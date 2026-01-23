@@ -1,0 +1,4 @@
+# Placeholder for images directory
+# Add your image files here
+
+
