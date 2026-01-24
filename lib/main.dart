@@ -8,7 +8,7 @@ import 'core/bloc/theme_bloc.dart';
 import 'core/di/injection_container.dart' as di;
 import 'core/services/localization_service.dart';
 import 'core/theme/app_theme.dart';
-import 'generated/codegen_loader.g.dart';
+import 'features/auth/auth.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -25,7 +25,6 @@ void main() async {
       fallbackLocale: const Locale('en'),
       startLocale: startLocale,
       saveLocale: false,
-      assetLoader: const CodegenLoader(),
       child: const MyApp(),
     ),
   );
@@ -40,6 +39,7 @@ class MyApp extends StatelessWidget {
       providers: [
         BlocProvider(create: (_) => di.sl<ThemeBloc>()),
         BlocProvider(create: (_) => di.sl<LocalizationBloc>()),
+        BlocProvider(create: (_) => di.sl<AuthBloc>()..add(const AuthCheckRequested())),
       ],
       child: BlocListener<LocalizationBloc, RealtimeState<Locale>>(
         listener: (context, state) {
@@ -70,7 +70,7 @@ class MyApp extends StatelessWidget {
                   theme: AppTheme.lightTheme,
                   darkTheme: AppTheme.darkTheme,
                   themeMode: themeMode,
-                  home: const HomePage(),
+                  home: const AuthWrapper(child: HomePage()),
                 );
               },
             );

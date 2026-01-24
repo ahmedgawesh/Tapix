@@ -1,53 +1,82 @@
-import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:get_it/get_it.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:tapix/core/di/injection_container.dart' as di;
-import 'package:tapix/core/services/localization_service.dart';
-import 'package:tapix/generated/codegen_loader.g.dart';
-import 'package:tapix/main.dart';
+import 'package:mockito/mockito.dart';
+import 'package:tapix/features/auth/auth.dart';
+
+class MockAuthBloc extends Mock implements AuthBloc {
+  final AuthState _state;
+  
+  MockAuthBloc(this._state);
+  
+  @override
+  AuthState get state => _state;
+  
+  @override
+  Stream<AuthState> get stream => Stream.value(_state);
+  
+  @override
+  Future<void> close() async {}
+}
 
 void main() {
-  setUpAll(() async {
-    SharedPreferences.setMockInitialValues({});
-    await di.init();
-  });
-
-  tearDownAll(() {
-    GetIt.instance.reset();
-  });
-
-  testWidgets('App smoke test', (WidgetTester tester) async {
-    final localizationService = di.sl<LocalizationService>();
-    final startLocale = localizationService.getLocale();
-
+  testWidgets('Setup screen shows when AuthNeedsSetup state', (WidgetTester tester) async {
+    final mockBloc = MockAuthBloc(const AuthNeedsSetup());
+    
     await tester.pumpWidget(
-      EasyLocalization(
-        supportedLocales: LocalizationService.supportedLocales,
-        path: 'assets/translations',
-        fallbackLocale: const Locale('en'),
-        startLocale: startLocale,
-        saveLocale: false,
-        assetLoader: const CodegenLoader(),
-        child: const MyApp(),
+      MaterialApp(
+        home: BlocProvider<AuthBloc>.value(
+          value: mockBloc,
+          child: const AuthWrapper(child: Scaffold(body: Text('Home'))),
+        ),
       ),
     );
 
-    await tester.pumpAndSettle();
+    await tester.pump();
 
-    // Verify basic UI elements are present
-    expect(find.text('Tapix'), findsOneWidget);
-    expect(find.text('Settings'), findsOneWidget);
+    expect(find.byType(SetupScreen), findsOneWidget);
+  });
+
+  testWidgets('Login screen shows when AuthUnauthenticated state', (WidgetTester tester) async {
+    final mockBloc = MockAuthBloc(const AuthUnauthenticated());
     
-    // Check for theme buttons
-    expect(find.text('Light'), findsOneWidget);
-    expect(find.text('Dark'), findsOneWidget);
-    expect(find.text('System'), findsOneWidget);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: BlocProvider<AuthBloc>.value(
+          value: mockBloc,
+          child: const AuthWrapper(child: Scaffold(body: Text('Home'))),
+        ),
+      ),
+    );
 
-    // Check for language buttons
-    expect(find.text('EN'), findsOneWidget);
-    expect(find.text('AR'), findsOneWidget);
-    expect(find.text('FR'), findsOneWidget);
+    await tester.pump();
+
+    expect(find.byType(LoginScreen), findsOneWidget);
+  });
+
+  testWidgets('Home shows when AuthAuthenticated state', (WidgetTester tester) async {
+    final user = UserEntity(
+      id: 1,
+      username: 'test',
+      role: UserRole.owner,
+      isActive: true,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
+
+    final mockBloc = MockAuthBloc(AuthAuthenticated(user: user));
+    
+    await tester.pumpWidget(
+      MaterialApp(
+        home: BlocProvider<AuthBloc>.value(
+          value: mockBloc,
+          child: const AuthWrapper(child: Scaffold(body: Text('Home Content'))),
+        ),
+      ),
+    );
+
+    await tester.pump();
+
+    expect(find.text('Home Content'), findsOneWidget);
   });
 }

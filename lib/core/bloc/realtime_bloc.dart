@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:meta/meta.dart';
 
 /// Base state class for all realtime bloc states
 abstract class RealtimeState<T> {
@@ -139,6 +140,24 @@ abstract class RealtimeBloc<T, E extends RealtimeEvent>
   /// Override this to handle custom events
   void registerEventHandlers();
 
+  /// Override this to customize how incoming stream values map to bloc states.
+  @protected
+  RealtimeState<T> mapDataToState(T data) => RealtimeSuccess<T>(data: data);
+
+  /// Override this to customize how errors map to bloc states.
+  @protected
+  RealtimeState<T> mapErrorToState(
+    Object error, {
+    StackTrace? stackTrace,
+    T? previousData,
+  }) {
+    return RealtimeError<T>(
+      error: error,
+      stackTrace: stackTrace,
+      previousData: previousData,
+    );
+  }
+
   void _initializeStream() {
     _subscribe();
   }
@@ -166,7 +185,7 @@ abstract class RealtimeBloc<T, E extends RealtimeEvent>
     if (state is RealtimeOptimistic<T>) {
       return;
     }
-    emit(RealtimeSuccess<T>(data: event.data));
+    emit(mapDataToState(event.data));
   }
 
   void _onErrorOccurred(
@@ -174,11 +193,13 @@ abstract class RealtimeBloc<T, E extends RealtimeEvent>
     Emitter<RealtimeState<T>> emit,
   ) {
     final previousData = _extractData(state);
-    emit(RealtimeError<T>(
-      error: event.error,
-      stackTrace: event.stackTrace,
-      previousData: previousData,
-    ));
+    emit(
+      mapErrorToState(
+        event.error,
+        stackTrace: event.stackTrace,
+        previousData: previousData,
+      ),
+    );
   }
 
   void _onRefreshRequested(

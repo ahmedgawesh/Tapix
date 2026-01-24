@@ -50,7 +50,7 @@ development_status:
 
   # EPIC-02: Authentication
   epic-2: in-progress
-  2-1-login-screen-auth-logic: ready-for-dev
+  2-1-login-screen-auth-logic: done
   2-2-role-based-access-control: backlog
   epic-2-retrospective: optional
 
