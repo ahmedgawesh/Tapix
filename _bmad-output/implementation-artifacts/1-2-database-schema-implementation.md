@@ -243,21 +243,22 @@ Cascade (SWE-1.5)
 Implemented complete Drift database schema with 33 tables covering all Tapix domains (products, parties, transactions, accounting, settings, audit). Created type-safe converters for money math (integer cents), basis points, timestamps, and JSON. Configured platform-specific database connections (native + WASM) with automatic fallback handling. Generated DAOs with reactive streams and implemented repository pattern with GetIt dependency injection. Comprehensive test coverage includes money converter precision, FK cascade/restrict behavior, migration verification, and performance benchmarks.
 
 ### Completion Notes
-- **Schema Implementation**: Created 33 tables across 7 domain files (settings, products, parties, people, transactions, accounting, audit) with exact column mappings per Technical Inventory
+- **Schema Implementation**: Created 34 tables across 8 domain files (users, settings, products, parties, people, transactions, accounting, audit) with exact column mappings per Technical Inventory
 - **Type Converters**: Implemented MoneyConverter (cents↔Decimal), BasisPointsConverter (tax rates), TimestampConverter, JsonMapConverter with full precision guarantees
-- **Foreign Keys**: Configured CASCADE for transaction children (sale_items, journal_entry_lines), RESTRICT for master data (products, customers, accounts) to prevent orphaned records
+- **Foreign Keys**: Configured CASCADE for transaction children (sale_items, journal_entry_lines), RESTRICT for master data (products, customers, accounts) to prevent orphaned records. Added user FK references to audit_logs, void_logs, notifications, journal_entries, accounting_periods
 - **Indexes**: Created 9 composite indexes for performance: sales(customer_id, sale_date), products(is_active, name), products(sku), sale_items(sale_id), journal_entries(entry_date), audit_logs(target_table, record_id), customers(is_active), suppliers(is_active), currencies(is_active)
 - **Migrations**: v1.0.0 baseline schema version (10000) with idempotent seeding (currencies, chart-of-accounts, system settings), foreign key enforcement on every open, and idempotent index creation. Drift schema snapshot generated under `drift_schemas/`.
 - **Platform Support**: Native database via sqlite3_flutter_libs + path_provider, Web WASM via conditional imports with storage tier detection wired to a notifier. COOP/COEP headers provided via `web/_headers`.
 - **DAOs**: Generated ProductDao, SaleDao, CustomerDao, AccountingDao with reactive watchers (watchAllProducts, watchSaleItems, etc.)
 - **Repository Layer**: ProductRepository with business logic, registered via GetIt for dependency injection
-- **Tests**: 26 tests passing - includes additional idempotency coverage for seeding and index creation.
+- **Tests**: 26 tests passing - includes additional idempotency coverage for seeding and index creation, plus users table integration
 - **Performance**: Product lookup <50ms ✓, Sale insertion <100ms ✓ (verified via benchmarks)
 
 ### File List
 - `lib/core/database/converters/money_converter.dart` - MoneyConverter (cents↔Decimal) + BasisPointsConverter
 - `lib/core/database/converters/timestamp_converter.dart` - Unix epoch ↔ DateTime
 - `lib/core/database/converters/json_converter.dart` - JSON ↔ Map<String, dynamic>
+- `lib/core/database/tables/users.dart` - Users table for authentication and user management
 - `lib/core/database/tables/settings.dart` - Currencies, AppSettings, StoreLogos, ExpenseCategories
 - `lib/core/database/tables/products.dart` - ProductCategories, ProductColors, Sizes, Products, ProductVariants, ProductBatches
 - `lib/core/database/tables/parties.dart` - Customers, CustomerTransactions, Suppliers, SupplierTransactions
@@ -281,7 +282,7 @@ Implemented complete Drift database schema with 33 tables covering all Tapix dom
 - `build.yaml` - Drift code generation configuration
 - `pubspec.yaml` - Added path_provider ^2.1.1, path ^1.8.3
 - `test/core/database/converters/money_converter_test.dart` - Money converter precision tests (8 tests)
-- `test/core/database/app_database_test.dart` - Migration, FK constraints, money math, performance tests (11 tests)
+- `test/core/database/app_database_test.dart` - Migration, FK constraints, money math, performance tests (13 tests)
 - `test/core/database/daos/product_dao_test.dart` - DAO operation tests (5 tests)
 
 ### Change Log

@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 import '../converters/money_converter.dart';
 import 'settings.dart';
+import 'users.dart';
 
 @DataClassName('Account')
 class Accounts extends Table {
@@ -24,7 +25,7 @@ class JournalEntries extends Table {
   DateTimeColumn get entryDate => dateTime().withDefault(currentDateAndTime)();
   IntColumn get accountingPeriodId => integer().nullable().references(AccountingPeriods, #id, onDelete: KeyAction.restrict)();
   TextColumn get status => text().withDefault(const Constant('draft'))();
-  IntColumn get createdBy => integer().nullable()();
+  IntColumn get createdBy => integer().nullable().references(Users, #id)();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
 }
@@ -48,6 +49,8 @@ class AccountingPeriods extends Table {
   DateTimeColumn get startDate => dateTime()();
   DateTimeColumn get endDate => dateTime()();
   BoolColumn get isClosed => boolean().withDefault(const Constant(false))();
+  DateTimeColumn get closedAt => dateTime().nullable()();
+  IntColumn get closedBy => integer().nullable().references(Users, #id)();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
 }

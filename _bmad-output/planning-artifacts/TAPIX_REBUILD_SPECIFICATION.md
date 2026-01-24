@@ -61,6 +61,7 @@ Rebuild the existing Tapix ERP application from scratch with:
 | **Offline-First** | App must work 100% offline with local database | CRITICAL |
 | **Multi-Platform** | Windows, Android, iOS, Web, Linux, macOS | CRITICAL |
 | **3 Languages** | English (primary), Arabic, French | CRITICAL |
+| **Semantic Colors** | Red (Error/Destructive), Orange (Warning), Green (Success) | CRITICAL |
 | **Light/Dark Themes** | Both themes with beautiful, modern colors | CRITICAL |
 | **Responsive Design** | No overflow on ANY screen size (mobile, tablet, desktop) | CRITICAL |
 | **Accurate Calculations** | 100% correct money math (use cents/smallest unit) | CRITICAL |

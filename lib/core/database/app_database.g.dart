@@ -3,6 +3,566 @@
 part of 'app_database.dart';
 
 // ignore_for_file: type=lint
+class $UsersTable extends Users with TableInfo<$UsersTable, User> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $UsersTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _usernameMeta = const VerificationMeta(
+    'username',
+  );
+  @override
+  late final GeneratedColumn<String> username = GeneratedColumn<String>(
+    'username',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
+  );
+  static const VerificationMeta _passwordHashMeta = const VerificationMeta(
+    'passwordHash',
+  );
+  @override
+  late final GeneratedColumn<String> passwordHash = GeneratedColumn<String>(
+    'password_hash',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _roleMeta = const VerificationMeta('role');
+  @override
+  late final GeneratedColumn<String> role = GeneratedColumn<String>(
+    'role',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _employeeIdMeta = const VerificationMeta(
+    'employeeId',
+  );
+  @override
+  late final GeneratedColumn<int> employeeId = GeneratedColumn<int>(
+    'employee_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _isActiveMeta = const VerificationMeta(
+    'isActive',
+  );
+  @override
+  late final GeneratedColumn<int> isActive = GeneratedColumn<int>(
+    'is_active',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
+  @override
+  late final GeneratedColumnWithTypeConverter<DateTime, int> createdAt =
+      GeneratedColumn<int>(
+        'created_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: true,
+      ).withConverter<DateTime>($UsersTable.$convertercreatedAt);
+  @override
+  late final GeneratedColumnWithTypeConverter<DateTime, int> updatedAt =
+      GeneratedColumn<int>(
+        'updated_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: true,
+      ).withConverter<DateTime>($UsersTable.$converterupdatedAt);
+  @override
+  late final GeneratedColumnWithTypeConverter<DateTime?, int> lastLoginAt =
+      GeneratedColumn<int>(
+        'last_login_at',
+        aliasedName,
+        true,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+      ).withConverter<DateTime?>($UsersTable.$converterlastLoginAtn);
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    username,
+    passwordHash,
+    role,
+    employeeId,
+    isActive,
+    createdAt,
+    updatedAt,
+    lastLoginAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'users';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<User> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('username')) {
+      context.handle(
+        _usernameMeta,
+        username.isAcceptableOrUnknown(data['username']!, _usernameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_usernameMeta);
+    }
+    if (data.containsKey('password_hash')) {
+      context.handle(
+        _passwordHashMeta,
+        passwordHash.isAcceptableOrUnknown(
+          data['password_hash']!,
+          _passwordHashMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_passwordHashMeta);
+    }
+    if (data.containsKey('role')) {
+      context.handle(
+        _roleMeta,
+        role.isAcceptableOrUnknown(data['role']!, _roleMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_roleMeta);
+    }
+    if (data.containsKey('employee_id')) {
+      context.handle(
+        _employeeIdMeta,
+        employeeId.isAcceptableOrUnknown(data['employee_id']!, _employeeIdMeta),
+      );
+    }
+    if (data.containsKey('is_active')) {
+      context.handle(
+        _isActiveMeta,
+        isActive.isAcceptableOrUnknown(data['is_active']!, _isActiveMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  User map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return User(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      username: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}username'],
+      )!,
+      passwordHash: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}password_hash'],
+      )!,
+      role: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}role'],
+      )!,
+      employeeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}employee_id'],
+      ),
+      isActive: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}is_active'],
+      )!,
+      createdAt: $UsersTable.$convertercreatedAt.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}created_at'],
+        )!,
+      ),
+      updatedAt: $UsersTable.$converterupdatedAt.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}updated_at'],
+        )!,
+      ),
+      lastLoginAt: $UsersTable.$converterlastLoginAtn.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}last_login_at'],
+        ),
+      ),
+    );
+  }
+
+  @override
+  $UsersTable createAlias(String alias) {
+    return $UsersTable(attachedDatabase, alias);
+  }
+
+  static TypeConverter<DateTime, int> $convertercreatedAt =
+      const TimestampConverter();
+  static TypeConverter<DateTime, int> $converterupdatedAt =
+      const TimestampConverter();
+  static TypeConverter<DateTime, int> $converterlastLoginAt =
+      const TimestampConverter();
+  static TypeConverter<DateTime?, int?> $converterlastLoginAtn =
+      NullAwareTypeConverter.wrap($converterlastLoginAt);
+}
+
+class User extends DataClass implements Insertable<User> {
+  final int id;
+  final String username;
+  final String passwordHash;
+  final String role;
+  final int? employeeId;
+  final int isActive;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final DateTime? lastLoginAt;
+  const User({
+    required this.id,
+    required this.username,
+    required this.passwordHash,
+    required this.role,
+    this.employeeId,
+    required this.isActive,
+    required this.createdAt,
+    required this.updatedAt,
+    this.lastLoginAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['username'] = Variable<String>(username);
+    map['password_hash'] = Variable<String>(passwordHash);
+    map['role'] = Variable<String>(role);
+    if (!nullToAbsent || employeeId != null) {
+      map['employee_id'] = Variable<int>(employeeId);
+    }
+    map['is_active'] = Variable<int>(isActive);
+    {
+      map['created_at'] = Variable<int>(
+        $UsersTable.$convertercreatedAt.toSql(createdAt),
+      );
+    }
+    {
+      map['updated_at'] = Variable<int>(
+        $UsersTable.$converterupdatedAt.toSql(updatedAt),
+      );
+    }
+    if (!nullToAbsent || lastLoginAt != null) {
+      map['last_login_at'] = Variable<int>(
+        $UsersTable.$converterlastLoginAtn.toSql(lastLoginAt),
+      );
+    }
+    return map;
+  }
+
+  UsersCompanion toCompanion(bool nullToAbsent) {
+    return UsersCompanion(
+      id: Value(id),
+      username: Value(username),
+      passwordHash: Value(passwordHash),
+      role: Value(role),
+      employeeId: employeeId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(employeeId),
+      isActive: Value(isActive),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      lastLoginAt: lastLoginAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastLoginAt),
+    );
+  }
+
+  factory User.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return User(
+      id: serializer.fromJson<int>(json['id']),
+      username: serializer.fromJson<String>(json['username']),
+      passwordHash: serializer.fromJson<String>(json['passwordHash']),
+      role: serializer.fromJson<String>(json['role']),
+      employeeId: serializer.fromJson<int?>(json['employeeId']),
+      isActive: serializer.fromJson<int>(json['isActive']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      lastLoginAt: serializer.fromJson<DateTime?>(json['lastLoginAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'username': serializer.toJson<String>(username),
+      'passwordHash': serializer.toJson<String>(passwordHash),
+      'role': serializer.toJson<String>(role),
+      'employeeId': serializer.toJson<int?>(employeeId),
+      'isActive': serializer.toJson<int>(isActive),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'lastLoginAt': serializer.toJson<DateTime?>(lastLoginAt),
+    };
+  }
+
+  User copyWith({
+    int? id,
+    String? username,
+    String? passwordHash,
+    String? role,
+    Value<int?> employeeId = const Value.absent(),
+    int? isActive,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    Value<DateTime?> lastLoginAt = const Value.absent(),
+  }) => User(
+    id: id ?? this.id,
+    username: username ?? this.username,
+    passwordHash: passwordHash ?? this.passwordHash,
+    role: role ?? this.role,
+    employeeId: employeeId.present ? employeeId.value : this.employeeId,
+    isActive: isActive ?? this.isActive,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    lastLoginAt: lastLoginAt.present ? lastLoginAt.value : this.lastLoginAt,
+  );
+  User copyWithCompanion(UsersCompanion data) {
+    return User(
+      id: data.id.present ? data.id.value : this.id,
+      username: data.username.present ? data.username.value : this.username,
+      passwordHash: data.passwordHash.present
+          ? data.passwordHash.value
+          : this.passwordHash,
+      role: data.role.present ? data.role.value : this.role,
+      employeeId: data.employeeId.present
+          ? data.employeeId.value
+          : this.employeeId,
+      isActive: data.isActive.present ? data.isActive.value : this.isActive,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      lastLoginAt: data.lastLoginAt.present
+          ? data.lastLoginAt.value
+          : this.lastLoginAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('User(')
+          ..write('id: $id, ')
+          ..write('username: $username, ')
+          ..write('passwordHash: $passwordHash, ')
+          ..write('role: $role, ')
+          ..write('employeeId: $employeeId, ')
+          ..write('isActive: $isActive, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('lastLoginAt: $lastLoginAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    username,
+    passwordHash,
+    role,
+    employeeId,
+    isActive,
+    createdAt,
+    updatedAt,
+    lastLoginAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is User &&
+          other.id == this.id &&
+          other.username == this.username &&
+          other.passwordHash == this.passwordHash &&
+          other.role == this.role &&
+          other.employeeId == this.employeeId &&
+          other.isActive == this.isActive &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.lastLoginAt == this.lastLoginAt);
+}
+
+class UsersCompanion extends UpdateCompanion<User> {
+  final Value<int> id;
+  final Value<String> username;
+  final Value<String> passwordHash;
+  final Value<String> role;
+  final Value<int?> employeeId;
+  final Value<int> isActive;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<DateTime?> lastLoginAt;
+  const UsersCompanion({
+    this.id = const Value.absent(),
+    this.username = const Value.absent(),
+    this.passwordHash = const Value.absent(),
+    this.role = const Value.absent(),
+    this.employeeId = const Value.absent(),
+    this.isActive = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.lastLoginAt = const Value.absent(),
+  });
+  UsersCompanion.insert({
+    this.id = const Value.absent(),
+    required String username,
+    required String passwordHash,
+    required String role,
+    this.employeeId = const Value.absent(),
+    this.isActive = const Value.absent(),
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.lastLoginAt = const Value.absent(),
+  }) : username = Value(username),
+       passwordHash = Value(passwordHash),
+       role = Value(role),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<User> custom({
+    Expression<int>? id,
+    Expression<String>? username,
+    Expression<String>? passwordHash,
+    Expression<String>? role,
+    Expression<int>? employeeId,
+    Expression<int>? isActive,
+    Expression<int>? createdAt,
+    Expression<int>? updatedAt,
+    Expression<int>? lastLoginAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (username != null) 'username': username,
+      if (passwordHash != null) 'password_hash': passwordHash,
+      if (role != null) 'role': role,
+      if (employeeId != null) 'employee_id': employeeId,
+      if (isActive != null) 'is_active': isActive,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (lastLoginAt != null) 'last_login_at': lastLoginAt,
+    });
+  }
+
+  UsersCompanion copyWith({
+    Value<int>? id,
+    Value<String>? username,
+    Value<String>? passwordHash,
+    Value<String>? role,
+    Value<int?>? employeeId,
+    Value<int>? isActive,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<DateTime?>? lastLoginAt,
+  }) {
+    return UsersCompanion(
+      id: id ?? this.id,
+      username: username ?? this.username,
+      passwordHash: passwordHash ?? this.passwordHash,
+      role: role ?? this.role,
+      employeeId: employeeId ?? this.employeeId,
+      isActive: isActive ?? this.isActive,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      lastLoginAt: lastLoginAt ?? this.lastLoginAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (username.present) {
+      map['username'] = Variable<String>(username.value);
+    }
+    if (passwordHash.present) {
+      map['password_hash'] = Variable<String>(passwordHash.value);
+    }
+    if (role.present) {
+      map['role'] = Variable<String>(role.value);
+    }
+    if (employeeId.present) {
+      map['employee_id'] = Variable<int>(employeeId.value);
+    }
+    if (isActive.present) {
+      map['is_active'] = Variable<int>(isActive.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<int>(
+        $UsersTable.$convertercreatedAt.toSql(createdAt.value),
+      );
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<int>(
+        $UsersTable.$converterupdatedAt.toSql(updatedAt.value),
+      );
+    }
+    if (lastLoginAt.present) {
+      map['last_login_at'] = Variable<int>(
+        $UsersTable.$converterlastLoginAtn.toSql(lastLoginAt.value),
+      );
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('UsersCompanion(')
+          ..write('id: $id, ')
+          ..write('username: $username, ')
+          ..write('passwordHash: $passwordHash, ')
+          ..write('role: $role, ')
+          ..write('employeeId: $employeeId, ')
+          ..write('isActive: $isActive, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('lastLoginAt: $lastLoginAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $CurrenciesTable extends Currencies
     with TableInfo<$CurrenciesTable, Currency> {
   @override
@@ -34,6 +594,7 @@ class $CurrenciesTable extends Currencies
     ),
     type: DriftSqlType.string,
     requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
   );
   static const VerificationMeta _nameMeta = const VerificationMeta('name');
   @override
@@ -14195,6 +14756,31 @@ class $AccountingPeriodsTable extends AccountingPeriods
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _closedAtMeta = const VerificationMeta(
+    'closedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> closedAt = GeneratedColumn<DateTime>(
+    'closed_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _closedByMeta = const VerificationMeta(
+    'closedBy',
+  );
+  @override
+  late final GeneratedColumn<int> closedBy = GeneratedColumn<int>(
+    'closed_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES users (id)',
+    ),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -14226,6 +14812,8 @@ class $AccountingPeriodsTable extends AccountingPeriods
     startDate,
     endDate,
     isClosed,
+    closedAt,
+    closedBy,
     createdAt,
     updatedAt,
   ];
@@ -14274,6 +14862,18 @@ class $AccountingPeriodsTable extends AccountingPeriods
         isClosed.isAcceptableOrUnknown(data['is_closed']!, _isClosedMeta),
       );
     }
+    if (data.containsKey('closed_at')) {
+      context.handle(
+        _closedAtMeta,
+        closedAt.isAcceptableOrUnknown(data['closed_at']!, _closedAtMeta),
+      );
+    }
+    if (data.containsKey('closed_by')) {
+      context.handle(
+        _closedByMeta,
+        closedBy.isAcceptableOrUnknown(data['closed_by']!, _closedByMeta),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -14315,6 +14915,14 @@ class $AccountingPeriodsTable extends AccountingPeriods
         DriftSqlType.bool,
         data['${effectivePrefix}is_closed'],
       )!,
+      closedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}closed_at'],
+      ),
+      closedBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}closed_by'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -14339,6 +14947,8 @@ class AccountingPeriod extends DataClass
   final DateTime startDate;
   final DateTime endDate;
   final bool isClosed;
+  final DateTime? closedAt;
+  final int? closedBy;
   final DateTime createdAt;
   final DateTime updatedAt;
   const AccountingPeriod({
@@ -14347,6 +14957,8 @@ class AccountingPeriod extends DataClass
     required this.startDate,
     required this.endDate,
     required this.isClosed,
+    this.closedAt,
+    this.closedBy,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -14358,6 +14970,12 @@ class AccountingPeriod extends DataClass
     map['start_date'] = Variable<DateTime>(startDate);
     map['end_date'] = Variable<DateTime>(endDate);
     map['is_closed'] = Variable<bool>(isClosed);
+    if (!nullToAbsent || closedAt != null) {
+      map['closed_at'] = Variable<DateTime>(closedAt);
+    }
+    if (!nullToAbsent || closedBy != null) {
+      map['closed_by'] = Variable<int>(closedBy);
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
@@ -14370,6 +14988,12 @@ class AccountingPeriod extends DataClass
       startDate: Value(startDate),
       endDate: Value(endDate),
       isClosed: Value(isClosed),
+      closedAt: closedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(closedAt),
+      closedBy: closedBy == null && nullToAbsent
+          ? const Value.absent()
+          : Value(closedBy),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
     );
@@ -14386,6 +15010,8 @@ class AccountingPeriod extends DataClass
       startDate: serializer.fromJson<DateTime>(json['startDate']),
       endDate: serializer.fromJson<DateTime>(json['endDate']),
       isClosed: serializer.fromJson<bool>(json['isClosed']),
+      closedAt: serializer.fromJson<DateTime?>(json['closedAt']),
+      closedBy: serializer.fromJson<int?>(json['closedBy']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
@@ -14399,6 +15025,8 @@ class AccountingPeriod extends DataClass
       'startDate': serializer.toJson<DateTime>(startDate),
       'endDate': serializer.toJson<DateTime>(endDate),
       'isClosed': serializer.toJson<bool>(isClosed),
+      'closedAt': serializer.toJson<DateTime?>(closedAt),
+      'closedBy': serializer.toJson<int?>(closedBy),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
@@ -14410,6 +15038,8 @@ class AccountingPeriod extends DataClass
     DateTime? startDate,
     DateTime? endDate,
     bool? isClosed,
+    Value<DateTime?> closedAt = const Value.absent(),
+    Value<int?> closedBy = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
   }) => AccountingPeriod(
@@ -14418,6 +15048,8 @@ class AccountingPeriod extends DataClass
     startDate: startDate ?? this.startDate,
     endDate: endDate ?? this.endDate,
     isClosed: isClosed ?? this.isClosed,
+    closedAt: closedAt.present ? closedAt.value : this.closedAt,
+    closedBy: closedBy.present ? closedBy.value : this.closedBy,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
@@ -14430,6 +15062,8 @@ class AccountingPeriod extends DataClass
       startDate: data.startDate.present ? data.startDate.value : this.startDate,
       endDate: data.endDate.present ? data.endDate.value : this.endDate,
       isClosed: data.isClosed.present ? data.isClosed.value : this.isClosed,
+      closedAt: data.closedAt.present ? data.closedAt.value : this.closedAt,
+      closedBy: data.closedBy.present ? data.closedBy.value : this.closedBy,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -14443,6 +15077,8 @@ class AccountingPeriod extends DataClass
           ..write('startDate: $startDate, ')
           ..write('endDate: $endDate, ')
           ..write('isClosed: $isClosed, ')
+          ..write('closedAt: $closedAt, ')
+          ..write('closedBy: $closedBy, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -14456,6 +15092,8 @@ class AccountingPeriod extends DataClass
     startDate,
     endDate,
     isClosed,
+    closedAt,
+    closedBy,
     createdAt,
     updatedAt,
   );
@@ -14468,6 +15106,8 @@ class AccountingPeriod extends DataClass
           other.startDate == this.startDate &&
           other.endDate == this.endDate &&
           other.isClosed == this.isClosed &&
+          other.closedAt == this.closedAt &&
+          other.closedBy == this.closedBy &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
 }
@@ -14478,6 +15118,8 @@ class AccountingPeriodsCompanion extends UpdateCompanion<AccountingPeriod> {
   final Value<DateTime> startDate;
   final Value<DateTime> endDate;
   final Value<bool> isClosed;
+  final Value<DateTime?> closedAt;
+  final Value<int?> closedBy;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   const AccountingPeriodsCompanion({
@@ -14486,6 +15128,8 @@ class AccountingPeriodsCompanion extends UpdateCompanion<AccountingPeriod> {
     this.startDate = const Value.absent(),
     this.endDate = const Value.absent(),
     this.isClosed = const Value.absent(),
+    this.closedAt = const Value.absent(),
+    this.closedBy = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
   });
@@ -14495,6 +15139,8 @@ class AccountingPeriodsCompanion extends UpdateCompanion<AccountingPeriod> {
     required DateTime startDate,
     required DateTime endDate,
     this.isClosed = const Value.absent(),
+    this.closedAt = const Value.absent(),
+    this.closedBy = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
   }) : periodName = Value(periodName),
@@ -14506,6 +15152,8 @@ class AccountingPeriodsCompanion extends UpdateCompanion<AccountingPeriod> {
     Expression<DateTime>? startDate,
     Expression<DateTime>? endDate,
     Expression<bool>? isClosed,
+    Expression<DateTime>? closedAt,
+    Expression<int>? closedBy,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
   }) {
@@ -14515,6 +15163,8 @@ class AccountingPeriodsCompanion extends UpdateCompanion<AccountingPeriod> {
       if (startDate != null) 'start_date': startDate,
       if (endDate != null) 'end_date': endDate,
       if (isClosed != null) 'is_closed': isClosed,
+      if (closedAt != null) 'closed_at': closedAt,
+      if (closedBy != null) 'closed_by': closedBy,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
     });
@@ -14526,6 +15176,8 @@ class AccountingPeriodsCompanion extends UpdateCompanion<AccountingPeriod> {
     Value<DateTime>? startDate,
     Value<DateTime>? endDate,
     Value<bool>? isClosed,
+    Value<DateTime?>? closedAt,
+    Value<int?>? closedBy,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
   }) {
@@ -14535,6 +15187,8 @@ class AccountingPeriodsCompanion extends UpdateCompanion<AccountingPeriod> {
       startDate: startDate ?? this.startDate,
       endDate: endDate ?? this.endDate,
       isClosed: isClosed ?? this.isClosed,
+      closedAt: closedAt ?? this.closedAt,
+      closedBy: closedBy ?? this.closedBy,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -14558,6 +15212,12 @@ class AccountingPeriodsCompanion extends UpdateCompanion<AccountingPeriod> {
     if (isClosed.present) {
       map['is_closed'] = Variable<bool>(isClosed.value);
     }
+    if (closedAt.present) {
+      map['closed_at'] = Variable<DateTime>(closedAt.value);
+    }
+    if (closedBy.present) {
+      map['closed_by'] = Variable<int>(closedBy.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -14575,6 +15235,8 @@ class AccountingPeriodsCompanion extends UpdateCompanion<AccountingPeriod> {
           ..write('startDate: $startDate, ')
           ..write('endDate: $endDate, ')
           ..write('isClosed: $isClosed, ')
+          ..write('closedAt: $closedAt, ')
+          ..write('closedBy: $closedBy, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -14669,6 +15331,9 @@ class $JournalEntriesTable extends JournalEntries
     true,
     type: DriftSqlType.int,
     requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES users (id)',
+    ),
   );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
@@ -16364,6 +17029,9 @@ class $AuditLogsTable extends AuditLogs
     true,
     type: DriftSqlType.int,
     requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES users (id)',
+    ),
   );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
@@ -16811,6 +17479,9 @@ class $VoidLogsTable extends VoidLogs with TableInfo<$VoidLogsTable, VoidLog> {
     true,
     type: DriftSqlType.int,
     requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES users (id)',
+    ),
   );
   static const VerificationMeta _voidedAtMeta = const VerificationMeta(
     'voidedAt',
@@ -17180,6 +17851,9 @@ class $NotificationsTable extends Notifications
     true,
     type: DriftSqlType.int,
     requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES users (id)',
+    ),
   );
   static const VerificationMeta _titleMeta = const VerificationMeta('title');
   @override
@@ -17596,6 +18270,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   _$AppDatabase.connect(DatabaseConnection c) : super.connect(c);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
+  late final $UsersTable users = $UsersTable(this);
   late final $CurrenciesTable currencies = $CurrenciesTable(this);
   late final $AppSettingsTable appSettings = $AppSettingsTable(this);
   late final $StoreLogosTable storeLogos = $StoreLogosTable(this);
@@ -17651,6 +18326,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
   @override
   List<DatabaseSchemaEntity> get allSchemaEntities => [
+    users,
     currencies,
     appSettings,
     storeLogos,
@@ -17767,6 +18443,767 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   ]);
 }
 
+typedef $$UsersTableCreateCompanionBuilder =
+    UsersCompanion Function({
+      Value<int> id,
+      required String username,
+      required String passwordHash,
+      required String role,
+      Value<int?> employeeId,
+      Value<int> isActive,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<DateTime?> lastLoginAt,
+    });
+typedef $$UsersTableUpdateCompanionBuilder =
+    UsersCompanion Function({
+      Value<int> id,
+      Value<String> username,
+      Value<String> passwordHash,
+      Value<String> role,
+      Value<int?> employeeId,
+      Value<int> isActive,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<DateTime?> lastLoginAt,
+    });
+
+final class $$UsersTableReferences
+    extends BaseReferences<_$AppDatabase, $UsersTable, User> {
+  $$UsersTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static MultiTypedResultKey<$AccountingPeriodsTable, List<AccountingPeriod>>
+  _accountingPeriodsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.accountingPeriods,
+        aliasName: $_aliasNameGenerator(
+          db.users.id,
+          db.accountingPeriods.closedBy,
+        ),
+      );
+
+  $$AccountingPeriodsTableProcessedTableManager get accountingPeriodsRefs {
+    final manager = $$AccountingPeriodsTableTableManager(
+      $_db,
+      $_db.accountingPeriods,
+    ).filter((f) => f.closedBy.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _accountingPeriodsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$JournalEntriesTable, List<JournalEntry>>
+  _journalEntriesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.journalEntries,
+    aliasName: $_aliasNameGenerator(db.users.id, db.journalEntries.createdBy),
+  );
+
+  $$JournalEntriesTableProcessedTableManager get journalEntriesRefs {
+    final manager = $$JournalEntriesTableTableManager(
+      $_db,
+      $_db.journalEntries,
+    ).filter((f) => f.createdBy.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_journalEntriesRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$AuditLogsTable, List<AuditLog>>
+  _auditLogsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.auditLogs,
+    aliasName: $_aliasNameGenerator(db.users.id, db.auditLogs.userId),
+  );
+
+  $$AuditLogsTableProcessedTableManager get auditLogsRefs {
+    final manager = $$AuditLogsTableTableManager(
+      $_db,
+      $_db.auditLogs,
+    ).filter((f) => f.userId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_auditLogsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$VoidLogsTable, List<VoidLog>> _voidLogsRefsTable(
+    _$AppDatabase db,
+  ) => MultiTypedResultKey.fromTable(
+    db.voidLogs,
+    aliasName: $_aliasNameGenerator(db.users.id, db.voidLogs.voidedBy),
+  );
+
+  $$VoidLogsTableProcessedTableManager get voidLogsRefs {
+    final manager = $$VoidLogsTableTableManager(
+      $_db,
+      $_db.voidLogs,
+    ).filter((f) => f.voidedBy.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_voidLogsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$NotificationsTable, List<Notification>>
+  _notificationsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.notifications,
+    aliasName: $_aliasNameGenerator(db.users.id, db.notifications.userId),
+  );
+
+  $$NotificationsTableProcessedTableManager get notificationsRefs {
+    final manager = $$NotificationsTableTableManager(
+      $_db,
+      $_db.notifications,
+    ).filter((f) => f.userId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_notificationsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$UsersTableFilterComposer extends Composer<_$AppDatabase, $UsersTable> {
+  $$UsersTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get username => $composableBuilder(
+    column: $table.username,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get passwordHash => $composableBuilder(
+    column: $table.passwordHash,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get role => $composableBuilder(
+    column: $table.role,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get employeeId => $composableBuilder(
+    column: $table.employeeId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get isActive => $composableBuilder(
+    column: $table.isActive,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<DateTime, DateTime, int> get createdAt =>
+      $composableBuilder(
+        column: $table.createdAt,
+        builder: (column) => ColumnWithTypeConverterFilters(column),
+      );
+
+  ColumnWithTypeConverterFilters<DateTime, DateTime, int> get updatedAt =>
+      $composableBuilder(
+        column: $table.updatedAt,
+        builder: (column) => ColumnWithTypeConverterFilters(column),
+      );
+
+  ColumnWithTypeConverterFilters<DateTime?, DateTime, int> get lastLoginAt =>
+      $composableBuilder(
+        column: $table.lastLoginAt,
+        builder: (column) => ColumnWithTypeConverterFilters(column),
+      );
+
+  Expression<bool> accountingPeriodsRefs(
+    Expression<bool> Function($$AccountingPeriodsTableFilterComposer f) f,
+  ) {
+    final $$AccountingPeriodsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.accountingPeriods,
+      getReferencedColumn: (t) => t.closedBy,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$AccountingPeriodsTableFilterComposer(
+            $db: $db,
+            $table: $db.accountingPeriods,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> journalEntriesRefs(
+    Expression<bool> Function($$JournalEntriesTableFilterComposer f) f,
+  ) {
+    final $$JournalEntriesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.journalEntries,
+      getReferencedColumn: (t) => t.createdBy,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$JournalEntriesTableFilterComposer(
+            $db: $db,
+            $table: $db.journalEntries,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> auditLogsRefs(
+    Expression<bool> Function($$AuditLogsTableFilterComposer f) f,
+  ) {
+    final $$AuditLogsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.auditLogs,
+      getReferencedColumn: (t) => t.userId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$AuditLogsTableFilterComposer(
+            $db: $db,
+            $table: $db.auditLogs,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> voidLogsRefs(
+    Expression<bool> Function($$VoidLogsTableFilterComposer f) f,
+  ) {
+    final $$VoidLogsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.voidLogs,
+      getReferencedColumn: (t) => t.voidedBy,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VoidLogsTableFilterComposer(
+            $db: $db,
+            $table: $db.voidLogs,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> notificationsRefs(
+    Expression<bool> Function($$NotificationsTableFilterComposer f) f,
+  ) {
+    final $$NotificationsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.notifications,
+      getReferencedColumn: (t) => t.userId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$NotificationsTableFilterComposer(
+            $db: $db,
+            $table: $db.notifications,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$UsersTableOrderingComposer
+    extends Composer<_$AppDatabase, $UsersTable> {
+  $$UsersTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get username => $composableBuilder(
+    column: $table.username,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get passwordHash => $composableBuilder(
+    column: $table.passwordHash,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get role => $composableBuilder(
+    column: $table.role,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get employeeId => $composableBuilder(
+    column: $table.employeeId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get isActive => $composableBuilder(
+    column: $table.isActive,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get lastLoginAt => $composableBuilder(
+    column: $table.lastLoginAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$UsersTableAnnotationComposer
+    extends Composer<_$AppDatabase, $UsersTable> {
+  $$UsersTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get username =>
+      $composableBuilder(column: $table.username, builder: (column) => column);
+
+  GeneratedColumn<String> get passwordHash => $composableBuilder(
+    column: $table.passwordHash,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get role =>
+      $composableBuilder(column: $table.role, builder: (column) => column);
+
+  GeneratedColumn<int> get employeeId => $composableBuilder(
+    column: $table.employeeId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get isActive =>
+      $composableBuilder(column: $table.isActive, builder: (column) => column);
+
+  GeneratedColumnWithTypeConverter<DateTime, int> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumnWithTypeConverter<DateTime, int> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumnWithTypeConverter<DateTime?, int> get lastLoginAt =>
+      $composableBuilder(
+        column: $table.lastLoginAt,
+        builder: (column) => column,
+      );
+
+  Expression<T> accountingPeriodsRefs<T extends Object>(
+    Expression<T> Function($$AccountingPeriodsTableAnnotationComposer a) f,
+  ) {
+    final $$AccountingPeriodsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.accountingPeriods,
+          getReferencedColumn: (t) => t.closedBy,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$AccountingPeriodsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.accountingPeriods,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<T> journalEntriesRefs<T extends Object>(
+    Expression<T> Function($$JournalEntriesTableAnnotationComposer a) f,
+  ) {
+    final $$JournalEntriesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.journalEntries,
+      getReferencedColumn: (t) => t.createdBy,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$JournalEntriesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.journalEntries,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> auditLogsRefs<T extends Object>(
+    Expression<T> Function($$AuditLogsTableAnnotationComposer a) f,
+  ) {
+    final $$AuditLogsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.auditLogs,
+      getReferencedColumn: (t) => t.userId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$AuditLogsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.auditLogs,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> voidLogsRefs<T extends Object>(
+    Expression<T> Function($$VoidLogsTableAnnotationComposer a) f,
+  ) {
+    final $$VoidLogsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.voidLogs,
+      getReferencedColumn: (t) => t.voidedBy,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VoidLogsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.voidLogs,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> notificationsRefs<T extends Object>(
+    Expression<T> Function($$NotificationsTableAnnotationComposer a) f,
+  ) {
+    final $$NotificationsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.notifications,
+      getReferencedColumn: (t) => t.userId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$NotificationsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.notifications,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$UsersTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $UsersTable,
+          User,
+          $$UsersTableFilterComposer,
+          $$UsersTableOrderingComposer,
+          $$UsersTableAnnotationComposer,
+          $$UsersTableCreateCompanionBuilder,
+          $$UsersTableUpdateCompanionBuilder,
+          (User, $$UsersTableReferences),
+          User,
+          PrefetchHooks Function({
+            bool accountingPeriodsRefs,
+            bool journalEntriesRefs,
+            bool auditLogsRefs,
+            bool voidLogsRefs,
+            bool notificationsRefs,
+          })
+        > {
+  $$UsersTableTableManager(_$AppDatabase db, $UsersTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$UsersTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$UsersTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$UsersTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> username = const Value.absent(),
+                Value<String> passwordHash = const Value.absent(),
+                Value<String> role = const Value.absent(),
+                Value<int?> employeeId = const Value.absent(),
+                Value<int> isActive = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<DateTime?> lastLoginAt = const Value.absent(),
+              }) => UsersCompanion(
+                id: id,
+                username: username,
+                passwordHash: passwordHash,
+                role: role,
+                employeeId: employeeId,
+                isActive: isActive,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                lastLoginAt: lastLoginAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required String username,
+                required String passwordHash,
+                required String role,
+                Value<int?> employeeId = const Value.absent(),
+                Value<int> isActive = const Value.absent(),
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<DateTime?> lastLoginAt = const Value.absent(),
+              }) => UsersCompanion.insert(
+                id: id,
+                username: username,
+                passwordHash: passwordHash,
+                role: role,
+                employeeId: employeeId,
+                isActive: isActive,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                lastLoginAt: lastLoginAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) =>
+                    (e.readTable(table), $$UsersTableReferences(db, table, e)),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({
+                accountingPeriodsRefs = false,
+                journalEntriesRefs = false,
+                auditLogsRefs = false,
+                voidLogsRefs = false,
+                notificationsRefs = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (accountingPeriodsRefs) db.accountingPeriods,
+                    if (journalEntriesRefs) db.journalEntries,
+                    if (auditLogsRefs) db.auditLogs,
+                    if (voidLogsRefs) db.voidLogs,
+                    if (notificationsRefs) db.notifications,
+                  ],
+                  addJoins: null,
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (accountingPeriodsRefs)
+                        await $_getPrefetchedData<
+                          User,
+                          $UsersTable,
+                          AccountingPeriod
+                        >(
+                          currentTable: table,
+                          referencedTable: $$UsersTableReferences
+                              ._accountingPeriodsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$UsersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).accountingPeriodsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.closedBy == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (journalEntriesRefs)
+                        await $_getPrefetchedData<
+                          User,
+                          $UsersTable,
+                          JournalEntry
+                        >(
+                          currentTable: table,
+                          referencedTable: $$UsersTableReferences
+                              ._journalEntriesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$UsersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).journalEntriesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.createdBy == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (auditLogsRefs)
+                        await $_getPrefetchedData<User, $UsersTable, AuditLog>(
+                          currentTable: table,
+                          referencedTable: $$UsersTableReferences
+                              ._auditLogsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$UsersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).auditLogsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.userId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (voidLogsRefs)
+                        await $_getPrefetchedData<User, $UsersTable, VoidLog>(
+                          currentTable: table,
+                          referencedTable: $$UsersTableReferences
+                              ._voidLogsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$UsersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).voidLogsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.voidedBy == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (notificationsRefs)
+                        await $_getPrefetchedData<
+                          User,
+                          $UsersTable,
+                          Notification
+                        >(
+                          currentTable: table,
+                          referencedTable: $$UsersTableReferences
+                              ._notificationsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$UsersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).notificationsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.userId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$UsersTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $UsersTable,
+      User,
+      $$UsersTableFilterComposer,
+      $$UsersTableOrderingComposer,
+      $$UsersTableAnnotationComposer,
+      $$UsersTableCreateCompanionBuilder,
+      $$UsersTableUpdateCompanionBuilder,
+      (User, $$UsersTableReferences),
+      User,
+      PrefetchHooks Function({
+        bool accountingPeriodsRefs,
+        bool journalEntriesRefs,
+        bool auditLogsRefs,
+        bool voidLogsRefs,
+        bool notificationsRefs,
+      })
+    >;
 typedef $$CurrenciesTableCreateCompanionBuilder =
     CurrenciesCompanion Function({
       Value<int> id,
@@ -33433,6 +34870,8 @@ typedef $$AccountingPeriodsTableCreateCompanionBuilder =
       required DateTime startDate,
       required DateTime endDate,
       Value<bool> isClosed,
+      Value<DateTime?> closedAt,
+      Value<int?> closedBy,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
     });
@@ -33443,6 +34882,8 @@ typedef $$AccountingPeriodsTableUpdateCompanionBuilder =
       Value<DateTime> startDate,
       Value<DateTime> endDate,
       Value<bool> isClosed,
+      Value<DateTime?> closedAt,
+      Value<int?> closedBy,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
     });
@@ -33459,6 +34900,24 @@ final class $$AccountingPeriodsTableReferences
     super.$_table,
     super.$_typedResult,
   );
+
+  static $UsersTable _closedByTable(_$AppDatabase db) => db.users.createAlias(
+    $_aliasNameGenerator(db.accountingPeriods.closedBy, db.users.id),
+  );
+
+  $$UsersTableProcessedTableManager? get closedBy {
+    final $_column = $_itemColumn<int>('closed_by');
+    if ($_column == null) return null;
+    final manager = $$UsersTableTableManager(
+      $_db,
+      $_db.users,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_closedByTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
 
   static MultiTypedResultKey<$JournalEntriesTable, List<JournalEntry>>
   _journalEntriesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
@@ -33516,6 +34975,11 @@ class $$AccountingPeriodsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<DateTime> get closedAt => $composableBuilder(
+    column: $table.closedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnFilters(column),
@@ -33525,6 +34989,29 @@ class $$AccountingPeriodsTableFilterComposer
     column: $table.updatedAt,
     builder: (column) => ColumnFilters(column),
   );
+
+  $$UsersTableFilterComposer get closedBy {
+    final $$UsersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.closedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableFilterComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 
   Expression<bool> journalEntriesRefs(
     Expression<bool> Function($$JournalEntriesTableFilterComposer f) f,
@@ -33586,6 +35073,11 @@ class $$AccountingPeriodsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<DateTime> get closedAt => $composableBuilder(
+    column: $table.closedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -33595,6 +35087,29 @@ class $$AccountingPeriodsTableOrderingComposer
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  $$UsersTableOrderingComposer get closedBy {
+    final $$UsersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.closedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableOrderingComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$AccountingPeriodsTableAnnotationComposer
@@ -33623,11 +35138,37 @@ class $$AccountingPeriodsTableAnnotationComposer
   GeneratedColumn<bool> get isClosed =>
       $composableBuilder(column: $table.isClosed, builder: (column) => column);
 
+  GeneratedColumn<DateTime> get closedAt =>
+      $composableBuilder(column: $table.closedAt, builder: (column) => column);
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  $$UsersTableAnnotationComposer get closedBy {
+    final $$UsersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.closedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 
   Expression<T> journalEntriesRefs<T extends Object>(
     Expression<T> Function($$JournalEntriesTableAnnotationComposer a) f,
@@ -33668,7 +35209,7 @@ class $$AccountingPeriodsTableTableManager
           $$AccountingPeriodsTableUpdateCompanionBuilder,
           (AccountingPeriod, $$AccountingPeriodsTableReferences),
           AccountingPeriod,
-          PrefetchHooks Function({bool journalEntriesRefs})
+          PrefetchHooks Function({bool closedBy, bool journalEntriesRefs})
         > {
   $$AccountingPeriodsTableTableManager(
     _$AppDatabase db,
@@ -33693,6 +35234,8 @@ class $$AccountingPeriodsTableTableManager
                 Value<DateTime> startDate = const Value.absent(),
                 Value<DateTime> endDate = const Value.absent(),
                 Value<bool> isClosed = const Value.absent(),
+                Value<DateTime?> closedAt = const Value.absent(),
+                Value<int?> closedBy = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
               }) => AccountingPeriodsCompanion(
@@ -33701,6 +35244,8 @@ class $$AccountingPeriodsTableTableManager
                 startDate: startDate,
                 endDate: endDate,
                 isClosed: isClosed,
+                closedAt: closedAt,
+                closedBy: closedBy,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
               ),
@@ -33711,6 +35256,8 @@ class $$AccountingPeriodsTableTableManager
                 required DateTime startDate,
                 required DateTime endDate,
                 Value<bool> isClosed = const Value.absent(),
+                Value<DateTime?> closedAt = const Value.absent(),
+                Value<int?> closedBy = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
               }) => AccountingPeriodsCompanion.insert(
@@ -33719,6 +35266,8 @@ class $$AccountingPeriodsTableTableManager
                 startDate: startDate,
                 endDate: endDate,
                 isClosed: isClosed,
+                closedAt: closedAt,
+                closedBy: closedBy,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
               ),
@@ -33730,40 +35279,74 @@ class $$AccountingPeriodsTableTableManager
                 ),
               )
               .toList(),
-          prefetchHooksCallback: ({journalEntriesRefs = false}) {
-            return PrefetchHooks(
-              db: db,
-              explicitlyWatchedTables: [
-                if (journalEntriesRefs) db.journalEntries,
-              ],
-              addJoins: null,
-              getPrefetchedDataCallback: (items) async {
-                return [
-                  if (journalEntriesRefs)
-                    await $_getPrefetchedData<
-                      AccountingPeriod,
-                      $AccountingPeriodsTable,
-                      JournalEntry
-                    >(
-                      currentTable: table,
-                      referencedTable: $$AccountingPeriodsTableReferences
-                          ._journalEntriesRefsTable(db),
-                      managerFromTypedResult: (p0) =>
-                          $$AccountingPeriodsTableReferences(
-                            db,
-                            table,
-                            p0,
-                          ).journalEntriesRefs,
-                      referencedItemsForCurrentItem: (item, referencedItems) =>
-                          referencedItems.where(
-                            (e) => e.accountingPeriodId == item.id,
-                          ),
-                      typedResults: items,
-                    ),
-                ];
+          prefetchHooksCallback:
+              ({closedBy = false, journalEntriesRefs = false}) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (journalEntriesRefs) db.journalEntries,
+                  ],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (closedBy) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.closedBy,
+                                    referencedTable:
+                                        $$AccountingPeriodsTableReferences
+                                            ._closedByTable(db),
+                                    referencedColumn:
+                                        $$AccountingPeriodsTableReferences
+                                            ._closedByTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (journalEntriesRefs)
+                        await $_getPrefetchedData<
+                          AccountingPeriod,
+                          $AccountingPeriodsTable,
+                          JournalEntry
+                        >(
+                          currentTable: table,
+                          referencedTable: $$AccountingPeriodsTableReferences
+                              ._journalEntriesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$AccountingPeriodsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).journalEntriesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.accountingPeriodId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
               },
-            );
-          },
         ),
       );
 }
@@ -33780,7 +35363,7 @@ typedef $$AccountingPeriodsTableProcessedTableManager =
       $$AccountingPeriodsTableUpdateCompanionBuilder,
       (AccountingPeriod, $$AccountingPeriodsTableReferences),
       AccountingPeriod,
-      PrefetchHooks Function({bool journalEntriesRefs})
+      PrefetchHooks Function({bool closedBy, bool journalEntriesRefs})
     >;
 typedef $$JournalEntriesTableCreateCompanionBuilder =
     JournalEntriesCompanion Function({
@@ -33831,6 +35414,24 @@ final class $$JournalEntriesTableReferences
       $_db.accountingPeriods,
     ).filter((f) => f.id.sqlEquals($_column));
     final item = $_typedResult.readTableOrNull(_accountingPeriodIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $UsersTable _createdByTable(_$AppDatabase db) => db.users.createAlias(
+    $_aliasNameGenerator(db.journalEntries.createdBy, db.users.id),
+  );
+
+  $$UsersTableProcessedTableManager? get createdBy {
+    final $_column = $_itemColumn<int>('created_by');
+    if ($_column == null) return null;
+    final manager = $$UsersTableTableManager(
+      $_db,
+      $_db.users,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_createdByTable($_db));
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
@@ -33896,11 +35497,6 @@ class $$JournalEntriesTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<int> get createdBy => $composableBuilder(
-    column: $table.createdBy,
-    builder: (column) => ColumnFilters(column),
-  );
-
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnFilters(column),
@@ -33925,6 +35521,29 @@ class $$JournalEntriesTableFilterComposer
           }) => $$AccountingPeriodsTableFilterComposer(
             $db: $db,
             $table: $db.accountingPeriods,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableFilterComposer get createdBy {
+    final $$UsersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.createdBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableFilterComposer(
+            $db: $db,
+            $table: $db.users,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -33994,11 +35613,6 @@ class $$JournalEntriesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<int> get createdBy => $composableBuilder(
-    column: $table.createdBy,
-    builder: (column) => ColumnOrderings(column),
-  );
-
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -34023,6 +35637,29 @@ class $$JournalEntriesTableOrderingComposer
           }) => $$AccountingPeriodsTableOrderingComposer(
             $db: $db,
             $table: $db.accountingPeriods,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableOrderingComposer get createdBy {
+    final $$UsersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.createdBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableOrderingComposer(
+            $db: $db,
+            $table: $db.users,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -34061,9 +35698,6 @@ class $$JournalEntriesTableAnnotationComposer
   GeneratedColumn<String> get status =>
       $composableBuilder(column: $table.status, builder: (column) => column);
 
-  GeneratedColumn<int> get createdBy =>
-      $composableBuilder(column: $table.createdBy, builder: (column) => column);
-
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -34091,6 +35725,29 @@ class $$JournalEntriesTableAnnotationComposer
                     $removeJoinBuilderFromRootComposer,
               ),
         );
+    return composer;
+  }
+
+  $$UsersTableAnnotationComposer get createdBy {
+    final $$UsersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.createdBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
     return composer;
   }
 
@@ -34136,6 +35793,7 @@ class $$JournalEntriesTableTableManager
           JournalEntry,
           PrefetchHooks Function({
             bool accountingPeriodId,
+            bool createdBy,
             bool journalEntryLinesRefs,
           })
         > {
@@ -34205,7 +35863,11 @@ class $$JournalEntriesTableTableManager
               )
               .toList(),
           prefetchHooksCallback:
-              ({accountingPeriodId = false, journalEntryLinesRefs = false}) {
+              ({
+                accountingPeriodId = false,
+                createdBy = false,
+                journalEntryLinesRefs = false,
+              }) {
                 return PrefetchHooks(
                   db: db,
                   explicitlyWatchedTables: [
@@ -34238,6 +35900,21 @@ class $$JournalEntriesTableTableManager
                                     referencedColumn:
                                         $$JournalEntriesTableReferences
                                             ._accountingPeriodIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (createdBy) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.createdBy,
+                                    referencedTable:
+                                        $$JournalEntriesTableReferences
+                                            ._createdByTable(db),
+                                    referencedColumn:
+                                        $$JournalEntriesTableReferences
+                                            ._createdByTable(db)
                                             .id,
                                   )
                                   as T;
@@ -34290,6 +35967,7 @@ typedef $$JournalEntriesTableProcessedTableManager =
       JournalEntry,
       PrefetchHooks Function({
         bool accountingPeriodId,
+        bool createdBy,
         bool journalEntryLinesRefs,
       })
     >;
@@ -35504,6 +37182,29 @@ typedef $$AuditLogsTableUpdateCompanionBuilder =
       Value<DateTime> createdAt,
     });
 
+final class $$AuditLogsTableReferences
+    extends BaseReferences<_$AppDatabase, $AuditLogsTable, AuditLog> {
+  $$AuditLogsTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $UsersTable _userIdTable(_$AppDatabase db) => db.users.createAlias(
+    $_aliasNameGenerator(db.auditLogs.userId, db.users.id),
+  );
+
+  $$UsersTableProcessedTableManager? get userId {
+    final $_column = $_itemColumn<int>('user_id');
+    if ($_column == null) return null;
+    final manager = $$UsersTableTableManager(
+      $_db,
+      $_db.users,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_userIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
 class $$AuditLogsTableFilterComposer
     extends Composer<_$AppDatabase, $AuditLogsTable> {
   $$AuditLogsTableFilterComposer({
@@ -35543,15 +37244,33 @@ class $$AuditLogsTableFilterComposer
     builder: (column) => ColumnWithTypeConverterFilters(column),
   );
 
-  ColumnFilters<int> get userId => $composableBuilder(
-    column: $table.userId,
-    builder: (column) => ColumnFilters(column),
-  );
-
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnFilters(column),
   );
+
+  $$UsersTableFilterComposer get userId {
+    final $$UsersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.userId,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableFilterComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$AuditLogsTableOrderingComposer
@@ -35588,15 +37307,33 @@ class $$AuditLogsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<int> get userId => $composableBuilder(
-    column: $table.userId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  $$UsersTableOrderingComposer get userId {
+    final $$UsersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.userId,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableOrderingComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$AuditLogsTableAnnotationComposer
@@ -35625,11 +37362,31 @@ class $$AuditLogsTableAnnotationComposer
   GeneratedColumnWithTypeConverter<Map<String, dynamic>, String> get changes =>
       $composableBuilder(column: $table.changes, builder: (column) => column);
 
-  GeneratedColumn<int> get userId =>
-      $composableBuilder(column: $table.userId, builder: (column) => column);
-
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$UsersTableAnnotationComposer get userId {
+    final $$UsersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.userId,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$AuditLogsTableTableManager
@@ -35643,9 +37400,9 @@ class $$AuditLogsTableTableManager
           $$AuditLogsTableAnnotationComposer,
           $$AuditLogsTableCreateCompanionBuilder,
           $$AuditLogsTableUpdateCompanionBuilder,
-          (AuditLog, BaseReferences<_$AppDatabase, $AuditLogsTable, AuditLog>),
+          (AuditLog, $$AuditLogsTableReferences),
           AuditLog,
-          PrefetchHooks Function()
+          PrefetchHooks Function({bool userId})
         > {
   $$AuditLogsTableTableManager(_$AppDatabase db, $AuditLogsTable table)
     : super(
@@ -35695,9 +37452,54 @@ class $$AuditLogsTableTableManager
                 createdAt: createdAt,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$AuditLogsTableReferences(db, table, e),
+                ),
+              )
               .toList(),
-          prefetchHooksCallback: null,
+          prefetchHooksCallback: ({userId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (userId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.userId,
+                                referencedTable: $$AuditLogsTableReferences
+                                    ._userIdTable(db),
+                                referencedColumn: $$AuditLogsTableReferences
+                                    ._userIdTable(db)
+                                    .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
         ),
       );
 }
@@ -35712,9 +37514,9 @@ typedef $$AuditLogsTableProcessedTableManager =
       $$AuditLogsTableAnnotationComposer,
       $$AuditLogsTableCreateCompanionBuilder,
       $$AuditLogsTableUpdateCompanionBuilder,
-      (AuditLog, BaseReferences<_$AppDatabase, $AuditLogsTable, AuditLog>),
+      (AuditLog, $$AuditLogsTableReferences),
       AuditLog,
-      PrefetchHooks Function()
+      PrefetchHooks Function({bool userId})
     >;
 typedef $$VoidLogsTableCreateCompanionBuilder =
     VoidLogsCompanion Function({
@@ -35734,6 +37536,29 @@ typedef $$VoidLogsTableUpdateCompanionBuilder =
       Value<int?> voidedBy,
       Value<DateTime> voidedAt,
     });
+
+final class $$VoidLogsTableReferences
+    extends BaseReferences<_$AppDatabase, $VoidLogsTable, VoidLog> {
+  $$VoidLogsTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $UsersTable _voidedByTable(_$AppDatabase db) => db.users.createAlias(
+    $_aliasNameGenerator(db.voidLogs.voidedBy, db.users.id),
+  );
+
+  $$UsersTableProcessedTableManager? get voidedBy {
+    final $_column = $_itemColumn<int>('voided_by');
+    if ($_column == null) return null;
+    final manager = $$UsersTableTableManager(
+      $_db,
+      $_db.users,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_voidedByTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
 
 class $$VoidLogsTableFilterComposer
     extends Composer<_$AppDatabase, $VoidLogsTable> {
@@ -35764,15 +37589,33 @@ class $$VoidLogsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<int> get voidedBy => $composableBuilder(
-    column: $table.voidedBy,
-    builder: (column) => ColumnFilters(column),
-  );
-
   ColumnFilters<DateTime> get voidedAt => $composableBuilder(
     column: $table.voidedAt,
     builder: (column) => ColumnFilters(column),
   );
+
+  $$UsersTableFilterComposer get voidedBy {
+    final $$UsersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.voidedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableFilterComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$VoidLogsTableOrderingComposer
@@ -35804,15 +37647,33 @@ class $$VoidLogsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<int> get voidedBy => $composableBuilder(
-    column: $table.voidedBy,
-    builder: (column) => ColumnOrderings(column),
-  );
-
   ColumnOrderings<DateTime> get voidedAt => $composableBuilder(
     column: $table.voidedAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  $$UsersTableOrderingComposer get voidedBy {
+    final $$UsersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.voidedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableOrderingComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$VoidLogsTableAnnotationComposer
@@ -35838,11 +37699,31 @@ class $$VoidLogsTableAnnotationComposer
   GeneratedColumn<String> get reason =>
       $composableBuilder(column: $table.reason, builder: (column) => column);
 
-  GeneratedColumn<int> get voidedBy =>
-      $composableBuilder(column: $table.voidedBy, builder: (column) => column);
-
   GeneratedColumn<DateTime> get voidedAt =>
       $composableBuilder(column: $table.voidedAt, builder: (column) => column);
+
+  $$UsersTableAnnotationComposer get voidedBy {
+    final $$UsersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.voidedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$VoidLogsTableTableManager
@@ -35856,9 +37737,9 @@ class $$VoidLogsTableTableManager
           $$VoidLogsTableAnnotationComposer,
           $$VoidLogsTableCreateCompanionBuilder,
           $$VoidLogsTableUpdateCompanionBuilder,
-          (VoidLog, BaseReferences<_$AppDatabase, $VoidLogsTable, VoidLog>),
+          (VoidLog, $$VoidLogsTableReferences),
           VoidLog,
-          PrefetchHooks Function()
+          PrefetchHooks Function({bool voidedBy})
         > {
   $$VoidLogsTableTableManager(_$AppDatabase db, $VoidLogsTable table)
     : super(
@@ -35904,9 +37785,54 @@ class $$VoidLogsTableTableManager
                 voidedAt: voidedAt,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$VoidLogsTableReferences(db, table, e),
+                ),
+              )
               .toList(),
-          prefetchHooksCallback: null,
+          prefetchHooksCallback: ({voidedBy = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (voidedBy) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.voidedBy,
+                                referencedTable: $$VoidLogsTableReferences
+                                    ._voidedByTable(db),
+                                referencedColumn: $$VoidLogsTableReferences
+                                    ._voidedByTable(db)
+                                    .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
         ),
       );
 }
@@ -35921,9 +37847,9 @@ typedef $$VoidLogsTableProcessedTableManager =
       $$VoidLogsTableAnnotationComposer,
       $$VoidLogsTableCreateCompanionBuilder,
       $$VoidLogsTableUpdateCompanionBuilder,
-      (VoidLog, BaseReferences<_$AppDatabase, $VoidLogsTable, VoidLog>),
+      (VoidLog, $$VoidLogsTableReferences),
       VoidLog,
-      PrefetchHooks Function()
+      PrefetchHooks Function({bool voidedBy})
     >;
 typedef $$NotificationsTableCreateCompanionBuilder =
     NotificationsCompanion Function({
@@ -35946,6 +37872,33 @@ typedef $$NotificationsTableUpdateCompanionBuilder =
       Value<DateTime> createdAt,
     });
 
+final class $$NotificationsTableReferences
+    extends BaseReferences<_$AppDatabase, $NotificationsTable, Notification> {
+  $$NotificationsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $UsersTable _userIdTable(_$AppDatabase db) => db.users.createAlias(
+    $_aliasNameGenerator(db.notifications.userId, db.users.id),
+  );
+
+  $$UsersTableProcessedTableManager? get userId {
+    final $_column = $_itemColumn<int>('user_id');
+    if ($_column == null) return null;
+    final manager = $$UsersTableTableManager(
+      $_db,
+      $_db.users,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_userIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
 class $$NotificationsTableFilterComposer
     extends Composer<_$AppDatabase, $NotificationsTable> {
   $$NotificationsTableFilterComposer({
@@ -35957,11 +37910,6 @@ class $$NotificationsTableFilterComposer
   });
   ColumnFilters<int> get id => $composableBuilder(
     column: $table.id,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get userId => $composableBuilder(
-    column: $table.userId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -35989,6 +37937,29 @@ class $$NotificationsTableFilterComposer
     column: $table.createdAt,
     builder: (column) => ColumnFilters(column),
   );
+
+  $$UsersTableFilterComposer get userId {
+    final $$UsersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.userId,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableFilterComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$NotificationsTableOrderingComposer
@@ -36002,11 +37973,6 @@ class $$NotificationsTableOrderingComposer
   });
   ColumnOrderings<int> get id => $composableBuilder(
     column: $table.id,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get userId => $composableBuilder(
-    column: $table.userId,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -36034,6 +38000,29 @@ class $$NotificationsTableOrderingComposer
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  $$UsersTableOrderingComposer get userId {
+    final $$UsersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.userId,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableOrderingComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$NotificationsTableAnnotationComposer
@@ -36047,9 +38036,6 @@ class $$NotificationsTableAnnotationComposer
   });
   GeneratedColumn<int> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
-
-  GeneratedColumn<int> get userId =>
-      $composableBuilder(column: $table.userId, builder: (column) => column);
 
   GeneratedColumn<String> get title =>
       $composableBuilder(column: $table.title, builder: (column) => column);
@@ -36065,6 +38051,29 @@ class $$NotificationsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$UsersTableAnnotationComposer get userId {
+    final $$UsersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.userId,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$NotificationsTableTableManager
@@ -36078,12 +38087,9 @@ class $$NotificationsTableTableManager
           $$NotificationsTableAnnotationComposer,
           $$NotificationsTableCreateCompanionBuilder,
           $$NotificationsTableUpdateCompanionBuilder,
-          (
-            Notification,
-            BaseReferences<_$AppDatabase, $NotificationsTable, Notification>,
-          ),
+          (Notification, $$NotificationsTableReferences),
           Notification,
-          PrefetchHooks Function()
+          PrefetchHooks Function({bool userId})
         > {
   $$NotificationsTableTableManager(_$AppDatabase db, $NotificationsTable table)
     : super(
@@ -36133,9 +38139,54 @@ class $$NotificationsTableTableManager
                 createdAt: createdAt,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$NotificationsTableReferences(db, table, e),
+                ),
+              )
               .toList(),
-          prefetchHooksCallback: null,
+          prefetchHooksCallback: ({userId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (userId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.userId,
+                                referencedTable: $$NotificationsTableReferences
+                                    ._userIdTable(db),
+                                referencedColumn: $$NotificationsTableReferences
+                                    ._userIdTable(db)
+                                    .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
         ),
       );
 }
@@ -36150,17 +38201,16 @@ typedef $$NotificationsTableProcessedTableManager =
       $$NotificationsTableAnnotationComposer,
       $$NotificationsTableCreateCompanionBuilder,
       $$NotificationsTableUpdateCompanionBuilder,
-      (
-        Notification,
-        BaseReferences<_$AppDatabase, $NotificationsTable, Notification>,
-      ),
+      (Notification, $$NotificationsTableReferences),
       Notification,
-      PrefetchHooks Function()
+      PrefetchHooks Function({bool userId})
     >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
   $AppDatabaseManager(this._db);
+  $$UsersTableTableManager get users =>
+      $$UsersTableTableManager(_db, _db.users);
   $$CurrenciesTableTableManager get currencies =>
       $$CurrenciesTableTableManager(_db, _db.currencies);
   $$AppSettingsTableTableManager get appSettings =>

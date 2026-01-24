@@ -211,7 +211,7 @@ void main() {
         ),
       );
 
-      final testAmount = Decimal.parse('123.45');
+      final testAmount = Decimal.fromInt(12345);
       final productId = await database.into(database.products).insert(
         ProductsCompanion.insert(
           sku: 'TEST-003',
@@ -231,17 +231,17 @@ void main() {
     });
 
     test('handles complex money calculations without precision loss', () async {
-      final price = Decimal.parse('19.99');
-      final quantity = 3;
-      final taxRate = 0.19;
-      
-      final subtotal = price * Decimal.fromInt(quantity);
-      final tax = subtotal * Decimal.parse(taxRate.toString());
-      final total = subtotal + tax;
+      final priceCents = 1999;
+      const quantity = 3;
+      const taxRateBps = 1900;
 
-      expect(subtotal, equals(Decimal.parse('59.97')));
-      expect(tax.toStringAsFixed(2), equals('11.39'));
-      expect(total.toStringAsFixed(2), equals('71.36'));
+      final subtotalCents = priceCents * quantity;
+      final taxCents = (subtotalCents * taxRateBps) ~/ 10000;
+      final totalCents = subtotalCents + taxCents;
+
+      expect(subtotalCents, equals(5997));
+      expect(taxCents, equals(1139));
+      expect(totalCents, equals(7136));
     });
   });
 

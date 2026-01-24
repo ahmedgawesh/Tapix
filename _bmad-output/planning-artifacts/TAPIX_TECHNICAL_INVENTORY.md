@@ -667,10 +667,10 @@ else:
 | `GlobalAppBar` | global_app_bar.dart | Consistent app bar with actions |
 | `DateRangeFilter` | date_range_filter.dart | Date range picker for reports |
 | `ReportActionButtons` | report_action_buttons.dart | PDF/Excel/Share buttons |
-| `BusinessRuleErrorDialog` | business_rule_error_dialog.dart | Validation error display |
-| `VoidReturnDialog` | void_return_dialog.dart | Void confirmation |
+| `BusinessRuleErrorDialog` | business_rule_error_dialog.dart | Validation error display (Red/Error theme) |
+| `VoidReturnDialog` | void_return_dialog.dart | Void confirmation (Red/Destructive theme) |
 | `PermissionWidgets` | permission_widgets.dart | Role-based visibility |
-| `AppButton` | app_button.dart | Styled button |
+| `AppButton` | app_button.dart | Styled button (supports Success/Green, Warning/Orange, Error/Red) |
 | `LogoHelper` | logo_helper.dart | Logo display utilities |
 
 ### 5.2 Sales Widgets (lib/features/sales/widgets/)

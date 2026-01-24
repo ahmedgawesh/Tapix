@@ -3,6 +3,7 @@ import 'package:decimal/decimal.dart';
 import 'package:flutter/foundation.dart';
 
 import 'tables/settings.dart';
+import 'tables/users.dart';
 import 'tables/products.dart';
 import 'tables/parties.dart';
 import 'tables/people.dart';
@@ -11,6 +12,7 @@ import 'tables/accounting.dart';
 import 'tables/audit.dart';
 import 'converters/money_converter.dart';
 import 'converters/json_converter.dart';
+import 'converters/timestamp_converter.dart';
 import 'daos/product_dao.dart';
 import 'daos/sale_dao.dart';
 import 'daos/customer_dao.dart';
@@ -22,6 +24,7 @@ part 'app_database.g.dart';
 
 @DriftDatabase(
   tables: [
+    Users,
     Currencies,
     AppSettings,
     StoreLogos,

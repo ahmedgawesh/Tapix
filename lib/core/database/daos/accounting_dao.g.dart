@@ -6,6 +6,7 @@ part of 'accounting_dao.dart';
 mixin _$AccountingDaoMixin on DatabaseAccessor<AppDatabase> {
   $CurrenciesTable get currencies => attachedDatabase.currencies;
   $AccountsTable get accounts => attachedDatabase.accounts;
+  $UsersTable get users => attachedDatabase.users;
   $AccountingPeriodsTable get accountingPeriods =>
       attachedDatabase.accountingPeriods;
   $JournalEntriesTable get journalEntries => attachedDatabase.journalEntries;
@@ -24,6 +25,8 @@ class AccountingDaoManager {
       $$CurrenciesTableTableManager(_db.attachedDatabase, _db.currencies);
   $$AccountsTableTableManager get accounts =>
       $$AccountsTableTableManager(_db.attachedDatabase, _db.accounts);
+  $$UsersTableTableManager get users =>
+      $$UsersTableTableManager(_db.attachedDatabase, _db.users);
   $$AccountingPeriodsTableTableManager get accountingPeriods =>
       $$AccountingPeriodsTableTableManager(
         _db.attachedDatabase,

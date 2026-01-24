@@ -143,6 +143,7 @@
 
 - [ ] Configure light theme with flex_color_scheme
 - [ ] Configure dark theme with flex_color_scheme
+- [ ] Configure semantic colors (Success=Green, Warning=Orange, Error=Red)
 - [ ] Create theme toggle functionality
 - [ ] Test theme persistence
 

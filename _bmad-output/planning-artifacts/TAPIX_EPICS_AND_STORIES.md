@@ -66,6 +66,8 @@
 
 **Acceptance Criteria:**
 - [ ] `flex_color_scheme` implemented with modern palette
+- [ ] Semantic colors defined: Green (Success), Orange (Warning), Red (Error/Destructive)
+- [ ] App theme configured to use semantic colors for buttons and text
 - [ ] `easy_localization` set up with EN, AR, FR support
 - [ ] RTL layout support verified for Arabic
 - [ ] Theme/Language persistence in local storage
@@ -631,10 +633,10 @@
 **So that** the app experience is uniform.
 
 **Acceptance Criteria:**
-- [ ] BusinessRuleErrorDialog (Show validation errors)
-- [ ] VoidReturnDialog (Confirm actions)
+- [ ] BusinessRuleErrorDialog (Show validation errors) - Uses Red/Error styling
+- [ ] VoidReturnDialog (Confirm actions) - Uses Red/Destructive styling
 - [ ] DateRangeFilter (Filter by date)
-- [ ] ConfirmationDialog (Generic confirmations)
+- [ ] ConfirmationDialog (Generic confirmations) - Uses Green/Success or Neutral styling
 
 ---
 

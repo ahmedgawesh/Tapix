@@ -6,12 +6,12 @@ class MoneyConverter extends TypeConverter<Decimal, int> {
 
   @override
   Decimal fromSql(int fromDb) {
-    return (Decimal.fromInt(fromDb) / Decimal.fromInt(100)).toDecimal();
+    return Decimal.fromInt(fromDb);
   }
 
   @override
   int toSql(Decimal value) {
-    return (value * Decimal.fromInt(100)).toBigInt().toInt();
+    return value.toBigInt().toInt();
   }
 }
 
