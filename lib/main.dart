@@ -1,121 +1,154 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
-void main() {
-  runApp(const MyApp());
+import 'core/bloc/localization_bloc.dart';
+import 'core/bloc/realtime_bloc.dart';
+import 'core/bloc/theme_bloc.dart';
+import 'core/di/injection_container.dart' as di;
+import 'core/services/localization_service.dart';
+import 'core/theme/app_theme.dart';
+import 'generated/codegen_loader.g.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await EasyLocalization.ensureInitialized();
+  await di.init();
+
+  final localizationService = di.sl<LocalizationService>();
+  final startLocale = localizationService.getLocale();
+
+  runApp(
+    EasyLocalization(
+      supportedLocales: LocalizationService.supportedLocales,
+      path: 'assets/translations',
+      fallbackLocale: const Locale('en'),
+      startLocale: startLocale,
+      saveLocale: false,
+      assetLoader: const CodegenLoader(),
+      child: const MyApp(),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
+    return MultiBlocProvider(
+      providers: [
+        BlocProvider(create: (_) => di.sl<ThemeBloc>()),
+        BlocProvider(create: (_) => di.sl<LocalizationBloc>()),
+      ],
+      child: BlocListener<LocalizationBloc, RealtimeState<Locale>>(
+        listener: (context, state) {
+          if (state is RealtimeSuccess<Locale>) {
+            context.setLocale(state.data);
+          }
+        },
+        child: BlocBuilder<ThemeBloc, RealtimeState<ThemeMode>>(
+          builder: (context, themeState) {
+            return BlocBuilder<LocalizationBloc, RealtimeState<Locale>>(
+              builder: (context, localeState) {
+                final themeMode =
+                    (themeState is RealtimeSuccess<ThemeMode>)
+                        ? themeState.data
+                        : ThemeMode.system;
+                
+                final locale =
+                    (localeState is RealtimeSuccess<Locale>)
+                        ? localeState.data
+                        : context.locale;
+
+                return MaterialApp(
+                  title: 'Tapix',
+                  debugShowCheckedModeBanner: false,
+                  localizationsDelegates: context.localizationDelegates,
+                  supportedLocales: context.supportedLocales,
+                  locale: locale,
+                  theme: AppTheme.lightTheme,
+                  darkTheme: AppTheme.darkTheme,
+                  themeMode: themeMode,
+                  home: const HomePage(),
+                );
+              },
+            );
+          },
+        ),
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
-
-  @override
-  State<MyHomePage> createState() => _MyHomePageState();
-}
-
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
-
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
-  }
+class HomePage extends StatelessWidget {
+  const HomePage({super.key});
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
       appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
+        title: const Text('app.name').tr(),
       ),
       body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
         child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: .center,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Text('You have pushed the button this many times:'),
             Text(
-              '$_counter',
+              'settings.title',
               style: Theme.of(context).textTheme.headlineMedium,
+            ).tr(),
+            const SizedBox(height: 32),
+            // Theme Section
+            Text(
+              'settings.theme',
+              style: Theme.of(context).textTheme.titleMedium,
+            ).tr(),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 8,
+              children: [
+                FilledButton.tonal(
+                  onPressed: () => context
+                      .read<ThemeBloc>()
+                      .add(const ThemeChanged(ThemeMode.light)),
+                  child: const Text('settings.light').tr(),
+                ),
+                FilledButton.tonal(
+                  onPressed: () => context
+                      .read<ThemeBloc>()
+                      .add(const ThemeChanged(ThemeMode.dark)),
+                  child: const Text('settings.dark').tr(),
+                ),
+                FilledButton.tonal(
+                  onPressed: () => context
+                      .read<ThemeBloc>()
+                      .add(const ThemeChanged(ThemeMode.system)),
+                  child: const Text('settings.system').tr(),
+                ),
+              ],
+            ),
+            const SizedBox(height: 32),
+            // Language Section
+            Text(
+              'settings.language',
+              style: Theme.of(context).textTheme.titleMedium,
+            ).tr(),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 8,
+              children: [
+                for (final locale in LocalizationService.supportedLocales)
+                  OutlinedButton(
+                    onPressed: () => context
+                        .read<LocalizationBloc>()
+                        .add(LocaleChanged(locale)),
+                    child: Text(locale.languageCode.toUpperCase()),
+                  ),
+              ],
             ),
           ],
         ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
       ),
     );
   }

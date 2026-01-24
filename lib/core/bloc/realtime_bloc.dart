@@ -119,7 +119,8 @@ abstract class RealtimeBloc<T, E extends RealtimeEvent>
   final Map<String, T> _pendingOptimisticUpdates = {};
   bool _isDisposed = false;
 
-  RealtimeBloc() : super(const RealtimeInitial()) {
+  RealtimeBloc([RealtimeState<T>? initialState])
+      : super(initialState ?? const RealtimeLoading()) {
     on<RealtimeDataUpdated<T>>(_onDataUpdated);
     on<RealtimeErrorOccurred>(_onErrorOccurred);
     on<RealtimeRefreshRequested>(_onRefreshRequested);
@@ -139,8 +140,6 @@ abstract class RealtimeBloc<T, E extends RealtimeEvent>
   void registerEventHandlers();
 
   void _initializeStream() {
-    // ignore: invalid_use_of_visible_for_testing_member
-    emit(const RealtimeLoading());
     _subscribe();
   }
 

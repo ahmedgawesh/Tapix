@@ -1,30 +1,53 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
+import 'package:get_it/get_it.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:tapix/core/di/injection_container.dart' as di;
+import 'package:tapix/core/services/localization_service.dart';
+import 'package:tapix/generated/codegen_loader.g.dart';
 import 'package:tapix/main.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  setUpAll(() async {
+    SharedPreferences.setMockInitialValues({});
+    await di.init();
+  });
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+  tearDownAll(() {
+    GetIt.instance.reset();
+  });
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+  testWidgets('App smoke test', (WidgetTester tester) async {
+    final localizationService = di.sl<LocalizationService>();
+    final startLocale = localizationService.getLocale();
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    await tester.pumpWidget(
+      EasyLocalization(
+        supportedLocales: LocalizationService.supportedLocales,
+        path: 'assets/translations',
+        fallbackLocale: const Locale('en'),
+        startLocale: startLocale,
+        saveLocale: false,
+        assetLoader: const CodegenLoader(),
+        child: const MyApp(),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    // Verify basic UI elements are present
+    expect(find.text('Tapix'), findsOneWidget);
+    expect(find.text('Settings'), findsOneWidget);
+    
+    // Check for theme buttons
+    expect(find.text('Light'), findsOneWidget);
+    expect(find.text('Dark'), findsOneWidget);
+    expect(find.text('System'), findsOneWidget);
+
+    // Check for language buttons
+    expect(find.text('EN'), findsOneWidget);
+    expect(find.text('AR'), findsOneWidget);
+    expect(find.text('FR'), findsOneWidget);
   });
 }
