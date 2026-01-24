@@ -36,11 +36,14 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Get the singleton AuthBloc and trigger auth check
+    final authBloc = di.sl<AuthBloc>()..add(const AuthCheckRequested());
+    
     return MultiBlocProvider(
       providers: [
         BlocProvider(create: (_) => di.sl<ThemeBloc>()),
         BlocProvider(create: (_) => di.sl<LocalizationBloc>()),
-        BlocProvider(create: (_) => di.sl<AuthBloc>()..add(const AuthCheckRequested())),
+        BlocProvider.value(value: authBloc),
       ],
       child: BlocListener<LocalizationBloc, RealtimeState<Locale>>(
         listener: (context, state) {

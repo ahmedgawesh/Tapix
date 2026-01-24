@@ -10,6 +10,8 @@ export 'presentation/navigation/permission_navigator.dart';
 export 'presentation/screens/access_denied_screen.dart';
 export 'presentation/screens/login_screen.dart';
 export 'presentation/screens/setup_screen.dart';
+export 'presentation/screens/splash_screen.dart';
+export 'presentation/screens/welcome_screen.dart';
 export 'presentation/widgets/auth_text_field.dart';
 export 'presentation/widgets/auth_wrapper.dart';
 export 'presentation/widgets/permission_gate.dart';

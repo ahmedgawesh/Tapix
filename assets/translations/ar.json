@@ -2,6 +2,31 @@
   "app": {
     "name": "تابكس"
   },
+  "welcome": {
+    "title": "مرحباً بك في تابكس",
+    "subtitle": "دعنا نخصص تجربتك",
+    "select_language": "اختر اللغة",
+    "select_theme": "اختر المظهر",
+    "theme_light": "فاتح",
+    "theme_dark": "داكن",
+    "theme_system": "إعداد النظام",
+    "continue": "متابعة"
+  },
+  "dashboard": {
+    "title": "لوحة التحكم",
+    "welcome": "مرحباً، {}!",
+    "role": "الدور: {}",
+    "quick_actions": "إجراءات سريعة",
+    "management": "الإدارة",
+    "new_sale": "بيع جديد",
+    "products": "المنتجات",
+    "customers": "العملاء",
+    "reports": "التقارير",
+    "suppliers": "الموردين",
+    "purchases": "المشتريات",
+    "expenses": "المصروفات",
+    "settings": "الإعدادات"
+  },
   "settings": {
     "title": "الإعدادات",
     "theme": "المظهر",

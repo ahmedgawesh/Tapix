@@ -49,9 +49,9 @@ development_status:
   epic-1-retrospective: optional
 
   # EPIC-02: Authentication
-  epic-2: in-progress
+  epic-2: done
   2-1-login-screen-auth-logic: done
-  2-2-role-based-access-control: review
+  2-2-role-based-access-control: done
   epic-2-retrospective: optional
 
   # EPIC-03: Product Management

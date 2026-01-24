@@ -2,6 +2,31 @@
   "app": {
     "name": "Tapix"
   },
+  "welcome": {
+    "title": "Welcome to Tapix",
+    "subtitle": "Let's personalize your experience",
+    "select_language": "Select Language",
+    "select_theme": "Select Theme",
+    "theme_light": "Light",
+    "theme_dark": "Dark",
+    "theme_system": "System Default",
+    "continue": "Continue"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "welcome": "Welcome, {}!",
+    "role": "Role: {}",
+    "quick_actions": "Quick Actions",
+    "management": "Management",
+    "new_sale": "New Sale",
+    "products": "Products",
+    "customers": "Customers",
+    "reports": "Reports",
+    "suppliers": "Suppliers",
+    "purchases": "Purchases",
+    "expenses": "Expenses",
+    "settings": "Settings"
+  },
   "settings": {
     "title": "Settings",
     "theme": "Theme",

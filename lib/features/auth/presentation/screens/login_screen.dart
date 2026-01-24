@@ -43,6 +43,16 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final screenWidth = MediaQuery.of(context).size.width;
+    
+    // Responsive breakpoints
+    final isDesktop = screenWidth >= 1024;
+    final isTablet = screenWidth >= 600 && screenWidth < 1024;
+    
+    // Responsive sizing
+    final logoSize = isDesktop ? 80.0 : (isTablet ? 72.0 : 64.0);
+    final maxWidth = isDesktop ? 450.0 : (isTablet ? 420.0 : 400.0);
+    final padding = isDesktop ? 32.0 : (isTablet ? 28.0 : 24.0);
 
     return Scaffold(
       body: BlocListener<AuthBloc, RealtimeState<UserEntity?>>( 
@@ -59,19 +69,21 @@ class _LoginScreenState extends State<LoginScreen> {
         child: SafeArea(
           child: Center(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
+              padding: EdgeInsets.all(padding),
               child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 400),
+                constraints: BoxConstraints(maxWidth: maxWidth),
                 child: Form(
                   key: _formKey,
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Icon(
-                        LucideIcons.store,
-                        size: 64,
-                        color: colorScheme.primary,
+                      // Logo instead of icon
+                      Image.asset(
+                        'assets/logos/logo.png',
+                        width: logoSize * 2,
+                        height: logoSize,
+                        fit: BoxFit.contain,
                       ),
                       const SizedBox(height: 16),
                       Text(

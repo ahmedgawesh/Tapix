@@ -12,6 +12,19 @@ enum UserRole {
       orElse: () => UserRole.salesperson,
     );
   }
+  
+  String get displayName {
+    switch (this) {
+      case UserRole.owner:
+        return 'Owner';
+      case UserRole.manager:
+        return 'Manager';
+      case UserRole.cashier:
+        return 'Cashier';
+      case UserRole.salesperson:
+        return 'Salesperson';
+    }
+  }
 }
 
 class UserEntity extends Equatable {

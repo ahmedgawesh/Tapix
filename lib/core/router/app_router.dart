@@ -1,64 +1,134 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../features/auth/auth.dart';
-import '../../features/auth/domain/entities/user_entity.dart';
+import '../../features/dashboard/presentation/screens/dashboard_screen.dart';
 import '../di/injection_container.dart';
 import 'route_permissions.dart';
 
 class AppRouter {
   static final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>();
+  static final AuthBloc _authBloc = sl<AuthBloc>();
+  
+  // Keys for tracking onboarding state
+  static const String _hasSeenWelcomeKey = 'has_seen_welcome';
+  
+  // Session state (resets on app restart)
+  static bool _hasCompletedSplash = false;
+  static bool? _hasSeenWelcome;
+  
+  static Future<bool> hasSeenWelcome() async {
+    if (_hasSeenWelcome != null) return _hasSeenWelcome!;
+    final prefs = sl<SharedPreferences>();
+    _hasSeenWelcome = prefs.getBool(_hasSeenWelcomeKey) ?? false;
+    return _hasSeenWelcome!;
+  }
+  
+  static Future<void> markWelcomeSeen() async {
+    final prefs = sl<SharedPreferences>();
+    await prefs.setBool(_hasSeenWelcomeKey, true);
+    _hasSeenWelcome = true;
+  }
+  
+  static void markSplashCompleted() {
+    _hasCompletedSplash = true;
+  }
 
   static final GoRouter router = GoRouter(
     navigatorKey: _rootNavigatorKey,
     initialLocation: '/',
-    redirect: (context, state) {
-      final authBloc = sl<AuthBloc>();
-      final authState = authBloc.state;
+    refreshListenable: GoRouterRefreshStream(_authBloc.stream),
+    redirect: (context, state) async {
+      final currentPath = state.uri.path;
+      final authState = _authBloc.state;
       
-      // Check authentication status
-      if (authState is! AuthAuthenticated) {
-        // Allow access to login and setup routes
-        if (state.uri.path == '/login' || state.uri.path == '/setup') {
+      // Show splash on first app launch (session-based)
+      if (!_hasCompletedSplash && currentPath != '/splash') {
+        return '/splash';
+      }
+      
+      // Allow splash route
+      if (currentPath == '/splash') {
+        return null;
+      }
+      
+      // After splash, check if user has seen welcome screen
+      final seenWelcome = await hasSeenWelcome();
+      if (!seenWelcome && currentPath != '/welcome') {
+        return '/welcome';
+      }
+      
+      // Allow welcome route
+      if (currentPath == '/welcome') {
+        return null;
+      }
+
+      // After welcome, handle auth states
+      // If still loading, stay on current route (will re-redirect when state changes)
+      if (authState is AuthInitial || authState is AuthLoading) {
+        // Don't show HomePage while loading - stay on a loading state
+        // The GoRouterRefreshStream will trigger redirect when auth state changes
+        return null;
+      }
+
+      // No users exist - go to setup screen to create first owner
+      if (authState is AuthNeedsSetup) {
+        if (currentPath == '/setup') {
           return null;
         }
-        return '/login';
+        return '/setup';
       }
 
-      final user = authState.user;
-      
-      // Check permissions for the route
-      final requiredRoles = RoutePermissions.map[state.uri.path];
-      if (requiredRoles != null) {
-        final permissionService = sl<PermissionService>();
-        if (!permissionService.isRoleAtLeast(user, requiredRoles.last)) { // Simplified check, ideally check exact role match or min level
-           // Better check: does user have ANY of the allowed roles?
-           bool hasAccess = false;
-           for (final role in requiredRoles) {
-             if (user.role == role) {
-               hasAccess = true;
-               break;
-             }
-           }
-           if (!hasAccess) {
-             // Check if it's a hierarchy check (e.g. manager+ can access)
-             // For simplicity in this implementation, we use the list as "allowed roles".
-             // If the list is [Owner, Manager], then only they can access.
-             return '/access-denied';
-           }
+      // User is authenticated - go to dashboard
+      if (authState is AuthAuthenticated) {
+        final user = authState.user;
+        final requiredRoles = RoutePermissions.map[currentPath];
+        if (requiredRoles != null) {
+          final hasAccess = requiredRoles.contains(user.role);
+          if (!hasAccess) {
+            return '/access-denied';
+          }
         }
+
+        // Redirect away from auth screens to dashboard
+        if (currentPath == '/login' || currentPath == '/setup' || currentPath == '/') {
+          return '/dashboard';
+        }
+
+        return null;
       }
 
-      // If user is authenticated but trying to access login/setup
-      if (state.uri.path == '/login' || state.uri.path == '/setup') {
-        return '/dashboard';
+      // AuthUnauthenticated or AuthError - go to login
+      if (currentPath == '/login') {
+        return null;
       }
 
-      return null;
+      return '/login';
     },
     routes: [
       GoRoute(
         path: '/',
-        builder: (context, state) => const HomePage(),
+        builder: (context, state) => const _AuthLoadingScreen(),
+      ),
+      GoRoute(
+        path: '/splash',
+        builder: (context, state) => SplashScreen(
+          onComplete: () {
+            markSplashCompleted();
+            router.go('/');
+          },
+        ),
+      ),
+      GoRoute(
+        path: '/welcome',
+        builder: (context, state) => WelcomeScreen(
+          onComplete: () async {
+            await markWelcomeSeen();
+            router.go('/');
+          },
+        ),
       ),
       GoRoute(
         path: '/login',
@@ -70,7 +140,7 @@ class AppRouter {
       ),
       GoRoute(
         path: '/dashboard',
-        builder: (context, state) => const PlaceholderScreen(title: 'Dashboard'),
+        builder: (context, state) => const DashboardScreen(),
       ),
       GoRoute(
         path: '/products',
@@ -129,22 +199,6 @@ class AppRouter {
     ],
   );
 
-  // Single source of truth for route permissions
-  static final Map<String, List<UserRole>> _routePermissions = {
-    '/dashboard': [UserRole.owner, UserRole.manager, UserRole.cashier, UserRole.salesperson],
-    '/products': [UserRole.owner, UserRole.manager, UserRole.cashier, UserRole.salesperson],
-    '/sales': [UserRole.owner, UserRole.manager, UserRole.cashier, UserRole.salesperson],
-    '/customers': [UserRole.owner, UserRole.manager, UserRole.cashier],
-    '/suppliers': [UserRole.owner, UserRole.manager],
-    '/purchases': [UserRole.owner, UserRole.manager],
-    '/expenses': [UserRole.owner, UserRole.manager],
-    '/reports': [UserRole.owner, UserRole.manager],
-    '/settings': [UserRole.owner],
-    '/users': [UserRole.owner],
-    '/employees': [UserRole.owner, UserRole.manager],
-    '/accounting': [UserRole.owner],
-    '/audit': [UserRole.owner],
-  };
 }
 
 class PlaceholderScreen extends StatelessWidget {
@@ -160,48 +214,47 @@ class PlaceholderScreen extends StatelessWidget {
   }
 }
 
-// Temporary Home Page wrapper until full migration
-class HomePage extends StatelessWidget {
-  const HomePage({super.key});
+class GoRouterRefreshStream extends ChangeNotifier {
+  GoRouterRefreshStream(Stream<dynamic> stream) {
+    notifyListeners();
+    _subscription = stream.listen((_) => notifyListeners());
+  }
+
+  late final StreamSubscription<dynamic> _subscription;
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Tapix Home')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          _NavButton(title: 'Dashboard', route: '/dashboard'),
-          _NavButton(title: 'Products', route: '/products'),
-          _NavButton(title: 'Sales', route: '/sales'),
-          _NavButton(title: 'Settings', route: '/settings'),
-          const Divider(),
-          ListTile(
-            title: const Text('Logout'),
-            leading: const Icon(Icons.logout),
-            onTap: () {
-              context.read<AuthBloc>().add(const AuthLogoutRequested());
-            },
-          ),
-        ],
-      ),
-    );
+  void dispose() {
+    _subscription.cancel();
+    super.dispose();
   }
 }
 
-class _NavButton extends StatelessWidget {
-  final String title;
-  final String route;
-  
-  const _NavButton({required this.title, required this.route});
+// Loading screen shown while auth state is being determined
+class _AuthLoadingScreen extends StatelessWidget {
+  const _AuthLoadingScreen();
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: ListTile(
-        title: Text(title),
-        trailing: const Icon(Icons.arrow_forward_ios),
-        onTap: () => context.go(route),
+    final colorScheme = Theme.of(context).colorScheme;
+    
+    return Scaffold(
+      backgroundColor: colorScheme.surface,
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Image.asset(
+              'assets/logos/logo.png',
+              width: 120,
+              height: 120,
+              fit: BoxFit.contain,
+            ),
+            const SizedBox(height: 24),
+            CircularProgressIndicator(
+              color: colorScheme.primary,
+            ),
+          ],
+        ),
       ),
     );
   }

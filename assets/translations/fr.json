@@ -2,6 +2,31 @@
   "app": {
     "name": "Tapix"
   },
+  "welcome": {
+    "title": "Bienvenue sur Tapix",
+    "subtitle": "Personnalisons votre expérience",
+    "select_language": "Choisir la langue",
+    "select_theme": "Choisir le thème",
+    "theme_light": "Clair",
+    "theme_dark": "Sombre",
+    "theme_system": "Par défaut du système",
+    "continue": "Continuer"
+  },
+  "dashboard": {
+    "title": "Tableau de bord",
+    "welcome": "Bienvenue, {}!",
+    "role": "Rôle: {}",
+    "quick_actions": "Actions rapides",
+    "management": "Gestion",
+    "new_sale": "Nouvelle vente",
+    "products": "Produits",
+    "customers": "Clients",
+    "reports": "Rapports",
+    "suppliers": "Fournisseurs",
+    "purchases": "Achats",
+    "expenses": "Dépenses",
+    "settings": "Paramètres"
+  },
   "settings": {
     "title": "Paramètres",
     "theme": "Thème",

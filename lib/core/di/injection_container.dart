@@ -36,5 +36,6 @@ Future<void> init() async {
   // Blocs
   sl.registerFactory(() => ThemeBloc(sl()));
   sl.registerFactory(() => LocalizationBloc(sl()));
-  sl.registerFactory(() => AuthBloc(repository: sl()));
+  // AuthBloc must be singleton so router and widgets share the same instance
+  sl.registerLazySingleton(() => AuthBloc(repository: sl()));
 }

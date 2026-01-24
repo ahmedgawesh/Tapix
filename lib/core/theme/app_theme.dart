@@ -4,19 +4,18 @@ import 'colors.dart';
 
 class AppTheme {
   static ThemeData lightTheme = FlexThemeData.light(
-    scheme: FlexScheme.materialBaseline,
     useMaterial3: true,
     useMaterial3ErrorColors: true,
     visualDensity: VisualDensity.standard,
     fontFamily: 'IBMPlexSansArabic',
-    // Custom colors
+    // Tapix Brand Colors (Blue & Orange from logo)
     colors: const FlexSchemeColor(
-      primary: AppColors.brandPrimary,
-      primaryContainer: Color(0xFFEADDFF),
-      secondary: Color(0xFF625B71),
-      secondaryContainer: Color(0xFFE8DEF8),
-      tertiary: Color(0xFF7D5260),
-      tertiaryContainer: Color(0xFFFFD8E4),
+      primary: AppColors.primary,                    // Tapix Blue
+      primaryContainer: AppColors.primaryContainer,  // Light Blue
+      secondary: AppColors.secondary,                // Tapix Orange
+      secondaryContainer: AppColors.secondaryContainer, // Light Orange
+      tertiary: AppColors.primaryDark,               // Dark Blue
+      tertiaryContainer: Color(0xFFBBDEFB),
       appBarColor: AppColors.surface,
       error: AppColors.error,
     ),
@@ -27,11 +26,17 @@ class AppTheme {
       useM2StyleDividerInM3: true,
       alignedDropdown: true,
       useInputDecoratorThemeInDialogs: true,
+      filledButtonRadius: 12,
+      elevatedButtonRadius: 12,
+      outlinedButtonRadius: 12,
+      inputDecoratorRadius: 12,
+      cardRadius: 16,
     ),
     keyColors: const FlexKeyColors(
       useSecondary: true,
       useTertiary: true,
       keepPrimary: true,
+      keepSecondary: true,
     ),
     tones: FlexTones.material(Brightness.light),
     extensions: [
@@ -44,20 +49,19 @@ class AppTheme {
   );
 
   static ThemeData darkTheme = FlexThemeData.dark(
-    scheme: FlexScheme.materialBaseline,
     useMaterial3: true,
     useMaterial3ErrorColors: true,
     visualDensity: VisualDensity.standard,
     fontFamily: 'IBMPlexSansArabic',
-    // Custom colors
+    // Tapix Brand Colors (Blue & Orange from logo) - Dark mode variants
     colors: const FlexSchemeColor(
-      primary: Color(0xFFD0BCFF),
-      primaryContainer: Color(0xFF4F378B),
-      secondary: Color(0xFFCCC2DC),
-      secondaryContainer: Color(0xFF4A4458),
-      tertiary: Color(0xFFEFB8C8),
-      tertiaryContainer: Color(0xFF633B48),
-      appBarColor: Color(0xFF1C1B1F),
+      primary: AppColors.primaryLight,               // Lighter Blue for dark mode
+      primaryContainer: AppColors.primaryDark,       // Dark Blue container
+      secondary: AppColors.secondaryLight,           // Lighter Orange for dark mode
+      secondaryContainer: AppColors.secondaryDark,   // Dark Orange container
+      tertiary: Color(0xFF90CAF9),                   // Light Blue accent
+      tertiaryContainer: Color(0xFF1565C0),
+      appBarColor: AppColors.surfaceDark,
       error: Color(0xFFF2B8B5),
     ),
     subThemesData: const FlexSubThemesData(
@@ -66,11 +70,17 @@ class AppTheme {
       useM2StyleDividerInM3: true,
       alignedDropdown: true,
       useInputDecoratorThemeInDialogs: true,
+      filledButtonRadius: 12,
+      elevatedButtonRadius: 12,
+      outlinedButtonRadius: 12,
+      inputDecoratorRadius: 12,
+      cardRadius: 16,
     ),
     keyColors: const FlexKeyColors(
       useSecondary: true,
       useTertiary: true,
       keepPrimary: true,
+      keepSecondary: true,
     ),
     tones: FlexTones.material(Brightness.dark),
     extensions: [
