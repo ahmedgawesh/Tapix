@@ -43,7 +43,7 @@ development_status:
   # EPIC-01: Core Infrastructure
   epic-1: in-progress
   1-1-project-setup-architecture: done
-  1-2-database-schema-implementation: backlog
+  1-2-database-schema-implementation: done
   1-3-real-time-state-management-infrastructure: backlog
   1-4-theme-localization: backlog
   epic-1-retrospective: optional
@@ -59,12 +59,31 @@ development_status:
   3-1-product-list-search-filter: backlog
   3-2-product-crud-variants: backlog
   3-3-barcode-management: backlog
+  3-4-bulk-product-form: backlog
+  3-5-edit-prices-screen: backlog
+  3-6-import-products-screen: backlog
+  3-7-simple-export-screen: backlog
+  3-8-barcode-design-screen: backlog
+  3-9-categories-screen: backlog
+  3-10-colors-screen: backlog
+  3-11-sizes-screen: backlog
+  3-12-products-main-screen: backlog
   epic-3-retrospective: optional
 
   # EPIC-04: Parties Management
   epic-4: backlog
   4-1-customer-management: backlog
-  4-2-supplier-management: backlog
+  4-2-customer-form-screen: backlog
+  4-3-customer-profile-screen: backlog
+  4-4-customer-payment-dialog: backlog
+  4-5-supplier-management: backlog
+  4-6-supplier-form-screen: backlog
+  4-7-supplier-profile-screen: backlog
+  4-8-supplier-seasonal-discount-screen: backlog
+  4-9-supplier-transaction-detail-screen: backlog
+  4-10-supplier-payment-dialog: backlog
+  4-11-supplier-discount-dialog: backlog
+  4-12-supplier-return-dialog: backlog
   epic-4-retrospective: optional
 
   # EPIC-05: Sales & POS
@@ -72,28 +91,104 @@ development_status:
   5-1-pos-interface-cart: backlog
   5-2-checkout-payment: backlog
   5-3-invoice-printing: backlog
+  5-4-sale-returns-processing: backlog
+  5-5-sales-screen: backlog
+  5-6-sale-form-screen: backlog
+  5-7-sale-product-selection-dialog: backlog
+  5-8-sale-product-edit-dialog: backlog
+  5-9-customer-payment-dialog: backlog
+  5-10-invoice-split-payment-dialog: backlog
+  5-11-customer-settlement-dialog: backlog
+  5-12-void-invoice-dialog: backlog
+  5-13-sale-invoice-print-dialog: backlog
+  5-14-sale-return-print-dialog: backlog
+  5-15-quick-sale-summary-dialog: backlog
+  5-16-sale-returns-screen: backlog
+  5-17-sale-return-form-screen: backlog
   epic-5-retrospective: optional
 
   # EPIC-06: Purchase Management
   epic-6: backlog
   6-1-purchase-orders: backlog
+  6-2-purchase-returns-processing: backlog
+  6-3-purchases-screen: backlog
+  6-4-purchase-form-screen: backlog
+  6-5-purchase-detail-screen: backlog
+  6-6-product-selection-dialog: backlog
+  6-7-product-edit-dialog: backlog
+  6-8-supplier-payment-dialog: backlog
+  6-9-supplier-refund-dialog: backlog
+  6-10-purchase-barcode-scanner: backlog
+  6-11-purchase-returns-screen: backlog
+  6-12-purchase-return-form-screen: backlog
+  6-13-purchase-return-detail-screen: backlog
   epic-6-retrospective: optional
 
   # EPIC-07: Finance & Accounting
   epic-7: backlog
   7-1-expenses-management: backlog
-  7-2-journal-entries-general-ledger: backlog
+  7-2-expenses-screen: backlog
+  7-3-expense-form-screen: backlog
+  7-4-expense-categories-screen: backlog
+  7-5-journal-entries-general-ledger: backlog
+  7-6-journal-entries-list-screen: backlog
+  7-7-journal-entry-form-screen: backlog
+  7-8-journal-entry-detail-screen: backlog
   epic-7-retrospective: optional
 
   # EPIC-08: Reporting
   epic-8: backlog
   8-1-financial-reports: backlog
   8-2-inventory-reports: backlog
+  8-3-customer-relationship-reports: backlog
+  8-4-supplier-performance-reports: backlog
+  8-5-salespeople-commission-reports: backlog
+  8-6-expense-reports: backlog
+  8-7-customer-sales-returns-reports: backlog
+  8-8-top-customers-reports: backlog
+  8-9-customer-payment-reports: backlog
+  8-10-customer-sales-reports: backlog
+  8-11-customer-aging-reports: backlog
+  8-12-customer-statement-reports: backlog
+  8-13-customer-analysis-reports: backlog
+  8-14-supplier-balance-reports: backlog
+  8-15-supplier-debit-balance-reports: backlog
+  8-16-supplier-credit-balance-reports: backlog
+  8-17-supplier-analysis-reports: backlog
+  8-18-supplier-aging-reports: backlog
+  8-19-supplier-statement-reports: backlog
+  8-20-supplier-stocktake-reports: backlog
+  8-21-supplier-balance-drilldown-reports: backlog
+  8-22-inventory-stock-reports: backlog
+  8-23-low-stock-reports: backlog
+  8-24-out-of-stock-reports: backlog
+  8-25-dead-stock-reports: backlog
+  8-26-category-stocktake-reports: backlog
+  8-27-product-movement-reports: backlog
+  8-28-financial-statements-reports: backlog
+  8-29-profit-loss-reports: backlog
+  8-30-balance-sheet-reports: backlog
+  8-31-trial-balance-reports: backlog
+  8-32-general-ledger-reports: backlog
+  8-33-cash-flow-reports: backlog
+  8-34-tax-reports: backlog
+  8-35-sales-summary-reports: backlog
+  8-36-void-logs-reports: backlog
+  8-37-reconciliation-diagnostics-reports: backlog
   epic-8-retrospective: optional
 
   # EPIC-09: Settings & Admin
   epic-9: backlog
   9-1-app-configuration: backlog
+  9-2-currency-settings: backlog
+  9-3-security-settings: backlog
+  9-4-printing-settings: backlog
+  9-5-database-management: backlog
+  9-6-database-health: backlog
+  9-7-audit-log: backlog
+  9-8-notifications: backlog
+  9-9-supplier-balance-fix: backlog
+  9-10-mismatch-detection: backlog
   epic-9-retrospective: optional
 
   # EPIC-10: Polish & QA
@@ -101,3 +196,178 @@ development_status:
   10-1-ui-ux-polish: backlog
   10-2-comprehensive-testing: backlog
   epic-10-retrospective: optional
+
+  # EPIC-05-XX: Sale Returns Management
+  epic-5-xx: backlog
+  5-4-sale-returns-processing: backlog
+  epic-5-xx-retrospective: optional
+
+  # EPIC-06-XX: Purchase Returns Management
+  epic-6-xx: backlog
+  6-2-purchase-returns-processing: backlog
+  epic-6-xx-retrospective: optional
+
+  # EPIC-11: Employee & User Management
+  epic-11: backlog
+  11-1-employee-management: backlog
+  11-2-user-account-management: backlog
+  epic-11-retrospective: optional
+
+  # EPIC-08-XX: Comprehensive Reporting System
+  epic-8-xx: backlog
+  8-3-financial-statements-suite: backlog
+  8-4-inventory-analytics-reports: backlog
+  8-5-customer-relationship-reports: backlog
+  8-6-supplier-performance-reports: backlog
+  8-7-sales-team-performance: backlog
+  8-8-expense-audit-reports: backlog
+  epic-8-xx-retrospective: optional
+
+  # EPIC-12: Advanced UI/UX Features
+  epic-12: backlog
+  12-1-responsive-design-system: backlog
+  12-2-advanced-interactions: backlog
+  epic-12-retrospective: optional
+
+  # EPIC-13: Core Services Implementation
+  epic-13: backlog
+  13-1-transaction-orchestrator-service: backlog
+  13-2-business-rules-engine: backlog
+  13-3-accounting-services: backlog
+  13-4-document-generation-services: backlog
+  13-5-security-services: backlog
+  13-6-utility-services: backlog
+  epic-13-retrospective: optional
+
+  # EPIC-14: Dialogs & Workflows
+  epic-14: backlog
+  14-1-sales-workflow-dialogs: backlog
+  14-2-purchase-workflow-dialogs: backlog
+  14-3-customer-supplier-dialogs: backlog
+  14-4-core-system-dialogs: backlog
+  epic-14-retrospective: optional
+
+  # EPIC-15: Advanced Settings & Configuration
+  epic-15: backlog
+  15-1-company-configuration: backlog
+  15-2-financial-settings: backlog
+  15-3-printing-export-settings: backlog
+  15-4-security-access-settings: backlog
+  epic-15-retrospective: optional
+
+  # EPIC-16: Mobile-Specific Features
+  epic-16: backlog
+  16-1-mobile-camera-integration: backlog
+  16-2-mobile-notifications: backlog
+  epic-16-retrospective: optional
+
+  # EPIC-17: Web-Specific Features
+  epic-17: backlog
+  17-1-web-responsive-design: backlog
+  17-2-web-performance: backlog
+  epic-17-retrospective: optional
+
+  # EPIC-18: Testing & Quality Assurance
+  epic-18: backlog
+  18-1-unit-testing-suite: backlog
+  18-2-integration-testing: backlog
+  18-3-ui-testing: backlog
+  18-4-performance-testing: backlog
+  epic-18-retrospective: optional
+
+  # EPIC-19: Documentation & Training
+  epic-19: backlog
+  19-1-technical-documentation: backlog
+  19-2-user-documentation: backlog
+  epic-19-retrospective: optional
+
+  # EPIC-20: Future Enhancements
+  epic-20: backlog
+  20-1-multi-store-support: backlog
+  20-2-online-sync-phase-2: backlog
+  20-3-advanced-analytics: backlog
+  epic-20-retrospective: optional
+
+  # EPIC-21: Advanced Dashboard & Analytics
+  epic-21: backlog
+  21-1-executive-dashboard: backlog
+  21-2-advanced-analytics-widgets: backlog
+  21-3-business-intelligence-insights: backlog
+  epic-21-retrospective: optional
+
+  # EPIC-22: Advanced Search & Filtering
+  epic-22: backlog
+  22-1-universal-search: backlog
+  22-2-advanced-filtering-system: backlog
+  22-3-smart-search-ai: backlog
+  epic-22-retrospective: optional
+
+  # EPIC-23: Performance & Optimization
+  epic-23: backlog
+  23-1-lazy-loading-virtual-scrolling: backlog
+  23-2-smart-caching-strategy: backlog
+  23-3-database-optimization: backlog
+  epic-23-retrospective: optional
+
+  # EPIC-24: Enhanced User Experience
+  epic-24: backlog
+  24-1-advanced-interactions: backlog
+  24-2-keyboard-shortcuts: backlog
+  24-3-accessibility-features: backlog
+  epic-24-retrospective: optional
+
+  # EPIC-25: Mobile-First Features
+  epic-25: backlog
+  25-1-advanced-camera-features: backlog
+  25-2-mobile-gestures: backlog
+  25-3-offline-sync-indicators: backlog
+  epic-25-retrospective: optional
+
+  # EPIC-26: Advanced Notifications System
+  epic-26: backlog
+  26-1-smart-notifications: backlog
+  26-2-notification-management: backlog
+  26-3-push-notifications-mobile: backlog
+  epic-26-retrospective: optional
+
+  # EPIC-27: Advanced Sales Features
+  epic-27: backlog
+  27-1-quick-sale-mode: backlog
+  27-2-customer-loyalty-program: backlog
+  27-3-advanced-discount-system: backlog
+  epic-27-retrospective: optional
+
+  # EPIC-28: Advanced Inventory Management
+  epic-28: backlog
+  28-1-inventory-forecasting: backlog
+  28-2-batch-tracking: backlog
+  28-3-multi-location-inventory: backlog
+  epic-28-retrospective: optional
+
+  # EPIC-29: Advanced Security & Compliance
+  epic-29: backlog
+  29-1-advanced-security-features: backlog
+  29-2-data-encryption: backlog
+  29-3-compliance-features: backlog
+  epic-29-retrospective: optional
+
+  # EPIC-30: Business Intelligence & Reporting
+  epic-30: backlog
+  30-1-custom-report-builder: backlog
+  30-2-data-visualization-suite: backlog
+  30-3-predictive-analytics: backlog
+  epic-30-retrospective: optional
+
+  # EPIC-31: Multi-Store & Franchise Support
+  epic-31: backlog
+  31-1-multi-store-management: backlog
+  31-2-role-based-store-access: backlog
+  31-3-consolidated-operations: backlog
+  epic-31-retrospective: optional
+
+  # EPIC-32: Developer Experience & Tools
+  epic-32: backlog
+  32-1-development-tools: backlog
+  32-2-automated-testing-suite: backlog
+  32-3-documentation-generator: backlog
+  epic-32-retrospective: optional

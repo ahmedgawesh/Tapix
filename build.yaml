@@ -1,0 +1,10 @@
+targets:
+  $default:
+    builders:
+      drift_dev:
+        options:
+          databases:
+            app_database: lib/core/database/app_database.dart
+          store_date_time_values_as_text: false
+          named_parameters: true
+          generate_connect_constructor: true

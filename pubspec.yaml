@@ -53,6 +53,8 @@ dependencies:
   decimal: ^2.3.0
   barcode_widget: ^2.0.4
   lucide_icons: ^0.257.0
+  path_provider: ^2.1.1
+  path: ^1.8.3
 
 dev_dependencies:
   flutter_test:
