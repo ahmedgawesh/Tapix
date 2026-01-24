@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:get_it/get_it.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:tapix/features/auth/auth.dart';
 
@@ -8,9 +9,18 @@ class MockAuthBloc extends Mock implements AuthBloc {}
 
 void main() {
   late MockAuthBloc mockAuthBloc;
+  late PermissionService permissionService;
 
   setUp(() {
     mockAuthBloc = MockAuthBloc();
+    permissionService = PermissionService();
+    if (!GetIt.I.isRegistered<PermissionService>()) {
+      GetIt.I.registerSingleton<PermissionService>(permissionService);
+    }
+  });
+
+  tearDown(() {
+    GetIt.I.reset();
   });
 
   UserEntity createUser(UserRole role, {bool isActive = true}) {

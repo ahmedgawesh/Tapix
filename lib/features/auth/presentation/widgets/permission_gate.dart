@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-
 import '../../../../core/bloc/realtime_bloc.dart';
-import '../../data/services/permission_service.dart';
-import '../../domain/entities/user_entity.dart';
-import '../bloc/auth_bloc.dart';
+import '../../../../core/di/injection_container.dart';
+import '../../auth.dart';
 
 class PermissionGate extends StatelessWidget {
   final String permission;
@@ -32,7 +30,7 @@ class PermissionGate extends StatelessWidget {
           return fallback ?? const SizedBox.shrink();
         }
 
-        final permissionService = PermissionService();
+        final permissionService = sl<PermissionService>();
         if (permissionService.hasPermission(state.user, permission)) {
           return child;
         }
@@ -117,7 +115,7 @@ class RoleGate extends StatelessWidget {
 
   bool _checkAccess(UserEntity user) {
     if (minRole != null) {
-      final permissionService = PermissionService();
+      final permissionService = sl<PermissionService>();
       return permissionService.isRoleAtLeast(user, minRole!);
     }
 
@@ -157,7 +155,7 @@ class MultiPermissionGate extends StatelessWidget {
           return fallback ?? const SizedBox.shrink();
         }
 
-        final permissionService = PermissionService();
+        final permissionService = sl<PermissionService>();
         final hasAccess = requireAll
             ? permissionService.hasAllPermissions(state.user, permissions)
             : permissionService.hasAnyPermission(state.user, permissions);

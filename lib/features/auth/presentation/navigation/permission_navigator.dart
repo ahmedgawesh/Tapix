@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
-
-import '../../data/services/permission_service.dart';
-import '../../domain/entities/user_entity.dart';
-import '../screens/access_denied_screen.dart';
+import '../../../../core/di/injection_container.dart';
+import '../../auth.dart';
 
 class PermissionNavigator {
   final PermissionService _permissionService;
 
-  PermissionNavigator({PermissionService? permissionService})
-      : _permissionService = permissionService ?? PermissionService();
+  PermissionNavigator._internal(this._permissionService);
+
+  factory PermissionNavigator() => PermissionNavigator._internal(sl<PermissionService>());
 
   bool canNavigate(UserEntity? user, String route) {
     return _permissionService.canAccessRoute(user, route);
@@ -108,7 +107,7 @@ class PermissionRouteGuard extends StatelessWidget {
           );
     }
 
-    final permissionService = PermissionService();
+    final permissionService = sl<PermissionService>();
     bool hasAccess = false;
 
     if (requiredPermission != null) {

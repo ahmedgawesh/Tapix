@@ -6,6 +6,7 @@ import 'core/bloc/localization_bloc.dart';
 import 'core/bloc/realtime_bloc.dart';
 import 'core/bloc/theme_bloc.dart';
 import 'core/di/injection_container.dart' as di;
+import 'core/router/app_router.dart';
 import 'core/services/localization_service.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/auth.dart';
@@ -61,7 +62,7 @@ class MyApp extends StatelessWidget {
                         ? localeState.data
                         : context.locale;
 
-                return MaterialApp(
+                return MaterialApp.router(
                   title: 'Tapix',
                   debugShowCheckedModeBanner: false,
                   localizationsDelegates: context.localizationDelegates,
@@ -70,84 +71,11 @@ class MyApp extends StatelessWidget {
                   theme: AppTheme.lightTheme,
                   darkTheme: AppTheme.darkTheme,
                   themeMode: themeMode,
-                  home: const AuthWrapper(child: HomePage()),
+                  routerConfig: AppRouter.router,
                 );
               },
             );
           },
-        ),
-      ),
-    );
-  }
-}
-
-class HomePage extends StatelessWidget {
-  const HomePage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('app.name').tr(),
-      ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              'settings.title',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ).tr(),
-            const SizedBox(height: 32),
-            // Theme Section
-            Text(
-              'settings.theme',
-              style: Theme.of(context).textTheme.titleMedium,
-            ).tr(),
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 8,
-              children: [
-                FilledButton.tonal(
-                  onPressed: () => context
-                      .read<ThemeBloc>()
-                      .add(const ThemeChanged(ThemeMode.light)),
-                  child: const Text('settings.light').tr(),
-                ),
-                FilledButton.tonal(
-                  onPressed: () => context
-                      .read<ThemeBloc>()
-                      .add(const ThemeChanged(ThemeMode.dark)),
-                  child: const Text('settings.dark').tr(),
-                ),
-                FilledButton.tonal(
-                  onPressed: () => context
-                      .read<ThemeBloc>()
-                      .add(const ThemeChanged(ThemeMode.system)),
-                  child: const Text('settings.system').tr(),
-                ),
-              ],
-            ),
-            const SizedBox(height: 32),
-            // Language Section
-            Text(
-              'settings.language',
-              style: Theme.of(context).textTheme.titleMedium,
-            ).tr(),
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 8,
-              children: [
-                for (final locale in LocalizationService.supportedLocales)
-                  OutlinedButton(
-                    onPressed: () => context
-                        .read<LocalizationBloc>()
-                        .add(LocaleChanged(locale)),
-                    child: Text(locale.languageCode.toUpperCase()),
-                  ),
-              ],
-            ),
-          ],
         ),
       ),
     );

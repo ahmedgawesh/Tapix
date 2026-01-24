@@ -1,3 +1,4 @@
+import '../../../../core/router/route_permissions.dart';
 import '../../domain/entities/permission_constants.dart';
 import '../../domain/entities/user_entity.dart';
 
@@ -158,23 +159,7 @@ class PermissionService {
   bool canAccessRoute(UserEntity? user, String route) {
     if (user == null || !user.isActive) return false;
 
-    final routePermissions = <String, List<UserRole>>{
-      '/dashboard': [UserRole.owner, UserRole.manager, UserRole.cashier, UserRole.salesperson],
-      '/products': [UserRole.owner, UserRole.manager, UserRole.cashier, UserRole.salesperson],
-      '/sales': [UserRole.owner, UserRole.manager, UserRole.cashier, UserRole.salesperson],
-      '/customers': [UserRole.owner, UserRole.manager, UserRole.cashier],
-      '/suppliers': [UserRole.owner, UserRole.manager],
-      '/purchases': [UserRole.owner, UserRole.manager],
-      '/expenses': [UserRole.owner, UserRole.manager],
-      '/reports': [UserRole.owner, UserRole.manager],
-      '/settings': [UserRole.owner],
-      '/users': [UserRole.owner],
-      '/employees': [UserRole.owner, UserRole.manager],
-      '/accounting': [UserRole.owner],
-      '/audit': [UserRole.owner],
-    };
-
-    final allowedRoles = routePermissions[route];
+    final allowedRoles = RoutePermissions.map[route];
     if (allowedRoles == null) return true;
     return allowedRoles.contains(user.role);
   }

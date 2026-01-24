@@ -20,6 +20,7 @@ Future<void> init() async {
   // Auth Services
   sl.registerLazySingleton(() => PasswordService());
   sl.registerLazySingleton(() => SessionService());
+  sl.registerLazySingleton(() => PermissionService());
   sl.registerLazySingleton<AuthRepositoryInterface>(
     () => AuthRepository(
       database: sl(),
