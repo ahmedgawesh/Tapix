@@ -1,0 +1,38 @@
+{
+  "app": {
+    "name": "Tapix"
+  },
+  "settings": {
+    "title": "Paramètres",
+    "theme": "Thème",
+    "language": "Langue",
+    "system": "Système",
+    "light": "Clair",
+    "dark": "Sombre"
+  },
+  "auth": {
+    "login_title": "Bon retour",
+    "login_subtitle": "Connectez-vous pour continuer",
+    "setup_title": "Bienvenue sur Tapix",
+    "setup_subtitle": "Créez votre compte propriétaire pour commencer",
+    "setup_info": "Ce sera votre compte administrateur avec un accès complet à toutes les fonctionnalités.",
+    "username": "Nom d'utilisateur",
+    "username_hint": "Entrez votre nom d'utilisateur",
+    "username_required": "Le nom d'utilisateur est requis",
+    "username_min_length": "Le nom d'utilisateur doit comporter au moins 3 caractères",
+    "password": "Mot de passe",
+    "password_hint": "Entrez votre mot de passe",
+    "password_required": "Le mot de passe est requis",
+    "password_min_length": "Le mot de passe doit comporter au moins 6 caractères",
+    "confirm_password": "Confirmer le mot de passe",
+    "confirm_password_hint": "Ressaisissez votre mot de passe",
+    "confirm_password_required": "Veuillez confirmer votre mot de passe",
+    "passwords_dont_match": "Les mots de passe ne correspondent pas",
+    "remember_me": "Se souvenir de moi",
+    "forgot_password": "Mot de passe oublié?",
+    "forgot_password_coming_soon": "Récupération du mot de passe bientôt disponible",
+    "login": "Se connecter",
+    "create_account": "Créer un compte",
+    "logout": "Se déconnecter"
+  }
+}

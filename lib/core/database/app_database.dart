@@ -282,6 +282,6 @@ class AppDatabase extends _$AppDatabase {
 
 QueryExecutor _openConnection() {
   return LazyDatabase(() async {
-    return openNativeDatabase();
+    return openDatabase();
   });
 }

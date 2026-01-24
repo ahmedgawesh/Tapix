@@ -1,0 +1,38 @@
+{
+  "app": {
+    "name": "تابكس"
+  },
+  "settings": {
+    "title": "الإعدادات",
+    "theme": "المظهر",
+    "language": "اللغة",
+    "system": "النظام",
+    "light": "فاتح",
+    "dark": "داكن"
+  },
+  "auth": {
+    "login_title": "مرحباً بعودتك",
+    "login_subtitle": "سجل دخولك للمتابعة",
+    "setup_title": "مرحباً بك في تابكس",
+    "setup_subtitle": "أنشئ حساب المالك للبدء",
+    "setup_info": "سيكون هذا حساب المسؤول الخاص بك مع صلاحية كاملة لجميع الميزات.",
+    "username": "اسم المستخدم",
+    "username_hint": "أدخل اسم المستخدم",
+    "username_required": "اسم المستخدم مطلوب",
+    "username_min_length": "يجب أن يكون اسم المستخدم 3 أحرف على الأقل",
+    "password": "كلمة المرور",
+    "password_hint": "أدخل كلمة المرور",
+    "password_required": "كلمة المرور مطلوبة",
+    "password_min_length": "يجب أن تكون كلمة المرور 6 أحرف على الأقل",
+    "confirm_password": "تأكيد كلمة المرور",
+    "confirm_password_hint": "أعد إدخال كلمة المرور",
+    "confirm_password_required": "يرجى تأكيد كلمة المرور",
+    "passwords_dont_match": "كلمات المرور غير متطابقة",
+    "remember_me": "تذكرني",
+    "forgot_password": "نسيت كلمة المرور؟",
+    "forgot_password_coming_soon": "استعادة كلمة المرور قريباً",
+    "login": "تسجيل الدخول",
+    "create_account": "إنشاء حساب",
+    "logout": "تسجيل الخروج"
+  }
+}

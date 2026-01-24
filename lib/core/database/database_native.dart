@@ -4,8 +4,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'dart:io';
 
-Future<DatabaseConnection> openNativeDatabase() async {
+Future<QueryExecutor> openDatabase() async {
   final dbFolder = await getApplicationDocumentsDirectory();
   final file = File(p.join(dbFolder.path, 'tapix.db'));
-  return DatabaseConnection(NativeDatabase(file));
+  return NativeDatabase(file);
 }
