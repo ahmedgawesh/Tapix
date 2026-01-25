@@ -41,22 +41,22 @@ story_location: "{project-root}/_bmad-output/implementation-artifacts"
 
 development_status:
   # EPIC-01: Core Infrastructure
-  epic-1: in-progress
+  epic-1: done
   1-1-project-setup-architecture: done
   1-2-database-schema-implementation: done
   1-3-real-time-state-management-infrastructure: done
   1-4-theme-localization: done
-  epic-1-retrospective: optional
+  epic-1-retrospective: done
 
   # EPIC-02: Authentication
   epic-2: done
   2-1-login-screen-auth-logic: done
   2-2-role-based-access-control: done
-  epic-2-retrospective: optional
+  epic-2-retrospective: done
 
   # EPIC-03: Product Management
-  epic-3: backlog
-  3-1-product-list-search-filter: backlog
+  epic-3: in-progress
+  3-1-product-list-search-filter: done
   3-2-product-crud-variants: backlog
   3-3-barcode-management: backlog
   3-4-bulk-product-form: backlog

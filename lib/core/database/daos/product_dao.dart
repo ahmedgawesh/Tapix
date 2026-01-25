@@ -21,9 +21,66 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
 
   Future<List<Product>> searchProducts(String query) {
     return (select(products)
-          ..where((p) => p.name.like('%$query%') | p.sku.like('%$query%'))
+          ..where((p) => p.name.like('%$query%') | p.sku.like('%$query%') | p.sku.equals(query))
           ..where((p) => p.isActive.equals(true)))
         .get();
+  }
+
+  Future<Product?> findByBarcode(String barcode) {
+    return (select(products)
+          ..where((p) => p.sku.equals(barcode))
+          ..where((p) => p.isActive.equals(true)))
+        .getSingleOrNull();
+  }
+
+  Future<List<Product>> filterProducts({
+    int? categoryId,
+    String? stockStatus,
+    int limit = 50,
+    int offset = 0,
+  }) {
+    final query = select(products)..where((p) => p.isActive.equals(true));
+
+    if (categoryId != null) {
+      query.where((p) => p.categoryId.equals(categoryId));
+    }
+
+    if (stockStatus != null) {
+      if (stockStatus == 'out_of_stock') {
+        query.where((p) => p.stockQuantity.equals(0));
+      } else if (stockStatus == 'low_stock') {
+        query.where((p) => p.stockQuantity.isBiggerThanValue(0) & p.stockQuantity.isSmallerOrEqual(p.reorderLevel));
+      }
+    }
+
+    query
+      ..orderBy([(p) => OrderingTerm(expression: p.name)])
+      ..limit(limit, offset: offset);
+
+    return query.get();
+  }
+
+  Stream<List<Product>> watchFilteredProducts({
+    int? categoryId,
+    String? stockStatus,
+  }) {
+    final query = select(products)..where((p) => p.isActive.equals(true));
+
+    if (categoryId != null) {
+      query.where((p) => p.categoryId.equals(categoryId));
+    }
+
+    if (stockStatus != null) {
+      if (stockStatus == 'out_of_stock') {
+        query.where((p) => p.stockQuantity.equals(0));
+      } else if (stockStatus == 'low_stock') {
+        query.where((p) => p.stockQuantity.isBiggerThanValue(0) & p.stockQuantity.isSmallerOrEqual(p.reorderLevel));
+      }
+    }
+
+    query.orderBy([(p) => OrderingTerm(expression: p.name)]);
+
+    return query.watch();
   }
 
   Future<Product?> findBySku(String sku) {

@@ -60,10 +60,43 @@ class ProductSearchRequested extends ProductsEvent {
   const ProductSearchRequested(this.query);
 }
 
+/// Event to filter products
+class ProductFilterRequested extends ProductsEvent {
+  final int? categoryId;
+  final String? stockStatus;
+
+  const ProductFilterRequested({
+    this.categoryId,
+    this.stockStatus,
+  });
+}
+
+/// Event to clear all filters
+class ProductFilterCleared extends ProductsEvent {
+  const ProductFilterCleared();
+}
+
+/// Event to scan barcode
+class ProductBarcodeScanned extends ProductsEvent {
+  final String barcode;
+
+  const ProductBarcodeScanned(this.barcode);
+}
+
+/// Event to load more products (pagination)
+class ProductLoadMoreRequested extends ProductsEvent {
+  const ProductLoadMoreRequested();
+}
+
 /// Products Bloc that extends RealtimeBloc for automatic real-time updates
 class ProductsBloc extends RealtimeBloc<List<Product>, ProductsEvent> {
   final ProductRepository _repository;
   String? _currentSearchQuery;
+  int? _currentCategoryFilter;
+  String? _currentStockStatusFilter;
+  int _currentPage = 0;
+  static const int _pageSize = 50;
+  bool _hasMoreData = true;
 
   ProductsBloc(this._repository) : super();
 
@@ -76,6 +109,10 @@ class ProductsBloc extends RealtimeBloc<List<Product>, ProductsEvent> {
     on<ProductUpdateRequested>(_onProductUpdate);
     on<ProductDeleteRequested>(_onProductDelete);
     on<ProductSearchRequested>(_onProductSearch);
+    on<ProductFilterRequested>(_onProductFilter);
+    on<ProductFilterCleared>(_onFilterCleared);
+    on<ProductBarcodeScanned>(_onBarcodeScanned);
+    on<ProductLoadMoreRequested>(_onLoadMore);
   }
 
   Future<void> _onProductCreate(
@@ -161,8 +198,105 @@ class ProductsBloc extends RealtimeBloc<List<Product>, ProductsEvent> {
     }
   }
 
+  Future<void> _onProductFilter(
+    ProductFilterRequested event,
+    Emitter<RealtimeState<List<Product>>> emit,
+  ) async {
+    _currentCategoryFilter = event.categoryId;
+    _currentStockStatusFilter = event.stockStatus;
+    _currentPage = 0;
+    _hasMoreData = true;
+
+    emit(RealtimeLoading<List<Product>>(previousData: currentData));
+
+    try {
+      final results = await _repository.filterProducts(
+        categoryId: event.categoryId,
+        stockStatus: event.stockStatus,
+        limit: _pageSize,
+        offset: 0,
+      );
+      _hasMoreData = results.length >= _pageSize;
+      emit(RealtimeSuccess<List<Product>>(data: results));
+    } catch (e, st) {
+      add(RealtimeErrorOccurred(e, st));
+    }
+  }
+
+  Future<void> _onFilterCleared(
+    ProductFilterCleared event,
+    Emitter<RealtimeState<List<Product>>> emit,
+  ) async {
+    _currentCategoryFilter = null;
+    _currentStockStatusFilter = null;
+    _currentSearchQuery = null;
+    _currentPage = 0;
+    _hasMoreData = true;
+    refresh();
+  }
+
+  Future<void> _onBarcodeScanned(
+    ProductBarcodeScanned event,
+    Emitter<RealtimeState<List<Product>>> emit,
+  ) async {
+    emit(RealtimeLoading<List<Product>>(previousData: currentData));
+
+    try {
+      final product = await _repository.findByBarcode(event.barcode);
+      if (product != null) {
+        emit(RealtimeSuccess<List<Product>>(data: [product]));
+      } else {
+        emit(RealtimeSuccess<List<Product>>(data: []));
+      }
+    } catch (e, st) {
+      add(RealtimeErrorOccurred(e, st));
+    }
+  }
+
+  Future<void> _onLoadMore(
+    ProductLoadMoreRequested event,
+    Emitter<RealtimeState<List<Product>>> emit,
+  ) async {
+    if (!_hasMoreData) return;
+
+    final currentProducts = currentData ?? [];
+    _currentPage++;
+
+    try {
+      final newProducts = await _repository.filterProducts(
+        categoryId: _currentCategoryFilter,
+        stockStatus: _currentStockStatusFilter,
+        limit: _pageSize,
+        offset: _currentPage * _pageSize,
+      );
+
+      _hasMoreData = newProducts.length >= _pageSize;
+      final allProducts = [...currentProducts, ...newProducts];
+      emit(RealtimeSuccess<List<Product>>(data: allProducts));
+    } catch (e, st) {
+      add(RealtimeErrorOccurred(e, st));
+    }
+  }
+
   /// Get search query if active
   String? get currentSearchQuery => _currentSearchQuery;
+
+  /// Get active filters count
+  int get activeFiltersCount {
+    int count = 0;
+    if (_currentCategoryFilter != null) count++;
+    if (_currentStockStatusFilter != null) count++;
+    return count;
+  }
+
+  /// Get current category filter
+  int? get currentCategoryFilter => _currentCategoryFilter;
+
+  /// Get current stock status filter
+  String? get currentStockStatusFilter => _currentStockStatusFilter;
+
+  /// Check if has more data for pagination
+  bool get hasMoreData => _hasMoreData;
 
   /// Clear search and return to full list
   void clearSearch() {

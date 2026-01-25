@@ -16,6 +16,28 @@ class ProductRepository {
 
   Future<Product?> findBySku(String sku) => _productDao.findBySku(sku);
 
+  Future<Product?> findByBarcode(String barcode) => _productDao.findByBarcode(barcode);
+
+  Future<List<Product>> filterProducts({
+    int? categoryId,
+    String? stockStatus,
+    int limit = 50,
+    int offset = 0,
+  }) => _productDao.filterProducts(
+        categoryId: categoryId,
+        stockStatus: stockStatus,
+        limit: limit,
+        offset: offset,
+      );
+
+  Stream<List<Product>> watchFilteredProducts({
+    int? categoryId,
+    String? stockStatus,
+  }) => _productDao.watchFilteredProducts(
+        categoryId: categoryId,
+        stockStatus: stockStatus,
+      );
+
   Future<int> createProduct({
     required String sku,
     required String name,

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../features/auth/auth.dart';
 import '../../features/dashboard/presentation/screens/dashboard_screen.dart';
+import '../../features/products/presentation/screens/product_list_screen.dart';
 import '../di/injection_container.dart';
 import 'route_permissions.dart';
 
@@ -144,7 +145,7 @@ class AppRouter {
       ),
       GoRoute(
         path: '/products',
-        builder: (context, state) => const PlaceholderScreen(title: 'Products'),
+        builder: (context, state) => const ProductListScreen(),
       ),
       GoRoute(
         path: '/sales',
