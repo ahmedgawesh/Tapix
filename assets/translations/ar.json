@@ -279,6 +279,8 @@
     "save_success": "تم تحديث الأسعار بنجاح",
     "save_error": "فشل تحديث الأسعار",
     "adjustment_type": "نوع التعديل",
+    "price_type": "نوع السعر",
+    "cost_price": "سعر التكلفة",
     "value": "القيمة",
     "apply": "تطبيق",
     "discard_title": "تجاهل التغييرات؟",
@@ -295,6 +297,9 @@
     "updated_by": "تم التحديث بواسطة",
     "min_margin_warning": "الهامش أقل من الحد الأدنى (15%)",
     "permission_denied": "ليس لديك صلاحية لتعديل الأسعار",
+    "selected": "محدد",
+    "select_all": "تحديد الكل",
+    "deselect_all": "إلغاء تحديد الكل",
     "permission": {
       "required_permission_or_role": "يجب توفير requiredPermission أو requiredRole",
       "allowed_roles_or_min_role": "يجب توفير allowedRoles أو minRole"

@@ -282,6 +282,8 @@
     "save_success": "Prices updated successfully",
     "save_error": "Failed to update prices",
     "adjustment_type": "Adjustment Type",
+    "price_type": "Price Type",
+    "cost_price": "Cost Price",
     "value": "Value",
     "apply": "Apply",
     "discard_title": "Discard Changes?",
@@ -297,7 +299,10 @@
     "last_updated": "Last Updated",
     "updated_by": "Updated By",
     "min_margin_warning": "Margin below minimum (15%)",
-    "permission_denied": "You do not have permission to edit prices",
+    "permission_denied": "You don't have permission to edit prices",
+    "selected": "Selected",
+    "select_all": "Select All",
+    "deselect_all": "Deselect All",
     "permission": {
       "required_permission_or_role": "Either requiredPermission or requiredRole must be provided",
       "allowed_roles_or_min_role": "Either allowedRoles or minRole must be provided"
