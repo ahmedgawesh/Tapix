@@ -167,7 +167,11 @@
     "include_name": "Include Name",
     "include_price": "Include Price",
     "error_no_barcode": "Product has no barcode to print",
-    "print_error": "Printing failed: {}"
+    "print_error": "Printing failed: {}",
+    "copies": "Copies",
+    "type": "Barcode Type",
+    "use_thermal_printer": "Use Thermal Printer",
+    "thermal_hint": "Optimized for 58mm thermal printers"
   },
   "products_search_hint": "Search products...",
   "products_filter_category": "Category",
@@ -207,6 +211,23 @@
   "product_form_variantSize": "Size",
   "manage_colors": "Manage Colors",
   "manage_sizes": "Manage Sizes",
+  "bulk_product": {
+    "title": "Bulk Add Products",
+    "add_row": "Add Product",
+    "remove_row": "Remove",
+    "reset": "Reset",
+    "submit": "Save All",
+    "new_product": "New Product",
+    "products_count": "{} Products",
+    "validation_errors": "{} rows have errors",
+    "submitting": "Saving product {} of {}...",
+    "success_message": "Successfully created {} of {} products",
+    "error_message": "Created {} of {} products. Some failed.",
+    "sku_duplicate": "Duplicate SKU in this batch",
+    "error_name_required": "Product name is required",
+    "error_price_required": "Selling price is required",
+    "error_cost_invalid": "Invalid cost price"
+  },
   "common": {
     "back": "Back",
     "retry": "Retry",
@@ -225,6 +246,7 @@
     "info": "Information",
     "print": "Print",
     "none": "None",
-    "close": "Close"
+    "close": "Close",
+    "share": "Share"
   }
 }

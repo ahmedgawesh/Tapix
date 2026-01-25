@@ -167,7 +167,11 @@
     "include_name": "Inclure le Nom",
     "include_price": "Inclure le Prix",
     "error_no_barcode": "Le produit n'a pas de code-barres à imprimer",
-    "print_error": "Échec de l'impression: {}"
+    "print_error": "Échec de l'impression: {}",
+    "copies": "Copies",
+    "type": "Type de Code-barres",
+    "use_thermal_printer": "Utiliser une Imprimante Thermique",
+    "thermal_hint": "Optimisé pour imprimantes thermiques 58mm"
   },
   "products_search_hint": "Rechercher des produits...",
   "products_filter_category": "Catégorie",
@@ -207,6 +211,23 @@
   "product_form_variantSize": "Taille",
   "manage_colors": "Gérer les Couleurs",
   "manage_sizes": "Gérer les Tailles",
+  "bulk_product": {
+    "title": "Ajout en Masse de Produits",
+    "add_row": "Ajouter un Produit",
+    "remove_row": "Supprimer",
+    "reset": "Réinitialiser",
+    "submit": "Tout Enregistrer",
+    "new_product": "Nouveau Produit",
+    "products_count": "{} Produits",
+    "validation_errors": "{} lignes ont des erreurs",
+    "submitting": "Enregistrement du produit {} sur {}...",
+    "success_message": "{} sur {} produits créés avec succès",
+    "error_message": "{} sur {} produits créés. Certains ont échoué.",
+    "sku_duplicate": "SKU en double dans ce lot",
+    "error_name_required": "Le nom du produit est requis",
+    "error_price_required": "Le prix de vente est requis",
+    "error_cost_invalid": "Prix de coût invalide"
+  },
   "common": {
     "back": "Retour",
     "retry": "Réessayer",
@@ -225,6 +246,7 @@
     "info": "Information",
     "print": "Imprimer",
     "none": "Aucun",
-    "close": "Fermer"
+    "close": "Fermer",
+    "share": "Partager"
   }
 }

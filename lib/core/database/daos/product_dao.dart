@@ -120,4 +120,19 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
           ..orderBy([(c) => OrderingTerm(expression: c.name)]))
         .watch();
   }
+
+  /// Bulk create products in a single transaction for performance
+  /// Returns a map of index to product ID
+  Future<Map<int, int>> bulkCreateProducts(List<ProductsCompanion> productList) async {
+    final results = <int, int>{};
+    
+    await db.transaction(() async {
+      for (int i = 0; i < productList.length; i++) {
+        final id = await into(products).insert(productList[i]);
+        results[i] = id;
+      }
+    });
+    
+    return results;
+  }
 }

@@ -166,7 +166,11 @@
     "include_name": "تضمين الاسم",
     "include_price": "تضمين السعر",
     "error_no_barcode": "المنتج ليس له باركود للطباعة",
-    "print_error": "فشلت الطباعة: {}"
+    "print_error": "فشلت الطباعة: {}",
+    "copies": "النسخ",
+    "type": "نوع الباركود",
+    "use_thermal_printer": "استخدام طابعة حرارية",
+    "thermal_hint": "محسّن لطابعات حرارية 58 مم"
   },
   "products_search_hint": "البحث عن منتجات...",
   "products_filter_category": "الفئة",
@@ -206,6 +210,23 @@
   "product_form_variantSize": "المقاس",
   "manage_colors": "إدارة الألوان",
   "manage_sizes": "إدارة المقاسات",
+  "bulk_product": {
+    "title": "إضافة منتجات بالجملة",
+    "add_row": "إضافة منتج",
+    "remove_row": "إزالة",
+    "reset": "إعادة تعيين",
+    "submit": "حفظ الكل",
+    "new_product": "منتج جديد",
+    "products_count": "{} منتجات",
+    "validation_errors": "{} صفوف بها أخطاء",
+    "submitting": "جاري حفظ المنتج {} من {}...",
+    "success_message": "تم إنشاء {} من {} منتجات بنجاح",
+    "error_message": "تم إنشاء {} من {} منتجات. فشل البعض.",
+    "sku_duplicate": "رمز المنتج مكرر في هذه الدفعة",
+    "error_name_required": "اسم المنتج مطلوب",
+    "error_price_required": "سعر البيع مطلوب",
+    "error_cost_invalid": "سعر التكلفة غير صالح"
+  },
   "common": {
     "back": "رجوع",
     "retry": "إعادة المحاولة",
@@ -219,11 +240,12 @@
     "filter": "تصفية",
     "loading": "جاري التحميل...",
     "error": "خطأ",
-    "success": "نجح",
+    "success": "نجاح",
     "warning": "تحذير",
     "info": "معلومات",
     "print": "طباعة",
-    "none": "لا يوجد",
-    "close": "إغلاق"
+    "none": "لا شيء",
+    "close": "إغلاق",
+    "share": "مشاركة"
   }
 }
