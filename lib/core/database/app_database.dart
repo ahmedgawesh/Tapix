@@ -110,13 +110,15 @@ class AppDatabase extends _$AppDatabase {
 
     await _safeAddColumn('product_variants', 'barcode', 'TEXT');
     await _safeAddColumn('product_variants', 'price_adjustment_cents', 'INTEGER NOT NULL DEFAULT 0');
+    await _safeAddColumn('product_variants', 'cost_cents', 'INTEGER NOT NULL DEFAULT 0');
+    await _safeAddColumn('product_variants', 'price_cents', 'INTEGER NOT NULL DEFAULT 0');
     
     await _safeAddColumn('sizes', 'sort_order', 'INTEGER NOT NULL DEFAULT 0');
     debugPrint('Schema integrity check completed.');
   }
 
   @override
-  int get schemaVersion => 10004;
+  int get schemaVersion => 10005;
 
   @override
   MigrationStrategy get migration {

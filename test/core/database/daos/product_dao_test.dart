@@ -140,6 +140,8 @@ void main() {
         ProductVariantsCompanion.insert(
           productId: productId,
           sku: const Value<String?>('VAR-001'),
+          costCents: Decimal.fromInt(0),
+          priceCents: Decimal.fromInt(0),
         ),
       );
 
@@ -147,6 +149,8 @@ void main() {
         ProductVariantsCompanion.insert(
           productId: productId,
           sku: const Value<String?>('VAR-002'),
+          costCents: Decimal.fromInt(0),
+          priceCents: Decimal.fromInt(0),
         ),
       );
 

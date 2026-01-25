@@ -5380,6 +5380,24 @@ class $ProductVariantsTable extends ProductVariants
     ),
   );
   @override
+  late final GeneratedColumnWithTypeConverter<Decimal, int> costCents =
+      GeneratedColumn<int>(
+        'cost_cents',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: true,
+      ).withConverter<Decimal>($ProductVariantsTable.$convertercostCents);
+  @override
+  late final GeneratedColumnWithTypeConverter<Decimal, int> priceCents =
+      GeneratedColumn<int>(
+        'price_cents',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: true,
+      ).withConverter<Decimal>($ProductVariantsTable.$converterpriceCents);
+  @override
   late final GeneratedColumnWithTypeConverter<Decimal, int>
   priceAdjustmentCents =
       GeneratedColumn<int>(
@@ -5451,6 +5469,8 @@ class $ProductVariantsTable extends ProductVariants
     barcode,
     colorId,
     sizeId,
+    costCents,
+    priceCents,
     priceAdjustmentCents,
     stockQuantity,
     isActive,
@@ -5564,6 +5584,18 @@ class $ProductVariantsTable extends ProductVariants
         DriftSqlType.int,
         data['${effectivePrefix}size_id'],
       ),
+      costCents: $ProductVariantsTable.$convertercostCents.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}cost_cents'],
+        )!,
+      ),
+      priceCents: $ProductVariantsTable.$converterpriceCents.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}price_cents'],
+        )!,
+      ),
       priceAdjustmentCents: $ProductVariantsTable.$converterpriceAdjustmentCents
           .fromSql(
             attachedDatabase.typeMapping.read(
@@ -5595,6 +5627,10 @@ class $ProductVariantsTable extends ProductVariants
     return $ProductVariantsTable(attachedDatabase, alias);
   }
 
+  static TypeConverter<Decimal, int> $convertercostCents =
+      const MoneyConverter();
+  static TypeConverter<Decimal, int> $converterpriceCents =
+      const MoneyConverter();
   static TypeConverter<Decimal, int> $converterpriceAdjustmentCents =
       const MoneyConverter();
 }
@@ -5606,6 +5642,8 @@ class ProductVariant extends DataClass implements Insertable<ProductVariant> {
   final String? barcode;
   final int? colorId;
   final int? sizeId;
+  final Decimal costCents;
+  final Decimal priceCents;
   final Decimal priceAdjustmentCents;
   final int stockQuantity;
   final bool isActive;
@@ -5618,6 +5656,8 @@ class ProductVariant extends DataClass implements Insertable<ProductVariant> {
     this.barcode,
     this.colorId,
     this.sizeId,
+    required this.costCents,
+    required this.priceCents,
     required this.priceAdjustmentCents,
     required this.stockQuantity,
     required this.isActive,
@@ -5640,6 +5680,16 @@ class ProductVariant extends DataClass implements Insertable<ProductVariant> {
     }
     if (!nullToAbsent || sizeId != null) {
       map['size_id'] = Variable<int>(sizeId);
+    }
+    {
+      map['cost_cents'] = Variable<int>(
+        $ProductVariantsTable.$convertercostCents.toSql(costCents),
+      );
+    }
+    {
+      map['price_cents'] = Variable<int>(
+        $ProductVariantsTable.$converterpriceCents.toSql(priceCents),
+      );
     }
     {
       map['price_adjustment_cents'] = Variable<int>(
@@ -5669,6 +5719,8 @@ class ProductVariant extends DataClass implements Insertable<ProductVariant> {
       sizeId: sizeId == null && nullToAbsent
           ? const Value.absent()
           : Value(sizeId),
+      costCents: Value(costCents),
+      priceCents: Value(priceCents),
       priceAdjustmentCents: Value(priceAdjustmentCents),
       stockQuantity: Value(stockQuantity),
       isActive: Value(isActive),
@@ -5689,6 +5741,8 @@ class ProductVariant extends DataClass implements Insertable<ProductVariant> {
       barcode: serializer.fromJson<String?>(json['barcode']),
       colorId: serializer.fromJson<int?>(json['colorId']),
       sizeId: serializer.fromJson<int?>(json['sizeId']),
+      costCents: serializer.fromJson<Decimal>(json['costCents']),
+      priceCents: serializer.fromJson<Decimal>(json['priceCents']),
       priceAdjustmentCents: serializer.fromJson<Decimal>(
         json['priceAdjustmentCents'],
       ),
@@ -5708,6 +5762,8 @@ class ProductVariant extends DataClass implements Insertable<ProductVariant> {
       'barcode': serializer.toJson<String?>(barcode),
       'colorId': serializer.toJson<int?>(colorId),
       'sizeId': serializer.toJson<int?>(sizeId),
+      'costCents': serializer.toJson<Decimal>(costCents),
+      'priceCents': serializer.toJson<Decimal>(priceCents),
       'priceAdjustmentCents': serializer.toJson<Decimal>(priceAdjustmentCents),
       'stockQuantity': serializer.toJson<int>(stockQuantity),
       'isActive': serializer.toJson<bool>(isActive),
@@ -5723,6 +5779,8 @@ class ProductVariant extends DataClass implements Insertable<ProductVariant> {
     Value<String?> barcode = const Value.absent(),
     Value<int?> colorId = const Value.absent(),
     Value<int?> sizeId = const Value.absent(),
+    Decimal? costCents,
+    Decimal? priceCents,
     Decimal? priceAdjustmentCents,
     int? stockQuantity,
     bool? isActive,
@@ -5735,6 +5793,8 @@ class ProductVariant extends DataClass implements Insertable<ProductVariant> {
     barcode: barcode.present ? barcode.value : this.barcode,
     colorId: colorId.present ? colorId.value : this.colorId,
     sizeId: sizeId.present ? sizeId.value : this.sizeId,
+    costCents: costCents ?? this.costCents,
+    priceCents: priceCents ?? this.priceCents,
     priceAdjustmentCents: priceAdjustmentCents ?? this.priceAdjustmentCents,
     stockQuantity: stockQuantity ?? this.stockQuantity,
     isActive: isActive ?? this.isActive,
@@ -5749,6 +5809,10 @@ class ProductVariant extends DataClass implements Insertable<ProductVariant> {
       barcode: data.barcode.present ? data.barcode.value : this.barcode,
       colorId: data.colorId.present ? data.colorId.value : this.colorId,
       sizeId: data.sizeId.present ? data.sizeId.value : this.sizeId,
+      costCents: data.costCents.present ? data.costCents.value : this.costCents,
+      priceCents: data.priceCents.present
+          ? data.priceCents.value
+          : this.priceCents,
       priceAdjustmentCents: data.priceAdjustmentCents.present
           ? data.priceAdjustmentCents.value
           : this.priceAdjustmentCents,
@@ -5770,6 +5834,8 @@ class ProductVariant extends DataClass implements Insertable<ProductVariant> {
           ..write('barcode: $barcode, ')
           ..write('colorId: $colorId, ')
           ..write('sizeId: $sizeId, ')
+          ..write('costCents: $costCents, ')
+          ..write('priceCents: $priceCents, ')
           ..write('priceAdjustmentCents: $priceAdjustmentCents, ')
           ..write('stockQuantity: $stockQuantity, ')
           ..write('isActive: $isActive, ')
@@ -5787,6 +5853,8 @@ class ProductVariant extends DataClass implements Insertable<ProductVariant> {
     barcode,
     colorId,
     sizeId,
+    costCents,
+    priceCents,
     priceAdjustmentCents,
     stockQuantity,
     isActive,
@@ -5803,6 +5871,8 @@ class ProductVariant extends DataClass implements Insertable<ProductVariant> {
           other.barcode == this.barcode &&
           other.colorId == this.colorId &&
           other.sizeId == this.sizeId &&
+          other.costCents == this.costCents &&
+          other.priceCents == this.priceCents &&
           other.priceAdjustmentCents == this.priceAdjustmentCents &&
           other.stockQuantity == this.stockQuantity &&
           other.isActive == this.isActive &&
@@ -5817,6 +5887,8 @@ class ProductVariantsCompanion extends UpdateCompanion<ProductVariant> {
   final Value<String?> barcode;
   final Value<int?> colorId;
   final Value<int?> sizeId;
+  final Value<Decimal> costCents;
+  final Value<Decimal> priceCents;
   final Value<Decimal> priceAdjustmentCents;
   final Value<int> stockQuantity;
   final Value<bool> isActive;
@@ -5829,6 +5901,8 @@ class ProductVariantsCompanion extends UpdateCompanion<ProductVariant> {
     this.barcode = const Value.absent(),
     this.colorId = const Value.absent(),
     this.sizeId = const Value.absent(),
+    this.costCents = const Value.absent(),
+    this.priceCents = const Value.absent(),
     this.priceAdjustmentCents = const Value.absent(),
     this.stockQuantity = const Value.absent(),
     this.isActive = const Value.absent(),
@@ -5842,12 +5916,16 @@ class ProductVariantsCompanion extends UpdateCompanion<ProductVariant> {
     this.barcode = const Value.absent(),
     this.colorId = const Value.absent(),
     this.sizeId = const Value.absent(),
+    required Decimal costCents,
+    required Decimal priceCents,
     this.priceAdjustmentCents = const Value.absent(),
     this.stockQuantity = const Value.absent(),
     this.isActive = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
-  }) : productId = Value(productId);
+  }) : productId = Value(productId),
+       costCents = Value(costCents),
+       priceCents = Value(priceCents);
   static Insertable<ProductVariant> custom({
     Expression<int>? id,
     Expression<int>? productId,
@@ -5855,6 +5933,8 @@ class ProductVariantsCompanion extends UpdateCompanion<ProductVariant> {
     Expression<String>? barcode,
     Expression<int>? colorId,
     Expression<int>? sizeId,
+    Expression<int>? costCents,
+    Expression<int>? priceCents,
     Expression<int>? priceAdjustmentCents,
     Expression<int>? stockQuantity,
     Expression<bool>? isActive,
@@ -5868,6 +5948,8 @@ class ProductVariantsCompanion extends UpdateCompanion<ProductVariant> {
       if (barcode != null) 'barcode': barcode,
       if (colorId != null) 'color_id': colorId,
       if (sizeId != null) 'size_id': sizeId,
+      if (costCents != null) 'cost_cents': costCents,
+      if (priceCents != null) 'price_cents': priceCents,
       if (priceAdjustmentCents != null)
         'price_adjustment_cents': priceAdjustmentCents,
       if (stockQuantity != null) 'stock_quantity': stockQuantity,
@@ -5884,6 +5966,8 @@ class ProductVariantsCompanion extends UpdateCompanion<ProductVariant> {
     Value<String?>? barcode,
     Value<int?>? colorId,
     Value<int?>? sizeId,
+    Value<Decimal>? costCents,
+    Value<Decimal>? priceCents,
     Value<Decimal>? priceAdjustmentCents,
     Value<int>? stockQuantity,
     Value<bool>? isActive,
@@ -5897,6 +5981,8 @@ class ProductVariantsCompanion extends UpdateCompanion<ProductVariant> {
       barcode: barcode ?? this.barcode,
       colorId: colorId ?? this.colorId,
       sizeId: sizeId ?? this.sizeId,
+      costCents: costCents ?? this.costCents,
+      priceCents: priceCents ?? this.priceCents,
       priceAdjustmentCents: priceAdjustmentCents ?? this.priceAdjustmentCents,
       stockQuantity: stockQuantity ?? this.stockQuantity,
       isActive: isActive ?? this.isActive,
@@ -5925,6 +6011,16 @@ class ProductVariantsCompanion extends UpdateCompanion<ProductVariant> {
     }
     if (sizeId.present) {
       map['size_id'] = Variable<int>(sizeId.value);
+    }
+    if (costCents.present) {
+      map['cost_cents'] = Variable<int>(
+        $ProductVariantsTable.$convertercostCents.toSql(costCents.value),
+      );
+    }
+    if (priceCents.present) {
+      map['price_cents'] = Variable<int>(
+        $ProductVariantsTable.$converterpriceCents.toSql(priceCents.value),
+      );
     }
     if (priceAdjustmentCents.present) {
       map['price_adjustment_cents'] = Variable<int>(
@@ -5957,6 +6053,8 @@ class ProductVariantsCompanion extends UpdateCompanion<ProductVariant> {
           ..write('barcode: $barcode, ')
           ..write('colorId: $colorId, ')
           ..write('sizeId: $sizeId, ')
+          ..write('costCents: $costCents, ')
+          ..write('priceCents: $priceCents, ')
           ..write('priceAdjustmentCents: $priceAdjustmentCents, ')
           ..write('stockQuantity: $stockQuantity, ')
           ..write('isActive: $isActive, ')
@@ -25091,6 +25189,8 @@ typedef $$ProductVariantsTableCreateCompanionBuilder =
       Value<String?> barcode,
       Value<int?> colorId,
       Value<int?> sizeId,
+      required Decimal costCents,
+      required Decimal priceCents,
       Value<Decimal> priceAdjustmentCents,
       Value<int> stockQuantity,
       Value<bool> isActive,
@@ -25105,6 +25205,8 @@ typedef $$ProductVariantsTableUpdateCompanionBuilder =
       Value<String?> barcode,
       Value<int?> colorId,
       Value<int?> sizeId,
+      Value<Decimal> costCents,
+      Value<Decimal> priceCents,
       Value<Decimal> priceAdjustmentCents,
       Value<int> stockQuantity,
       Value<bool> isActive,
@@ -25264,6 +25366,18 @@ class $$ProductVariantsTableFilterComposer
     column: $table.barcode,
     builder: (column) => ColumnFilters(column),
   );
+
+  ColumnWithTypeConverterFilters<Decimal, Decimal, int> get costCents =>
+      $composableBuilder(
+        column: $table.costCents,
+        builder: (column) => ColumnWithTypeConverterFilters(column),
+      );
+
+  ColumnWithTypeConverterFilters<Decimal, Decimal, int> get priceCents =>
+      $composableBuilder(
+        column: $table.priceCents,
+        builder: (column) => ColumnWithTypeConverterFilters(column),
+      );
 
   ColumnWithTypeConverterFilters<Decimal, Decimal, int>
   get priceAdjustmentCents => $composableBuilder(
@@ -25460,6 +25574,16 @@ class $$ProductVariantsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get costCents => $composableBuilder(
+    column: $table.costCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get priceCents => $composableBuilder(
+    column: $table.priceCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get priceAdjustmentCents => $composableBuilder(
     column: $table.priceAdjustmentCents,
     builder: (column) => ColumnOrderings(column),
@@ -25572,6 +25696,15 @@ class $$ProductVariantsTableAnnotationComposer
 
   GeneratedColumn<String> get barcode =>
       $composableBuilder(column: $table.barcode, builder: (column) => column);
+
+  GeneratedColumnWithTypeConverter<Decimal, int> get costCents =>
+      $composableBuilder(column: $table.costCents, builder: (column) => column);
+
+  GeneratedColumnWithTypeConverter<Decimal, int> get priceCents =>
+      $composableBuilder(
+        column: $table.priceCents,
+        builder: (column) => column,
+      );
 
   GeneratedColumnWithTypeConverter<Decimal, int> get priceAdjustmentCents =>
       $composableBuilder(
@@ -25781,6 +25914,8 @@ class $$ProductVariantsTableTableManager
                 Value<String?> barcode = const Value.absent(),
                 Value<int?> colorId = const Value.absent(),
                 Value<int?> sizeId = const Value.absent(),
+                Value<Decimal> costCents = const Value.absent(),
+                Value<Decimal> priceCents = const Value.absent(),
                 Value<Decimal> priceAdjustmentCents = const Value.absent(),
                 Value<int> stockQuantity = const Value.absent(),
                 Value<bool> isActive = const Value.absent(),
@@ -25793,6 +25928,8 @@ class $$ProductVariantsTableTableManager
                 barcode: barcode,
                 colorId: colorId,
                 sizeId: sizeId,
+                costCents: costCents,
+                priceCents: priceCents,
                 priceAdjustmentCents: priceAdjustmentCents,
                 stockQuantity: stockQuantity,
                 isActive: isActive,
@@ -25807,6 +25944,8 @@ class $$ProductVariantsTableTableManager
                 Value<String?> barcode = const Value.absent(),
                 Value<int?> colorId = const Value.absent(),
                 Value<int?> sizeId = const Value.absent(),
+                required Decimal costCents,
+                required Decimal priceCents,
                 Value<Decimal> priceAdjustmentCents = const Value.absent(),
                 Value<int> stockQuantity = const Value.absent(),
                 Value<bool> isActive = const Value.absent(),
@@ -25819,6 +25958,8 @@ class $$ProductVariantsTableTableManager
                 barcode: barcode,
                 colorId: colorId,
                 sizeId: sizeId,
+                costCents: costCents,
+                priceCents: priceCents,
                 priceAdjustmentCents: priceAdjustmentCents,
                 stockQuantity: stockQuantity,
                 isActive: isActive,

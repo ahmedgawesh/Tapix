@@ -68,6 +68,8 @@ class ProductVariants extends Table {
   TextColumn get barcode => text().nullable().unique()();
   IntColumn get colorId => integer().nullable().references(ProductColors, #id, onDelete: KeyAction.restrict)();
   IntColumn get sizeId => integer().nullable().references(Sizes, #id, onDelete: KeyAction.restrict)();
+  IntColumn get costCents => integer().map(const MoneyConverter())();
+  IntColumn get priceCents => integer().map(const MoneyConverter())();
   IntColumn get priceAdjustmentCents => integer().map(const MoneyConverter()).withDefault(const Constant(0))();
   IntColumn get stockQuantity => integer().withDefault(const Constant(0))(); // quantity in requirements
   BoolColumn get isActive => boolean().withDefault(const Constant(true))();
