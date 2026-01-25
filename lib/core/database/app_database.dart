@@ -77,6 +77,105 @@ class AppDatabase extends _$AppDatabase {
   
   AppDatabase.connect(DatabaseConnection connection) : super.connect(connection);
 
+  Future<void> _repairProductVariantsSkuNullabilityIfNeeded() async {
+    var foreignKeysDisabled = false;
+    try {
+      final info = await customSelect(
+        "SELECT name, \"notnull\" as is_not_null FROM pragma_table_info('product_variants') WHERE name IN ('sku', 'barcode')",
+      ).get();
+
+      if (info.isEmpty) {
+        return;
+      }
+
+      final skuRow = info.where((r) => r.read<String>('name') == 'sku');
+      final skuNotNull = skuRow.isNotEmpty
+          ? skuRow.first.read<int>('is_not_null') == 1
+          : false;
+
+      final barcodeRow = info.where((r) => r.read<String>('name') == 'barcode');
+      final barcodeNotNull =
+          barcodeRow.isNotEmpty ? barcodeRow.first.read<int>('is_not_null') == 1 : false;
+
+      if (!skuNotNull && !barcodeNotNull) {
+        return;
+      }
+
+      debugPrint('DB schema fix: rebuilding product_variants to relax NOT NULL constraints');
+      await _ensureSchemaIntegrity();
+
+      await customStatement('PRAGMA foreign_keys = OFF');
+      foreignKeysDisabled = true;
+      await customStatement('ALTER TABLE product_variants RENAME TO product_variants__old');
+
+      await customStatement('''
+CREATE TABLE product_variants (
+  id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+  product_id INTEGER NOT NULL REFERENCES products (id) ON DELETE CASCADE,
+  sku TEXT UNIQUE,
+  barcode TEXT UNIQUE,
+  color_id INTEGER REFERENCES product_colors (id) ON DELETE RESTRICT,
+  size_id INTEGER REFERENCES sizes (id) ON DELETE RESTRICT,
+  cost_cents INTEGER NOT NULL,
+  price_cents INTEGER NOT NULL,
+  price_adjustment_cents INTEGER NOT NULL DEFAULT 0,
+  stock_quantity INTEGER NOT NULL DEFAULT 0,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+)
+''');
+
+      await customStatement('''
+INSERT INTO product_variants (
+  id,
+  product_id,
+  sku,
+  barcode,
+  color_id,
+  size_id,
+  cost_cents,
+  price_cents,
+  price_adjustment_cents,
+  stock_quantity,
+  is_active,
+  created_at,
+  updated_at
+)
+SELECT
+  id,
+  product_id,
+  NULLIF(sku, ''),
+  NULLIF(barcode, ''),
+  color_id,
+  size_id,
+  COALESCE(cost_cents, 0),
+  COALESCE(price_cents, 0),
+  COALESCE(price_adjustment_cents, 0),
+  COALESCE(stock_quantity, 0),
+  COALESCE(is_active, 1),
+  COALESCE(created_at, CURRENT_TIMESTAMP),
+  COALESCE(updated_at, CURRENT_TIMESTAMP)
+FROM product_variants__old
+''');
+
+      await customStatement('DROP TABLE product_variants__old');
+      await customStatement('PRAGMA foreign_keys = ON');
+      foreignKeysDisabled = false;
+    } catch (e, st) {
+      debugPrint('DB schema fix failed (product_variants rebuild): $e');
+      debugPrint('$st');
+    } finally {
+      if (foreignKeysDisabled) {
+        try {
+          await customStatement('PRAGMA foreign_keys = ON');
+        } catch (_) {
+          // ignore
+        }
+      }
+    }
+  }
+
   Future<void> _safeAddColumn(String table, String column, String type) async {
     final result = await customSelect(
       "SELECT COUNT(*) as cnt FROM pragma_table_info('$table') WHERE name = '$column'",
@@ -118,7 +217,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 10005;
+  int get schemaVersion => 10006;
 
   @override
   MigrationStrategy get migration {
@@ -159,6 +258,9 @@ class AppDatabase extends _$AppDatabase {
         if (from < 10004) {
           await _ensureSchemaIntegrity();
         }
+        if (from < 10006) {
+          await _repairProductVariantsSkuNullabilityIfNeeded();
+        }
 
         await _createIndexes();
         await _seedInitialData();
@@ -169,6 +271,7 @@ class AppDatabase extends _$AppDatabase {
         );
         await customStatement('PRAGMA foreign_keys = ON');
         await _ensureSchemaIntegrity();
+        await _repairProductVariantsSkuNullabilityIfNeeded();
       },
     );
   }
@@ -186,6 +289,8 @@ class AppDatabase extends _$AppDatabase {
     await customStatement('CREATE INDEX IF NOT EXISTS idx_journal_entry_date ON journal_entries(entry_date)');
     await customStatement('CREATE INDEX IF NOT EXISTS idx_audit_table_record ON audit_logs(target_table, record_id)');
     await customStatement('CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku)');
+    await customStatement('CREATE UNIQUE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode) WHERE barcode IS NOT NULL');
+    await customStatement('CREATE UNIQUE INDEX IF NOT EXISTS idx_product_variants_barcode ON product_variants(barcode) WHERE barcode IS NOT NULL');
     await customStatement('CREATE INDEX IF NOT EXISTS idx_customers_active ON customers(is_active)');
     await customStatement('CREATE INDEX IF NOT EXISTS idx_suppliers_active ON suppliers(is_active)');
     await customStatement('CREATE INDEX IF NOT EXISTS idx_currency_active ON currencies(is_active)');

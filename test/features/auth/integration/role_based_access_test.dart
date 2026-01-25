@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:tapix/features/auth/auth.dart';
 
@@ -10,6 +11,12 @@ class MockAuthBloc extends Mock implements AuthBloc {}
 void main() {
   late MockAuthBloc mockAuthBloc;
   late PermissionService permissionService;
+
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUpAll(() async {
+    await EasyLocalization.ensureInitialized();
+  });
 
   setUp(() {
     mockAuthBloc = MockAuthBloc();
@@ -41,10 +48,20 @@ void main() {
     when(() => mockAuthBloc.state).thenReturn(authState);
     when(() => mockAuthBloc.stream).thenAnswer((_) => Stream.value(authState));
 
-    return MaterialApp(
-      home: BlocProvider<AuthBloc>.value(
-        value: mockAuthBloc,
-        child: child,
+    return EasyLocalization(
+      supportedLocales: const [Locale('en')],
+      path: 'assets/translations',
+      fallbackLocale: const Locale('en'),
+      child: Builder(
+        builder: (context) => MaterialApp(
+          localizationsDelegates: context.localizationDelegates,
+          supportedLocales: context.supportedLocales,
+          locale: context.locale,
+          home: BlocProvider<AuthBloc>.value(
+            value: mockAuthBloc,
+            child: child,
+          ),
+        ),
       ),
     );
   }

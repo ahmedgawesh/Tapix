@@ -11,6 +11,7 @@ class RoutePermissions {
     '/expenses': [UserRole.owner, UserRole.manager],
     '/reports': [UserRole.owner, UserRole.manager],
     '/settings': [UserRole.owner],
+    '/settings/admin-tools': [UserRole.owner],
     '/users': [UserRole.owner],
     '/employees': [UserRole.owner, UserRole.manager],
     '/accounting': [UserRole.owner],

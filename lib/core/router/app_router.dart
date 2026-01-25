@@ -9,6 +9,7 @@ import '../../features/products/presentation/screens/product_list_screen.dart';
 import '../../features/products/presentation/screens/product_form_screen.dart';
 import '../../features/barcode/presentation/screens/barcode_scanner_screen.dart';
 import '../../features/settings/presentation/screens/settings_screen.dart';
+import '../../features/settings/presentation/screens/admin_tools_screen.dart';
 import '../di/injection_container.dart';
 import 'route_permissions.dart';
 
@@ -194,6 +195,10 @@ class AppRouter {
       GoRoute(
         path: '/settings',
         builder: (context, state) => const SettingsScreen(),
+      ),
+      GoRoute(
+        path: '/settings/admin-tools',
+        builder: (context, state) => const AdminToolsScreen(),
       ),
       GoRoute(
         path: '/barcode-scanner',

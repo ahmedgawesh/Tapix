@@ -1,4 +1,5 @@
 import 'package:decimal/decimal.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/bloc/realtime_bloc.dart';
@@ -105,6 +106,7 @@ class ProductsBloc extends RealtimeBloc<List<Product>, ProductsEvent> {
   int _currentPage = 0;
   static const int _pageSize = 50;
   bool _hasMoreData = false;
+  bool _isLoadingMore = false;
 
   ProductsBloc(this._repository) : super();
 
@@ -193,17 +195,33 @@ class ProductsBloc extends RealtimeBloc<List<Product>, ProductsEvent> {
     ProductSearchRequested event,
     Emitter<RealtimeState<List<Product>>> emit,
   ) async {
+    debugPrint(
+      'ProductsBloc.search query="${event.query}" currentData=${currentData?.length ?? 0}',
+    );
     _currentSearchQuery = event.query.isEmpty ? null : event.query;
 
+    // Search results are not paginated in the current implementation.
+    // Disable pagination loader while a search is active.
+    _currentPage = 0;
+    _hasMoreData = false;
+    _isLoadingMore = false;
+
     if (_currentSearchQuery == null) {
+      _hasMoreData = true;
+      _isLoadingMore = false;
+      debugPrint('ProductsBloc.search cleared -> refresh (hasMoreData=$_hasMoreData)');
       refresh();
       return;
     }
 
+    debugPrint('ProductsBloc.search active -> disable pagination (hasMoreData=$_hasMoreData)');
     emit(RealtimeLoading<List<Product>>(previousData: currentData));
 
     try {
       final results = await _repository.searchProducts(event.query);
+      debugPrint(
+        'ProductsBloc.search results=${results.length} -> emit success (hasMoreData=$_hasMoreData)',
+      );
       emit(RealtimeSuccess<List<Product>>(data: results));
     } catch (e, st) {
       add(RealtimeErrorOccurred(e, st));
@@ -214,10 +232,16 @@ class ProductsBloc extends RealtimeBloc<List<Product>, ProductsEvent> {
     ProductFilterRequested event,
     Emitter<RealtimeState<List<Product>>> emit,
   ) async {
+    debugPrint(
+      'ProductsBloc.filter categoryId=${event.categoryId} stockStatus=${event.stockStatus} currentData=${currentData?.length ?? 0}',
+    );
     _currentCategoryFilter = event.categoryId;
     _currentStockStatusFilter = event.stockStatus;
     _currentPage = 0;
     _hasMoreData = true;
+    _isLoadingMore = false;
+
+    debugPrint('ProductsBloc.filter -> emit loading (hasMoreData=$_hasMoreData page=$_currentPage)');
 
     emit(RealtimeLoading<List<Product>>(previousData: currentData));
 
@@ -229,6 +253,7 @@ class ProductsBloc extends RealtimeBloc<List<Product>, ProductsEvent> {
         offset: 0,
       );
       _hasMoreData = results.length >= _pageSize;
+      debugPrint('ProductsBloc.filter results=${results.length} hasMoreData=$_hasMoreData');
       emit(RealtimeSuccess<List<Product>>(data: results));
     } catch (e, st) {
       add(RealtimeErrorOccurred(e, st));
@@ -239,11 +264,13 @@ class ProductsBloc extends RealtimeBloc<List<Product>, ProductsEvent> {
     ProductFilterCleared event,
     Emitter<RealtimeState<List<Product>>> emit,
   ) async {
+    debugPrint('ProductsBloc.clearFilters -> refresh');
     _currentCategoryFilter = null;
     _currentStockStatusFilter = null;
     _currentSearchQuery = null;
     _currentPage = 0;
     _hasMoreData = true;
+    _isLoadingMore = false;
     refresh();
   }
 
@@ -251,10 +278,17 @@ class ProductsBloc extends RealtimeBloc<List<Product>, ProductsEvent> {
     ProductBarcodeScanned event,
     Emitter<RealtimeState<List<Product>>> emit,
   ) async {
+    debugPrint('ProductsBloc.barcodeScanned barcode=${event.barcode}');
+    // Barcode scan returns a single result (or empty), so pagination is not applicable.
+    _currentSearchQuery = null;
+    _currentPage = 0;
+    _hasMoreData = false;
+    _isLoadingMore = false;
     emit(RealtimeLoading<List<Product>>(previousData: currentData));
 
     try {
       final product = await _repository.findByBarcode(event.barcode);
+      debugPrint('ProductsBloc.barcodeScanned found=${product != null}');
       if (product != null) {
         emit(RealtimeSuccess<List<Product>>(data: [product]));
       } else {
@@ -270,9 +304,16 @@ class ProductsBloc extends RealtimeBloc<List<Product>, ProductsEvent> {
     Emitter<RealtimeState<List<Product>>> emit,
   ) async {
     if (!_hasMoreData) return;
+    if (_isLoadingMore) return;
 
     final currentProducts = currentData ?? [];
     _currentPage++;
+
+    _isLoadingMore = true;
+
+    debugPrint(
+      'ProductsBloc.loadMore page=$_currentPage current=${currentProducts.length} hasMoreData=$_hasMoreData',
+    );
 
     try {
       final newProducts = await _repository.filterProducts(
@@ -283,10 +324,15 @@ class ProductsBloc extends RealtimeBloc<List<Product>, ProductsEvent> {
       );
 
       _hasMoreData = newProducts.length >= _pageSize;
+      debugPrint(
+        'ProductsBloc.loadMore fetched=${newProducts.length} hasMoreData=$_hasMoreData',
+      );
       final allProducts = [...currentProducts, ...newProducts];
       emit(RealtimeSuccess<List<Product>>(data: allProducts));
     } catch (e, st) {
       add(RealtimeErrorOccurred(e, st));
+    } finally {
+      _isLoadingMore = false;
     }
   }
 
@@ -309,6 +355,9 @@ class ProductsBloc extends RealtimeBloc<List<Product>, ProductsEvent> {
 
   /// Check if has more data for pagination
   bool get hasMoreData => _hasMoreData;
+
+  /// True only while a load-more request is actively fetching the next page.
+  bool get isLoadingMore => _isLoadingMore;
 
   /// Clear search and return to full list
   void clearSearch() {
