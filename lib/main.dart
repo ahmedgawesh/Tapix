@@ -5,11 +5,13 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'core/bloc/localization_bloc.dart';
 import 'core/bloc/realtime_bloc.dart';
 import 'core/bloc/theme_bloc.dart';
+import 'core/bloc/currency_bloc.dart';
 import 'core/di/injection_container.dart' as di;
 import 'core/router/app_router.dart';
 import 'core/services/localization_service.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/auth.dart';
+import 'core/services/currency_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -39,48 +41,55 @@ class MyApp extends StatelessWidget {
     // Get the singleton AuthBloc and trigger auth check
     final authBloc = di.sl<AuthBloc>()..add(const AuthCheckRequested());
     
-    return MultiBlocProvider(
+    return MultiRepositoryProvider(
       providers: [
-        BlocProvider(create: (_) => di.sl<ThemeBloc>()),
-        BlocProvider(create: (_) => di.sl<LocalizationBloc>()),
-        BlocProvider.value(value: authBloc),
+        RepositoryProvider(create: (_) => di.sl<CurrencyService>()),
       ],
-      child: BlocListener<LocalizationBloc, RealtimeState<Locale>>(
-        listener: (context, state) {
-          if (state is RealtimeSuccess<Locale>) {
-            context.setLocale(state.data);
-          }
-        },
-        child: BlocBuilder<ThemeBloc, RealtimeState<ThemeMode>>(
-          builder: (context, themeState) {
-            return BlocBuilder<LocalizationBloc, RealtimeState<Locale>>(
-              builder: (context, localeState) {
-                final themeMode =
-                    (themeState is RealtimeSuccess<ThemeMode>)
-                        ? themeState.data
-                        : ThemeMode.system;
-                
-                final locale =
-                    (localeState is RealtimeSuccess<Locale>)
-                        ? localeState.data
-                        : context.locale;
-
-                return MaterialApp.router(
-                  title: 'Tapix',
-                  debugShowCheckedModeBanner: false,
-                  localizationsDelegates: context.localizationDelegates,
-                  supportedLocales: context.supportedLocales,
-                  locale: locale,
-                  theme: AppTheme.lightTheme,
-                  darkTheme: AppTheme.darkTheme,
-                  themeMode: themeMode,
-                  routerConfig: AppRouter.router,
-                );
-              },
-            );
+      child: MultiBlocProvider(
+        providers: [
+          BlocProvider(create: (_) => di.sl<ThemeBloc>()),
+          BlocProvider(create: (_) => di.sl<LocalizationBloc>()),
+          BlocProvider(create: (_) => di.sl<CurrencyBloc>()),
+          BlocProvider.value(value: authBloc),
+        ],
+        child: BlocListener<LocalizationBloc, RealtimeState<Locale>>(
+          listener: (context, state) {
+            if (state is RealtimeSuccess<Locale>) {
+              context.setLocale(state.data);
+            }
           },
+          child: BlocBuilder<ThemeBloc, RealtimeState<ThemeMode>>(
+            builder: (context, themeState) {
+              return BlocBuilder<LocalizationBloc, RealtimeState<Locale>>(
+                builder: (context, localeState) {
+                  final themeMode =
+                      (themeState is RealtimeSuccess<ThemeMode>)
+                          ? themeState.data
+                          : ThemeMode.system;
+                  
+                  final locale =
+                      (localeState is RealtimeSuccess<Locale>)
+                          ? localeState.data
+                          : context.locale;
+
+                  return MaterialApp.router(
+                    title: 'Tapix',
+                    debugShowCheckedModeBanner: false,
+                    localizationsDelegates: context.localizationDelegates,
+                    supportedLocales: context.supportedLocales,
+                    locale: locale,
+                    theme: AppTheme.lightTheme,
+                    darkTheme: AppTheme.darkTheme,
+                    themeMode: themeMode,
+                    routerConfig: AppRouter.router,
+                  );
+                },
+              );
+            },
+          ),
         ),
       ),
     );
   }
 }
+

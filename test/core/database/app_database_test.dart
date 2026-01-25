@@ -112,11 +112,11 @@ void main() {
 
       final productId = await database.into(database.products).insert(
         ProductsCompanion.insert(
-          sku: 'TEST-001',
+          sku: const Value<String?>('TEST-001'),
           name: 'Test Product',
           costCents: Decimal.fromInt(10),
           priceCents: Decimal.fromInt(20),
-          currencyId: currencyId,
+          currencyId: Value(currencyId),
         ),
       );
 
@@ -163,11 +163,11 @@ void main() {
 
       final productId = await database.into(database.products).insert(
         ProductsCompanion.insert(
-          sku: 'TEST-002',
+          sku: const Value<String?>('TEST-002'),
           name: 'Test Product 2',
           costCents: Decimal.fromInt(10),
           priceCents: Decimal.fromInt(20),
-          currencyId: currencyId,
+          currencyId: Value(currencyId),
         ),
       );
 
@@ -214,11 +214,11 @@ void main() {
       final testAmount = Decimal.fromInt(12345);
       final productId = await database.into(database.products).insert(
         ProductsCompanion.insert(
-          sku: 'TEST-003',
+          sku: const Value<String?>('TEST-003'),
           name: 'Test Product 3',
           costCents: testAmount,
           priceCents: testAmount,
-          currencyId: currencyId,
+          currencyId: Value(currencyId),
         ),
       );
 
@@ -259,11 +259,11 @@ void main() {
       for (int i = 0; i < 100; i++) {
         await database.into(database.products).insert(
           ProductsCompanion.insert(
-            sku: 'SKU-$i',
+            sku: Value<String?>('SKU-$i'),
             name: 'Product $i',
             costCents: Decimal.fromInt(10),
             priceCents: Decimal.fromInt(20),
-            currencyId: currencyId,
+            currencyId: Value(currencyId),
           ),
         );
       }
@@ -289,11 +289,11 @@ void main() {
 
       final productId = await database.into(database.products).insert(
         ProductsCompanion.insert(
-          sku: 'PERF-001',
+          sku: const Value<String?>('PERF-001'),
           name: 'Performance Test Product',
           costCents: Decimal.fromInt(10),
           priceCents: Decimal.fromInt(20),
-          currencyId: currencyId,
+          currencyId: Value(currencyId),
         ),
       );
 

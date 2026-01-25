@@ -5,8 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tapix/core/bloc/realtime_bloc.dart';
-import 'package:tapix/core/database/app_database.dart';
-import 'package:tapix/features/products/data/repositories/product_repository.dart';
+import 'package:tapix/core/database/app_database.dart' hide Product;
+import 'package:tapix/features/products/domain/entities/product_entity.dart';
+import 'package:tapix/features/products/data/repositories/product_repository_impl.dart';
+import 'package:tapix/features/products/data/datasources/product_local_datasource.dart';
 import 'package:tapix/features/products/presentation/bloc/products_bloc.dart';
 
 void main() {
@@ -46,7 +48,7 @@ void main() {
       ),
     );
 
-    final repository = ProductRepository(database.productDao);
+    final repository = ProductRepositoryImpl(ProductLocalDatasourceImpl(database.productDao));
     bloc = ProductsBloc(repository);
 
     await tester.pumpWidget(
@@ -75,11 +77,11 @@ void main() {
 
     await database.into(database.products).insert(
       ProductsCompanion.insert(
-        sku: 'WGT-001',
+        sku: const Value<String?>('WGT-001'),
         name: 'Widget Product',
         costCents: Decimal.fromInt(1000),
         priceCents: Decimal.fromInt(2000),
-        currencyId: currencyId,
+        currencyId: Value(currencyId),
       ),
     );
 

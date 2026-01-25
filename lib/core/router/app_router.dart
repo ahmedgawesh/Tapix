@@ -6,6 +6,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../features/auth/auth.dart';
 import '../../features/dashboard/presentation/screens/dashboard_screen.dart';
 import '../../features/products/presentation/screens/product_list_screen.dart';
+import '../../features/products/presentation/screens/product_form_screen.dart';
+import '../../features/settings/presentation/screens/settings_screen.dart';
 import '../di/injection_container.dart';
 import 'route_permissions.dart';
 
@@ -146,6 +148,19 @@ class AppRouter {
       GoRoute(
         path: '/products',
         builder: (context, state) => const ProductListScreen(),
+        routes: [
+          GoRoute(
+            path: 'new',
+            builder: (context, state) => const ProductFormScreen(),
+          ),
+          GoRoute(
+            path: ':id/edit',
+            builder: (context, state) {
+              final id = int.tryParse(state.pathParameters['id'] ?? '');
+              return ProductFormScreen(productId: id);
+            },
+          ),
+        ],
       ),
       GoRoute(
         path: '/sales',
@@ -173,7 +188,7 @@ class AppRouter {
       ),
       GoRoute(
         path: '/settings',
-        builder: (context, state) => const PlaceholderScreen(title: 'Settings'),
+        builder: (context, state) => const SettingsScreen(),
       ),
       GoRoute(
         path: '/users',
@@ -209,7 +224,21 @@ class PlaceholderScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(title)),
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () {
+            if (Navigator.of(context).canPop()) {
+              Navigator.of(context).pop();
+            } else {
+              context.go('/dashboard');
+            }
+          },
+          tooltip: 'Back',
+        ),
+        title: Text(title),
+        centerTitle: true,
+      ),
       body: Center(child: Text('$title Screen')),
     );
   }

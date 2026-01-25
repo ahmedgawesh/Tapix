@@ -177,6 +177,42 @@
   <step n="2" goal="Load and analyze core artifacts">
     <critical>🔬 EXHAUSTIVE ARTIFACT ANALYSIS - This is where you prevent future developer fuckups!</critical>
 
+    <!-- MANDATORY: Load project-context.md FIRST -->
+    <critical>🎯 MANDATORY FIRST STEP: Load and internalize project-context.md</critical>
+    <action>Find and load {project_context} file (pattern: **/project-context.md)</action>
+    <check if="project-context.md NOT found">
+      <output>⚠️ WARNING: project-context.md not found!</output>
+      <output>This file contains critical cross-cutting concerns that MUST be followed:</output>
+      <output>- RealtimeBloc pattern (mandatory for all features)</output>
+      <output>- Theme system with semantic colors</output>
+      <output>- Localization requirements (EN/AR/FR)</output>
+      <output>- Currency service usage (NO hardcoded symbols)</output>
+      <output>- Navigation patterns with GoRouter</output>
+      <output>- Responsive design requirements (mobile/tablet/desktop/web)</output>
+      <output>- Money calculations (integer cents only)</output>
+      <output>- Back button behavior (critical for mobile/tablet)</output>
+      <output></output>
+      <output>Creating story without project-context.md may result in missing critical requirements!</output>
+      <ask>Continue without project-context.md? [y/n]</ask>
+      <check if="user says 'n' or 'no'">
+        <output>Please create project-context.md at project root with all cross-cutting concerns</output>
+        <action>HALT - Cannot proceed without project context</action>
+      </check>
+    </check>
+    <action>Read ENTIRE project-context.md from start to finish</action>
+    <action>Extract ALL mandatory patterns and requirements:</action>
+    <action>- RealtimeBloc pattern for state management</action>
+    <action>- Theme system (semantic colors: success/warning/error)</action>
+    <action>- Localization (EN/AR/FR with RTL support)</action>
+    <action>- Currency service for ALL money displays</action>
+    <action>- GoRouter navigation patterns</action>
+    <action>- Responsive design (mobile/tablet/desktop/web)</action>
+    <action>- Money as integer cents (NEVER double)</action>
+    <action>- Back button behavior (automatic with Scaffold AppBar)</action>
+    <action>- Testing requirements (90%+ coverage)</action>
+    <action>Store these as MANDATORY requirements for story implementation</action>
+    <output>✅ Project context loaded - all cross-cutting concerns will be enforced</output>
+
     <!-- Load all available content through discovery protocol -->
     <invoke-protocol
       name="discover_inputs" />

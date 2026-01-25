@@ -1,7 +1,9 @@
 import 'package:get_it/get_it.dart';
 import '../database/app_database.dart';
 import '../database/daos/product_dao.dart';
-import '../../features/products/data/repositories/product_repository.dart';
+import '../../features/products/domain/repositories/product_repository.dart';
+import '../../features/products/data/repositories/product_repository_impl.dart';
+import '../../features/products/data/datasources/product_local_datasource.dart';
 
 final getIt = GetIt.instance;
 
@@ -15,5 +17,10 @@ void setupDatabase() {
   getIt.registerLazySingleton(() => database.customerDao);
   getIt.registerLazySingleton(() => database.accountingDao);
   
-  getIt.registerLazySingleton(() => ProductRepository(getIt<ProductDao>()));
+  getIt.registerLazySingleton<ProductLocalDatasource>(
+    () => ProductLocalDatasourceImpl(getIt<ProductDao>()),
+  );
+  getIt.registerLazySingleton<ProductRepository>(
+    () => ProductRepositoryImpl(getIt<ProductLocalDatasource>()),
+  );
 }

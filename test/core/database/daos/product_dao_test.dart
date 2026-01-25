@@ -22,22 +22,22 @@ void main() {
 
       await database.into(database.products).insert(
         ProductsCompanion.insert(
-          sku: 'ACTIVE-001',
+          sku: const Value<String?>('ACTIVE-001'),
           name: 'Active Product',
           costCents: Decimal.fromInt(10),
           priceCents: Decimal.fromInt(20),
-          currencyId: currencyId,
+          currencyId: Value(currencyId),
           isActive: const Value(true),
         ),
       );
 
       await database.into(database.products).insert(
         ProductsCompanion.insert(
-          sku: 'INACTIVE-001',
+          sku: const Value<String?>('INACTIVE-001'),
           name: 'Inactive Product',
           costCents: Decimal.fromInt(10),
           priceCents: Decimal.fromInt(20),
-          currencyId: currencyId,
+          currencyId: Value(currencyId),
           isActive: const Value(false),
         ),
       );
@@ -54,21 +54,21 @@ void main() {
 
       await database.into(database.products).insert(
         ProductsCompanion.insert(
-          sku: 'SEARCH-001',
+          sku: const Value<String?>('SEARCH-001'),
           name: 'Laptop Computer',
           costCents: Decimal.fromInt(500),
           priceCents: Decimal.fromInt(1000),
-          currencyId: currencyId,
+          currencyId: Value(currencyId),
         ),
       );
 
       await database.into(database.products).insert(
         ProductsCompanion.insert(
-          sku: 'SEARCH-002',
+          sku: const Value<String?>('SEARCH-002'),
           name: 'Desktop Computer',
           costCents: Decimal.fromInt(600),
           priceCents: Decimal.fromInt(1200),
-          currencyId: currencyId,
+          currencyId: Value(currencyId),
         ),
       );
 
@@ -86,11 +86,11 @@ void main() {
 
       await database.into(database.products).insert(
         ProductsCompanion.insert(
-          sku: 'UNIQUE-SKU',
+          sku: const Value<String?>('UNIQUE-SKU'),
           name: 'Unique Product',
           costCents: Decimal.fromInt(10),
           priceCents: Decimal.fromInt(20),
-          currencyId: currencyId,
+          currencyId: Value(currencyId),
         ),
       );
 
@@ -106,11 +106,11 @@ void main() {
 
       final productId = await database.productDao.createProduct(
         ProductsCompanion.insert(
-          sku: 'NEW-PRODUCT',
+          sku: const Value<String?>('NEW-PRODUCT'),
           name: 'New Product',
           costCents: Decimal.fromInt(15),
           priceCents: Decimal.fromInt(30),
-          currencyId: currencyId,
+          currencyId: Value(currencyId),
         ),
       );
 
@@ -127,11 +127,11 @@ void main() {
 
       final productId = await database.into(database.products).insert(
         ProductsCompanion.insert(
-          sku: 'VAR-PRODUCT',
+          sku: const Value<String?>('VAR-PRODUCT'),
           name: 'Product with Variants',
           costCents: Decimal.fromInt(10),
           priceCents: Decimal.fromInt(20),
-          currencyId: currencyId,
+          currencyId: Value(currencyId),
           hasVariants: const Value(true),
         ),
       );
@@ -139,18 +139,14 @@ void main() {
       await database.into(database.productVariants).insert(
         ProductVariantsCompanion.insert(
           productId: productId,
-          sku: 'VAR-001',
-          costCents: Decimal.fromInt(10),
-          priceCents: Decimal.fromInt(20),
+          sku: const Value<String?>('VAR-001'),
         ),
       );
 
       await database.into(database.productVariants).insert(
         ProductVariantsCompanion.insert(
           productId: productId,
-          sku: 'VAR-002',
-          costCents: Decimal.fromInt(12),
-          priceCents: Decimal.fromInt(24),
+          sku: const Value<String?>('VAR-002'),
         ),
       );
 

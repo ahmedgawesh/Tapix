@@ -4,7 +4,9 @@ import 'package:drift/native.dart';
 import 'package:decimal/decimal.dart';
 import 'package:tapix/core/database/app_database.dart';
 import 'package:tapix/core/services/realtime_service.dart';
-import 'package:tapix/features/products/data/repositories/product_repository.dart';
+import 'package:tapix/features/products/domain/repositories/product_repository.dart';
+import 'package:tapix/features/products/data/repositories/product_repository_impl.dart';
+import 'package:tapix/features/products/data/datasources/product_local_datasource.dart';
 import 'package:tapix/features/products/presentation/bloc/products_bloc.dart';
 
 void main() {
@@ -18,7 +20,7 @@ void main() {
     setUp(() async {
       database = AppDatabase.connect(DatabaseConnection(NativeDatabase.memory()));
       realtimeService = RealtimeService(database);
-      productRepository = ProductRepository(database.productDao);
+      productRepository = ProductRepositoryImpl(ProductLocalDatasourceImpl(database.productDao));
       productsBloc = ProductsBloc(productRepository);
 
       currencyId = await database.into(database.currencies).insert(
@@ -47,11 +49,11 @@ void main() {
 
       await database.into(database.products).insert(
         ProductsCompanion.insert(
-          sku: 'E2E-001',
+          sku: const Value<String?>('E2E-001'),
           name: 'End-to-End Product',
           costCents: Decimal.fromInt(100),
           priceCents: Decimal.fromInt(200),
-          currencyId: currencyId,
+          currencyId: Value(currencyId),
         ),
       );
 
@@ -69,11 +71,11 @@ void main() {
 
       await database.into(database.products).insert(
         ProductsCompanion.insert(
-          sku: 'BLOC-001',
+          sku: const Value<String?>('BLOC-001'),
           name: 'Bloc Test Product',
           costCents: Decimal.fromInt(100),
           priceCents: Decimal.fromInt(200),
-          currencyId: currencyId,
+          currencyId: Value(currencyId),
         ),
       );
 
@@ -90,11 +92,11 @@ void main() {
       for (int i = 1; i <= 10; i++) {
         await database.into(database.products).insert(
           ProductsCompanion.insert(
-            sku: 'RAPID-$i',
+            sku: Value<String?>('RAPID-$i'),
             name: 'Rapid Product $i',
             costCents: Decimal.fromInt(100),
             priceCents: Decimal.fromInt(200),
-            currencyId: currencyId,
+            currencyId: Value(currencyId),
           ),
         );
       }
@@ -107,11 +109,11 @@ void main() {
     test('Product updates propagate to bloc state', () async {
       final productId = await database.into(database.products).insert(
         ProductsCompanion.insert(
-          sku: 'UPDATE-001',
+          sku: const Value<String?>('UPDATE-001'),
           name: 'Original Name',
           costCents: Decimal.fromInt(100),
           priceCents: Decimal.fromInt(200),
-          currencyId: currencyId,
+          currencyId: Value(currencyId),
         ),
       );
 
@@ -131,11 +133,11 @@ void main() {
     test('Product deletion propagates to bloc state', () async {
       final productId = await database.into(database.products).insert(
         ProductsCompanion.insert(
-          sku: 'DELETE-001',
+          sku: const Value<String?>('DELETE-001'),
           name: 'To Be Deleted',
           costCents: Decimal.fromInt(100),
           priceCents: Decimal.fromInt(200),
-          currencyId: currencyId,
+          currencyId: Value(currencyId),
         ),
       );
 
@@ -161,7 +163,7 @@ void main() {
 
     setUp(() async {
       database = AppDatabase.connect(DatabaseConnection(NativeDatabase.memory()));
-      productRepository = ProductRepository(database.productDao);
+      productRepository = ProductRepositoryImpl(ProductLocalDatasourceImpl(database.productDao)); // Use Impl
       productsBloc = ProductsBloc(productRepository);
 
       currencyId = await database.into(database.currencies).insert(
@@ -182,11 +184,11 @@ void main() {
     test('Update latency is under 100ms', () async {
       await database.into(database.products).insert(
         ProductsCompanion.insert(
-          sku: 'PERF-001',
+          sku: const Value<String?>('PERF-001'),
           name: 'Performance Test',
           costCents: Decimal.fromInt(100),
           priceCents: Decimal.fromInt(200),
-          currencyId: currencyId,
+          currencyId: Value(currencyId),
         ),
       );
 
@@ -220,11 +222,11 @@ void main() {
       for (int i = 0; i < 100; i++) {
         await database.into(database.products).insert(
           ProductsCompanion.insert(
-            sku: 'BULK-$i',
+            sku: Value<String?>('BULK-$i'),
             name: 'Bulk Product $i',
             costCents: Decimal.fromInt(100),
             priceCents: Decimal.fromInt(200),
-            currencyId: currencyId,
+            currencyId: Value(currencyId),
           ),
         );
       }
@@ -242,7 +244,7 @@ void main() {
     test('No retained streams after bloc disposal', () async {
       final database = AppDatabase.connect(DatabaseConnection(NativeDatabase.memory()));
       final realtimeService = RealtimeService(database);
-      final productRepository = ProductRepository(database.productDao);
+      final productRepository = ProductRepositoryImpl(ProductLocalDatasourceImpl(database.productDao)); // Use Impl
       final productsBloc = ProductsBloc(productRepository);
 
       final currencyId = await database.into(database.currencies).insert(
@@ -256,11 +258,11 @@ void main() {
 
       await database.into(database.products).insert(
         ProductsCompanion.insert(
-          sku: 'MEM-001',
+          sku: const Value<String?>('MEM-001'),
           name: 'Memory Test',
           costCents: Decimal.fromInt(100),
           priceCents: Decimal.fromInt(200),
-          currencyId: currencyId,
+          currencyId: Value(currencyId),
         ),
       );
 
@@ -282,7 +284,7 @@ void main() {
       final database = AppDatabase.connect(DatabaseConnection(NativeDatabase.memory()));
 
       for (int i = 0; i < 10; i++) {
-        final productRepository = ProductRepository(database.productDao);
+        final productRepository = ProductRepositoryImpl(ProductLocalDatasourceImpl(database.productDao)); // Use Impl
         final bloc = ProductsBloc(productRepository);
         await Future<void>.delayed(const Duration(milliseconds: 50));
         await bloc.close();

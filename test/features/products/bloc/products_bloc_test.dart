@@ -3,8 +3,11 @@ import 'package:drift/drift.dart' hide isNull;
 import 'package:drift/native.dart';
 import 'package:decimal/decimal.dart';
 import 'package:tapix/core/bloc/realtime_bloc.dart';
-import 'package:tapix/core/database/app_database.dart';
-import 'package:tapix/features/products/data/repositories/product_repository.dart';
+import 'package:tapix/core/database/app_database.dart' hide Product;
+import 'package:tapix/features/products/domain/entities/product_entity.dart';
+import 'package:tapix/features/products/domain/repositories/product_repository.dart';
+import 'package:tapix/features/products/data/repositories/product_repository_impl.dart';
+import 'package:tapix/features/products/data/datasources/product_local_datasource.dart';
 import 'package:tapix/features/products/presentation/bloc/products_bloc.dart';
 
 void main() {
@@ -16,7 +19,7 @@ void main() {
 
     setUp(() async {
       database = AppDatabase.connect(DatabaseConnection(NativeDatabase.memory()));
-      repository = ProductRepository(database.productDao);
+      repository = ProductRepositoryImpl(ProductLocalDatasourceImpl(database.productDao));
       bloc = ProductsBloc(repository);
 
       currencyId = await database.into(database.currencies).insert(
@@ -79,7 +82,7 @@ void main() {
           currencyId: currencyId,
           trackInventory: true,
           stockQuantity: 50,
-          reorderLevel: 10,
+          minQuantity: 10,
           hasVariants: false,
         ));
 
@@ -95,11 +98,11 @@ void main() {
       test('updates product optimistically', () async {
         await database.into(database.products).insert(
           ProductsCompanion.insert(
-            sku: 'UPDATE-001',
+            sku: const Value<String?>('UPDATE-001'),
             name: 'Original',
             costCents: Decimal.fromInt(100),
             priceCents: Decimal.fromInt(200),
-            currencyId: currencyId,
+            currencyId: Value(currencyId),
           ),
         );
 
@@ -120,11 +123,11 @@ void main() {
       test('deletes product optimistically', () async {
         final productId = await database.into(database.products).insert(
           ProductsCompanion.insert(
-            sku: 'DELETE-001',
+            sku: const Value<String?>('DELETE-001'),
             name: 'To Delete',
             costCents: Decimal.fromInt(100),
             priceCents: Decimal.fromInt(200),
-            currencyId: currencyId,
+            currencyId: Value(currencyId),
           ),
         );
 
@@ -144,21 +147,21 @@ void main() {
       test('searches products and updates state', () async {
         await database.into(database.products).insert(
           ProductsCompanion.insert(
-            sku: 'SEARCH-001',
+            sku: const Value<String?>('SEARCH-001'),
             name: 'Apple Phone',
             costCents: Decimal.fromInt(100),
             priceCents: Decimal.fromInt(200),
-            currencyId: currencyId,
+            currencyId: Value(currencyId),
           ),
         );
 
         await database.into(database.products).insert(
           ProductsCompanion.insert(
-            sku: 'SEARCH-002',
+            sku: const Value<String?>('SEARCH-002'),
             name: 'Samsung Phone',
             costCents: Decimal.fromInt(100),
             priceCents: Decimal.fromInt(200),
-            currencyId: currencyId,
+            currencyId: Value(currencyId),
           ),
         );
 
@@ -176,11 +179,11 @@ void main() {
       test('empty search clears query and refreshes', () async {
         await database.into(database.products).insert(
           ProductsCompanion.insert(
-            sku: 'SEARCH-003',
+            sku: const Value<String?>('SEARCH-003'),
             name: 'Test Product',
             costCents: Decimal.fromInt(100),
             priceCents: Decimal.fromInt(200),
-            currencyId: currencyId,
+            currencyId: Value(currencyId),
           ),
         );
 
@@ -200,21 +203,21 @@ void main() {
       test('clearSearch resets to full list', () async {
         await database.into(database.products).insert(
           ProductsCompanion.insert(
-            sku: 'CLEAR-001',
+            sku: const Value<String?>('CLEAR-001'),
             name: 'Product One',
             costCents: Decimal.fromInt(100),
             priceCents: Decimal.fromInt(200),
-            currencyId: currencyId,
+            currencyId: Value(currencyId),
           ),
         );
 
         await database.into(database.products).insert(
           ProductsCompanion.insert(
-            sku: 'CLEAR-002',
+            sku: const Value<String?>('CLEAR-002'),
             name: 'Product Two',
             costCents: Decimal.fromInt(100),
             priceCents: Decimal.fromInt(200),
-            currencyId: currencyId,
+            currencyId: Value(currencyId),
           ),
         );
 
@@ -236,11 +239,11 @@ void main() {
       test('refresh resubscribes to stream', () async {
         await database.into(database.products).insert(
           ProductsCompanion.insert(
-            sku: 'REFRESH-001',
+            sku: const Value<String?>('REFRESH-001'),
             name: 'Refresh Test',
             costCents: Decimal.fromInt(100),
             priceCents: Decimal.fromInt(200),
-            currencyId: currencyId,
+            currencyId: Value(currencyId),
           ),
         );
 

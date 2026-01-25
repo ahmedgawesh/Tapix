@@ -136,11 +136,11 @@ void main() {
 
         await database.into(database.products).insert(
           ProductsCompanion.insert(
-            sku: 'TEST-001',
+            sku: const Value<String?>('TEST-001'),
             name: 'Test Product',
             costCents: Decimal.fromInt(10),
             priceCents: Decimal.fromInt(20),
-            currencyId: currencyId,
+            currencyId: Value(currencyId),
           ),
         );
 
@@ -164,11 +164,11 @@ void main() {
 
         final productId = await database.into(database.products).insert(
           ProductsCompanion.insert(
-            sku: 'TEST-002',
+            sku: const Value<String?>('TEST-002'),
             name: 'Initial Name',
             costCents: Decimal.fromInt(10),
             priceCents: Decimal.fromInt(20),
-            currencyId: currencyId,
+            currencyId: Value(currencyId),
           ),
         );
 
@@ -361,11 +361,11 @@ void main() {
         stopwatch.start();
         await database.into(database.products).insert(
           ProductsCompanion.insert(
-            sku: 'PERF-001',
+            sku: const Value<String?>('PERF-001'),
             name: 'Performance Test',
             costCents: Decimal.fromInt(10),
             priceCents: Decimal.fromInt(20),
-            currencyId: currencyId,
+            currencyId: Value(currencyId),
           ),
         );
 

@@ -7,6 +7,7 @@ mixin _$ProductDaoMixin on DatabaseAccessor<AppDatabase> {
   $ProductCategoriesTable get productCategories =>
       attachedDatabase.productCategories;
   $CurrenciesTable get currencies => attachedDatabase.currencies;
+  $SuppliersTable get suppliers => attachedDatabase.suppliers;
   $ProductsTable get products => attachedDatabase.products;
   $ProductColorsTable get productColors => attachedDatabase.productColors;
   $SizesTable get sizes => attachedDatabase.sizes;
@@ -25,6 +26,8 @@ class ProductDaoManager {
       );
   $$CurrenciesTableTableManager get currencies =>
       $$CurrenciesTableTableManager(_db.attachedDatabase, _db.currencies);
+  $$SuppliersTableTableManager get suppliers =>
+      $$SuppliersTableTableManager(_db.attachedDatabase, _db.suppliers);
   $$ProductsTableTableManager get products =>
       $$ProductsTableTableManager(_db.attachedDatabase, _db.products);
   $$ProductColorsTableTableManager get productColors =>

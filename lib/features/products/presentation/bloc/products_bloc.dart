@@ -2,8 +2,8 @@ import 'package:decimal/decimal.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/bloc/realtime_bloc.dart';
-import '../../../../core/database/app_database.dart';
-import '../../data/repositories/product_repository.dart';
+import '../../domain/entities/product_entity.dart';
+import '../../domain/repositories/product_repository.dart';
 
 /// Events specific to products management
 abstract class ProductsEvent extends RealtimeEvent {
@@ -18,11 +18,15 @@ class ProductCreateRequested extends ProductsEvent {
   final int? categoryId;
   final Decimal costCents;
   final Decimal priceCents;
+  final Decimal? wholesalePriceCents;
   final int currencyId;
   final bool trackInventory;
   final int stockQuantity;
-  final int? reorderLevel;
+  final int minQuantity;
   final bool hasVariants;
+  final bool isTaxable;
+  final int taxRateBps;
+  final String? imagePath;
 
   const ProductCreateRequested({
     required this.sku,
@@ -31,11 +35,15 @@ class ProductCreateRequested extends ProductsEvent {
     this.categoryId,
     required this.costCents,
     required this.priceCents,
+    this.wholesalePriceCents,
     required this.currencyId,
     this.trackInventory = true,
     this.stockQuantity = 0,
-    this.reorderLevel,
+    this.minQuantity = 0,
     this.hasVariants = false,
+    this.isTaxable = false,
+    this.taxRateBps = 0,
+    this.imagePath,
   });
 }
 
@@ -127,11 +135,15 @@ class ProductsBloc extends RealtimeBloc<List<Product>, ProductsEvent> {
         categoryId: event.categoryId,
         costCents: event.costCents,
         priceCents: event.priceCents,
+        wholesalePriceCents: event.wholesalePriceCents,
         currencyId: event.currencyId,
         trackInventory: event.trackInventory,
         stockQuantity: event.stockQuantity,
-        reorderLevel: event.reorderLevel,
+        minQuantity: event.minQuantity,
         hasVariants: event.hasVariants,
+        isTaxable: event.isTaxable,
+        taxRateBps: event.taxRateBps,
+        imagePath: event.imagePath,
       );
     } catch (e, st) {
       add(RealtimeErrorOccurred(e, st));

@@ -99,7 +99,7 @@ void main() {
       ));
 
       expect(find.text('Settings Screen'), findsNothing);
-      expect(find.text('Access Denied'), findsOneWidget);
+      expect(find.text('Access Denied'), findsNWidgets(2));
     });
 
     testWidgets('Salesperson cannot access settings screen', (tester) async {
@@ -117,7 +117,7 @@ void main() {
       ));
 
       expect(find.text('Settings Screen'), findsNothing);
-      expect(find.text('Access Denied'), findsOneWidget);
+      expect(find.text('Access Denied'), findsNWidgets(2));
     });
   });
 
@@ -313,7 +313,7 @@ void main() {
       ));
 
       expect(find.text('User Management'), findsNothing);
-      expect(find.text('Access Denied'), findsOneWidget);
+      expect(find.text('Access Denied'), findsNWidgets(2));
     });
 
     testWidgets('Owner can access user management', (tester) async {

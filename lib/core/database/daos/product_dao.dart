@@ -26,9 +26,9 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
         .get();
   }
 
-  Future<Product?> findByBarcode(String barcode) {
+  Future<Product?> findBySkuOrBarcode(String code) {
     return (select(products)
-          ..where((p) => p.sku.equals(barcode))
+          ..where((p) => p.sku.equals(code) | p.barcode.equals(code))
           ..where((p) => p.isActive.equals(true)))
         .getSingleOrNull();
   }
@@ -49,7 +49,7 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
       if (stockStatus == 'out_of_stock') {
         query.where((p) => p.stockQuantity.equals(0));
       } else if (stockStatus == 'low_stock') {
-        query.where((p) => p.stockQuantity.isBiggerThanValue(0) & p.stockQuantity.isSmallerOrEqual(p.reorderLevel));
+        query.where((p) => p.stockQuantity.isBiggerThanValue(0) & p.stockQuantity.isSmallerOrEqual(p.minQuantity));
       }
     }
 
@@ -74,7 +74,7 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
       if (stockStatus == 'out_of_stock') {
         query.where((p) => p.stockQuantity.equals(0));
       } else if (stockStatus == 'low_stock') {
-        query.where((p) => p.stockQuantity.isBiggerThanValue(0) & p.stockQuantity.isSmallerOrEqual(p.reorderLevel));
+        query.where((p) => p.stockQuantity.isBiggerThanValue(0) & p.stockQuantity.isSmallerOrEqual(p.minQuantity));
       }
     }
 
@@ -85,6 +85,10 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
 
   Future<Product?> findBySku(String sku) {
     return (select(products)..where((p) => p.sku.equals(sku))).getSingleOrNull();
+  }
+
+  Future<Product?> findByBarcode(String barcode) {
+    return (select(products)..where((p) => p.barcode.equals(barcode))).getSingleOrNull();
   }
 
   Future<int> createProduct(ProductsCompanion product) {
