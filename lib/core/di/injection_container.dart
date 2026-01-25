@@ -8,6 +8,7 @@ import '../database/daos/product_dao.dart';
 import '../database/daos/product_variant_dao.dart';
 import '../database/daos/product_color_dao.dart';
 import '../database/daos/size_dao.dart';
+import '../database/daos/settings_dao.dart';
 import '../services/currency_service.dart';
 import '../services/localization_service.dart';
 import '../services/theme_service.dart';
@@ -40,6 +41,7 @@ Future<void> init() async {
   sl.registerLazySingleton(() => ProductVariantDao(sl()));
   sl.registerLazySingleton(() => ProductColorDao(sl()));
   sl.registerLazySingleton(() => SizeDao(sl()));
+  sl.registerLazySingleton(() => SettingsDao(sl()));
 
   // Auth Services
   sl.registerLazySingleton(() => PasswordService());
@@ -90,7 +92,7 @@ Future<void> init() async {
 
   // Barcode Services
   sl.registerLazySingleton(() => BarcodeValidationService());
-  sl.registerLazySingleton(() => BarcodePrinterService());
+  sl.registerLazySingleton(() => BarcodePrinterService(settingsDao: sl()));
   
   // Barcode Blocs
   sl.registerFactory(() => BarcodeScannerBloc(

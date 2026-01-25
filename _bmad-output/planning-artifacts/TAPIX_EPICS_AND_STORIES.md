@@ -133,9 +133,9 @@
 **So that** inventory management is efficient.
 
 **Acceptance Criteria:**
-- [ ] `mobile_scanner` integrated for camera scanning
-- [ ] `barcode_widget` used to generate labels
-- [ ] Barcode printing layout designed
+- [x] `mobile_scanner` integrated for camera scanning
+- [x] `barcode_widget` used to generate labels
+- [x] Barcode printing layout designed
 
 ---
 

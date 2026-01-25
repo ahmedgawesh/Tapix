@@ -7,7 +7,9 @@ import '../../features/auth/auth.dart';
 import '../../features/dashboard/presentation/screens/dashboard_screen.dart';
 import '../../features/products/presentation/screens/product_list_screen.dart';
 import '../../features/products/presentation/screens/product_form_screen.dart';
+import '../../features/products/domain/entities/product_entity.dart';
 import '../../features/barcode/presentation/screens/barcode_scanner_screen.dart';
+import '../../features/barcode/presentation/screens/barcode_label_designer_screen.dart';
 import '../../features/settings/presentation/screens/settings_screen.dart';
 import '../../features/settings/presentation/screens/admin_tools_screen.dart';
 import '../di/injection_container.dart';
@@ -202,7 +204,18 @@ class AppRouter {
       ),
       GoRoute(
         path: '/barcode-scanner',
-        builder: (context, state) => const BarcodeScannerScreen(),
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>?;
+          final returnOnScan = extra?['returnOnScan'] as bool? ?? false;
+          return BarcodeScannerScreen(returnOnScan: returnOnScan);
+        },
+      ),
+      GoRoute(
+        path: '/barcode-designer',
+        builder: (context, state) {
+          final product = state.extra as Product;
+          return BarcodeLabelDesignerScreen(product: product);
+        },
       ),
       GoRoute(
         path: '/users',

@@ -20,6 +20,7 @@ import 'daos/size_dao.dart';
 import 'daos/sale_dao.dart';
 import 'daos/customer_dao.dart';
 import 'daos/accounting_dao.dart';
+import 'daos/settings_dao.dart';
 
 import 'database_native.dart' if (dart.library.html) 'database_web.dart';
 
@@ -70,6 +71,7 @@ part 'app_database.g.dart';
     SaleDao,
     CustomerDao,
     AccountingDao,
+    SettingsDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
