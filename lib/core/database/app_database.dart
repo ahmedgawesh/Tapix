@@ -80,22 +80,25 @@ class AppDatabase extends _$AppDatabase {
   Future<void> _repairProductVariantsSkuNullabilityIfNeeded() async {
     var foreignKeysDisabled = false;
     try {
-      final info = await customSelect(
-        "SELECT name, \"notnull\" as is_not_null FROM pragma_table_info('product_variants') WHERE name IN ('sku', 'barcode')",
-      ).get();
+      // Some SQLite builds are picky about the `pragma_table_info(...).notnull` column name.
+      // To keep this repair robust across platforms, inspect the CREATE TABLE DDL instead.
+      final ddlRow = await customSelect(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'product_variants'",
+      ).getSingleOrNull();
 
-      if (info.isEmpty) {
+      final ddl = ddlRow?.readNullable<String>('sql') ?? '';
+      if (ddl.isEmpty) {
         return;
       }
 
-      final skuRow = info.where((r) => r.read<String>('name') == 'sku');
-      final skuNotNull = skuRow.isNotEmpty
-          ? skuRow.first.read<int>('is_not_null') == 1
-          : false;
-
-      final barcodeRow = info.where((r) => r.read<String>('name') == 'barcode');
-      final barcodeNotNull =
-          barcodeRow.isNotEmpty ? barcodeRow.first.read<int>('is_not_null') == 1 : false;
+      final skuNotNull = RegExp(
+        r'\bsku\b[^,]*\bNOT\s+NULL\b',
+        caseSensitive: false,
+      ).hasMatch(ddl);
+      final barcodeNotNull = RegExp(
+        r'\bbarcode\b[^,]*\bNOT\s+NULL\b',
+        caseSensitive: false,
+      ).hasMatch(ddl);
 
       if (!skuNotNull && !barcodeNotNull) {
         return;

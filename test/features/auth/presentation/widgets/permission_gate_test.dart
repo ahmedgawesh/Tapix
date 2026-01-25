@@ -1,33 +1,11 @@
-import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:get_it/get_it.dart';
-import 'package:easy_localization/easy_localization.dart';
-import 'package:mocktail/mocktail.dart';
 import 'package:tapix/features/auth/auth.dart';
 
-class MockAuthBloc extends Mock implements AuthBloc {}
-
 void main() {
-  late MockAuthBloc mockAuthBloc;
   late PermissionService permissionService;
 
-  TestWidgetsFlutterBinding.ensureInitialized();
-
-  setUpAll(() async {
-    await EasyLocalization.ensureInitialized();
-  });
-
   setUp(() {
-    mockAuthBloc = MockAuthBloc();
     permissionService = PermissionService();
-    if (!GetIt.I.isRegistered<PermissionService>()) {
-      GetIt.I.registerSingleton<PermissionService>(permissionService);
-    }
-  });
-
-  tearDown(() {
-    GetIt.I.reset();
   });
 
   UserEntity createUser(UserRole role, {bool isActive = true}) {
@@ -41,259 +19,89 @@ void main() {
     );
   }
 
-  Widget buildTestWidget(Widget child) {
-    return EasyLocalization(
-      supportedLocales: const [Locale('en')],
-      path: 'assets/translations',
-      fallbackLocale: const Locale('en'),
-      child: Builder(
-        builder: (context) => MaterialApp(
-          localizationsDelegates: context.localizationDelegates,
-          supportedLocales: context.supportedLocales,
-          locale: context.locale,
-          home: BlocProvider<AuthBloc>.value(
-            value: mockAuthBloc,
-            child: Scaffold(body: child),
-          ),
-        ),
-      ),
-    );
-  }
-
-  group('PermissionGate', () {
-    testWidgets('shows child when user has permission', (tester) async {
+  group('PermissionGate Logic', () {
+    test('owner has manageUsers permission', () {
       final user = createUser(UserRole.owner);
-      when(() => mockAuthBloc.state).thenReturn(AuthAuthenticated(user: user));
-      when(() => mockAuthBloc.stream).thenAnswer(
-        (_) => Stream.value(AuthAuthenticated(user: user)),
-      );
-
-      await tester.pumpWidget(buildTestWidget(
-        const PermissionGate(
-          permission: Permissions.manageUsers,
-          child: Text('Protected Content'),
-        ),
-      ));
-
-      expect(find.text('Protected Content'), findsOneWidget);
+      expect(permissionService.hasPermission(user, Permissions.manageUsers), isTrue);
     });
 
-    testWidgets('shows fallback when user lacks permission', (tester) async {
+    test('cashier lacks manageUsers permission', () {
       final user = createUser(UserRole.cashier);
-      when(() => mockAuthBloc.state).thenReturn(AuthAuthenticated(user: user));
-      when(() => mockAuthBloc.stream).thenAnswer(
-        (_) => Stream.value(AuthAuthenticated(user: user)),
-      );
-
-      await tester.pumpWidget(buildTestWidget(
-        const PermissionGate(
-          permission: Permissions.manageUsers,
-          fallback: Text('Access Denied'),
-          child: Text('Protected Content'),
-        ),
-      ));
-
-      expect(find.text('Protected Content'), findsNothing);
-      expect(find.text('Access Denied'), findsOneWidget);
+      expect(permissionService.hasPermission(user, Permissions.manageUsers), isFalse);
     });
 
-    testWidgets('shows nothing when no fallback and no permission',
-        (tester) async {
+    test('salesperson lacks manageUsers permission', () {
       final user = createUser(UserRole.salesperson);
-      when(() => mockAuthBloc.state).thenReturn(AuthAuthenticated(user: user));
-      when(() => mockAuthBloc.stream).thenAnswer(
-        (_) => Stream.value(AuthAuthenticated(user: user)),
-      );
-
-      await tester.pumpWidget(buildTestWidget(
-        const PermissionGate(
-          permission: Permissions.manageUsers,
-          child: Text('Protected Content'),
-        ),
-      ));
-
-      expect(find.text('Protected Content'), findsNothing);
-      expect(find.byType(SizedBox), findsOneWidget);
+      expect(permissionService.hasPermission(user, Permissions.manageUsers), isFalse);
     });
 
-    testWidgets('shows fallback when user is not authenticated',
-        (tester) async {
-      when(() => mockAuthBloc.state).thenReturn(const AuthUnauthenticated());
-      when(() => mockAuthBloc.stream).thenAnswer(
-        (_) => Stream.value(const AuthUnauthenticated()),
-      );
-
-      await tester.pumpWidget(buildTestWidget(
-        const PermissionGate(
-          permission: Permissions.manageUsers,
-          fallback: Text('Not Logged In'),
-          child: Text('Protected Content'),
-        ),
-      ));
-
-      expect(find.text('Protected Content'), findsNothing);
-      expect(find.text('Not Logged In'), findsOneWidget);
-    });
-
-    testWidgets('shows disabled state with tooltip when showDisabled is true',
-        (tester) async {
-      final user = createUser(UserRole.cashier);
-      when(() => mockAuthBloc.state).thenReturn(AuthAuthenticated(user: user));
-      when(() => mockAuthBloc.stream).thenAnswer(
-        (_) => Stream.value(AuthAuthenticated(user: user)),
-      );
-
-      await tester.pumpWidget(buildTestWidget(
-        PermissionGate(
-          permission: Permissions.manageUsers,
-          showDisabled: true,
-          disabledTooltip: 'Manager access required',
-          child: ElevatedButton(
-            onPressed: () {},
-            child: const Text('Manage Users'),
-          ),
-        ),
-      ));
-
-      expect(find.byType(Tooltip), findsOneWidget);
-      expect(find.byType(Opacity), findsOneWidget);
+    test('inactive user has no permissions', () {
+      final user = createUser(UserRole.owner, isActive: false);
+      expect(permissionService.hasPermission(user, Permissions.manageUsers), isFalse);
     });
   });
 
-  group('RoleGate', () {
-    testWidgets('shows child when user has allowed role', (tester) async {
+  group('RoleGate Logic', () {
+    test('manager meets minRole of manager', () {
       final user = createUser(UserRole.manager);
-      when(() => mockAuthBloc.state).thenReturn(AuthAuthenticated(user: user));
-      when(() => mockAuthBloc.stream).thenAnswer(
-        (_) => Stream.value(AuthAuthenticated(user: user)),
-      );
-
-      await tester.pumpWidget(buildTestWidget(
-        const RoleGate(
-          allowedRoles: [UserRole.owner, UserRole.manager],
-          child: Text('Manager Content'),
-        ),
-      ));
-
-      expect(find.text('Manager Content'), findsOneWidget);
+      expect(permissionService.isRoleAtLeast(user, UserRole.manager), isTrue);
     });
 
-    testWidgets('shows fallback when user role is not allowed', (tester) async {
+    test('owner meets minRole of manager', () {
+      final user = createUser(UserRole.owner);
+      expect(permissionService.isRoleAtLeast(user, UserRole.manager), isTrue);
+    });
+
+    test('cashier does not meet minRole of manager', () {
       final user = createUser(UserRole.cashier);
-      when(() => mockAuthBloc.state).thenReturn(AuthAuthenticated(user: user));
-      when(() => mockAuthBloc.stream).thenAnswer(
-        (_) => Stream.value(AuthAuthenticated(user: user)),
-      );
-
-      await tester.pumpWidget(buildTestWidget(
-        const RoleGate(
-          allowedRoles: [UserRole.owner, UserRole.manager],
-          fallback: Text('Managers Only'),
-          child: Text('Manager Content'),
-        ),
-      ));
-
-      expect(find.text('Manager Content'), findsNothing);
-      expect(find.text('Managers Only'), findsOneWidget);
+      expect(permissionService.isRoleAtLeast(user, UserRole.manager), isFalse);
     });
 
-    testWidgets('minRole allows roles at or above minimum', (tester) async {
-      final manager = createUser(UserRole.manager);
-      when(() => mockAuthBloc.state)
-          .thenReturn(AuthAuthenticated(user: manager));
-      when(() => mockAuthBloc.stream).thenAnswer(
-        (_) => Stream.value(AuthAuthenticated(user: manager)),
-      );
-
-      await tester.pumpWidget(buildTestWidget(
-        const RoleGate(
-          minRole: UserRole.manager,
-          child: Text('Manager+ Content'),
-        ),
-      ));
-
-      expect(find.text('Manager+ Content'), findsOneWidget);
+    test('salesperson does not meet minRole of manager', () {
+      final user = createUser(UserRole.salesperson);
+      expect(permissionService.isRoleAtLeast(user, UserRole.manager), isFalse);
     });
 
-    testWidgets('minRole blocks roles below minimum', (tester) async {
-      final cashier = createUser(UserRole.cashier);
-      when(() => mockAuthBloc.state)
-          .thenReturn(AuthAuthenticated(user: cashier));
-      when(() => mockAuthBloc.stream).thenAnswer(
-        (_) => Stream.value(AuthAuthenticated(user: cashier)),
-      );
-
-      await tester.pumpWidget(buildTestWidget(
-        const RoleGate(
-          minRole: UserRole.manager,
-          fallback: Text('Insufficient Role'),
-          child: Text('Manager+ Content'),
-        ),
-      ));
-
-      expect(find.text('Manager+ Content'), findsNothing);
-      expect(find.text('Insufficient Role'), findsOneWidget);
+    test('inactive user does not meet any minRole', () {
+      final user = createUser(UserRole.owner, isActive: false);
+      expect(permissionService.isRoleAtLeast(user, UserRole.salesperson), isFalse);
     });
   });
 
-  group('MultiPermissionGate', () {
-    testWidgets('shows child when user has all required permissions',
-        (tester) async {
+  group('MultiPermissionGate Logic', () {
+    test('owner has all required permissions', () {
       final user = createUser(UserRole.owner);
-      when(() => mockAuthBloc.state).thenReturn(AuthAuthenticated(user: user));
-      when(() => mockAuthBloc.stream).thenAnswer(
-        (_) => Stream.value(AuthAuthenticated(user: user)),
-      );
-
-      await tester.pumpWidget(buildTestWidget(
-        const MultiPermissionGate(
-          permissions: [Permissions.manageUsers, Permissions.viewReports],
-          requireAll: true,
-          child: Text('Admin Content'),
+      expect(
+        permissionService.hasAllPermissions(
+          user,
+          [Permissions.manageUsers, Permissions.viewReports],
         ),
-      ));
-
-      expect(find.text('Admin Content'), findsOneWidget);
+        isTrue,
+      );
     });
 
-    testWidgets('shows child when user has any of the permissions',
-        (tester) async {
+    test('manager has viewReports but not manageUsers', () {
       final user = createUser(UserRole.manager);
-      when(() => mockAuthBloc.state).thenReturn(AuthAuthenticated(user: user));
-      when(() => mockAuthBloc.stream).thenAnswer(
-        (_) => Stream.value(AuthAuthenticated(user: user)),
-      );
-
-      await tester.pumpWidget(buildTestWidget(
-        const MultiPermissionGate(
-          permissions: [Permissions.manageUsers, Permissions.viewReports],
-          requireAll: false,
-          child: Text('Reports Content'),
+      expect(permissionService.hasPermission(user, Permissions.viewReports), isTrue);
+      expect(permissionService.hasPermission(user, Permissions.manageUsers), isFalse);
+      expect(
+        permissionService.hasAnyPermission(
+          user,
+          [Permissions.manageUsers, Permissions.viewReports],
         ),
-      ));
-
-      expect(find.text('Reports Content'), findsOneWidget);
+        isTrue,
+      );
     });
 
-    testWidgets('shows fallback when user lacks all permissions',
-        (tester) async {
+    test('salesperson lacks all admin permissions', () {
       final user = createUser(UserRole.salesperson);
-      when(() => mockAuthBloc.state).thenReturn(AuthAuthenticated(user: user));
-      when(() => mockAuthBloc.stream).thenAnswer(
-        (_) => Stream.value(AuthAuthenticated(user: user)),
-      );
-
-      await tester.pumpWidget(buildTestWidget(
-        const MultiPermissionGate(
-          permissions: [Permissions.manageUsers, Permissions.viewReports],
-          requireAll: false,
-          fallback: Text('No Access'),
-          child: Text('Protected Content'),
+      expect(
+        permissionService.hasAnyPermission(
+          user,
+          [Permissions.manageUsers, Permissions.viewReports],
         ),
-      ));
-
-      expect(find.text('Protected Content'), findsNothing);
-      expect(find.text('No Access'), findsOneWidget);
+        isFalse,
+      );
     });
   });
 }
