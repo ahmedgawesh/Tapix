@@ -7,6 +7,7 @@ import '../../features/auth/auth.dart';
 import '../../features/dashboard/presentation/screens/dashboard_screen.dart';
 import '../../features/products/presentation/screens/product_list_screen.dart';
 import '../../features/products/presentation/screens/product_form_screen.dart';
+import '../../features/barcode/presentation/screens/barcode_scanner_screen.dart';
 import '../../features/settings/presentation/screens/settings_screen.dart';
 import '../di/injection_container.dart';
 import 'route_permissions.dart';
@@ -151,7 +152,11 @@ class AppRouter {
         routes: [
           GoRoute(
             path: 'new',
-            builder: (context, state) => const ProductFormScreen(),
+            builder: (context, state) {
+              final extra = state.extra as Map<String, dynamic>?;
+              final barcode = extra?['barcode'] as String?;
+              return ProductFormScreen(initialBarcode: barcode);
+            },
           ),
           GoRoute(
             path: ':id/edit',
@@ -189,6 +194,10 @@ class AppRouter {
       GoRoute(
         path: '/settings',
         builder: (context, state) => const SettingsScreen(),
+      ),
+      GoRoute(
+        path: '/barcode-scanner',
+        builder: (context, state) => const BarcodeScannerScreen(),
       ),
       GoRoute(
         path: '/users',

@@ -191,7 +191,7 @@
       <output>- Responsive design requirements (mobile/tablet/desktop/web)</output>
       <output>- Money calculations (integer cents only)</output>
       <output>- Back button behavior (critical for mobile/tablet)</output>
-      <output></output>
+      <output>- Testing requirements (all platforms, themes, languages)</output>
       <output>Creating story without project-context.md may result in missing critical requirements!</output>
       <ask>Continue without project-context.md? [y/n]</ask>
       <check if="user says 'n' or 'no'">

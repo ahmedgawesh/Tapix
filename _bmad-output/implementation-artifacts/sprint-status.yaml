@@ -58,7 +58,7 @@ development_status:
   epic-3: in-progress
   3-1-product-list-search-filter: done
   3-2-product-crud-variants: done
-  3-3-barcode-management: backlog
+  3-3-barcode-management: done
   3-4-bulk-product-form: backlog
   3-5-edit-prices-screen: backlog
   3-6-import-products-screen: backlog

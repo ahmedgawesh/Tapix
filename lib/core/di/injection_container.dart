@@ -21,6 +21,9 @@ import '../../features/products/data/datasources/variant_local_datasource.dart';
 import '../../features/products/presentation/bloc/products_bloc.dart';
 import '../../features/products/presentation/bloc/product_form_bloc.dart';
 import '../../features/products/presentation/bloc/product_variants_bloc.dart';
+import '../../features/barcode/services/barcode_validation_service.dart';
+import '../../features/barcode/services/barcode_printer_service.dart';
+import '../../features/barcode/presentation/bloc/barcode_scanner_bloc.dart';
 
 final sl = GetIt.instance;
 
@@ -84,4 +87,14 @@ Future<void> init() async {
   sl.registerFactory(() => ProductVariantsBloc(sl<ProductVariantRepository>()));
   sl.registerFactory(() => ColorsBloc(sl<ProductVariantRepository>()));
   sl.registerFactory(() => SizesBloc(sl<ProductVariantRepository>()));
+
+  // Barcode Services
+  sl.registerLazySingleton(() => BarcodeValidationService());
+  sl.registerLazySingleton(() => BarcodePrinterService());
+  
+  // Barcode Blocs
+  sl.registerFactory(() => BarcodeScannerBloc(
+    productRepository: sl(),
+    validationService: sl(),
+  ));
 }

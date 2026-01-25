@@ -77,8 +77,46 @@ class AppDatabase extends _$AppDatabase {
   
   AppDatabase.connect(DatabaseConnection connection) : super.connect(connection);
 
+  Future<void> _safeAddColumn(String table, String column, String type) async {
+    final result = await customSelect(
+      "SELECT COUNT(*) as cnt FROM pragma_table_info('$table') WHERE name = '$column'",
+    ).getSingle();
+    
+    final exists = result.read<int>('cnt') > 0;
+    if (!exists) {
+      debugPrint('DB schema fix: adding missing column $table.$column ($type)');
+      await customStatement('ALTER TABLE $table ADD COLUMN $column $type');
+    }
+  }
+
+  Future<void> _ensureSchemaIntegrity() async {
+    debugPrint('Starting schema integrity check...');
+    await _safeAddColumn('products', 'barcode', 'TEXT');
+    await _safeAddColumn('products', 'name_ar', 'TEXT');
+    await _safeAddColumn('products', 'name_fr', 'TEXT');
+    await _safeAddColumn('products', 'supplier_id', 'INTEGER REFERENCES suppliers(id)');
+    await _safeAddColumn('products', 'wholesale_price_cents', 'INTEGER');
+    await _safeAddColumn('products', 'min_quantity', 'INTEGER DEFAULT 0');
+
+    // Ensure boolean-ish and tax fields exist for older DBs.
+    // Drift stores booleans as INTEGER 0/1.
+    await _safeAddColumn('products', 'has_variants', 'INTEGER NOT NULL DEFAULT 0');
+    await _safeAddColumn('products', 'is_taxable', 'INTEGER NOT NULL DEFAULT 0');
+    await _safeAddColumn('products', 'tax_rate_bps', 'INTEGER NOT NULL DEFAULT 0');
+    await _safeAddColumn('products', 'track_inventory', 'INTEGER NOT NULL DEFAULT 1');
+    await _safeAddColumn('products', 'stock_quantity', 'INTEGER NOT NULL DEFAULT 0');
+    await _safeAddColumn('products', 'image_path', 'TEXT');
+    await _safeAddColumn('products', 'is_active', 'INTEGER NOT NULL DEFAULT 1');
+
+    await _safeAddColumn('product_variants', 'barcode', 'TEXT');
+    await _safeAddColumn('product_variants', 'price_adjustment_cents', 'INTEGER NOT NULL DEFAULT 0');
+    
+    await _safeAddColumn('sizes', 'sort_order', 'INTEGER NOT NULL DEFAULT 0');
+    debugPrint('Schema integrity check completed.');
+  }
+
   @override
-  int get schemaVersion => 10000;
+  int get schemaVersion => 10004;
 
   @override
   MigrationStrategy get migration {
@@ -93,11 +131,42 @@ class AppDatabase extends _$AppDatabase {
           return;
         }
 
+        // Migration from 10000 to 10001: Add barcode, name_ar, name_fr columns to products and product_variants
+        if (from < 10001) {
+          await _safeAddColumn('products', 'barcode', 'TEXT');
+          await _safeAddColumn('product_variants', 'barcode', 'TEXT');
+          await _safeAddColumn('products', 'name_ar', 'TEXT');
+          await _safeAddColumn('products', 'name_fr', 'TEXT');
+
+          await customStatement('CREATE UNIQUE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode) WHERE barcode IS NOT NULL');
+          await customStatement('CREATE UNIQUE INDEX IF NOT EXISTS idx_product_variants_barcode ON product_variants(barcode) WHERE barcode IS NOT NULL');
+        }
+
+        // Migration from 10001 to 10002: Add supplier_id and wholesale_price_cents columns to products
+        if (from < 10002) {
+          await _safeAddColumn('products', 'supplier_id', 'INTEGER REFERENCES suppliers(id)');
+          await _safeAddColumn('products', 'wholesale_price_cents', 'INTEGER');
+        }
+
+        // Migration from 10002 to 10003: Ensure all columns exist (fix for failed migrations)
+        if (from < 10003) {
+          await _ensureSchemaIntegrity();
+        }
+        
+        // Migration 10003 -> 10004: Force integrity check again to ensure variants/sizes support
+        if (from < 10004) {
+          await _ensureSchemaIntegrity();
+        }
+
         await _createIndexes();
         await _seedInitialData();
       },
       beforeOpen: (details) async {
+        debugPrint(
+          'DB open: wasCreated=${details.wasCreated} hadUpgrade=${details.hadUpgrade} versionBefore=${details.versionBefore} versionNow=${details.versionNow}',
+        );
         await customStatement('PRAGMA foreign_keys = ON');
+        await _ensureSchemaIntegrity();
       },
     );
   }

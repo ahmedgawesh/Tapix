@@ -12,10 +12,14 @@ import 'core/services/localization_service.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/auth.dart';
 import 'core/services/currency_service.dart';
+import 'core/bloc/simple_bloc_observer.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await EasyLocalization.ensureInitialized();
+  
+  Bloc.observer = SimpleBlocObserver();
+  
   await di.init();
 
   final localizationService = di.sl<LocalizationService>();
@@ -73,6 +77,7 @@ class MyApp extends StatelessWidget {
                           : context.locale;
 
                   return MaterialApp.router(
+                    key: ValueKey('app_${locale.languageCode}'),
                     title: 'Tapix',
                     debugShowCheckedModeBanner: false,
                     localizationsDelegates: context.localizationDelegates,

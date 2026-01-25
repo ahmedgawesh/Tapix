@@ -104,7 +104,7 @@ class ProductsBloc extends RealtimeBloc<List<Product>, ProductsEvent> {
   String? _currentStockStatusFilter;
   int _currentPage = 0;
   static const int _pageSize = 50;
-  bool _hasMoreData = true;
+  bool _hasMoreData = false;
 
   ProductsBloc(this._repository) : super();
 
