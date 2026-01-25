@@ -295,6 +295,35 @@
     "last_updated": "Dernière mise à jour",
     "updated_by": "Mis à jour par",
     "min_margin_warning": "Marge inférieure au minimum (15%)",
-    "permission_denied": "Vous n'avez pas la permission de modifier les prix"
+    "permission_denied": "Vous n'avez pas la permission de modifier les prix",
+    "permission": {
+      "required_permission_or_role": "Soit requiredPermission ou requiredRole doit être fourni",
+      "allowed_roles_or_min_role": "Soit allowedRoles ou minRole doit être fourni"
+    },
+    "access_denied": "Accès Refusé",
+    "go_back": "Retour",
+    "home": "Accueil",
+    "ok": "OK",
+    "admin": "Admin",
+    "admin_tools": {
+      "title": "Outils d'Admin"
+    },
+    "database": "Base de Données",
+    "health_check": "Vérification Santé",
+    "size_management_pending": "Gestion des tailles en attente d'implémentation",
+    "color_management_pending": "Gestion des couleurs en attente d'implémentation",
+    "tapix": "Tapix",
+    "english": "English",
+    "arabic": "العربية",
+    "french": "Français",
+    "authentication_error": "Erreur d'authentification",
+    "invalid_credentials": "Nom d'utilisateur ou mot de passe invalide",
+    "failed_to_create_owner": "Échec de la création du compte propriétaire",
+    "owner": "owner",
+    "bulk": "bulk",
+    "edit_prices": "edit_prices",
+    "return_on_scan": "returnOnScan",
+    "price_cents": "priceCents",
+    "wholesale_price_cents": "wholesalePriceCents"
   }
 }

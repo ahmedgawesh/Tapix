@@ -118,16 +118,45 @@ so that {{benefit}}.
 ## Tasks / Subtasks
 
 ### ENFORCEMENT TASKS (MANDATORY)
-- [ ] COMPLIANCE-001: Verify RealtimeBloc pattern implementation (AC-COMP-001)
-- [ ] COMPLIANCE-002: Verify all text is localized (AC-COMP-002)
-- [ ] COMPLIANCE-003: Verify integer cents for money (AC-COMP-003)
-- [ ] COMPLIANCE-004: Verify CurrencyService usage (AC-COMP-004)
-- [ ] COMPLIANCE-005: Verify responsive design (AC-COMP-005)
-- [ ] COMPLIANCE-006: Verify GoRouter navigation (AC-COMP-006)
-- [ ] COMPLIANCE-007: Verify semantic colors (AC-COMP-007)
-- [ ] COMPLIANCE-008: Verify database integration (AC-COMP-008)
+- [ ] COMPLIANCE-001: Verify RealtimeBloc pattern implementation (AC-TECH-002)
+- [ ] COMPLIANCE-002: Verify all text is localized (AC-TECH-006)
+- [ ] COMPLIANCE-003: Verify integer cents for money (AC-TECH-003)
+- [ ] COMPLIANCE-004: Verify CurrencyService usage (AC-BL-004)
+- [ ] COMPLIANCE-005: Verify responsive design (AC-TECH-004)
+- [ ] COMPLIANCE-006: Verify GoRouter navigation (AC-UI-003)
+- [ ] COMPLIANCE-007: Verify semantic colors (AC-UI-001)
+- [ ] COMPLIANCE-008: Verify database integration (AC-BL-003)
 
-### Feature Tasks
+### TECHNICAL IMPLEMENTATION TASKS
+- [ ] TECH-001: Implement Clean Architecture structure (AC-TECH-001)
+- [ ] TECH-002: Set up Bloc with real-time database streams (AC-TECH-002)
+- [ ] TECH-003: Configure responsive layout breakpoints (AC-TECH-004)
+- [ ] TECH-004: Implement theme support (Light/Dark) (AC-TECH-005)
+- [ ] TECH-005: Add localization support (EN/AR/FR) (AC-TECH-006)
+- [ ] TECH-006: Test on all target platforms (AC-TECH-007)
+
+### UI/UX IMPLEMENTATION TASKS
+- [ ] UI-001: Design responsive layout (mobile/tablet/desktop) (AC-UI-004)
+- [ ] UI-002: Apply semantic color scheme (AC-UI-001)
+- [ ] UI-003: Implement GoRouter navigation (AC-UI-003)
+- [ ] UI-004: Test accessibility and contrast (AC-UI-005)
+- [ ] UI-005: Verify RTL layout for Arabic (AC-TECH-006)
+
+### BUSINESS LOGIC TASKS
+- [ ] BL-001: Implement field validations per specification (AC-BL-001)
+- [ ] BL-002: Add role-based permission checks (AC-BL-002)
+- [ ] BL-003: Configure real-time data synchronization (AC-BL-003)
+- [ ] BL-004: Implement money calculations in cents (AC-BL-004)
+
+### TESTING TASKS
+- [ ] TEST-001: Write unit tests for Blocs (90%+ coverage) (AC-TECH-008)
+- [ ] TEST-002: Write widget tests for UI components (AC-TECH-008)
+- [ ] TEST-003: Write integration tests for user flows (AC-TECH-008)
+- [ ] TEST-004: Test on all platforms (mobile, desktop, web) (AC-TECH-007)
+- [ ] TEST-005: Test all languages (EN/AR/FR) with RTL (AC-TECH-006)
+- [ ] TEST-006: Test both themes (Light/Dark) (AC-TECH-005)
+
+### FEATURE TASKS
 - [ ] Task 1 (AC: #)
   - [ ] Subtask 1.1
 - [ ] Task 2 (AC: #)
@@ -136,10 +165,23 @@ so that {{benefit}}.
 ## Dev Notes
 
 ### ENFORCEMENT NOTES (MANDATORY)
-- **CRITICAL**: AI Models MUST load project-context.md and treat as BINDING LAW
+- **CRITICAL**: AI Models MUST load TAPIX_REBUILD_SPECIFICATION.md and treat as BINDING LAW
 - **CRITICAL**: AI Models MUST load UI architecture specification and follow exactly
 - **CRITICAL**: Every implementation MUST explain how constraints are satisfied
 - **FAILURE TO FOLLOW BINDING CONSTRAINTS IS NOT ACCEPTABLE**
+
+### Specification References (MANDATORY)
+- **Primary Specification**: TAPIX_REBUILD_SPECIFICATION.md (1096 lines of detailed requirements)
+- **UI Architecture**: 2-1-ui-architecture-specification.md (screen placement and navigation)
+- **Enforcement Framework**: 2-2-development-enforcement-framework.md (binding constraints)
+- **Project Context**: project-context.md (implementation patterns)
+
+### Detailed Implementation Guidance
+- **Screen Names**: Use exact screen names from rebuild spec (e.g., `ProductsMainScreen`, `BulkProductFormScreen`)
+- **Field Lists**: Include ALL fields from specification (e.g., 12 product fields from section 5.3)
+- **Business Rules**: Implement all validations and rules from specification
+- **Service Integration**: Use services from Core Services Inventory (section 8)
+- **Database Schema**: Follow exact schema from Database Requirements (section 9)
 
 ### Architecture Notes
 - Relevant architecture patterns and constraints

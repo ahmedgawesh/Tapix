@@ -31,6 +31,8 @@ variables:
 project_context: "**/project-context.md"
 ui_architecture: "{implementation_artifacts}/2-1-ui-architecture-specification.md"
 enforcement_framework: "{implementation_artifacts}/2-2-development-enforcement-framework.md"
+rebuild_specification: "{planning_artifacts}/TAPIX_REBUILD_SPECIFICATION.md"
+epics_stories: "{planning_artifacts}/TAPIX_EPICS_AND_STORIES.md"
 
 default_output_file: "{story_dir}/{{story_key}}.md"
 

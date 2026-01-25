@@ -297,6 +297,35 @@
     "last_updated": "Last Updated",
     "updated_by": "Updated By",
     "min_margin_warning": "Margin below minimum (15%)",
-    "permission_denied": "You do not have permission to edit prices"
+    "permission_denied": "You do not have permission to edit prices",
+    "permission": {
+      "required_permission_or_role": "Either requiredPermission or requiredRole must be provided",
+      "allowed_roles_or_min_role": "Either allowedRoles or minRole must be provided"
+    },
+    "access_denied": "Access Denied",
+    "go_back": "Go Back",
+    "home": "Home",
+    "ok": "OK",
+    "admin": "Admin",
+    "admin_tools": {
+      "title": "Admin Tools"
+    },
+    "database": "Database",
+    "health_check": "Health Check",
+    "size_management_pending": "Size management implementation pending",
+    "color_management_pending": "Color management implementation pending",
+    "tapix": "Tapix",
+    "english": "English",
+    "arabic": "العربية",
+    "french": "Français",
+    "authentication_error": "Authentication error",
+    "invalid_credentials": "Invalid username or password",
+    "failed_to_create_owner": "Failed to create owner account",
+    "owner": "owner",
+    "bulk": "bulk",
+    "edit_prices": "edit_prices",
+    "return_on_scan": "returnOnScan",
+    "price_cents": "priceCents",
+    "wholesale_price_cents": "wholesalePriceCents"
   }
 }

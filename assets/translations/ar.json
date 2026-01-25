@@ -294,6 +294,35 @@
     "last_updated": "آخر تحديث",
     "updated_by": "تم التحديث بواسطة",
     "min_margin_warning": "الهامش أقل من الحد الأدنى (15%)",
-    "permission_denied": "ليس لديك صلاحية لتعديل الأسعار"
+    "permission_denied": "ليس لديك صلاحية لتعديل الأسعار",
+    "permission": {
+      "required_permission_or_role": "يجب توفير requiredPermission أو requiredRole",
+      "allowed_roles_or_min_role": "يجب توفير allowedRoles أو minRole"
+    },
+    "access_denied": "الوصول مرفوض",
+    "go_back": "العودة",
+    "home": "الرئيسية",
+    "ok": "موافق",
+    "admin": "المسؤول",
+    "admin_tools": {
+      "title": "أدوات المسؤول"
+    },
+    "database": "قاعدة البيانات",
+    "health_check": "فحص الصحة",
+    "size_management_pending": "إدارة الأحجام قيد التنفيذ",
+    "color_management_pending": "إدارة الألوان قيد التنفيذ",
+    "tapix": "تابيكس",
+    "english": "English",
+    "arabic": "العربية",
+    "french": "Français",
+    "authentication_error": "خطأ في المصادقة",
+    "invalid_credentials": "اسم المستخدم أو كلمة المرور غير صحيحة",
+    "failed_to_create_owner": "فشل في إنشاء حساب المالك",
+    "owner": "owner",
+    "bulk": "bulk",
+    "edit_prices": "edit_prices",
+    "return_on_scan": "returnOnScan",
+    "price_cents": "priceCents",
+    "wholesale_price_cents": "wholesalePriceCents"
   }
 }

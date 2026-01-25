@@ -37,7 +37,7 @@ class AccessDeniedScreen extends StatelessWidget {
           },
           tooltip: 'common.back'.tr(),
         ),
-        title: const Text('Access Denied'),
+        title: Text('access_denied'.tr()),
         centerTitle: true,
       ),
       body: Center(
@@ -53,7 +53,7 @@ class AccessDeniedScreen extends StatelessWidget {
               ),
               const SizedBox(height: 24),
               Text(
-                'Access Denied',
+                'access_denied'.tr(),
                 style: theme.textTheme.headlineMedium?.copyWith(
                   fontWeight: FontWeight.bold,
                   color: theme.colorScheme.error,
@@ -96,7 +96,7 @@ class AccessDeniedScreen extends StatelessWidget {
                     OutlinedButton.icon(
                       onPressed: onBack,
                       icon: const Icon(Icons.arrow_back),
-                      label: const Text('Go Back'),
+                      label: Text('go_back'.tr()),
                     ),
                   if (onBack != null && onHome != null)
                     const SizedBox(width: 16),
@@ -104,7 +104,7 @@ class AccessDeniedScreen extends StatelessWidget {
                     FilledButton.icon(
                       onPressed: onHome,
                       icon: const Icon(Icons.home),
-                      label: const Text('Home'),
+                      label: Text('home'.tr()),
                     ),
                 ],
               ),
@@ -190,7 +190,7 @@ class PermissionDeniedDialog extends StatelessWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('OK'),
+          child: Text('ok'.tr()),
         ),
       ],
     );
