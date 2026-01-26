@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -14,8 +15,10 @@ import '../../features/products/presentation/screens/simple_export_screen.dart';
 import '../../features/products/domain/entities/product_entity.dart';
 import '../../features/barcode/presentation/screens/barcode_scanner_screen.dart';
 import '../../features/barcode/presentation/screens/barcode_label_designer_screen.dart';
+import '../../features/barcode/presentation/screens/barcode_design_screen.dart';
 import '../../features/settings/presentation/screens/settings_screen.dart';
 import '../../features/settings/presentation/screens/admin_tools_screen.dart';
+import '../../features/settings/presentation/screens/company_profile_screen.dart';
 import '../di/injection_container.dart';
 import 'route_permissions.dart';
 
@@ -219,6 +222,10 @@ class AppRouter {
         builder: (context, state) => const SettingsScreen(),
       ),
       GoRoute(
+        path: '/settings/company',
+        builder: (context, state) => const CompanyProfileScreen(),
+      ),
+      GoRoute(
         path: '/settings/admin-tools',
         builder: (context, state) => const AdminToolsScreen(),
       ),
@@ -235,6 +242,14 @@ class AppRouter {
         builder: (context, state) {
           final product = state.extra as Product;
           return BarcodeLabelDesignerScreen(product: product);
+        },
+      ),
+      GoRoute(
+        path: '/products/barcode-design',
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>?;
+          final products = extra?['products'] as List<Product>?;
+          return BarcodeDesignScreen(initialProducts: products);
         },
       ),
       GoRoute(
@@ -286,7 +301,7 @@ class PlaceholderScreen extends StatelessWidget {
         title: Text(title),
         centerTitle: true,
       ),
-      body: Center(child: Text('$title Screen')),
+      body: Center(child: Text('$title ${'common.screen'.tr()}')),
     );
   }
 }

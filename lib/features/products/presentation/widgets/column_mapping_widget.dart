@@ -204,7 +204,7 @@ class _ColumnMappingWidgetState extends State<ColumnMappingWidget> {
                 ...headers.asMap().entries.map((entry) {
                   return DropdownMenuItem<int?>(
                     value: entry.key,
-                    child: Text('${entry.value} (Column ${entry.key + 1})'),
+                    child: Text('${entry.value} ${'import_products.column_reference'.tr()} ${entry.key + 1})'),
                   );
                 }),
               ],

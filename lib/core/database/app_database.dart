@@ -10,6 +10,7 @@ import 'tables/people.dart';
 import 'tables/transactions.dart';
 import 'tables/accounting.dart';
 import 'tables/audit.dart';
+import 'tables/barcode.dart';
 import 'converters/money_converter.dart';
 import 'converters/json_converter.dart';
 import 'converters/timestamp_converter.dart';
@@ -21,6 +22,7 @@ import 'daos/sale_dao.dart';
 import 'daos/customer_dao.dart';
 import 'daos/accounting_dao.dart';
 import 'daos/settings_dao.dart';
+import 'daos/barcode_template_dao.dart';
 
 import 'database_native.dart' if (dart.library.html) 'database_web.dart';
 
@@ -62,6 +64,8 @@ part 'app_database.g.dart';
     AuditLogs,
     VoidLogs,
     Notifications,
+    BarcodeTemplates,
+    PrintHistories,
   ],
   daos: [
     ProductDao,
@@ -72,6 +76,7 @@ part 'app_database.g.dart';
     CustomerDao,
     AccountingDao,
     SettingsDao,
+    BarcodeTemplateDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -222,7 +227,7 @@ FROM product_variants__old
   }
 
   @override
-  int get schemaVersion => 10006;
+  int get schemaVersion => 10007;
 
   @override
   MigrationStrategy get migration {
@@ -267,6 +272,13 @@ FROM product_variants__old
           await _repairProductVariantsSkuNullabilityIfNeeded();
         }
 
+        // Migration 10006 -> 10007: Add barcode templates and print history tables
+        if (from < 10007) {
+          await m.createTable(barcodeTemplates);
+          await m.createTable(printHistories);
+          await _seedDefaultBarcodeTemplates();
+        }
+
         await _createIndexes();
         await _seedInitialData();
       },
@@ -299,6 +311,9 @@ FROM product_variants__old
     await customStatement('CREATE INDEX IF NOT EXISTS idx_customers_active ON customers(is_active)');
     await customStatement('CREATE INDEX IF NOT EXISTS idx_suppliers_active ON suppliers(is_active)');
     await customStatement('CREATE INDEX IF NOT EXISTS idx_currency_active ON currencies(is_active)');
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_barcode_templates_default ON barcode_templates(is_default)');
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_print_history_product ON print_histories(product_id, print_date)');
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_print_history_date ON print_histories(print_date)');
   }
 
   Future<void> _seedInitialData() async {
@@ -463,6 +478,68 @@ FROM product_variants__old
       key: 'default_currency_id',
       value: usdId.toString(),
       description: 'Default currency ID',
+    );
+  }
+
+  Future<void> _seedDefaultBarcodeTemplates() async {
+    Future<void> upsertTemplate({
+      required String name,
+      required String description,
+      required String paperSize,
+      required double widthMm,
+      required double heightMm,
+      required bool isDefault,
+    }) async {
+      final existing = await (select(barcodeTemplates)
+            ..where((t) => t.name.equals(name)))
+          .getSingleOrNull();
+
+      if (existing == null) {
+        await into(barcodeTemplates).insert(
+          BarcodeTemplatesCompanion.insert(
+            name: name,
+            description: Value(description),
+            layoutConfig: '{}',
+            paperSize: Value(paperSize),
+            widthMm: Value(widthMm),
+            heightMm: Value(heightMm),
+            includeName: const Value(true),
+            includePrice: const Value(true),
+            includeSku: const Value(false),
+            includeCompanyName: const Value(false),
+            includeVariantInfo: const Value(false),
+            barcodeType: const Value('auto'),
+            isDefault: Value(isDefault),
+          ),
+        );
+      }
+    }
+
+    await upsertTemplate(
+      name: 'Small Label (58mm)',
+      description: 'Small thermal label for 58mm printers',
+      paperSize: '58mm',
+      widthMm: 58,
+      heightMm: 40,
+      isDefault: true,
+    );
+
+    await upsertTemplate(
+      name: 'Medium Label (80mm)',
+      description: 'Medium thermal label for 80mm printers',
+      paperSize: '80mm',
+      widthMm: 80,
+      heightMm: 50,
+      isDefault: false,
+    );
+
+    await upsertTemplate(
+      name: 'Large Label (A4)',
+      description: 'Large A4 sheet label',
+      paperSize: 'A4',
+      widthMm: 100,
+      heightMm: 70,
+      isDefault: false,
     );
   }
 }

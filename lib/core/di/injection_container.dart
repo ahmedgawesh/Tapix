@@ -9,6 +9,7 @@ import '../database/daos/product_variant_dao.dart';
 import '../database/daos/product_color_dao.dart';
 import '../database/daos/size_dao.dart';
 import '../database/daos/settings_dao.dart';
+import '../database/daos/barcode_template_dao.dart';
 import '../services/currency_service.dart';
 import '../services/localization_service.dart';
 import '../services/theme_service.dart';
@@ -36,6 +37,8 @@ import '../../features/products/domain/usecases/import_products.dart';
 import '../../features/barcode/services/barcode_validation_service.dart';
 import '../../features/barcode/services/barcode_printer_service.dart';
 import '../../features/barcode/presentation/bloc/barcode_scanner_bloc.dart';
+import '../../features/barcode/presentation/bloc/barcode_design_bloc.dart';
+import '../../features/settings/data/services/company_profile_service.dart';
 
 final sl = GetIt.instance;
 
@@ -53,6 +56,7 @@ Future<void> init() async {
   sl.registerLazySingleton(() => ProductColorDao(sl()));
   sl.registerLazySingleton(() => SizeDao(sl()));
   sl.registerLazySingleton(() => SettingsDao(sl()));
+  sl.registerLazySingleton(() => BarcodeTemplateDao(sl()));
 
   // Auth Services
   sl.registerLazySingleton(() => PasswordService());
@@ -127,10 +131,18 @@ Future<void> init() async {
   // Barcode Services
   sl.registerLazySingleton(() => BarcodeValidationService());
   sl.registerLazySingleton(() => BarcodePrinterService(settingsDao: sl()));
+
+  // Settings Services
+  sl.registerLazySingleton(() => CompanyProfileService(sl()));
   
   // Barcode Blocs
   sl.registerFactory(() => BarcodeScannerBloc(
     productRepository: sl(),
     validationService: sl(),
+  ));
+  sl.registerFactory(() => BarcodeDesignBloc(
+    templateDao: sl<BarcodeTemplateDao>(),
+    printerService: sl<BarcodePrinterService>(),
+    companyProfileService: sl<CompanyProfileService>(),
   ));
 }

@@ -87,7 +87,7 @@ class ImportPreviewWidget extends StatelessWidget {
                     LucideIcons.alertCircle,
                     color: colorScheme.error,
                   ),
-                  title: Text('Row ${error.rowIndex + 2}: ${error.field}'),
+                  title: Text('${'import_products.row'.tr()} ${error.rowIndex + 2}: ${error.field}'),
                   subtitle: Text(error.message),
                 );
               },

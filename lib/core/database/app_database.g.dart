@@ -19501,6 +19501,1617 @@ class NotificationsCompanion extends UpdateCompanion<Notification> {
   }
 }
 
+class $BarcodeTemplatesTable extends BarcodeTemplates
+    with TableInfo<$BarcodeTemplatesTable, BarcodeTemplate> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $BarcodeTemplatesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _descriptionMeta = const VerificationMeta(
+    'description',
+  );
+  @override
+  late final GeneratedColumn<String> description = GeneratedColumn<String>(
+    'description',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _layoutConfigMeta = const VerificationMeta(
+    'layoutConfig',
+  );
+  @override
+  late final GeneratedColumn<String> layoutConfig = GeneratedColumn<String>(
+    'layout_config',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _paperSizeMeta = const VerificationMeta(
+    'paperSize',
+  );
+  @override
+  late final GeneratedColumn<String> paperSize = GeneratedColumn<String>(
+    'paper_size',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('58mm'),
+  );
+  static const VerificationMeta _widthMmMeta = const VerificationMeta(
+    'widthMm',
+  );
+  @override
+  late final GeneratedColumn<double> widthMm = GeneratedColumn<double>(
+    'width_mm',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(58.0),
+  );
+  static const VerificationMeta _heightMmMeta = const VerificationMeta(
+    'heightMm',
+  );
+  @override
+  late final GeneratedColumn<double> heightMm = GeneratedColumn<double>(
+    'height_mm',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(40.0),
+  );
+  static const VerificationMeta _includeNameMeta = const VerificationMeta(
+    'includeName',
+  );
+  @override
+  late final GeneratedColumn<bool> includeName = GeneratedColumn<bool>(
+    'include_name',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("include_name" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _includePriceMeta = const VerificationMeta(
+    'includePrice',
+  );
+  @override
+  late final GeneratedColumn<bool> includePrice = GeneratedColumn<bool>(
+    'include_price',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("include_price" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _includeSkuMeta = const VerificationMeta(
+    'includeSku',
+  );
+  @override
+  late final GeneratedColumn<bool> includeSku = GeneratedColumn<bool>(
+    'include_sku',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("include_sku" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _includeCompanyNameMeta =
+      const VerificationMeta('includeCompanyName');
+  @override
+  late final GeneratedColumn<bool> includeCompanyName = GeneratedColumn<bool>(
+    'include_company_name',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("include_company_name" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _includeVariantInfoMeta =
+      const VerificationMeta('includeVariantInfo');
+  @override
+  late final GeneratedColumn<bool> includeVariantInfo = GeneratedColumn<bool>(
+    'include_variant_info',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("include_variant_info" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _barcodeTypeMeta = const VerificationMeta(
+    'barcodeType',
+  );
+  @override
+  late final GeneratedColumn<String> barcodeType = GeneratedColumn<String>(
+    'barcode_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('auto'),
+  );
+  static const VerificationMeta _isDefaultMeta = const VerificationMeta(
+    'isDefault',
+  );
+  @override
+  late final GeneratedColumn<bool> isDefault = GeneratedColumn<bool>(
+    'is_default',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_default" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _isActiveMeta = const VerificationMeta(
+    'isActive',
+  );
+  @override
+  late final GeneratedColumn<bool> isActive = GeneratedColumn<bool>(
+    'is_active',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_active" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    name,
+    description,
+    layoutConfig,
+    paperSize,
+    widthMm,
+    heightMm,
+    includeName,
+    includePrice,
+    includeSku,
+    includeCompanyName,
+    includeVariantInfo,
+    barcodeType,
+    isDefault,
+    isActive,
+    createdAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'barcode_templates';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<BarcodeTemplate> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('description')) {
+      context.handle(
+        _descriptionMeta,
+        description.isAcceptableOrUnknown(
+          data['description']!,
+          _descriptionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('layout_config')) {
+      context.handle(
+        _layoutConfigMeta,
+        layoutConfig.isAcceptableOrUnknown(
+          data['layout_config']!,
+          _layoutConfigMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_layoutConfigMeta);
+    }
+    if (data.containsKey('paper_size')) {
+      context.handle(
+        _paperSizeMeta,
+        paperSize.isAcceptableOrUnknown(data['paper_size']!, _paperSizeMeta),
+      );
+    }
+    if (data.containsKey('width_mm')) {
+      context.handle(
+        _widthMmMeta,
+        widthMm.isAcceptableOrUnknown(data['width_mm']!, _widthMmMeta),
+      );
+    }
+    if (data.containsKey('height_mm')) {
+      context.handle(
+        _heightMmMeta,
+        heightMm.isAcceptableOrUnknown(data['height_mm']!, _heightMmMeta),
+      );
+    }
+    if (data.containsKey('include_name')) {
+      context.handle(
+        _includeNameMeta,
+        includeName.isAcceptableOrUnknown(
+          data['include_name']!,
+          _includeNameMeta,
+        ),
+      );
+    }
+    if (data.containsKey('include_price')) {
+      context.handle(
+        _includePriceMeta,
+        includePrice.isAcceptableOrUnknown(
+          data['include_price']!,
+          _includePriceMeta,
+        ),
+      );
+    }
+    if (data.containsKey('include_sku')) {
+      context.handle(
+        _includeSkuMeta,
+        includeSku.isAcceptableOrUnknown(data['include_sku']!, _includeSkuMeta),
+      );
+    }
+    if (data.containsKey('include_company_name')) {
+      context.handle(
+        _includeCompanyNameMeta,
+        includeCompanyName.isAcceptableOrUnknown(
+          data['include_company_name']!,
+          _includeCompanyNameMeta,
+        ),
+      );
+    }
+    if (data.containsKey('include_variant_info')) {
+      context.handle(
+        _includeVariantInfoMeta,
+        includeVariantInfo.isAcceptableOrUnknown(
+          data['include_variant_info']!,
+          _includeVariantInfoMeta,
+        ),
+      );
+    }
+    if (data.containsKey('barcode_type')) {
+      context.handle(
+        _barcodeTypeMeta,
+        barcodeType.isAcceptableOrUnknown(
+          data['barcode_type']!,
+          _barcodeTypeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('is_default')) {
+      context.handle(
+        _isDefaultMeta,
+        isDefault.isAcceptableOrUnknown(data['is_default']!, _isDefaultMeta),
+      );
+    }
+    if (data.containsKey('is_active')) {
+      context.handle(
+        _isActiveMeta,
+        isActive.isAcceptableOrUnknown(data['is_active']!, _isActiveMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  BarcodeTemplate map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return BarcodeTemplate(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      description: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}description'],
+      ),
+      layoutConfig: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}layout_config'],
+      )!,
+      paperSize: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}paper_size'],
+      )!,
+      widthMm: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}width_mm'],
+      )!,
+      heightMm: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}height_mm'],
+      )!,
+      includeName: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}include_name'],
+      )!,
+      includePrice: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}include_price'],
+      )!,
+      includeSku: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}include_sku'],
+      )!,
+      includeCompanyName: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}include_company_name'],
+      )!,
+      includeVariantInfo: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}include_variant_info'],
+      )!,
+      barcodeType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}barcode_type'],
+      )!,
+      isDefault: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_default'],
+      )!,
+      isActive: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_active'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $BarcodeTemplatesTable createAlias(String alias) {
+    return $BarcodeTemplatesTable(attachedDatabase, alias);
+  }
+}
+
+class BarcodeTemplate extends DataClass implements Insertable<BarcodeTemplate> {
+  final int id;
+  final String name;
+  final String? description;
+
+  /// JSON configuration for layout (font sizes, colors, element positions, etc.)
+  final String layoutConfig;
+
+  /// Paper size: '58mm', '80mm', 'A4', 'custom'
+  final String paperSize;
+
+  /// Label width in mm
+  final double widthMm;
+
+  /// Label height in mm
+  final double heightMm;
+
+  /// Whether to include product name on label
+  final bool includeName;
+
+  /// Whether to include price on label
+  final bool includePrice;
+
+  /// Whether to include SKU on label
+  final bool includeSku;
+
+  /// Whether to include company name on label
+  final bool includeCompanyName;
+
+  /// Whether to show size/color variant info
+  final bool includeVariantInfo;
+
+  /// Barcode type: 'auto', 'code128', 'ean13', 'ean8', 'upca', 'qr'
+  final String barcodeType;
+
+  /// Whether this is the default template
+  final bool isDefault;
+  final bool isActive;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  const BarcodeTemplate({
+    required this.id,
+    required this.name,
+    this.description,
+    required this.layoutConfig,
+    required this.paperSize,
+    required this.widthMm,
+    required this.heightMm,
+    required this.includeName,
+    required this.includePrice,
+    required this.includeSku,
+    required this.includeCompanyName,
+    required this.includeVariantInfo,
+    required this.barcodeType,
+    required this.isDefault,
+    required this.isActive,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['name'] = Variable<String>(name);
+    if (!nullToAbsent || description != null) {
+      map['description'] = Variable<String>(description);
+    }
+    map['layout_config'] = Variable<String>(layoutConfig);
+    map['paper_size'] = Variable<String>(paperSize);
+    map['width_mm'] = Variable<double>(widthMm);
+    map['height_mm'] = Variable<double>(heightMm);
+    map['include_name'] = Variable<bool>(includeName);
+    map['include_price'] = Variable<bool>(includePrice);
+    map['include_sku'] = Variable<bool>(includeSku);
+    map['include_company_name'] = Variable<bool>(includeCompanyName);
+    map['include_variant_info'] = Variable<bool>(includeVariantInfo);
+    map['barcode_type'] = Variable<String>(barcodeType);
+    map['is_default'] = Variable<bool>(isDefault);
+    map['is_active'] = Variable<bool>(isActive);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  BarcodeTemplatesCompanion toCompanion(bool nullToAbsent) {
+    return BarcodeTemplatesCompanion(
+      id: Value(id),
+      name: Value(name),
+      description: description == null && nullToAbsent
+          ? const Value.absent()
+          : Value(description),
+      layoutConfig: Value(layoutConfig),
+      paperSize: Value(paperSize),
+      widthMm: Value(widthMm),
+      heightMm: Value(heightMm),
+      includeName: Value(includeName),
+      includePrice: Value(includePrice),
+      includeSku: Value(includeSku),
+      includeCompanyName: Value(includeCompanyName),
+      includeVariantInfo: Value(includeVariantInfo),
+      barcodeType: Value(barcodeType),
+      isDefault: Value(isDefault),
+      isActive: Value(isActive),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory BarcodeTemplate.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return BarcodeTemplate(
+      id: serializer.fromJson<int>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      description: serializer.fromJson<String?>(json['description']),
+      layoutConfig: serializer.fromJson<String>(json['layoutConfig']),
+      paperSize: serializer.fromJson<String>(json['paperSize']),
+      widthMm: serializer.fromJson<double>(json['widthMm']),
+      heightMm: serializer.fromJson<double>(json['heightMm']),
+      includeName: serializer.fromJson<bool>(json['includeName']),
+      includePrice: serializer.fromJson<bool>(json['includePrice']),
+      includeSku: serializer.fromJson<bool>(json['includeSku']),
+      includeCompanyName: serializer.fromJson<bool>(json['includeCompanyName']),
+      includeVariantInfo: serializer.fromJson<bool>(json['includeVariantInfo']),
+      barcodeType: serializer.fromJson<String>(json['barcodeType']),
+      isDefault: serializer.fromJson<bool>(json['isDefault']),
+      isActive: serializer.fromJson<bool>(json['isActive']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'name': serializer.toJson<String>(name),
+      'description': serializer.toJson<String?>(description),
+      'layoutConfig': serializer.toJson<String>(layoutConfig),
+      'paperSize': serializer.toJson<String>(paperSize),
+      'widthMm': serializer.toJson<double>(widthMm),
+      'heightMm': serializer.toJson<double>(heightMm),
+      'includeName': serializer.toJson<bool>(includeName),
+      'includePrice': serializer.toJson<bool>(includePrice),
+      'includeSku': serializer.toJson<bool>(includeSku),
+      'includeCompanyName': serializer.toJson<bool>(includeCompanyName),
+      'includeVariantInfo': serializer.toJson<bool>(includeVariantInfo),
+      'barcodeType': serializer.toJson<String>(barcodeType),
+      'isDefault': serializer.toJson<bool>(isDefault),
+      'isActive': serializer.toJson<bool>(isActive),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  BarcodeTemplate copyWith({
+    int? id,
+    String? name,
+    Value<String?> description = const Value.absent(),
+    String? layoutConfig,
+    String? paperSize,
+    double? widthMm,
+    double? heightMm,
+    bool? includeName,
+    bool? includePrice,
+    bool? includeSku,
+    bool? includeCompanyName,
+    bool? includeVariantInfo,
+    String? barcodeType,
+    bool? isDefault,
+    bool? isActive,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) => BarcodeTemplate(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    description: description.present ? description.value : this.description,
+    layoutConfig: layoutConfig ?? this.layoutConfig,
+    paperSize: paperSize ?? this.paperSize,
+    widthMm: widthMm ?? this.widthMm,
+    heightMm: heightMm ?? this.heightMm,
+    includeName: includeName ?? this.includeName,
+    includePrice: includePrice ?? this.includePrice,
+    includeSku: includeSku ?? this.includeSku,
+    includeCompanyName: includeCompanyName ?? this.includeCompanyName,
+    includeVariantInfo: includeVariantInfo ?? this.includeVariantInfo,
+    barcodeType: barcodeType ?? this.barcodeType,
+    isDefault: isDefault ?? this.isDefault,
+    isActive: isActive ?? this.isActive,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  BarcodeTemplate copyWithCompanion(BarcodeTemplatesCompanion data) {
+    return BarcodeTemplate(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      description: data.description.present
+          ? data.description.value
+          : this.description,
+      layoutConfig: data.layoutConfig.present
+          ? data.layoutConfig.value
+          : this.layoutConfig,
+      paperSize: data.paperSize.present ? data.paperSize.value : this.paperSize,
+      widthMm: data.widthMm.present ? data.widthMm.value : this.widthMm,
+      heightMm: data.heightMm.present ? data.heightMm.value : this.heightMm,
+      includeName: data.includeName.present
+          ? data.includeName.value
+          : this.includeName,
+      includePrice: data.includePrice.present
+          ? data.includePrice.value
+          : this.includePrice,
+      includeSku: data.includeSku.present
+          ? data.includeSku.value
+          : this.includeSku,
+      includeCompanyName: data.includeCompanyName.present
+          ? data.includeCompanyName.value
+          : this.includeCompanyName,
+      includeVariantInfo: data.includeVariantInfo.present
+          ? data.includeVariantInfo.value
+          : this.includeVariantInfo,
+      barcodeType: data.barcodeType.present
+          ? data.barcodeType.value
+          : this.barcodeType,
+      isDefault: data.isDefault.present ? data.isDefault.value : this.isDefault,
+      isActive: data.isActive.present ? data.isActive.value : this.isActive,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('BarcodeTemplate(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('description: $description, ')
+          ..write('layoutConfig: $layoutConfig, ')
+          ..write('paperSize: $paperSize, ')
+          ..write('widthMm: $widthMm, ')
+          ..write('heightMm: $heightMm, ')
+          ..write('includeName: $includeName, ')
+          ..write('includePrice: $includePrice, ')
+          ..write('includeSku: $includeSku, ')
+          ..write('includeCompanyName: $includeCompanyName, ')
+          ..write('includeVariantInfo: $includeVariantInfo, ')
+          ..write('barcodeType: $barcodeType, ')
+          ..write('isDefault: $isDefault, ')
+          ..write('isActive: $isActive, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    name,
+    description,
+    layoutConfig,
+    paperSize,
+    widthMm,
+    heightMm,
+    includeName,
+    includePrice,
+    includeSku,
+    includeCompanyName,
+    includeVariantInfo,
+    barcodeType,
+    isDefault,
+    isActive,
+    createdAt,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is BarcodeTemplate &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.description == this.description &&
+          other.layoutConfig == this.layoutConfig &&
+          other.paperSize == this.paperSize &&
+          other.widthMm == this.widthMm &&
+          other.heightMm == this.heightMm &&
+          other.includeName == this.includeName &&
+          other.includePrice == this.includePrice &&
+          other.includeSku == this.includeSku &&
+          other.includeCompanyName == this.includeCompanyName &&
+          other.includeVariantInfo == this.includeVariantInfo &&
+          other.barcodeType == this.barcodeType &&
+          other.isDefault == this.isDefault &&
+          other.isActive == this.isActive &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class BarcodeTemplatesCompanion extends UpdateCompanion<BarcodeTemplate> {
+  final Value<int> id;
+  final Value<String> name;
+  final Value<String?> description;
+  final Value<String> layoutConfig;
+  final Value<String> paperSize;
+  final Value<double> widthMm;
+  final Value<double> heightMm;
+  final Value<bool> includeName;
+  final Value<bool> includePrice;
+  final Value<bool> includeSku;
+  final Value<bool> includeCompanyName;
+  final Value<bool> includeVariantInfo;
+  final Value<String> barcodeType;
+  final Value<bool> isDefault;
+  final Value<bool> isActive;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  const BarcodeTemplatesCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.description = const Value.absent(),
+    this.layoutConfig = const Value.absent(),
+    this.paperSize = const Value.absent(),
+    this.widthMm = const Value.absent(),
+    this.heightMm = const Value.absent(),
+    this.includeName = const Value.absent(),
+    this.includePrice = const Value.absent(),
+    this.includeSku = const Value.absent(),
+    this.includeCompanyName = const Value.absent(),
+    this.includeVariantInfo = const Value.absent(),
+    this.barcodeType = const Value.absent(),
+    this.isDefault = const Value.absent(),
+    this.isActive = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  });
+  BarcodeTemplatesCompanion.insert({
+    this.id = const Value.absent(),
+    required String name,
+    this.description = const Value.absent(),
+    required String layoutConfig,
+    this.paperSize = const Value.absent(),
+    this.widthMm = const Value.absent(),
+    this.heightMm = const Value.absent(),
+    this.includeName = const Value.absent(),
+    this.includePrice = const Value.absent(),
+    this.includeSku = const Value.absent(),
+    this.includeCompanyName = const Value.absent(),
+    this.includeVariantInfo = const Value.absent(),
+    this.barcodeType = const Value.absent(),
+    this.isDefault = const Value.absent(),
+    this.isActive = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  }) : name = Value(name),
+       layoutConfig = Value(layoutConfig);
+  static Insertable<BarcodeTemplate> custom({
+    Expression<int>? id,
+    Expression<String>? name,
+    Expression<String>? description,
+    Expression<String>? layoutConfig,
+    Expression<String>? paperSize,
+    Expression<double>? widthMm,
+    Expression<double>? heightMm,
+    Expression<bool>? includeName,
+    Expression<bool>? includePrice,
+    Expression<bool>? includeSku,
+    Expression<bool>? includeCompanyName,
+    Expression<bool>? includeVariantInfo,
+    Expression<String>? barcodeType,
+    Expression<bool>? isDefault,
+    Expression<bool>? isActive,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (description != null) 'description': description,
+      if (layoutConfig != null) 'layout_config': layoutConfig,
+      if (paperSize != null) 'paper_size': paperSize,
+      if (widthMm != null) 'width_mm': widthMm,
+      if (heightMm != null) 'height_mm': heightMm,
+      if (includeName != null) 'include_name': includeName,
+      if (includePrice != null) 'include_price': includePrice,
+      if (includeSku != null) 'include_sku': includeSku,
+      if (includeCompanyName != null)
+        'include_company_name': includeCompanyName,
+      if (includeVariantInfo != null)
+        'include_variant_info': includeVariantInfo,
+      if (barcodeType != null) 'barcode_type': barcodeType,
+      if (isDefault != null) 'is_default': isDefault,
+      if (isActive != null) 'is_active': isActive,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+    });
+  }
+
+  BarcodeTemplatesCompanion copyWith({
+    Value<int>? id,
+    Value<String>? name,
+    Value<String?>? description,
+    Value<String>? layoutConfig,
+    Value<String>? paperSize,
+    Value<double>? widthMm,
+    Value<double>? heightMm,
+    Value<bool>? includeName,
+    Value<bool>? includePrice,
+    Value<bool>? includeSku,
+    Value<bool>? includeCompanyName,
+    Value<bool>? includeVariantInfo,
+    Value<String>? barcodeType,
+    Value<bool>? isDefault,
+    Value<bool>? isActive,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+  }) {
+    return BarcodeTemplatesCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      description: description ?? this.description,
+      layoutConfig: layoutConfig ?? this.layoutConfig,
+      paperSize: paperSize ?? this.paperSize,
+      widthMm: widthMm ?? this.widthMm,
+      heightMm: heightMm ?? this.heightMm,
+      includeName: includeName ?? this.includeName,
+      includePrice: includePrice ?? this.includePrice,
+      includeSku: includeSku ?? this.includeSku,
+      includeCompanyName: includeCompanyName ?? this.includeCompanyName,
+      includeVariantInfo: includeVariantInfo ?? this.includeVariantInfo,
+      barcodeType: barcodeType ?? this.barcodeType,
+      isDefault: isDefault ?? this.isDefault,
+      isActive: isActive ?? this.isActive,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (description.present) {
+      map['description'] = Variable<String>(description.value);
+    }
+    if (layoutConfig.present) {
+      map['layout_config'] = Variable<String>(layoutConfig.value);
+    }
+    if (paperSize.present) {
+      map['paper_size'] = Variable<String>(paperSize.value);
+    }
+    if (widthMm.present) {
+      map['width_mm'] = Variable<double>(widthMm.value);
+    }
+    if (heightMm.present) {
+      map['height_mm'] = Variable<double>(heightMm.value);
+    }
+    if (includeName.present) {
+      map['include_name'] = Variable<bool>(includeName.value);
+    }
+    if (includePrice.present) {
+      map['include_price'] = Variable<bool>(includePrice.value);
+    }
+    if (includeSku.present) {
+      map['include_sku'] = Variable<bool>(includeSku.value);
+    }
+    if (includeCompanyName.present) {
+      map['include_company_name'] = Variable<bool>(includeCompanyName.value);
+    }
+    if (includeVariantInfo.present) {
+      map['include_variant_info'] = Variable<bool>(includeVariantInfo.value);
+    }
+    if (barcodeType.present) {
+      map['barcode_type'] = Variable<String>(barcodeType.value);
+    }
+    if (isDefault.present) {
+      map['is_default'] = Variable<bool>(isDefault.value);
+    }
+    if (isActive.present) {
+      map['is_active'] = Variable<bool>(isActive.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('BarcodeTemplatesCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('description: $description, ')
+          ..write('layoutConfig: $layoutConfig, ')
+          ..write('paperSize: $paperSize, ')
+          ..write('widthMm: $widthMm, ')
+          ..write('heightMm: $heightMm, ')
+          ..write('includeName: $includeName, ')
+          ..write('includePrice: $includePrice, ')
+          ..write('includeSku: $includeSku, ')
+          ..write('includeCompanyName: $includeCompanyName, ')
+          ..write('includeVariantInfo: $includeVariantInfo, ')
+          ..write('barcodeType: $barcodeType, ')
+          ..write('isDefault: $isDefault, ')
+          ..write('isActive: $isActive, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $PrintHistoriesTable extends PrintHistories
+    with TableInfo<$PrintHistoriesTable, PrintHistory> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PrintHistoriesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _productIdMeta = const VerificationMeta(
+    'productId',
+  );
+  @override
+  late final GeneratedColumn<int> productId = GeneratedColumn<int>(
+    'product_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES products (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _variantIdMeta = const VerificationMeta(
+    'variantId',
+  );
+  @override
+  late final GeneratedColumn<int> variantId = GeneratedColumn<int>(
+    'variant_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES product_variants (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _templateIdMeta = const VerificationMeta(
+    'templateId',
+  );
+  @override
+  late final GeneratedColumn<int> templateId = GeneratedColumn<int>(
+    'template_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES barcode_templates (id) ON DELETE SET NULL',
+    ),
+  );
+  static const VerificationMeta _quantityPrintedMeta = const VerificationMeta(
+    'quantityPrinted',
+  );
+  @override
+  late final GeneratedColumn<int> quantityPrinted = GeneratedColumn<int>(
+    'quantity_printed',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _printerNameMeta = const VerificationMeta(
+    'printerName',
+  );
+  @override
+  late final GeneratedColumn<String> printerName = GeneratedColumn<String>(
+    'printer_name',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _printTypeMeta = const VerificationMeta(
+    'printType',
+  );
+  @override
+  late final GeneratedColumn<String> printType = GeneratedColumn<String>(
+    'print_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('single'),
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('success'),
+  );
+  static const VerificationMeta _errorMessageMeta = const VerificationMeta(
+    'errorMessage',
+  );
+  @override
+  late final GeneratedColumn<String> errorMessage = GeneratedColumn<String>(
+    'error_message',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _printDateMeta = const VerificationMeta(
+    'printDate',
+  );
+  @override
+  late final GeneratedColumn<DateTime> printDate = GeneratedColumn<DateTime>(
+    'print_date',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    productId,
+    variantId,
+    templateId,
+    quantityPrinted,
+    printerName,
+    printType,
+    status,
+    errorMessage,
+    printDate,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'print_histories';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<PrintHistory> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('product_id')) {
+      context.handle(
+        _productIdMeta,
+        productId.isAcceptableOrUnknown(data['product_id']!, _productIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_productIdMeta);
+    }
+    if (data.containsKey('variant_id')) {
+      context.handle(
+        _variantIdMeta,
+        variantId.isAcceptableOrUnknown(data['variant_id']!, _variantIdMeta),
+      );
+    }
+    if (data.containsKey('template_id')) {
+      context.handle(
+        _templateIdMeta,
+        templateId.isAcceptableOrUnknown(data['template_id']!, _templateIdMeta),
+      );
+    }
+    if (data.containsKey('quantity_printed')) {
+      context.handle(
+        _quantityPrintedMeta,
+        quantityPrinted.isAcceptableOrUnknown(
+          data['quantity_printed']!,
+          _quantityPrintedMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_quantityPrintedMeta);
+    }
+    if (data.containsKey('printer_name')) {
+      context.handle(
+        _printerNameMeta,
+        printerName.isAcceptableOrUnknown(
+          data['printer_name']!,
+          _printerNameMeta,
+        ),
+      );
+    }
+    if (data.containsKey('print_type')) {
+      context.handle(
+        _printTypeMeta,
+        printType.isAcceptableOrUnknown(data['print_type']!, _printTypeMeta),
+      );
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    }
+    if (data.containsKey('error_message')) {
+      context.handle(
+        _errorMessageMeta,
+        errorMessage.isAcceptableOrUnknown(
+          data['error_message']!,
+          _errorMessageMeta,
+        ),
+      );
+    }
+    if (data.containsKey('print_date')) {
+      context.handle(
+        _printDateMeta,
+        printDate.isAcceptableOrUnknown(data['print_date']!, _printDateMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  PrintHistory map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PrintHistory(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      productId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}product_id'],
+      )!,
+      variantId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}variant_id'],
+      ),
+      templateId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}template_id'],
+      ),
+      quantityPrinted: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}quantity_printed'],
+      )!,
+      printerName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}printer_name'],
+      ),
+      printType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}print_type'],
+      )!,
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      errorMessage: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}error_message'],
+      ),
+      printDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}print_date'],
+      )!,
+    );
+  }
+
+  @override
+  $PrintHistoriesTable createAlias(String alias) {
+    return $PrintHistoriesTable(attachedDatabase, alias);
+  }
+}
+
+class PrintHistory extends DataClass implements Insertable<PrintHistory> {
+  final int id;
+  final int productId;
+  final int? variantId;
+  final int? templateId;
+  final int quantityPrinted;
+  final String? printerName;
+
+  /// Print type: 'single', 'batch', 'all_quantity'
+  final String printType;
+
+  /// Status: 'success', 'failed', 'cancelled'
+  final String status;
+  final String? errorMessage;
+  final DateTime printDate;
+  const PrintHistory({
+    required this.id,
+    required this.productId,
+    this.variantId,
+    this.templateId,
+    required this.quantityPrinted,
+    this.printerName,
+    required this.printType,
+    required this.status,
+    this.errorMessage,
+    required this.printDate,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['product_id'] = Variable<int>(productId);
+    if (!nullToAbsent || variantId != null) {
+      map['variant_id'] = Variable<int>(variantId);
+    }
+    if (!nullToAbsent || templateId != null) {
+      map['template_id'] = Variable<int>(templateId);
+    }
+    map['quantity_printed'] = Variable<int>(quantityPrinted);
+    if (!nullToAbsent || printerName != null) {
+      map['printer_name'] = Variable<String>(printerName);
+    }
+    map['print_type'] = Variable<String>(printType);
+    map['status'] = Variable<String>(status);
+    if (!nullToAbsent || errorMessage != null) {
+      map['error_message'] = Variable<String>(errorMessage);
+    }
+    map['print_date'] = Variable<DateTime>(printDate);
+    return map;
+  }
+
+  PrintHistoriesCompanion toCompanion(bool nullToAbsent) {
+    return PrintHistoriesCompanion(
+      id: Value(id),
+      productId: Value(productId),
+      variantId: variantId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(variantId),
+      templateId: templateId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(templateId),
+      quantityPrinted: Value(quantityPrinted),
+      printerName: printerName == null && nullToAbsent
+          ? const Value.absent()
+          : Value(printerName),
+      printType: Value(printType),
+      status: Value(status),
+      errorMessage: errorMessage == null && nullToAbsent
+          ? const Value.absent()
+          : Value(errorMessage),
+      printDate: Value(printDate),
+    );
+  }
+
+  factory PrintHistory.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PrintHistory(
+      id: serializer.fromJson<int>(json['id']),
+      productId: serializer.fromJson<int>(json['productId']),
+      variantId: serializer.fromJson<int?>(json['variantId']),
+      templateId: serializer.fromJson<int?>(json['templateId']),
+      quantityPrinted: serializer.fromJson<int>(json['quantityPrinted']),
+      printerName: serializer.fromJson<String?>(json['printerName']),
+      printType: serializer.fromJson<String>(json['printType']),
+      status: serializer.fromJson<String>(json['status']),
+      errorMessage: serializer.fromJson<String?>(json['errorMessage']),
+      printDate: serializer.fromJson<DateTime>(json['printDate']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'productId': serializer.toJson<int>(productId),
+      'variantId': serializer.toJson<int?>(variantId),
+      'templateId': serializer.toJson<int?>(templateId),
+      'quantityPrinted': serializer.toJson<int>(quantityPrinted),
+      'printerName': serializer.toJson<String?>(printerName),
+      'printType': serializer.toJson<String>(printType),
+      'status': serializer.toJson<String>(status),
+      'errorMessage': serializer.toJson<String?>(errorMessage),
+      'printDate': serializer.toJson<DateTime>(printDate),
+    };
+  }
+
+  PrintHistory copyWith({
+    int? id,
+    int? productId,
+    Value<int?> variantId = const Value.absent(),
+    Value<int?> templateId = const Value.absent(),
+    int? quantityPrinted,
+    Value<String?> printerName = const Value.absent(),
+    String? printType,
+    String? status,
+    Value<String?> errorMessage = const Value.absent(),
+    DateTime? printDate,
+  }) => PrintHistory(
+    id: id ?? this.id,
+    productId: productId ?? this.productId,
+    variantId: variantId.present ? variantId.value : this.variantId,
+    templateId: templateId.present ? templateId.value : this.templateId,
+    quantityPrinted: quantityPrinted ?? this.quantityPrinted,
+    printerName: printerName.present ? printerName.value : this.printerName,
+    printType: printType ?? this.printType,
+    status: status ?? this.status,
+    errorMessage: errorMessage.present ? errorMessage.value : this.errorMessage,
+    printDate: printDate ?? this.printDate,
+  );
+  PrintHistory copyWithCompanion(PrintHistoriesCompanion data) {
+    return PrintHistory(
+      id: data.id.present ? data.id.value : this.id,
+      productId: data.productId.present ? data.productId.value : this.productId,
+      variantId: data.variantId.present ? data.variantId.value : this.variantId,
+      templateId: data.templateId.present
+          ? data.templateId.value
+          : this.templateId,
+      quantityPrinted: data.quantityPrinted.present
+          ? data.quantityPrinted.value
+          : this.quantityPrinted,
+      printerName: data.printerName.present
+          ? data.printerName.value
+          : this.printerName,
+      printType: data.printType.present ? data.printType.value : this.printType,
+      status: data.status.present ? data.status.value : this.status,
+      errorMessage: data.errorMessage.present
+          ? data.errorMessage.value
+          : this.errorMessage,
+      printDate: data.printDate.present ? data.printDate.value : this.printDate,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PrintHistory(')
+          ..write('id: $id, ')
+          ..write('productId: $productId, ')
+          ..write('variantId: $variantId, ')
+          ..write('templateId: $templateId, ')
+          ..write('quantityPrinted: $quantityPrinted, ')
+          ..write('printerName: $printerName, ')
+          ..write('printType: $printType, ')
+          ..write('status: $status, ')
+          ..write('errorMessage: $errorMessage, ')
+          ..write('printDate: $printDate')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    productId,
+    variantId,
+    templateId,
+    quantityPrinted,
+    printerName,
+    printType,
+    status,
+    errorMessage,
+    printDate,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PrintHistory &&
+          other.id == this.id &&
+          other.productId == this.productId &&
+          other.variantId == this.variantId &&
+          other.templateId == this.templateId &&
+          other.quantityPrinted == this.quantityPrinted &&
+          other.printerName == this.printerName &&
+          other.printType == this.printType &&
+          other.status == this.status &&
+          other.errorMessage == this.errorMessage &&
+          other.printDate == this.printDate);
+}
+
+class PrintHistoriesCompanion extends UpdateCompanion<PrintHistory> {
+  final Value<int> id;
+  final Value<int> productId;
+  final Value<int?> variantId;
+  final Value<int?> templateId;
+  final Value<int> quantityPrinted;
+  final Value<String?> printerName;
+  final Value<String> printType;
+  final Value<String> status;
+  final Value<String?> errorMessage;
+  final Value<DateTime> printDate;
+  const PrintHistoriesCompanion({
+    this.id = const Value.absent(),
+    this.productId = const Value.absent(),
+    this.variantId = const Value.absent(),
+    this.templateId = const Value.absent(),
+    this.quantityPrinted = const Value.absent(),
+    this.printerName = const Value.absent(),
+    this.printType = const Value.absent(),
+    this.status = const Value.absent(),
+    this.errorMessage = const Value.absent(),
+    this.printDate = const Value.absent(),
+  });
+  PrintHistoriesCompanion.insert({
+    this.id = const Value.absent(),
+    required int productId,
+    this.variantId = const Value.absent(),
+    this.templateId = const Value.absent(),
+    required int quantityPrinted,
+    this.printerName = const Value.absent(),
+    this.printType = const Value.absent(),
+    this.status = const Value.absent(),
+    this.errorMessage = const Value.absent(),
+    this.printDate = const Value.absent(),
+  }) : productId = Value(productId),
+       quantityPrinted = Value(quantityPrinted);
+  static Insertable<PrintHistory> custom({
+    Expression<int>? id,
+    Expression<int>? productId,
+    Expression<int>? variantId,
+    Expression<int>? templateId,
+    Expression<int>? quantityPrinted,
+    Expression<String>? printerName,
+    Expression<String>? printType,
+    Expression<String>? status,
+    Expression<String>? errorMessage,
+    Expression<DateTime>? printDate,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (productId != null) 'product_id': productId,
+      if (variantId != null) 'variant_id': variantId,
+      if (templateId != null) 'template_id': templateId,
+      if (quantityPrinted != null) 'quantity_printed': quantityPrinted,
+      if (printerName != null) 'printer_name': printerName,
+      if (printType != null) 'print_type': printType,
+      if (status != null) 'status': status,
+      if (errorMessage != null) 'error_message': errorMessage,
+      if (printDate != null) 'print_date': printDate,
+    });
+  }
+
+  PrintHistoriesCompanion copyWith({
+    Value<int>? id,
+    Value<int>? productId,
+    Value<int?>? variantId,
+    Value<int?>? templateId,
+    Value<int>? quantityPrinted,
+    Value<String?>? printerName,
+    Value<String>? printType,
+    Value<String>? status,
+    Value<String?>? errorMessage,
+    Value<DateTime>? printDate,
+  }) {
+    return PrintHistoriesCompanion(
+      id: id ?? this.id,
+      productId: productId ?? this.productId,
+      variantId: variantId ?? this.variantId,
+      templateId: templateId ?? this.templateId,
+      quantityPrinted: quantityPrinted ?? this.quantityPrinted,
+      printerName: printerName ?? this.printerName,
+      printType: printType ?? this.printType,
+      status: status ?? this.status,
+      errorMessage: errorMessage ?? this.errorMessage,
+      printDate: printDate ?? this.printDate,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (productId.present) {
+      map['product_id'] = Variable<int>(productId.value);
+    }
+    if (variantId.present) {
+      map['variant_id'] = Variable<int>(variantId.value);
+    }
+    if (templateId.present) {
+      map['template_id'] = Variable<int>(templateId.value);
+    }
+    if (quantityPrinted.present) {
+      map['quantity_printed'] = Variable<int>(quantityPrinted.value);
+    }
+    if (printerName.present) {
+      map['printer_name'] = Variable<String>(printerName.value);
+    }
+    if (printType.present) {
+      map['print_type'] = Variable<String>(printType.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (errorMessage.present) {
+      map['error_message'] = Variable<String>(errorMessage.value);
+    }
+    if (printDate.present) {
+      map['print_date'] = Variable<DateTime>(printDate.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PrintHistoriesCompanion(')
+          ..write('id: $id, ')
+          ..write('productId: $productId, ')
+          ..write('variantId: $variantId, ')
+          ..write('templateId: $templateId, ')
+          ..write('quantityPrinted: $quantityPrinted, ')
+          ..write('printerName: $printerName, ')
+          ..write('printType: $printType, ')
+          ..write('status: $status, ')
+          ..write('errorMessage: $errorMessage, ')
+          ..write('printDate: $printDate')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   _$AppDatabase.connect(DatabaseConnection c) : super.connect(c);
@@ -19552,6 +21163,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $AuditLogsTable auditLogs = $AuditLogsTable(this);
   late final $VoidLogsTable voidLogs = $VoidLogsTable(this);
   late final $NotificationsTable notifications = $NotificationsTable(this);
+  late final $BarcodeTemplatesTable barcodeTemplates = $BarcodeTemplatesTable(
+    this,
+  );
+  late final $PrintHistoriesTable printHistories = $PrintHistoriesTable(this);
   late final ProductDao productDao = ProductDao(this as AppDatabase);
   late final ProductVariantDao productVariantDao = ProductVariantDao(
     this as AppDatabase,
@@ -19564,6 +21179,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final CustomerDao customerDao = CustomerDao(this as AppDatabase);
   late final AccountingDao accountingDao = AccountingDao(this as AppDatabase);
   late final SettingsDao settingsDao = SettingsDao(this as AppDatabase);
+  late final BarcodeTemplateDao barcodeTemplateDao = BarcodeTemplateDao(
+    this as AppDatabase,
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -19603,6 +21221,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     auditLogs,
     voidLogs,
     notifications,
+    barcodeTemplates,
+    printHistories,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -19682,6 +21302,27 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('journal_entry_lines', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'products',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('print_histories', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'product_variants',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('print_histories', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'barcode_templates',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('print_histories', kind: UpdateKind.update)],
     ),
   ]);
 }
@@ -24706,6 +26347,27 @@ final class $$ProductsTableReferences
       manager.$state.copyWith(prefetchedData: cache),
     );
   }
+
+  static MultiTypedResultKey<$PrintHistoriesTable, List<PrintHistory>>
+  _printHistoriesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.printHistories,
+    aliasName: $_aliasNameGenerator(
+      db.products.id,
+      db.printHistories.productId,
+    ),
+  );
+
+  $$PrintHistoriesTableProcessedTableManager get printHistoriesRefs {
+    final manager = $$PrintHistoriesTableTableManager(
+      $_db,
+      $_db.printHistories,
+    ).filter((f) => f.productId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_printHistoriesRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
 }
 
 class $$ProductsTableFilterComposer
@@ -24980,6 +26642,31 @@ class $$ProductsTableFilterComposer
           }) => $$PurchaseItemsTableFilterComposer(
             $db: $db,
             $table: $db.purchaseItems,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> printHistoriesRefs(
+    Expression<bool> Function($$PrintHistoriesTableFilterComposer f) f,
+  ) {
+    final $$PrintHistoriesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.printHistories,
+      getReferencedColumn: (t) => t.productId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PrintHistoriesTableFilterComposer(
+            $db: $db,
+            $table: $db.printHistories,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -25425,6 +27112,31 @@ class $$ProductsTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> printHistoriesRefs<T extends Object>(
+    Expression<T> Function($$PrintHistoriesTableAnnotationComposer a) f,
+  ) {
+    final $$PrintHistoriesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.printHistories,
+      getReferencedColumn: (t) => t.productId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PrintHistoriesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.printHistories,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$ProductsTableTableManager
@@ -25448,6 +27160,7 @@ class $$ProductsTableTableManager
             bool productBatchesRefs,
             bool saleItemsRefs,
             bool purchaseItemsRefs,
+            bool printHistoriesRefs,
           })
         > {
   $$ProductsTableTableManager(_$AppDatabase db, $ProductsTable table)
@@ -25578,6 +27291,7 @@ class $$ProductsTableTableManager
                 productBatchesRefs = false,
                 saleItemsRefs = false,
                 purchaseItemsRefs = false,
+                printHistoriesRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
@@ -25586,6 +27300,7 @@ class $$ProductsTableTableManager
                     if (productBatchesRefs) db.productBatches,
                     if (saleItemsRefs) db.saleItems,
                     if (purchaseItemsRefs) db.purchaseItems,
+                    if (printHistoriesRefs) db.printHistories,
                   ],
                   addJoins:
                       <
@@ -25731,6 +27446,27 @@ class $$ProductsTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (printHistoriesRefs)
+                        await $_getPrefetchedData<
+                          Product,
+                          $ProductsTable,
+                          PrintHistory
+                        >(
+                          currentTable: table,
+                          referencedTable: $$ProductsTableReferences
+                              ._printHistoriesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$ProductsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).printHistoriesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.productId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -25759,6 +27495,7 @@ typedef $$ProductsTableProcessedTableManager =
         bool productBatchesRefs,
         bool saleItemsRefs,
         bool purchaseItemsRefs,
+        bool printHistoriesRefs,
       })
     >;
 typedef $$ProductVariantsTableCreateCompanionBuilder =
@@ -25917,6 +27654,27 @@ final class $$ProductVariantsTableReferences
     ).filter((f) => f.variantId.id.sqlEquals($_itemColumn<int>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_purchaseItemsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$PrintHistoriesTable, List<PrintHistory>>
+  _printHistoriesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.printHistories,
+    aliasName: $_aliasNameGenerator(
+      db.productVariants.id,
+      db.printHistories.variantId,
+    ),
+  );
+
+  $$PrintHistoriesTableProcessedTableManager get printHistoriesRefs {
+    final manager = $$PrintHistoriesTableTableManager(
+      $_db,
+      $_db.printHistories,
+    ).filter((f) => f.variantId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_printHistoriesRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -26120,6 +27878,31 @@ class $$ProductVariantsTableFilterComposer
           }) => $$PurchaseItemsTableFilterComposer(
             $db: $db,
             $table: $db.purchaseItems,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> printHistoriesRefs(
+    Expression<bool> Function($$PrintHistoriesTableFilterComposer f) f,
+  ) {
+    final $$PrintHistoriesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.printHistories,
+      getReferencedColumn: (t) => t.variantId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PrintHistoriesTableFilterComposer(
+            $db: $db,
+            $table: $db.printHistories,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -26449,6 +28232,31 @@ class $$ProductVariantsTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> printHistoriesRefs<T extends Object>(
+    Expression<T> Function($$PrintHistoriesTableAnnotationComposer a) f,
+  ) {
+    final $$PrintHistoriesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.printHistories,
+      getReferencedColumn: (t) => t.variantId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PrintHistoriesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.printHistories,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$ProductVariantsTableTableManager
@@ -26471,6 +28279,7 @@ class $$ProductVariantsTableTableManager
             bool productBatchesRefs,
             bool saleItemsRefs,
             bool purchaseItemsRefs,
+            bool printHistoriesRefs,
           })
         > {
   $$ProductVariantsTableTableManager(
@@ -26562,6 +28371,7 @@ class $$ProductVariantsTableTableManager
                 productBatchesRefs = false,
                 saleItemsRefs = false,
                 purchaseItemsRefs = false,
+                printHistoriesRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
@@ -26569,6 +28379,7 @@ class $$ProductVariantsTableTableManager
                     if (productBatchesRefs) db.productBatches,
                     if (saleItemsRefs) db.saleItems,
                     if (purchaseItemsRefs) db.purchaseItems,
+                    if (printHistoriesRefs) db.printHistories,
                   ],
                   addJoins:
                       <
@@ -26699,6 +28510,27 @@ class $$ProductVariantsTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (printHistoriesRefs)
+                        await $_getPrefetchedData<
+                          ProductVariant,
+                          $ProductVariantsTable,
+                          PrintHistory
+                        >(
+                          currentTable: table,
+                          referencedTable: $$ProductVariantsTableReferences
+                              ._printHistoriesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$ProductVariantsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).printHistoriesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.variantId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -26726,6 +28558,7 @@ typedef $$ProductVariantsTableProcessedTableManager =
         bool productBatchesRefs,
         bool saleItemsRefs,
         bool purchaseItemsRefs,
+        bool printHistoriesRefs,
       })
     >;
 typedef $$ProductBatchesTableCreateCompanionBuilder =
@@ -40214,6 +42047,1170 @@ typedef $$NotificationsTableProcessedTableManager =
       Notification,
       PrefetchHooks Function({bool userId})
     >;
+typedef $$BarcodeTemplatesTableCreateCompanionBuilder =
+    BarcodeTemplatesCompanion Function({
+      Value<int> id,
+      required String name,
+      Value<String?> description,
+      required String layoutConfig,
+      Value<String> paperSize,
+      Value<double> widthMm,
+      Value<double> heightMm,
+      Value<bool> includeName,
+      Value<bool> includePrice,
+      Value<bool> includeSku,
+      Value<bool> includeCompanyName,
+      Value<bool> includeVariantInfo,
+      Value<String> barcodeType,
+      Value<bool> isDefault,
+      Value<bool> isActive,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+    });
+typedef $$BarcodeTemplatesTableUpdateCompanionBuilder =
+    BarcodeTemplatesCompanion Function({
+      Value<int> id,
+      Value<String> name,
+      Value<String?> description,
+      Value<String> layoutConfig,
+      Value<String> paperSize,
+      Value<double> widthMm,
+      Value<double> heightMm,
+      Value<bool> includeName,
+      Value<bool> includePrice,
+      Value<bool> includeSku,
+      Value<bool> includeCompanyName,
+      Value<bool> includeVariantInfo,
+      Value<String> barcodeType,
+      Value<bool> isDefault,
+      Value<bool> isActive,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+    });
+
+final class $$BarcodeTemplatesTableReferences
+    extends
+        BaseReferences<_$AppDatabase, $BarcodeTemplatesTable, BarcodeTemplate> {
+  $$BarcodeTemplatesTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static MultiTypedResultKey<$PrintHistoriesTable, List<PrintHistory>>
+  _printHistoriesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.printHistories,
+    aliasName: $_aliasNameGenerator(
+      db.barcodeTemplates.id,
+      db.printHistories.templateId,
+    ),
+  );
+
+  $$PrintHistoriesTableProcessedTableManager get printHistoriesRefs {
+    final manager = $$PrintHistoriesTableTableManager(
+      $_db,
+      $_db.printHistories,
+    ).filter((f) => f.templateId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_printHistoriesRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$BarcodeTemplatesTableFilterComposer
+    extends Composer<_$AppDatabase, $BarcodeTemplatesTable> {
+  $$BarcodeTemplatesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get layoutConfig => $composableBuilder(
+    column: $table.layoutConfig,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get paperSize => $composableBuilder(
+    column: $table.paperSize,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get widthMm => $composableBuilder(
+    column: $table.widthMm,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get heightMm => $composableBuilder(
+    column: $table.heightMm,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get includeName => $composableBuilder(
+    column: $table.includeName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get includePrice => $composableBuilder(
+    column: $table.includePrice,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get includeSku => $composableBuilder(
+    column: $table.includeSku,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get includeCompanyName => $composableBuilder(
+    column: $table.includeCompanyName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get includeVariantInfo => $composableBuilder(
+    column: $table.includeVariantInfo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get barcodeType => $composableBuilder(
+    column: $table.barcodeType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isDefault => $composableBuilder(
+    column: $table.isDefault,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isActive => $composableBuilder(
+    column: $table.isActive,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  Expression<bool> printHistoriesRefs(
+    Expression<bool> Function($$PrintHistoriesTableFilterComposer f) f,
+  ) {
+    final $$PrintHistoriesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.printHistories,
+      getReferencedColumn: (t) => t.templateId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PrintHistoriesTableFilterComposer(
+            $db: $db,
+            $table: $db.printHistories,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$BarcodeTemplatesTableOrderingComposer
+    extends Composer<_$AppDatabase, $BarcodeTemplatesTable> {
+  $$BarcodeTemplatesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get layoutConfig => $composableBuilder(
+    column: $table.layoutConfig,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get paperSize => $composableBuilder(
+    column: $table.paperSize,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get widthMm => $composableBuilder(
+    column: $table.widthMm,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get heightMm => $composableBuilder(
+    column: $table.heightMm,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get includeName => $composableBuilder(
+    column: $table.includeName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get includePrice => $composableBuilder(
+    column: $table.includePrice,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get includeSku => $composableBuilder(
+    column: $table.includeSku,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get includeCompanyName => $composableBuilder(
+    column: $table.includeCompanyName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get includeVariantInfo => $composableBuilder(
+    column: $table.includeVariantInfo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get barcodeType => $composableBuilder(
+    column: $table.barcodeType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isDefault => $composableBuilder(
+    column: $table.isDefault,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isActive => $composableBuilder(
+    column: $table.isActive,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$BarcodeTemplatesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $BarcodeTemplatesTable> {
+  $$BarcodeTemplatesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get layoutConfig => $composableBuilder(
+    column: $table.layoutConfig,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get paperSize =>
+      $composableBuilder(column: $table.paperSize, builder: (column) => column);
+
+  GeneratedColumn<double> get widthMm =>
+      $composableBuilder(column: $table.widthMm, builder: (column) => column);
+
+  GeneratedColumn<double> get heightMm =>
+      $composableBuilder(column: $table.heightMm, builder: (column) => column);
+
+  GeneratedColumn<bool> get includeName => $composableBuilder(
+    column: $table.includeName,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get includePrice => $composableBuilder(
+    column: $table.includePrice,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get includeSku => $composableBuilder(
+    column: $table.includeSku,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get includeCompanyName => $composableBuilder(
+    column: $table.includeCompanyName,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get includeVariantInfo => $composableBuilder(
+    column: $table.includeVariantInfo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get barcodeType => $composableBuilder(
+    column: $table.barcodeType,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get isDefault =>
+      $composableBuilder(column: $table.isDefault, builder: (column) => column);
+
+  GeneratedColumn<bool> get isActive =>
+      $composableBuilder(column: $table.isActive, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  Expression<T> printHistoriesRefs<T extends Object>(
+    Expression<T> Function($$PrintHistoriesTableAnnotationComposer a) f,
+  ) {
+    final $$PrintHistoriesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.printHistories,
+      getReferencedColumn: (t) => t.templateId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PrintHistoriesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.printHistories,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$BarcodeTemplatesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $BarcodeTemplatesTable,
+          BarcodeTemplate,
+          $$BarcodeTemplatesTableFilterComposer,
+          $$BarcodeTemplatesTableOrderingComposer,
+          $$BarcodeTemplatesTableAnnotationComposer,
+          $$BarcodeTemplatesTableCreateCompanionBuilder,
+          $$BarcodeTemplatesTableUpdateCompanionBuilder,
+          (BarcodeTemplate, $$BarcodeTemplatesTableReferences),
+          BarcodeTemplate,
+          PrefetchHooks Function({bool printHistoriesRefs})
+        > {
+  $$BarcodeTemplatesTableTableManager(
+    _$AppDatabase db,
+    $BarcodeTemplatesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$BarcodeTemplatesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$BarcodeTemplatesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$BarcodeTemplatesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String?> description = const Value.absent(),
+                Value<String> layoutConfig = const Value.absent(),
+                Value<String> paperSize = const Value.absent(),
+                Value<double> widthMm = const Value.absent(),
+                Value<double> heightMm = const Value.absent(),
+                Value<bool> includeName = const Value.absent(),
+                Value<bool> includePrice = const Value.absent(),
+                Value<bool> includeSku = const Value.absent(),
+                Value<bool> includeCompanyName = const Value.absent(),
+                Value<bool> includeVariantInfo = const Value.absent(),
+                Value<String> barcodeType = const Value.absent(),
+                Value<bool> isDefault = const Value.absent(),
+                Value<bool> isActive = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => BarcodeTemplatesCompanion(
+                id: id,
+                name: name,
+                description: description,
+                layoutConfig: layoutConfig,
+                paperSize: paperSize,
+                widthMm: widthMm,
+                heightMm: heightMm,
+                includeName: includeName,
+                includePrice: includePrice,
+                includeSku: includeSku,
+                includeCompanyName: includeCompanyName,
+                includeVariantInfo: includeVariantInfo,
+                barcodeType: barcodeType,
+                isDefault: isDefault,
+                isActive: isActive,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required String name,
+                Value<String?> description = const Value.absent(),
+                required String layoutConfig,
+                Value<String> paperSize = const Value.absent(),
+                Value<double> widthMm = const Value.absent(),
+                Value<double> heightMm = const Value.absent(),
+                Value<bool> includeName = const Value.absent(),
+                Value<bool> includePrice = const Value.absent(),
+                Value<bool> includeSku = const Value.absent(),
+                Value<bool> includeCompanyName = const Value.absent(),
+                Value<bool> includeVariantInfo = const Value.absent(),
+                Value<String> barcodeType = const Value.absent(),
+                Value<bool> isDefault = const Value.absent(),
+                Value<bool> isActive = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => BarcodeTemplatesCompanion.insert(
+                id: id,
+                name: name,
+                description: description,
+                layoutConfig: layoutConfig,
+                paperSize: paperSize,
+                widthMm: widthMm,
+                heightMm: heightMm,
+                includeName: includeName,
+                includePrice: includePrice,
+                includeSku: includeSku,
+                includeCompanyName: includeCompanyName,
+                includeVariantInfo: includeVariantInfo,
+                barcodeType: barcodeType,
+                isDefault: isDefault,
+                isActive: isActive,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$BarcodeTemplatesTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({printHistoriesRefs = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [
+                if (printHistoriesRefs) db.printHistories,
+              ],
+              addJoins: null,
+              getPrefetchedDataCallback: (items) async {
+                return [
+                  if (printHistoriesRefs)
+                    await $_getPrefetchedData<
+                      BarcodeTemplate,
+                      $BarcodeTemplatesTable,
+                      PrintHistory
+                    >(
+                      currentTable: table,
+                      referencedTable: $$BarcodeTemplatesTableReferences
+                          ._printHistoriesRefsTable(db),
+                      managerFromTypedResult: (p0) =>
+                          $$BarcodeTemplatesTableReferences(
+                            db,
+                            table,
+                            p0,
+                          ).printHistoriesRefs,
+                      referencedItemsForCurrentItem: (item, referencedItems) =>
+                          referencedItems.where((e) => e.templateId == item.id),
+                      typedResults: items,
+                    ),
+                ];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$BarcodeTemplatesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $BarcodeTemplatesTable,
+      BarcodeTemplate,
+      $$BarcodeTemplatesTableFilterComposer,
+      $$BarcodeTemplatesTableOrderingComposer,
+      $$BarcodeTemplatesTableAnnotationComposer,
+      $$BarcodeTemplatesTableCreateCompanionBuilder,
+      $$BarcodeTemplatesTableUpdateCompanionBuilder,
+      (BarcodeTemplate, $$BarcodeTemplatesTableReferences),
+      BarcodeTemplate,
+      PrefetchHooks Function({bool printHistoriesRefs})
+    >;
+typedef $$PrintHistoriesTableCreateCompanionBuilder =
+    PrintHistoriesCompanion Function({
+      Value<int> id,
+      required int productId,
+      Value<int?> variantId,
+      Value<int?> templateId,
+      required int quantityPrinted,
+      Value<String?> printerName,
+      Value<String> printType,
+      Value<String> status,
+      Value<String?> errorMessage,
+      Value<DateTime> printDate,
+    });
+typedef $$PrintHistoriesTableUpdateCompanionBuilder =
+    PrintHistoriesCompanion Function({
+      Value<int> id,
+      Value<int> productId,
+      Value<int?> variantId,
+      Value<int?> templateId,
+      Value<int> quantityPrinted,
+      Value<String?> printerName,
+      Value<String> printType,
+      Value<String> status,
+      Value<String?> errorMessage,
+      Value<DateTime> printDate,
+    });
+
+final class $$PrintHistoriesTableReferences
+    extends BaseReferences<_$AppDatabase, $PrintHistoriesTable, PrintHistory> {
+  $$PrintHistoriesTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $ProductsTable _productIdTable(_$AppDatabase db) =>
+      db.products.createAlias(
+        $_aliasNameGenerator(db.printHistories.productId, db.products.id),
+      );
+
+  $$ProductsTableProcessedTableManager get productId {
+    final $_column = $_itemColumn<int>('product_id')!;
+
+    final manager = $$ProductsTableTableManager(
+      $_db,
+      $_db.products,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_productIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $ProductVariantsTable _variantIdTable(_$AppDatabase db) =>
+      db.productVariants.createAlias(
+        $_aliasNameGenerator(
+          db.printHistories.variantId,
+          db.productVariants.id,
+        ),
+      );
+
+  $$ProductVariantsTableProcessedTableManager? get variantId {
+    final $_column = $_itemColumn<int>('variant_id');
+    if ($_column == null) return null;
+    final manager = $$ProductVariantsTableTableManager(
+      $_db,
+      $_db.productVariants,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_variantIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $BarcodeTemplatesTable _templateIdTable(_$AppDatabase db) =>
+      db.barcodeTemplates.createAlias(
+        $_aliasNameGenerator(
+          db.printHistories.templateId,
+          db.barcodeTemplates.id,
+        ),
+      );
+
+  $$BarcodeTemplatesTableProcessedTableManager? get templateId {
+    final $_column = $_itemColumn<int>('template_id');
+    if ($_column == null) return null;
+    final manager = $$BarcodeTemplatesTableTableManager(
+      $_db,
+      $_db.barcodeTemplates,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_templateIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$PrintHistoriesTableFilterComposer
+    extends Composer<_$AppDatabase, $PrintHistoriesTable> {
+  $$PrintHistoriesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get quantityPrinted => $composableBuilder(
+    column: $table.quantityPrinted,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get printerName => $composableBuilder(
+    column: $table.printerName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get printType => $composableBuilder(
+    column: $table.printType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get errorMessage => $composableBuilder(
+    column: $table.errorMessage,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get printDate => $composableBuilder(
+    column: $table.printDate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$ProductsTableFilterComposer get productId {
+    final $$ProductsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.productId,
+      referencedTable: $db.products,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductsTableFilterComposer(
+            $db: $db,
+            $table: $db.products,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ProductVariantsTableFilterComposer get variantId {
+    final $$ProductVariantsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.variantId,
+      referencedTable: $db.productVariants,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductVariantsTableFilterComposer(
+            $db: $db,
+            $table: $db.productVariants,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$BarcodeTemplatesTableFilterComposer get templateId {
+    final $$BarcodeTemplatesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.templateId,
+      referencedTable: $db.barcodeTemplates,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BarcodeTemplatesTableFilterComposer(
+            $db: $db,
+            $table: $db.barcodeTemplates,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$PrintHistoriesTableOrderingComposer
+    extends Composer<_$AppDatabase, $PrintHistoriesTable> {
+  $$PrintHistoriesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get quantityPrinted => $composableBuilder(
+    column: $table.quantityPrinted,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get printerName => $composableBuilder(
+    column: $table.printerName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get printType => $composableBuilder(
+    column: $table.printType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get errorMessage => $composableBuilder(
+    column: $table.errorMessage,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get printDate => $composableBuilder(
+    column: $table.printDate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$ProductsTableOrderingComposer get productId {
+    final $$ProductsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.productId,
+      referencedTable: $db.products,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductsTableOrderingComposer(
+            $db: $db,
+            $table: $db.products,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ProductVariantsTableOrderingComposer get variantId {
+    final $$ProductVariantsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.variantId,
+      referencedTable: $db.productVariants,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductVariantsTableOrderingComposer(
+            $db: $db,
+            $table: $db.productVariants,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$BarcodeTemplatesTableOrderingComposer get templateId {
+    final $$BarcodeTemplatesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.templateId,
+      referencedTable: $db.barcodeTemplates,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BarcodeTemplatesTableOrderingComposer(
+            $db: $db,
+            $table: $db.barcodeTemplates,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$PrintHistoriesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $PrintHistoriesTable> {
+  $$PrintHistoriesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get quantityPrinted => $composableBuilder(
+    column: $table.quantityPrinted,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get printerName => $composableBuilder(
+    column: $table.printerName,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get printType =>
+      $composableBuilder(column: $table.printType, builder: (column) => column);
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<String> get errorMessage => $composableBuilder(
+    column: $table.errorMessage,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get printDate =>
+      $composableBuilder(column: $table.printDate, builder: (column) => column);
+
+  $$ProductsTableAnnotationComposer get productId {
+    final $$ProductsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.productId,
+      referencedTable: $db.products,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.products,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ProductVariantsTableAnnotationComposer get variantId {
+    final $$ProductVariantsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.variantId,
+      referencedTable: $db.productVariants,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductVariantsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.productVariants,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$BarcodeTemplatesTableAnnotationComposer get templateId {
+    final $$BarcodeTemplatesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.templateId,
+      referencedTable: $db.barcodeTemplates,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BarcodeTemplatesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.barcodeTemplates,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$PrintHistoriesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $PrintHistoriesTable,
+          PrintHistory,
+          $$PrintHistoriesTableFilterComposer,
+          $$PrintHistoriesTableOrderingComposer,
+          $$PrintHistoriesTableAnnotationComposer,
+          $$PrintHistoriesTableCreateCompanionBuilder,
+          $$PrintHistoriesTableUpdateCompanionBuilder,
+          (PrintHistory, $$PrintHistoriesTableReferences),
+          PrintHistory,
+          PrefetchHooks Function({
+            bool productId,
+            bool variantId,
+            bool templateId,
+          })
+        > {
+  $$PrintHistoriesTableTableManager(
+    _$AppDatabase db,
+    $PrintHistoriesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PrintHistoriesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$PrintHistoriesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$PrintHistoriesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> productId = const Value.absent(),
+                Value<int?> variantId = const Value.absent(),
+                Value<int?> templateId = const Value.absent(),
+                Value<int> quantityPrinted = const Value.absent(),
+                Value<String?> printerName = const Value.absent(),
+                Value<String> printType = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<String?> errorMessage = const Value.absent(),
+                Value<DateTime> printDate = const Value.absent(),
+              }) => PrintHistoriesCompanion(
+                id: id,
+                productId: productId,
+                variantId: variantId,
+                templateId: templateId,
+                quantityPrinted: quantityPrinted,
+                printerName: printerName,
+                printType: printType,
+                status: status,
+                errorMessage: errorMessage,
+                printDate: printDate,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required int productId,
+                Value<int?> variantId = const Value.absent(),
+                Value<int?> templateId = const Value.absent(),
+                required int quantityPrinted,
+                Value<String?> printerName = const Value.absent(),
+                Value<String> printType = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<String?> errorMessage = const Value.absent(),
+                Value<DateTime> printDate = const Value.absent(),
+              }) => PrintHistoriesCompanion.insert(
+                id: id,
+                productId: productId,
+                variantId: variantId,
+                templateId: templateId,
+                quantityPrinted: quantityPrinted,
+                printerName: printerName,
+                printType: printType,
+                status: status,
+                errorMessage: errorMessage,
+                printDate: printDate,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$PrintHistoriesTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({productId = false, variantId = false, templateId = false}) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (productId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.productId,
+                                    referencedTable:
+                                        $$PrintHistoriesTableReferences
+                                            ._productIdTable(db),
+                                    referencedColumn:
+                                        $$PrintHistoriesTableReferences
+                                            ._productIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (variantId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.variantId,
+                                    referencedTable:
+                                        $$PrintHistoriesTableReferences
+                                            ._variantIdTable(db),
+                                    referencedColumn:
+                                        $$PrintHistoriesTableReferences
+                                            ._variantIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (templateId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.templateId,
+                                    referencedTable:
+                                        $$PrintHistoriesTableReferences
+                                            ._templateIdTable(db),
+                                    referencedColumn:
+                                        $$PrintHistoriesTableReferences
+                                            ._templateIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$PrintHistoriesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $PrintHistoriesTable,
+      PrintHistory,
+      $$PrintHistoriesTableFilterComposer,
+      $$PrintHistoriesTableOrderingComposer,
+      $$PrintHistoriesTableAnnotationComposer,
+      $$PrintHistoriesTableCreateCompanionBuilder,
+      $$PrintHistoriesTableUpdateCompanionBuilder,
+      (PrintHistory, $$PrintHistoriesTableReferences),
+      PrintHistory,
+      PrefetchHooks Function({bool productId, bool variantId, bool templateId})
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -40286,4 +43283,8 @@ class $AppDatabaseManager {
       $$VoidLogsTableTableManager(_db, _db.voidLogs);
   $$NotificationsTableTableManager get notifications =>
       $$NotificationsTableTableManager(_db, _db.notifications);
+  $$BarcodeTemplatesTableTableManager get barcodeTemplates =>
+      $$BarcodeTemplatesTableTableManager(_db, _db.barcodeTemplates);
+  $$PrintHistoriesTableTableManager get printHistories =>
+      $$PrintHistoriesTableTableManager(_db, _db.printHistories);
 }
