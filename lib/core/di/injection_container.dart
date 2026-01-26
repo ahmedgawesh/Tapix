@@ -24,6 +24,13 @@ import '../../features/products/presentation/bloc/product_form_bloc.dart';
 import '../../features/products/presentation/bloc/product_variants_bloc.dart';
 import '../../features/products/presentation/bloc/bulk_product_bloc.dart';
 import '../../features/products/presentation/bloc/edit_prices_bloc.dart';
+import '../../features/products/presentation/bloc/import_products_bloc.dart';
+import '../../features/products/services/file_import_service.dart';
+import '../../features/products/services/import_validation_service.dart';
+import '../../features/products/services/product_import_service.dart';
+import '../../features/products/domain/usecases/parse_import_file.dart';
+import '../../features/products/domain/usecases/validate_import_data.dart';
+import '../../features/products/domain/usecases/import_products.dart';
 import '../../features/barcode/services/barcode_validation_service.dart';
 import '../../features/barcode/services/barcode_printer_service.dart';
 import '../../features/barcode/presentation/bloc/barcode_scanner_bloc.dart';
@@ -85,6 +92,15 @@ Future<void> init() async {
   // AuthBloc must be singleton so router and widgets share the same instance
   sl.registerLazySingleton(() => AuthBloc(repository: sl()));
   
+  // Import Products Services
+  sl.registerLazySingleton<ParseImportFile>(() => FileImportService());
+  sl.registerLazySingleton<ValidateImportData>(
+    () => ImportValidationService(sl<ProductRepository>()),
+  );
+  sl.registerLazySingleton<ImportProducts>(
+    () => ProductImportService(sl<ProductRepository>()),
+  );
+
   // Feature Blocs
   sl.registerFactory(() => ProductsBloc(sl()));
   sl.registerFactory(() => ProductFormBloc(sl()));
@@ -93,6 +109,12 @@ Future<void> init() async {
   sl.registerFactory(() => EditPricesBloc(sl<ProductRepository>()));
   sl.registerFactory(() => ColorsBloc(sl<ProductVariantRepository>()));
   sl.registerFactory(() => SizesBloc(sl<ProductVariantRepository>()));
+  sl.registerFactory(() => ImportProductsBloc(
+    parseImportFile: sl<ParseImportFile>(),
+    validateImportData: sl<ValidateImportData>(),
+    importProducts: sl<ImportProducts>(),
+    currencyService: sl<CurrencyService>(),
+  ));
 
   // Barcode Services
   sl.registerLazySingleton(() => BarcodeValidationService());
