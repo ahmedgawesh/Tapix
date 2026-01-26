@@ -14728,6 +14728,44 @@ class $AccountsTable extends Accounts with TableInfo<$AccountsTable, Account> {
     ),
     defaultValue: const Constant(true),
   );
+  static const VerificationMeta _isSystemAccountMeta = const VerificationMeta(
+    'isSystemAccount',
+  );
+  @override
+  late final GeneratedColumn<bool> isSystemAccount = GeneratedColumn<bool>(
+    'is_system_account',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_system_account" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _displayOrderMeta = const VerificationMeta(
+    'displayOrder',
+  );
+  @override
+  late final GeneratedColumn<int> displayOrder = GeneratedColumn<int>(
+    'display_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _descriptionMeta = const VerificationMeta(
+    'description',
+  );
+  @override
+  late final GeneratedColumn<String> description = GeneratedColumn<String>(
+    'description',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -14762,6 +14800,9 @@ class $AccountsTable extends Accounts with TableInfo<$AccountsTable, Account> {
     balanceCents,
     currencyId,
     isActive,
+    isSystemAccount,
+    displayOrder,
+    description,
     createdAt,
     updatedAt,
   ];
@@ -14836,6 +14877,33 @@ class $AccountsTable extends Accounts with TableInfo<$AccountsTable, Account> {
         isActive.isAcceptableOrUnknown(data['is_active']!, _isActiveMeta),
       );
     }
+    if (data.containsKey('is_system_account')) {
+      context.handle(
+        _isSystemAccountMeta,
+        isSystemAccount.isAcceptableOrUnknown(
+          data['is_system_account']!,
+          _isSystemAccountMeta,
+        ),
+      );
+    }
+    if (data.containsKey('display_order')) {
+      context.handle(
+        _displayOrderMeta,
+        displayOrder.isAcceptableOrUnknown(
+          data['display_order']!,
+          _displayOrderMeta,
+        ),
+      );
+    }
+    if (data.containsKey('description')) {
+      context.handle(
+        _descriptionMeta,
+        description.isAcceptableOrUnknown(
+          data['description']!,
+          _descriptionMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -14891,6 +14959,18 @@ class $AccountsTable extends Accounts with TableInfo<$AccountsTable, Account> {
         DriftSqlType.bool,
         data['${effectivePrefix}is_active'],
       )!,
+      isSystemAccount: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_system_account'],
+      )!,
+      displayOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}display_order'],
+      )!,
+      description: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}description'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -14920,6 +15000,9 @@ class Account extends DataClass implements Insertable<Account> {
   final Decimal balanceCents;
   final int currencyId;
   final bool isActive;
+  final bool isSystemAccount;
+  final int displayOrder;
+  final String? description;
   final DateTime createdAt;
   final DateTime updatedAt;
   const Account({
@@ -14931,6 +15014,9 @@ class Account extends DataClass implements Insertable<Account> {
     required this.balanceCents,
     required this.currencyId,
     required this.isActive,
+    required this.isSystemAccount,
+    required this.displayOrder,
+    this.description,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -14951,6 +15037,11 @@ class Account extends DataClass implements Insertable<Account> {
     }
     map['currency_id'] = Variable<int>(currencyId);
     map['is_active'] = Variable<bool>(isActive);
+    map['is_system_account'] = Variable<bool>(isSystemAccount);
+    map['display_order'] = Variable<int>(displayOrder);
+    if (!nullToAbsent || description != null) {
+      map['description'] = Variable<String>(description);
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
@@ -14968,6 +15059,11 @@ class Account extends DataClass implements Insertable<Account> {
       balanceCents: Value(balanceCents),
       currencyId: Value(currencyId),
       isActive: Value(isActive),
+      isSystemAccount: Value(isSystemAccount),
+      displayOrder: Value(displayOrder),
+      description: description == null && nullToAbsent
+          ? const Value.absent()
+          : Value(description),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
     );
@@ -14987,6 +15083,9 @@ class Account extends DataClass implements Insertable<Account> {
       balanceCents: serializer.fromJson<Decimal>(json['balanceCents']),
       currencyId: serializer.fromJson<int>(json['currencyId']),
       isActive: serializer.fromJson<bool>(json['isActive']),
+      isSystemAccount: serializer.fromJson<bool>(json['isSystemAccount']),
+      displayOrder: serializer.fromJson<int>(json['displayOrder']),
+      description: serializer.fromJson<String?>(json['description']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
@@ -15003,6 +15102,9 @@ class Account extends DataClass implements Insertable<Account> {
       'balanceCents': serializer.toJson<Decimal>(balanceCents),
       'currencyId': serializer.toJson<int>(currencyId),
       'isActive': serializer.toJson<bool>(isActive),
+      'isSystemAccount': serializer.toJson<bool>(isSystemAccount),
+      'displayOrder': serializer.toJson<int>(displayOrder),
+      'description': serializer.toJson<String?>(description),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
@@ -15017,6 +15119,9 @@ class Account extends DataClass implements Insertable<Account> {
     Decimal? balanceCents,
     int? currencyId,
     bool? isActive,
+    bool? isSystemAccount,
+    int? displayOrder,
+    Value<String?> description = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
   }) => Account(
@@ -15030,6 +15135,9 @@ class Account extends DataClass implements Insertable<Account> {
     balanceCents: balanceCents ?? this.balanceCents,
     currencyId: currencyId ?? this.currencyId,
     isActive: isActive ?? this.isActive,
+    isSystemAccount: isSystemAccount ?? this.isSystemAccount,
+    displayOrder: displayOrder ?? this.displayOrder,
+    description: description.present ? description.value : this.description,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
@@ -15055,6 +15163,15 @@ class Account extends DataClass implements Insertable<Account> {
           ? data.currencyId.value
           : this.currencyId,
       isActive: data.isActive.present ? data.isActive.value : this.isActive,
+      isSystemAccount: data.isSystemAccount.present
+          ? data.isSystemAccount.value
+          : this.isSystemAccount,
+      displayOrder: data.displayOrder.present
+          ? data.displayOrder.value
+          : this.displayOrder,
+      description: data.description.present
+          ? data.description.value
+          : this.description,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -15071,6 +15188,9 @@ class Account extends DataClass implements Insertable<Account> {
           ..write('balanceCents: $balanceCents, ')
           ..write('currencyId: $currencyId, ')
           ..write('isActive: $isActive, ')
+          ..write('isSystemAccount: $isSystemAccount, ')
+          ..write('displayOrder: $displayOrder, ')
+          ..write('description: $description, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -15087,6 +15207,9 @@ class Account extends DataClass implements Insertable<Account> {
     balanceCents,
     currencyId,
     isActive,
+    isSystemAccount,
+    displayOrder,
+    description,
     createdAt,
     updatedAt,
   );
@@ -15102,6 +15225,9 @@ class Account extends DataClass implements Insertable<Account> {
           other.balanceCents == this.balanceCents &&
           other.currencyId == this.currencyId &&
           other.isActive == this.isActive &&
+          other.isSystemAccount == this.isSystemAccount &&
+          other.displayOrder == this.displayOrder &&
+          other.description == this.description &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
 }
@@ -15115,6 +15241,9 @@ class AccountsCompanion extends UpdateCompanion<Account> {
   final Value<Decimal> balanceCents;
   final Value<int> currencyId;
   final Value<bool> isActive;
+  final Value<bool> isSystemAccount;
+  final Value<int> displayOrder;
+  final Value<String?> description;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   const AccountsCompanion({
@@ -15126,6 +15255,9 @@ class AccountsCompanion extends UpdateCompanion<Account> {
     this.balanceCents = const Value.absent(),
     this.currencyId = const Value.absent(),
     this.isActive = const Value.absent(),
+    this.isSystemAccount = const Value.absent(),
+    this.displayOrder = const Value.absent(),
+    this.description = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
   });
@@ -15138,6 +15270,9 @@ class AccountsCompanion extends UpdateCompanion<Account> {
     this.balanceCents = const Value.absent(),
     required int currencyId,
     this.isActive = const Value.absent(),
+    this.isSystemAccount = const Value.absent(),
+    this.displayOrder = const Value.absent(),
+    this.description = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
   }) : accountCode = Value(accountCode),
@@ -15153,6 +15288,9 @@ class AccountsCompanion extends UpdateCompanion<Account> {
     Expression<int>? balanceCents,
     Expression<int>? currencyId,
     Expression<bool>? isActive,
+    Expression<bool>? isSystemAccount,
+    Expression<int>? displayOrder,
+    Expression<String>? description,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
   }) {
@@ -15165,6 +15303,9 @@ class AccountsCompanion extends UpdateCompanion<Account> {
       if (balanceCents != null) 'balance_cents': balanceCents,
       if (currencyId != null) 'currency_id': currencyId,
       if (isActive != null) 'is_active': isActive,
+      if (isSystemAccount != null) 'is_system_account': isSystemAccount,
+      if (displayOrder != null) 'display_order': displayOrder,
+      if (description != null) 'description': description,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
     });
@@ -15179,6 +15320,9 @@ class AccountsCompanion extends UpdateCompanion<Account> {
     Value<Decimal>? balanceCents,
     Value<int>? currencyId,
     Value<bool>? isActive,
+    Value<bool>? isSystemAccount,
+    Value<int>? displayOrder,
+    Value<String?>? description,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
   }) {
@@ -15191,6 +15335,9 @@ class AccountsCompanion extends UpdateCompanion<Account> {
       balanceCents: balanceCents ?? this.balanceCents,
       currencyId: currencyId ?? this.currencyId,
       isActive: isActive ?? this.isActive,
+      isSystemAccount: isSystemAccount ?? this.isSystemAccount,
+      displayOrder: displayOrder ?? this.displayOrder,
+      description: description ?? this.description,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -15225,6 +15372,15 @@ class AccountsCompanion extends UpdateCompanion<Account> {
     if (isActive.present) {
       map['is_active'] = Variable<bool>(isActive.value);
     }
+    if (isSystemAccount.present) {
+      map['is_system_account'] = Variable<bool>(isSystemAccount.value);
+    }
+    if (displayOrder.present) {
+      map['display_order'] = Variable<int>(displayOrder.value);
+    }
+    if (description.present) {
+      map['description'] = Variable<String>(description.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -15245,6 +15401,9 @@ class AccountsCompanion extends UpdateCompanion<Account> {
           ..write('balanceCents: $balanceCents, ')
           ..write('currencyId: $currencyId, ')
           ..write('isActive: $isActive, ')
+          ..write('isSystemAccount: $isSystemAccount, ')
+          ..write('displayOrder: $displayOrder, ')
+          ..write('description: $description, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -15884,6 +16043,89 @@ class $JournalEntriesTable extends JournalEntries
     requiredDuringInsert: false,
     defaultValue: const Constant('draft'),
   );
+  static const VerificationMeta _entryTypeMeta = const VerificationMeta(
+    'entryType',
+  );
+  @override
+  late final GeneratedColumn<String> entryType = GeneratedColumn<String>(
+    'entry_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('manual'),
+  );
+  static const VerificationMeta _sourceTableMeta = const VerificationMeta(
+    'sourceTable',
+  );
+  @override
+  late final GeneratedColumn<String> sourceTable = GeneratedColumn<String>(
+    'source_table',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _sourceIdMeta = const VerificationMeta(
+    'sourceId',
+  );
+  @override
+  late final GeneratedColumn<int> sourceId = GeneratedColumn<int>(
+    'source_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _reversedEntryIdMeta = const VerificationMeta(
+    'reversedEntryId',
+  );
+  @override
+  late final GeneratedColumn<int> reversedEntryId = GeneratedColumn<int>(
+    'reversed_entry_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES journal_entries (id)',
+    ),
+  );
+  static const VerificationMeta _isReversedMeta = const VerificationMeta(
+    'isReversed',
+  );
+  @override
+  late final GeneratedColumn<bool> isReversed = GeneratedColumn<bool>(
+    'is_reversed',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_reversed" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  @override
+  late final GeneratedColumnWithTypeConverter<Decimal, int> totalDebitCents =
+      GeneratedColumn<int>(
+        'total_debit_cents',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(0),
+      ).withConverter<Decimal>($JournalEntriesTable.$convertertotalDebitCents);
+  @override
+  late final GeneratedColumnWithTypeConverter<Decimal, int> totalCreditCents =
+      GeneratedColumn<int>(
+        'total_credit_cents',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(0),
+      ).withConverter<Decimal>($JournalEntriesTable.$convertertotalCreditCents);
   static const VerificationMeta _createdByMeta = const VerificationMeta(
     'createdBy',
   );
@@ -15897,6 +16139,31 @@ class $JournalEntriesTable extends JournalEntries
     defaultConstraints: GeneratedColumn.constraintIsAlways(
       'REFERENCES users (id)',
     ),
+  );
+  static const VerificationMeta _postedByMeta = const VerificationMeta(
+    'postedBy',
+  );
+  @override
+  late final GeneratedColumn<int> postedBy = GeneratedColumn<int>(
+    'posted_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES users (id)',
+    ),
+  );
+  static const VerificationMeta _postedAtMeta = const VerificationMeta(
+    'postedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> postedAt = GeneratedColumn<DateTime>(
+    'posted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
   );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
@@ -15930,7 +16197,16 @@ class $JournalEntriesTable extends JournalEntries
     entryDate,
     accountingPeriodId,
     status,
+    entryType,
+    sourceTable,
+    sourceId,
+    reversedEntryId,
+    isReversed,
+    totalDebitCents,
+    totalCreditCents,
     createdBy,
+    postedBy,
+    postedAt,
     createdAt,
     updatedAt,
   ];
@@ -15992,10 +16268,58 @@ class $JournalEntriesTable extends JournalEntries
         status.isAcceptableOrUnknown(data['status']!, _statusMeta),
       );
     }
+    if (data.containsKey('entry_type')) {
+      context.handle(
+        _entryTypeMeta,
+        entryType.isAcceptableOrUnknown(data['entry_type']!, _entryTypeMeta),
+      );
+    }
+    if (data.containsKey('source_table')) {
+      context.handle(
+        _sourceTableMeta,
+        sourceTable.isAcceptableOrUnknown(
+          data['source_table']!,
+          _sourceTableMeta,
+        ),
+      );
+    }
+    if (data.containsKey('source_id')) {
+      context.handle(
+        _sourceIdMeta,
+        sourceId.isAcceptableOrUnknown(data['source_id']!, _sourceIdMeta),
+      );
+    }
+    if (data.containsKey('reversed_entry_id')) {
+      context.handle(
+        _reversedEntryIdMeta,
+        reversedEntryId.isAcceptableOrUnknown(
+          data['reversed_entry_id']!,
+          _reversedEntryIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('is_reversed')) {
+      context.handle(
+        _isReversedMeta,
+        isReversed.isAcceptableOrUnknown(data['is_reversed']!, _isReversedMeta),
+      );
+    }
     if (data.containsKey('created_by')) {
       context.handle(
         _createdByMeta,
         createdBy.isAcceptableOrUnknown(data['created_by']!, _createdByMeta),
+      );
+    }
+    if (data.containsKey('posted_by')) {
+      context.handle(
+        _postedByMeta,
+        postedBy.isAcceptableOrUnknown(data['posted_by']!, _postedByMeta),
+      );
+    }
+    if (data.containsKey('posted_at')) {
+      context.handle(
+        _postedAtMeta,
+        postedAt.isAcceptableOrUnknown(data['posted_at']!, _postedAtMeta),
       );
     }
     if (data.containsKey('created_at')) {
@@ -16043,9 +16367,49 @@ class $JournalEntriesTable extends JournalEntries
         DriftSqlType.string,
         data['${effectivePrefix}status'],
       )!,
+      entryType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}entry_type'],
+      )!,
+      sourceTable: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source_table'],
+      ),
+      sourceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}source_id'],
+      ),
+      reversedEntryId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}reversed_entry_id'],
+      ),
+      isReversed: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_reversed'],
+      )!,
+      totalDebitCents: $JournalEntriesTable.$convertertotalDebitCents.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}total_debit_cents'],
+        )!,
+      ),
+      totalCreditCents: $JournalEntriesTable.$convertertotalCreditCents.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}total_credit_cents'],
+        )!,
+      ),
       createdBy: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}created_by'],
+      ),
+      postedBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}posted_by'],
+      ),
+      postedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}posted_at'],
       ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
@@ -16062,6 +16426,11 @@ class $JournalEntriesTable extends JournalEntries
   $JournalEntriesTable createAlias(String alias) {
     return $JournalEntriesTable(attachedDatabase, alias);
   }
+
+  static TypeConverter<Decimal, int> $convertertotalDebitCents =
+      const MoneyConverter();
+  static TypeConverter<Decimal, int> $convertertotalCreditCents =
+      const MoneyConverter();
 }
 
 class JournalEntry extends DataClass implements Insertable<JournalEntry> {
@@ -16071,7 +16440,16 @@ class JournalEntry extends DataClass implements Insertable<JournalEntry> {
   final DateTime entryDate;
   final int? accountingPeriodId;
   final String status;
+  final String entryType;
+  final String? sourceTable;
+  final int? sourceId;
+  final int? reversedEntryId;
+  final bool isReversed;
+  final Decimal totalDebitCents;
+  final Decimal totalCreditCents;
   final int? createdBy;
+  final int? postedBy;
+  final DateTime? postedAt;
   final DateTime createdAt;
   final DateTime updatedAt;
   const JournalEntry({
@@ -16081,7 +16459,16 @@ class JournalEntry extends DataClass implements Insertable<JournalEntry> {
     required this.entryDate,
     this.accountingPeriodId,
     required this.status,
+    required this.entryType,
+    this.sourceTable,
+    this.sourceId,
+    this.reversedEntryId,
+    required this.isReversed,
+    required this.totalDebitCents,
+    required this.totalCreditCents,
     this.createdBy,
+    this.postedBy,
+    this.postedAt,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -16096,8 +16483,35 @@ class JournalEntry extends DataClass implements Insertable<JournalEntry> {
       map['accounting_period_id'] = Variable<int>(accountingPeriodId);
     }
     map['status'] = Variable<String>(status);
+    map['entry_type'] = Variable<String>(entryType);
+    if (!nullToAbsent || sourceTable != null) {
+      map['source_table'] = Variable<String>(sourceTable);
+    }
+    if (!nullToAbsent || sourceId != null) {
+      map['source_id'] = Variable<int>(sourceId);
+    }
+    if (!nullToAbsent || reversedEntryId != null) {
+      map['reversed_entry_id'] = Variable<int>(reversedEntryId);
+    }
+    map['is_reversed'] = Variable<bool>(isReversed);
+    {
+      map['total_debit_cents'] = Variable<int>(
+        $JournalEntriesTable.$convertertotalDebitCents.toSql(totalDebitCents),
+      );
+    }
+    {
+      map['total_credit_cents'] = Variable<int>(
+        $JournalEntriesTable.$convertertotalCreditCents.toSql(totalCreditCents),
+      );
+    }
     if (!nullToAbsent || createdBy != null) {
       map['created_by'] = Variable<int>(createdBy);
+    }
+    if (!nullToAbsent || postedBy != null) {
+      map['posted_by'] = Variable<int>(postedBy);
+    }
+    if (!nullToAbsent || postedAt != null) {
+      map['posted_at'] = Variable<DateTime>(postedAt);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
@@ -16114,9 +16528,28 @@ class JournalEntry extends DataClass implements Insertable<JournalEntry> {
           ? const Value.absent()
           : Value(accountingPeriodId),
       status: Value(status),
+      entryType: Value(entryType),
+      sourceTable: sourceTable == null && nullToAbsent
+          ? const Value.absent()
+          : Value(sourceTable),
+      sourceId: sourceId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(sourceId),
+      reversedEntryId: reversedEntryId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(reversedEntryId),
+      isReversed: Value(isReversed),
+      totalDebitCents: Value(totalDebitCents),
+      totalCreditCents: Value(totalCreditCents),
       createdBy: createdBy == null && nullToAbsent
           ? const Value.absent()
           : Value(createdBy),
+      postedBy: postedBy == null && nullToAbsent
+          ? const Value.absent()
+          : Value(postedBy),
+      postedAt: postedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(postedAt),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
     );
@@ -16134,7 +16567,16 @@ class JournalEntry extends DataClass implements Insertable<JournalEntry> {
       entryDate: serializer.fromJson<DateTime>(json['entryDate']),
       accountingPeriodId: serializer.fromJson<int?>(json['accountingPeriodId']),
       status: serializer.fromJson<String>(json['status']),
+      entryType: serializer.fromJson<String>(json['entryType']),
+      sourceTable: serializer.fromJson<String?>(json['sourceTable']),
+      sourceId: serializer.fromJson<int?>(json['sourceId']),
+      reversedEntryId: serializer.fromJson<int?>(json['reversedEntryId']),
+      isReversed: serializer.fromJson<bool>(json['isReversed']),
+      totalDebitCents: serializer.fromJson<Decimal>(json['totalDebitCents']),
+      totalCreditCents: serializer.fromJson<Decimal>(json['totalCreditCents']),
       createdBy: serializer.fromJson<int?>(json['createdBy']),
+      postedBy: serializer.fromJson<int?>(json['postedBy']),
+      postedAt: serializer.fromJson<DateTime?>(json['postedAt']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
@@ -16149,7 +16591,16 @@ class JournalEntry extends DataClass implements Insertable<JournalEntry> {
       'entryDate': serializer.toJson<DateTime>(entryDate),
       'accountingPeriodId': serializer.toJson<int?>(accountingPeriodId),
       'status': serializer.toJson<String>(status),
+      'entryType': serializer.toJson<String>(entryType),
+      'sourceTable': serializer.toJson<String?>(sourceTable),
+      'sourceId': serializer.toJson<int?>(sourceId),
+      'reversedEntryId': serializer.toJson<int?>(reversedEntryId),
+      'isReversed': serializer.toJson<bool>(isReversed),
+      'totalDebitCents': serializer.toJson<Decimal>(totalDebitCents),
+      'totalCreditCents': serializer.toJson<Decimal>(totalCreditCents),
       'createdBy': serializer.toJson<int?>(createdBy),
+      'postedBy': serializer.toJson<int?>(postedBy),
+      'postedAt': serializer.toJson<DateTime?>(postedAt),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
@@ -16162,7 +16613,16 @@ class JournalEntry extends DataClass implements Insertable<JournalEntry> {
     DateTime? entryDate,
     Value<int?> accountingPeriodId = const Value.absent(),
     String? status,
+    String? entryType,
+    Value<String?> sourceTable = const Value.absent(),
+    Value<int?> sourceId = const Value.absent(),
+    Value<int?> reversedEntryId = const Value.absent(),
+    bool? isReversed,
+    Decimal? totalDebitCents,
+    Decimal? totalCreditCents,
     Value<int?> createdBy = const Value.absent(),
+    Value<int?> postedBy = const Value.absent(),
+    Value<DateTime?> postedAt = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
   }) => JournalEntry(
@@ -16174,7 +16634,18 @@ class JournalEntry extends DataClass implements Insertable<JournalEntry> {
         ? accountingPeriodId.value
         : this.accountingPeriodId,
     status: status ?? this.status,
+    entryType: entryType ?? this.entryType,
+    sourceTable: sourceTable.present ? sourceTable.value : this.sourceTable,
+    sourceId: sourceId.present ? sourceId.value : this.sourceId,
+    reversedEntryId: reversedEntryId.present
+        ? reversedEntryId.value
+        : this.reversedEntryId,
+    isReversed: isReversed ?? this.isReversed,
+    totalDebitCents: totalDebitCents ?? this.totalDebitCents,
+    totalCreditCents: totalCreditCents ?? this.totalCreditCents,
     createdBy: createdBy.present ? createdBy.value : this.createdBy,
+    postedBy: postedBy.present ? postedBy.value : this.postedBy,
+    postedAt: postedAt.present ? postedAt.value : this.postedAt,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
@@ -16192,7 +16663,26 @@ class JournalEntry extends DataClass implements Insertable<JournalEntry> {
           ? data.accountingPeriodId.value
           : this.accountingPeriodId,
       status: data.status.present ? data.status.value : this.status,
+      entryType: data.entryType.present ? data.entryType.value : this.entryType,
+      sourceTable: data.sourceTable.present
+          ? data.sourceTable.value
+          : this.sourceTable,
+      sourceId: data.sourceId.present ? data.sourceId.value : this.sourceId,
+      reversedEntryId: data.reversedEntryId.present
+          ? data.reversedEntryId.value
+          : this.reversedEntryId,
+      isReversed: data.isReversed.present
+          ? data.isReversed.value
+          : this.isReversed,
+      totalDebitCents: data.totalDebitCents.present
+          ? data.totalDebitCents.value
+          : this.totalDebitCents,
+      totalCreditCents: data.totalCreditCents.present
+          ? data.totalCreditCents.value
+          : this.totalCreditCents,
       createdBy: data.createdBy.present ? data.createdBy.value : this.createdBy,
+      postedBy: data.postedBy.present ? data.postedBy.value : this.postedBy,
+      postedAt: data.postedAt.present ? data.postedAt.value : this.postedAt,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -16207,7 +16697,16 @@ class JournalEntry extends DataClass implements Insertable<JournalEntry> {
           ..write('entryDate: $entryDate, ')
           ..write('accountingPeriodId: $accountingPeriodId, ')
           ..write('status: $status, ')
+          ..write('entryType: $entryType, ')
+          ..write('sourceTable: $sourceTable, ')
+          ..write('sourceId: $sourceId, ')
+          ..write('reversedEntryId: $reversedEntryId, ')
+          ..write('isReversed: $isReversed, ')
+          ..write('totalDebitCents: $totalDebitCents, ')
+          ..write('totalCreditCents: $totalCreditCents, ')
           ..write('createdBy: $createdBy, ')
+          ..write('postedBy: $postedBy, ')
+          ..write('postedAt: $postedAt, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -16222,7 +16721,16 @@ class JournalEntry extends DataClass implements Insertable<JournalEntry> {
     entryDate,
     accountingPeriodId,
     status,
+    entryType,
+    sourceTable,
+    sourceId,
+    reversedEntryId,
+    isReversed,
+    totalDebitCents,
+    totalCreditCents,
     createdBy,
+    postedBy,
+    postedAt,
     createdAt,
     updatedAt,
   );
@@ -16236,7 +16744,16 @@ class JournalEntry extends DataClass implements Insertable<JournalEntry> {
           other.entryDate == this.entryDate &&
           other.accountingPeriodId == this.accountingPeriodId &&
           other.status == this.status &&
+          other.entryType == this.entryType &&
+          other.sourceTable == this.sourceTable &&
+          other.sourceId == this.sourceId &&
+          other.reversedEntryId == this.reversedEntryId &&
+          other.isReversed == this.isReversed &&
+          other.totalDebitCents == this.totalDebitCents &&
+          other.totalCreditCents == this.totalCreditCents &&
           other.createdBy == this.createdBy &&
+          other.postedBy == this.postedBy &&
+          other.postedAt == this.postedAt &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
 }
@@ -16248,7 +16765,16 @@ class JournalEntriesCompanion extends UpdateCompanion<JournalEntry> {
   final Value<DateTime> entryDate;
   final Value<int?> accountingPeriodId;
   final Value<String> status;
+  final Value<String> entryType;
+  final Value<String?> sourceTable;
+  final Value<int?> sourceId;
+  final Value<int?> reversedEntryId;
+  final Value<bool> isReversed;
+  final Value<Decimal> totalDebitCents;
+  final Value<Decimal> totalCreditCents;
   final Value<int?> createdBy;
+  final Value<int?> postedBy;
+  final Value<DateTime?> postedAt;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   const JournalEntriesCompanion({
@@ -16258,7 +16784,16 @@ class JournalEntriesCompanion extends UpdateCompanion<JournalEntry> {
     this.entryDate = const Value.absent(),
     this.accountingPeriodId = const Value.absent(),
     this.status = const Value.absent(),
+    this.entryType = const Value.absent(),
+    this.sourceTable = const Value.absent(),
+    this.sourceId = const Value.absent(),
+    this.reversedEntryId = const Value.absent(),
+    this.isReversed = const Value.absent(),
+    this.totalDebitCents = const Value.absent(),
+    this.totalCreditCents = const Value.absent(),
     this.createdBy = const Value.absent(),
+    this.postedBy = const Value.absent(),
+    this.postedAt = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
   });
@@ -16269,7 +16804,16 @@ class JournalEntriesCompanion extends UpdateCompanion<JournalEntry> {
     this.entryDate = const Value.absent(),
     this.accountingPeriodId = const Value.absent(),
     this.status = const Value.absent(),
+    this.entryType = const Value.absent(),
+    this.sourceTable = const Value.absent(),
+    this.sourceId = const Value.absent(),
+    this.reversedEntryId = const Value.absent(),
+    this.isReversed = const Value.absent(),
+    this.totalDebitCents = const Value.absent(),
+    this.totalCreditCents = const Value.absent(),
     this.createdBy = const Value.absent(),
+    this.postedBy = const Value.absent(),
+    this.postedAt = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
   }) : entryNumber = Value(entryNumber),
@@ -16281,7 +16825,16 @@ class JournalEntriesCompanion extends UpdateCompanion<JournalEntry> {
     Expression<DateTime>? entryDate,
     Expression<int>? accountingPeriodId,
     Expression<String>? status,
+    Expression<String>? entryType,
+    Expression<String>? sourceTable,
+    Expression<int>? sourceId,
+    Expression<int>? reversedEntryId,
+    Expression<bool>? isReversed,
+    Expression<int>? totalDebitCents,
+    Expression<int>? totalCreditCents,
     Expression<int>? createdBy,
+    Expression<int>? postedBy,
+    Expression<DateTime>? postedAt,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
   }) {
@@ -16293,7 +16846,16 @@ class JournalEntriesCompanion extends UpdateCompanion<JournalEntry> {
       if (accountingPeriodId != null)
         'accounting_period_id': accountingPeriodId,
       if (status != null) 'status': status,
+      if (entryType != null) 'entry_type': entryType,
+      if (sourceTable != null) 'source_table': sourceTable,
+      if (sourceId != null) 'source_id': sourceId,
+      if (reversedEntryId != null) 'reversed_entry_id': reversedEntryId,
+      if (isReversed != null) 'is_reversed': isReversed,
+      if (totalDebitCents != null) 'total_debit_cents': totalDebitCents,
+      if (totalCreditCents != null) 'total_credit_cents': totalCreditCents,
       if (createdBy != null) 'created_by': createdBy,
+      if (postedBy != null) 'posted_by': postedBy,
+      if (postedAt != null) 'posted_at': postedAt,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
     });
@@ -16306,7 +16868,16 @@ class JournalEntriesCompanion extends UpdateCompanion<JournalEntry> {
     Value<DateTime>? entryDate,
     Value<int?>? accountingPeriodId,
     Value<String>? status,
+    Value<String>? entryType,
+    Value<String?>? sourceTable,
+    Value<int?>? sourceId,
+    Value<int?>? reversedEntryId,
+    Value<bool>? isReversed,
+    Value<Decimal>? totalDebitCents,
+    Value<Decimal>? totalCreditCents,
     Value<int?>? createdBy,
+    Value<int?>? postedBy,
+    Value<DateTime?>? postedAt,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
   }) {
@@ -16317,7 +16888,16 @@ class JournalEntriesCompanion extends UpdateCompanion<JournalEntry> {
       entryDate: entryDate ?? this.entryDate,
       accountingPeriodId: accountingPeriodId ?? this.accountingPeriodId,
       status: status ?? this.status,
+      entryType: entryType ?? this.entryType,
+      sourceTable: sourceTable ?? this.sourceTable,
+      sourceId: sourceId ?? this.sourceId,
+      reversedEntryId: reversedEntryId ?? this.reversedEntryId,
+      isReversed: isReversed ?? this.isReversed,
+      totalDebitCents: totalDebitCents ?? this.totalDebitCents,
+      totalCreditCents: totalCreditCents ?? this.totalCreditCents,
       createdBy: createdBy ?? this.createdBy,
+      postedBy: postedBy ?? this.postedBy,
+      postedAt: postedAt ?? this.postedAt,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -16344,8 +16924,43 @@ class JournalEntriesCompanion extends UpdateCompanion<JournalEntry> {
     if (status.present) {
       map['status'] = Variable<String>(status.value);
     }
+    if (entryType.present) {
+      map['entry_type'] = Variable<String>(entryType.value);
+    }
+    if (sourceTable.present) {
+      map['source_table'] = Variable<String>(sourceTable.value);
+    }
+    if (sourceId.present) {
+      map['source_id'] = Variable<int>(sourceId.value);
+    }
+    if (reversedEntryId.present) {
+      map['reversed_entry_id'] = Variable<int>(reversedEntryId.value);
+    }
+    if (isReversed.present) {
+      map['is_reversed'] = Variable<bool>(isReversed.value);
+    }
+    if (totalDebitCents.present) {
+      map['total_debit_cents'] = Variable<int>(
+        $JournalEntriesTable.$convertertotalDebitCents.toSql(
+          totalDebitCents.value,
+        ),
+      );
+    }
+    if (totalCreditCents.present) {
+      map['total_credit_cents'] = Variable<int>(
+        $JournalEntriesTable.$convertertotalCreditCents.toSql(
+          totalCreditCents.value,
+        ),
+      );
+    }
     if (createdBy.present) {
       map['created_by'] = Variable<int>(createdBy.value);
+    }
+    if (postedBy.present) {
+      map['posted_by'] = Variable<int>(postedBy.value);
+    }
+    if (postedAt.present) {
+      map['posted_at'] = Variable<DateTime>(postedAt.value);
     }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
@@ -16365,7 +16980,16 @@ class JournalEntriesCompanion extends UpdateCompanion<JournalEntry> {
           ..write('entryDate: $entryDate, ')
           ..write('accountingPeriodId: $accountingPeriodId, ')
           ..write('status: $status, ')
+          ..write('entryType: $entryType, ')
+          ..write('sourceTable: $sourceTable, ')
+          ..write('sourceId: $sourceId, ')
+          ..write('reversedEntryId: $reversedEntryId, ')
+          ..write('isReversed: $isReversed, ')
+          ..write('totalDebitCents: $totalDebitCents, ')
+          ..write('totalCreditCents: $totalCreditCents, ')
           ..write('createdBy: $createdBy, ')
+          ..write('postedBy: $postedBy, ')
+          ..write('postedAt: $postedAt, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -16454,6 +17078,18 @@ class $JournalEntryLinesTable extends JournalEntryLines
       'REFERENCES currencies (id) ON DELETE RESTRICT',
     ),
   );
+  static const VerificationMeta _lineNumberMeta = const VerificationMeta(
+    'lineNumber',
+  );
+  @override
+  late final GeneratedColumn<int> lineNumber = GeneratedColumn<int>(
+    'line_number',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
   static const VerificationMeta _descriptionMeta = const VerificationMeta(
     'description',
   );
@@ -16485,6 +17121,7 @@ class $JournalEntryLinesTable extends JournalEntryLines
     debitCents,
     creditCents,
     currencyId,
+    lineNumber,
     description,
     createdAt,
   ];
@@ -16529,6 +17166,12 @@ class $JournalEntryLinesTable extends JournalEntryLines
       );
     } else if (isInserting) {
       context.missing(_currencyIdMeta);
+    }
+    if (data.containsKey('line_number')) {
+      context.handle(
+        _lineNumberMeta,
+        lineNumber.isAcceptableOrUnknown(data['line_number']!, _lineNumberMeta),
+      );
     }
     if (data.containsKey('description')) {
       context.handle(
@@ -16582,6 +17225,10 @@ class $JournalEntryLinesTable extends JournalEntryLines
         DriftSqlType.int,
         data['${effectivePrefix}currency_id'],
       )!,
+      lineNumber: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}line_number'],
+      )!,
       description: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}description'],
@@ -16612,6 +17259,7 @@ class JournalEntryLine extends DataClass
   final Decimal debitCents;
   final Decimal creditCents;
   final int currencyId;
+  final int lineNumber;
   final String? description;
   final DateTime createdAt;
   const JournalEntryLine({
@@ -16621,6 +17269,7 @@ class JournalEntryLine extends DataClass
     required this.debitCents,
     required this.creditCents,
     required this.currencyId,
+    required this.lineNumber,
     this.description,
     required this.createdAt,
   });
@@ -16641,6 +17290,7 @@ class JournalEntryLine extends DataClass
       );
     }
     map['currency_id'] = Variable<int>(currencyId);
+    map['line_number'] = Variable<int>(lineNumber);
     if (!nullToAbsent || description != null) {
       map['description'] = Variable<String>(description);
     }
@@ -16656,6 +17306,7 @@ class JournalEntryLine extends DataClass
       debitCents: Value(debitCents),
       creditCents: Value(creditCents),
       currencyId: Value(currencyId),
+      lineNumber: Value(lineNumber),
       description: description == null && nullToAbsent
           ? const Value.absent()
           : Value(description),
@@ -16675,6 +17326,7 @@ class JournalEntryLine extends DataClass
       debitCents: serializer.fromJson<Decimal>(json['debitCents']),
       creditCents: serializer.fromJson<Decimal>(json['creditCents']),
       currencyId: serializer.fromJson<int>(json['currencyId']),
+      lineNumber: serializer.fromJson<int>(json['lineNumber']),
       description: serializer.fromJson<String?>(json['description']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
@@ -16689,6 +17341,7 @@ class JournalEntryLine extends DataClass
       'debitCents': serializer.toJson<Decimal>(debitCents),
       'creditCents': serializer.toJson<Decimal>(creditCents),
       'currencyId': serializer.toJson<int>(currencyId),
+      'lineNumber': serializer.toJson<int>(lineNumber),
       'description': serializer.toJson<String?>(description),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
@@ -16701,6 +17354,7 @@ class JournalEntryLine extends DataClass
     Decimal? debitCents,
     Decimal? creditCents,
     int? currencyId,
+    int? lineNumber,
     Value<String?> description = const Value.absent(),
     DateTime? createdAt,
   }) => JournalEntryLine(
@@ -16710,6 +17364,7 @@ class JournalEntryLine extends DataClass
     debitCents: debitCents ?? this.debitCents,
     creditCents: creditCents ?? this.creditCents,
     currencyId: currencyId ?? this.currencyId,
+    lineNumber: lineNumber ?? this.lineNumber,
     description: description.present ? description.value : this.description,
     createdAt: createdAt ?? this.createdAt,
   );
@@ -16729,6 +17384,9 @@ class JournalEntryLine extends DataClass
       currencyId: data.currencyId.present
           ? data.currencyId.value
           : this.currencyId,
+      lineNumber: data.lineNumber.present
+          ? data.lineNumber.value
+          : this.lineNumber,
       description: data.description.present
           ? data.description.value
           : this.description,
@@ -16745,6 +17403,7 @@ class JournalEntryLine extends DataClass
           ..write('debitCents: $debitCents, ')
           ..write('creditCents: $creditCents, ')
           ..write('currencyId: $currencyId, ')
+          ..write('lineNumber: $lineNumber, ')
           ..write('description: $description, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
@@ -16759,6 +17418,7 @@ class JournalEntryLine extends DataClass
     debitCents,
     creditCents,
     currencyId,
+    lineNumber,
     description,
     createdAt,
   );
@@ -16772,6 +17432,7 @@ class JournalEntryLine extends DataClass
           other.debitCents == this.debitCents &&
           other.creditCents == this.creditCents &&
           other.currencyId == this.currencyId &&
+          other.lineNumber == this.lineNumber &&
           other.description == this.description &&
           other.createdAt == this.createdAt);
 }
@@ -16783,6 +17444,7 @@ class JournalEntryLinesCompanion extends UpdateCompanion<JournalEntryLine> {
   final Value<Decimal> debitCents;
   final Value<Decimal> creditCents;
   final Value<int> currencyId;
+  final Value<int> lineNumber;
   final Value<String?> description;
   final Value<DateTime> createdAt;
   const JournalEntryLinesCompanion({
@@ -16792,6 +17454,7 @@ class JournalEntryLinesCompanion extends UpdateCompanion<JournalEntryLine> {
     this.debitCents = const Value.absent(),
     this.creditCents = const Value.absent(),
     this.currencyId = const Value.absent(),
+    this.lineNumber = const Value.absent(),
     this.description = const Value.absent(),
     this.createdAt = const Value.absent(),
   });
@@ -16802,6 +17465,7 @@ class JournalEntryLinesCompanion extends UpdateCompanion<JournalEntryLine> {
     this.debitCents = const Value.absent(),
     this.creditCents = const Value.absent(),
     required int currencyId,
+    this.lineNumber = const Value.absent(),
     this.description = const Value.absent(),
     this.createdAt = const Value.absent(),
   }) : journalEntryId = Value(journalEntryId),
@@ -16814,6 +17478,7 @@ class JournalEntryLinesCompanion extends UpdateCompanion<JournalEntryLine> {
     Expression<int>? debitCents,
     Expression<int>? creditCents,
     Expression<int>? currencyId,
+    Expression<int>? lineNumber,
     Expression<String>? description,
     Expression<DateTime>? createdAt,
   }) {
@@ -16824,6 +17489,7 @@ class JournalEntryLinesCompanion extends UpdateCompanion<JournalEntryLine> {
       if (debitCents != null) 'debit_cents': debitCents,
       if (creditCents != null) 'credit_cents': creditCents,
       if (currencyId != null) 'currency_id': currencyId,
+      if (lineNumber != null) 'line_number': lineNumber,
       if (description != null) 'description': description,
       if (createdAt != null) 'created_at': createdAt,
     });
@@ -16836,6 +17502,7 @@ class JournalEntryLinesCompanion extends UpdateCompanion<JournalEntryLine> {
     Value<Decimal>? debitCents,
     Value<Decimal>? creditCents,
     Value<int>? currencyId,
+    Value<int>? lineNumber,
     Value<String?>? description,
     Value<DateTime>? createdAt,
   }) {
@@ -16846,6 +17513,7 @@ class JournalEntryLinesCompanion extends UpdateCompanion<JournalEntryLine> {
       debitCents: debitCents ?? this.debitCents,
       creditCents: creditCents ?? this.creditCents,
       currencyId: currencyId ?? this.currencyId,
+      lineNumber: lineNumber ?? this.lineNumber,
       description: description ?? this.description,
       createdAt: createdAt ?? this.createdAt,
     );
@@ -16876,6 +17544,9 @@ class JournalEntryLinesCompanion extends UpdateCompanion<JournalEntryLine> {
     if (currencyId.present) {
       map['currency_id'] = Variable<int>(currencyId.value);
     }
+    if (lineNumber.present) {
+      map['line_number'] = Variable<int>(lineNumber.value);
+    }
     if (description.present) {
       map['description'] = Variable<String>(description.value);
     }
@@ -16894,6 +17565,7 @@ class JournalEntryLinesCompanion extends UpdateCompanion<JournalEntryLine> {
           ..write('debitCents: $debitCents, ')
           ..write('creditCents: $creditCents, ')
           ..write('currencyId: $currencyId, ')
+          ..write('lineNumber: $lineNumber, ')
           ..write('description: $description, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
@@ -19067,24 +19739,6 @@ final class $$UsersTableReferences
     );
   }
 
-  static MultiTypedResultKey<$JournalEntriesTable, List<JournalEntry>>
-  _journalEntriesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
-    db.journalEntries,
-    aliasName: $_aliasNameGenerator(db.users.id, db.journalEntries.createdBy),
-  );
-
-  $$JournalEntriesTableProcessedTableManager get journalEntriesRefs {
-    final manager = $$JournalEntriesTableTableManager(
-      $_db,
-      $_db.journalEntries,
-    ).filter((f) => f.createdBy.id.sqlEquals($_itemColumn<int>('id')!));
-
-    final cache = $_typedResult.readTableOrNull(_journalEntriesRefsTable($_db));
-    return ProcessedTableManager(
-      manager.$state.copyWith(prefetchedData: cache),
-    );
-  }
-
   static MultiTypedResultKey<$AuditLogsTable, List<AuditLog>>
   _auditLogsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.auditLogs,
@@ -19213,31 +19867,6 @@ class $$UsersTableFilterComposer extends Composer<_$AppDatabase, $UsersTable> {
           }) => $$AccountingPeriodsTableFilterComposer(
             $db: $db,
             $table: $db.accountingPeriods,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return f(composer);
-  }
-
-  Expression<bool> journalEntriesRefs(
-    Expression<bool> Function($$JournalEntriesTableFilterComposer f) f,
-  ) {
-    final $$JournalEntriesTableFilterComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.id,
-      referencedTable: $db.journalEntries,
-      getReferencedColumn: (t) => t.createdBy,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$JournalEntriesTableFilterComposer(
-            $db: $db,
-            $table: $db.journalEntries,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -19447,31 +20076,6 @@ class $$UsersTableAnnotationComposer
     return f(composer);
   }
 
-  Expression<T> journalEntriesRefs<T extends Object>(
-    Expression<T> Function($$JournalEntriesTableAnnotationComposer a) f,
-  ) {
-    final $$JournalEntriesTableAnnotationComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.id,
-      referencedTable: $db.journalEntries,
-      getReferencedColumn: (t) => t.createdBy,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$JournalEntriesTableAnnotationComposer(
-            $db: $db,
-            $table: $db.journalEntries,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return f(composer);
-  }
-
   Expression<T> auditLogsRefs<T extends Object>(
     Expression<T> Function($$AuditLogsTableAnnotationComposer a) f,
   ) {
@@ -19563,7 +20167,6 @@ class $$UsersTableTableManager
           User,
           PrefetchHooks Function({
             bool accountingPeriodsRefs,
-            bool journalEntriesRefs,
             bool auditLogsRefs,
             bool voidLogsRefs,
             bool notificationsRefs,
@@ -19633,7 +20236,6 @@ class $$UsersTableTableManager
           prefetchHooksCallback:
               ({
                 accountingPeriodsRefs = false,
-                journalEntriesRefs = false,
                 auditLogsRefs = false,
                 voidLogsRefs = false,
                 notificationsRefs = false,
@@ -19642,7 +20244,6 @@ class $$UsersTableTableManager
                   db: db,
                   explicitlyWatchedTables: [
                     if (accountingPeriodsRefs) db.accountingPeriods,
-                    if (journalEntriesRefs) db.journalEntries,
                     if (auditLogsRefs) db.auditLogs,
                     if (voidLogsRefs) db.voidLogs,
                     if (notificationsRefs) db.notifications,
@@ -19668,27 +20269,6 @@ class $$UsersTableTableManager
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
                                 (e) => e.closedBy == item.id,
-                              ),
-                          typedResults: items,
-                        ),
-                      if (journalEntriesRefs)
-                        await $_getPrefetchedData<
-                          User,
-                          $UsersTable,
-                          JournalEntry
-                        >(
-                          currentTable: table,
-                          referencedTable: $$UsersTableReferences
-                              ._journalEntriesRefsTable(db),
-                          managerFromTypedResult: (p0) =>
-                              $$UsersTableReferences(
-                                db,
-                                table,
-                                p0,
-                              ).journalEntriesRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.createdBy == item.id,
                               ),
                           typedResults: items,
                         ),
@@ -19769,7 +20349,6 @@ typedef $$UsersTableProcessedTableManager =
       User,
       PrefetchHooks Function({
         bool accountingPeriodsRefs,
-        bool journalEntriesRefs,
         bool auditLogsRefs,
         bool voidLogsRefs,
         bool notificationsRefs,
@@ -35136,6 +35715,9 @@ typedef $$AccountsTableCreateCompanionBuilder =
       Value<Decimal> balanceCents,
       required int currencyId,
       Value<bool> isActive,
+      Value<bool> isSystemAccount,
+      Value<int> displayOrder,
+      Value<String?> description,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
     });
@@ -35149,6 +35731,9 @@ typedef $$AccountsTableUpdateCompanionBuilder =
       Value<Decimal> balanceCents,
       Value<int> currencyId,
       Value<bool> isActive,
+      Value<bool> isSystemAccount,
+      Value<int> displayOrder,
+      Value<String?> description,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
     });
@@ -35276,6 +35861,21 @@ class $$AccountsTableFilterComposer
 
   ColumnFilters<bool> get isActive => $composableBuilder(
     column: $table.isActive,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isSystemAccount => $composableBuilder(
+    column: $table.isSystemAccount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get displayOrder => $composableBuilder(
+    column: $table.displayOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get description => $composableBuilder(
+    column: $table.description,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -35425,6 +36025,21 @@ class $$AccountsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get isSystemAccount => $composableBuilder(
+    column: $table.isSystemAccount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get displayOrder => $composableBuilder(
+    column: $table.displayOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -35517,6 +36132,21 @@ class $$AccountsTableAnnotationComposer
 
   GeneratedColumn<bool> get isActive =>
       $composableBuilder(column: $table.isActive, builder: (column) => column);
+
+  GeneratedColumn<bool> get isSystemAccount => $composableBuilder(
+    column: $table.isSystemAccount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get displayOrder => $composableBuilder(
+    column: $table.displayOrder,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -35663,6 +36293,9 @@ class $$AccountsTableTableManager
                 Value<Decimal> balanceCents = const Value.absent(),
                 Value<int> currencyId = const Value.absent(),
                 Value<bool> isActive = const Value.absent(),
+                Value<bool> isSystemAccount = const Value.absent(),
+                Value<int> displayOrder = const Value.absent(),
+                Value<String?> description = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
               }) => AccountsCompanion(
@@ -35674,6 +36307,9 @@ class $$AccountsTableTableManager
                 balanceCents: balanceCents,
                 currencyId: currencyId,
                 isActive: isActive,
+                isSystemAccount: isSystemAccount,
+                displayOrder: displayOrder,
+                description: description,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
               ),
@@ -35687,6 +36323,9 @@ class $$AccountsTableTableManager
                 Value<Decimal> balanceCents = const Value.absent(),
                 required int currencyId,
                 Value<bool> isActive = const Value.absent(),
+                Value<bool> isSystemAccount = const Value.absent(),
+                Value<int> displayOrder = const Value.absent(),
+                Value<String?> description = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
               }) => AccountsCompanion.insert(
@@ -35698,6 +36337,9 @@ class $$AccountsTableTableManager
                 balanceCents: balanceCents,
                 currencyId: currencyId,
                 isActive: isActive,
+                isSystemAccount: isSystemAccount,
+                displayOrder: displayOrder,
+                description: description,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
               ),
@@ -36348,7 +36990,16 @@ typedef $$JournalEntriesTableCreateCompanionBuilder =
       Value<DateTime> entryDate,
       Value<int?> accountingPeriodId,
       Value<String> status,
+      Value<String> entryType,
+      Value<String?> sourceTable,
+      Value<int?> sourceId,
+      Value<int?> reversedEntryId,
+      Value<bool> isReversed,
+      Value<Decimal> totalDebitCents,
+      Value<Decimal> totalCreditCents,
       Value<int?> createdBy,
+      Value<int?> postedBy,
+      Value<DateTime?> postedAt,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
     });
@@ -36360,7 +37011,16 @@ typedef $$JournalEntriesTableUpdateCompanionBuilder =
       Value<DateTime> entryDate,
       Value<int?> accountingPeriodId,
       Value<String> status,
+      Value<String> entryType,
+      Value<String?> sourceTable,
+      Value<int?> sourceId,
+      Value<int?> reversedEntryId,
+      Value<bool> isReversed,
+      Value<Decimal> totalDebitCents,
+      Value<Decimal> totalCreditCents,
       Value<int?> createdBy,
+      Value<int?> postedBy,
+      Value<DateTime?> postedAt,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
     });
@@ -36395,6 +37055,28 @@ final class $$JournalEntriesTableReferences
     );
   }
 
+  static $JournalEntriesTable _reversedEntryIdTable(_$AppDatabase db) =>
+      db.journalEntries.createAlias(
+        $_aliasNameGenerator(
+          db.journalEntries.reversedEntryId,
+          db.journalEntries.id,
+        ),
+      );
+
+  $$JournalEntriesTableProcessedTableManager? get reversedEntryId {
+    final $_column = $_itemColumn<int>('reversed_entry_id');
+    if ($_column == null) return null;
+    final manager = $$JournalEntriesTableTableManager(
+      $_db,
+      $_db.journalEntries,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_reversedEntryIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
   static $UsersTable _createdByTable(_$AppDatabase db) => db.users.createAlias(
     $_aliasNameGenerator(db.journalEntries.createdBy, db.users.id),
   );
@@ -36407,6 +37089,24 @@ final class $$JournalEntriesTableReferences
       $_db.users,
     ).filter((f) => f.id.sqlEquals($_column));
     final item = $_typedResult.readTableOrNull(_createdByTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $UsersTable _postedByTable(_$AppDatabase db) => db.users.createAlias(
+    $_aliasNameGenerator(db.journalEntries.postedBy, db.users.id),
+  );
+
+  $$UsersTableProcessedTableManager? get postedBy {
+    final $_column = $_itemColumn<int>('posted_by');
+    if ($_column == null) return null;
+    final manager = $$UsersTableTableManager(
+      $_db,
+      $_db.users,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_postedByTable($_db));
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
@@ -36472,6 +37172,43 @@ class $$JournalEntriesTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get entryType => $composableBuilder(
+    column: $table.entryType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sourceTable => $composableBuilder(
+    column: $table.sourceTable,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sourceId => $composableBuilder(
+    column: $table.sourceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isReversed => $composableBuilder(
+    column: $table.isReversed,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<Decimal, Decimal, int> get totalDebitCents =>
+      $composableBuilder(
+        column: $table.totalDebitCents,
+        builder: (column) => ColumnWithTypeConverterFilters(column),
+      );
+
+  ColumnWithTypeConverterFilters<Decimal, Decimal, int> get totalCreditCents =>
+      $composableBuilder(
+        column: $table.totalCreditCents,
+        builder: (column) => ColumnWithTypeConverterFilters(column),
+      );
+
+  ColumnFilters<DateTime> get postedAt => $composableBuilder(
+    column: $table.postedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnFilters(column),
@@ -36505,10 +37242,56 @@ class $$JournalEntriesTableFilterComposer
     return composer;
   }
 
+  $$JournalEntriesTableFilterComposer get reversedEntryId {
+    final $$JournalEntriesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.reversedEntryId,
+      referencedTable: $db.journalEntries,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$JournalEntriesTableFilterComposer(
+            $db: $db,
+            $table: $db.journalEntries,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
   $$UsersTableFilterComposer get createdBy {
     final $$UsersTableFilterComposer composer = $composerBuilder(
       composer: this,
       getCurrentColumn: (t) => t.createdBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableFilterComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableFilterComposer get postedBy {
+    final $$UsersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.postedBy,
       referencedTable: $db.users,
       getReferencedColumn: (t) => t.id,
       builder:
@@ -36588,6 +37371,41 @@ class $$JournalEntriesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get entryType => $composableBuilder(
+    column: $table.entryType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get sourceTable => $composableBuilder(
+    column: $table.sourceTable,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get sourceId => $composableBuilder(
+    column: $table.sourceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isReversed => $composableBuilder(
+    column: $table.isReversed,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get totalDebitCents => $composableBuilder(
+    column: $table.totalDebitCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get totalCreditCents => $composableBuilder(
+    column: $table.totalCreditCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get postedAt => $composableBuilder(
+    column: $table.postedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -36621,10 +37439,56 @@ class $$JournalEntriesTableOrderingComposer
     return composer;
   }
 
+  $$JournalEntriesTableOrderingComposer get reversedEntryId {
+    final $$JournalEntriesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.reversedEntryId,
+      referencedTable: $db.journalEntries,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$JournalEntriesTableOrderingComposer(
+            $db: $db,
+            $table: $db.journalEntries,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
   $$UsersTableOrderingComposer get createdBy {
     final $$UsersTableOrderingComposer composer = $composerBuilder(
       composer: this,
       getCurrentColumn: (t) => t.createdBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableOrderingComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableOrderingComposer get postedBy {
+    final $$UsersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.postedBy,
       referencedTable: $db.users,
       getReferencedColumn: (t) => t.id,
       builder:
@@ -36673,6 +37537,37 @@ class $$JournalEntriesTableAnnotationComposer
   GeneratedColumn<String> get status =>
       $composableBuilder(column: $table.status, builder: (column) => column);
 
+  GeneratedColumn<String> get entryType =>
+      $composableBuilder(column: $table.entryType, builder: (column) => column);
+
+  GeneratedColumn<String> get sourceTable => $composableBuilder(
+    column: $table.sourceTable,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get sourceId =>
+      $composableBuilder(column: $table.sourceId, builder: (column) => column);
+
+  GeneratedColumn<bool> get isReversed => $composableBuilder(
+    column: $table.isReversed,
+    builder: (column) => column,
+  );
+
+  GeneratedColumnWithTypeConverter<Decimal, int> get totalDebitCents =>
+      $composableBuilder(
+        column: $table.totalDebitCents,
+        builder: (column) => column,
+      );
+
+  GeneratedColumnWithTypeConverter<Decimal, int> get totalCreditCents =>
+      $composableBuilder(
+        column: $table.totalCreditCents,
+        builder: (column) => column,
+      );
+
+  GeneratedColumn<DateTime> get postedAt =>
+      $composableBuilder(column: $table.postedAt, builder: (column) => column);
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -36703,10 +37598,56 @@ class $$JournalEntriesTableAnnotationComposer
     return composer;
   }
 
+  $$JournalEntriesTableAnnotationComposer get reversedEntryId {
+    final $$JournalEntriesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.reversedEntryId,
+      referencedTable: $db.journalEntries,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$JournalEntriesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.journalEntries,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
   $$UsersTableAnnotationComposer get createdBy {
     final $$UsersTableAnnotationComposer composer = $composerBuilder(
       composer: this,
       getCurrentColumn: (t) => t.createdBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableAnnotationComposer get postedBy {
+    final $$UsersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.postedBy,
       referencedTable: $db.users,
       getReferencedColumn: (t) => t.id,
       builder:
@@ -36768,7 +37709,9 @@ class $$JournalEntriesTableTableManager
           JournalEntry,
           PrefetchHooks Function({
             bool accountingPeriodId,
+            bool reversedEntryId,
             bool createdBy,
+            bool postedBy,
             bool journalEntryLinesRefs,
           })
         > {
@@ -36793,7 +37736,16 @@ class $$JournalEntriesTableTableManager
                 Value<DateTime> entryDate = const Value.absent(),
                 Value<int?> accountingPeriodId = const Value.absent(),
                 Value<String> status = const Value.absent(),
+                Value<String> entryType = const Value.absent(),
+                Value<String?> sourceTable = const Value.absent(),
+                Value<int?> sourceId = const Value.absent(),
+                Value<int?> reversedEntryId = const Value.absent(),
+                Value<bool> isReversed = const Value.absent(),
+                Value<Decimal> totalDebitCents = const Value.absent(),
+                Value<Decimal> totalCreditCents = const Value.absent(),
                 Value<int?> createdBy = const Value.absent(),
+                Value<int?> postedBy = const Value.absent(),
+                Value<DateTime?> postedAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
               }) => JournalEntriesCompanion(
@@ -36803,7 +37755,16 @@ class $$JournalEntriesTableTableManager
                 entryDate: entryDate,
                 accountingPeriodId: accountingPeriodId,
                 status: status,
+                entryType: entryType,
+                sourceTable: sourceTable,
+                sourceId: sourceId,
+                reversedEntryId: reversedEntryId,
+                isReversed: isReversed,
+                totalDebitCents: totalDebitCents,
+                totalCreditCents: totalCreditCents,
                 createdBy: createdBy,
+                postedBy: postedBy,
+                postedAt: postedAt,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
               ),
@@ -36815,7 +37776,16 @@ class $$JournalEntriesTableTableManager
                 Value<DateTime> entryDate = const Value.absent(),
                 Value<int?> accountingPeriodId = const Value.absent(),
                 Value<String> status = const Value.absent(),
+                Value<String> entryType = const Value.absent(),
+                Value<String?> sourceTable = const Value.absent(),
+                Value<int?> sourceId = const Value.absent(),
+                Value<int?> reversedEntryId = const Value.absent(),
+                Value<bool> isReversed = const Value.absent(),
+                Value<Decimal> totalDebitCents = const Value.absent(),
+                Value<Decimal> totalCreditCents = const Value.absent(),
                 Value<int?> createdBy = const Value.absent(),
+                Value<int?> postedBy = const Value.absent(),
+                Value<DateTime?> postedAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
               }) => JournalEntriesCompanion.insert(
@@ -36825,7 +37795,16 @@ class $$JournalEntriesTableTableManager
                 entryDate: entryDate,
                 accountingPeriodId: accountingPeriodId,
                 status: status,
+                entryType: entryType,
+                sourceTable: sourceTable,
+                sourceId: sourceId,
+                reversedEntryId: reversedEntryId,
+                isReversed: isReversed,
+                totalDebitCents: totalDebitCents,
+                totalCreditCents: totalCreditCents,
                 createdBy: createdBy,
+                postedBy: postedBy,
+                postedAt: postedAt,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
               ),
@@ -36840,7 +37819,9 @@ class $$JournalEntriesTableTableManager
           prefetchHooksCallback:
               ({
                 accountingPeriodId = false,
+                reversedEntryId = false,
                 createdBy = false,
+                postedBy = false,
                 journalEntryLinesRefs = false,
               }) {
                 return PrefetchHooks(
@@ -36879,6 +37860,21 @@ class $$JournalEntriesTableTableManager
                                   )
                                   as T;
                         }
+                        if (reversedEntryId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.reversedEntryId,
+                                    referencedTable:
+                                        $$JournalEntriesTableReferences
+                                            ._reversedEntryIdTable(db),
+                                    referencedColumn:
+                                        $$JournalEntriesTableReferences
+                                            ._reversedEntryIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
                         if (createdBy) {
                           state =
                               state.withJoin(
@@ -36890,6 +37886,21 @@ class $$JournalEntriesTableTableManager
                                     referencedColumn:
                                         $$JournalEntriesTableReferences
                                             ._createdByTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (postedBy) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.postedBy,
+                                    referencedTable:
+                                        $$JournalEntriesTableReferences
+                                            ._postedByTable(db),
+                                    referencedColumn:
+                                        $$JournalEntriesTableReferences
+                                            ._postedByTable(db)
                                             .id,
                                   )
                                   as T;
@@ -36942,7 +37953,9 @@ typedef $$JournalEntriesTableProcessedTableManager =
       JournalEntry,
       PrefetchHooks Function({
         bool accountingPeriodId,
+        bool reversedEntryId,
         bool createdBy,
+        bool postedBy,
         bool journalEntryLinesRefs,
       })
     >;
@@ -36954,6 +37967,7 @@ typedef $$JournalEntryLinesTableCreateCompanionBuilder =
       Value<Decimal> debitCents,
       Value<Decimal> creditCents,
       required int currencyId,
+      Value<int> lineNumber,
       Value<String?> description,
       Value<DateTime> createdAt,
     });
@@ -36965,6 +37979,7 @@ typedef $$JournalEntryLinesTableUpdateCompanionBuilder =
       Value<Decimal> debitCents,
       Value<Decimal> creditCents,
       Value<int> currencyId,
+      Value<int> lineNumber,
       Value<String?> description,
       Value<DateTime> createdAt,
     });
@@ -37069,6 +38084,11 @@ class $$JournalEntryLinesTableFilterComposer
         builder: (column) => ColumnWithTypeConverterFilters(column),
       );
 
+  ColumnFilters<int> get lineNumber => $composableBuilder(
+    column: $table.lineNumber,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<String> get description => $composableBuilder(
     column: $table.description,
     builder: (column) => ColumnFilters(column),
@@ -37170,6 +38190,11 @@ class $$JournalEntryLinesTableOrderingComposer
 
   ColumnOrderings<int> get creditCents => $composableBuilder(
     column: $table.creditCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get lineNumber => $composableBuilder(
+    column: $table.lineNumber,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -37276,6 +38301,11 @@ class $$JournalEntryLinesTableAnnotationComposer
         column: $table.creditCents,
         builder: (column) => column,
       );
+
+  GeneratedColumn<int> get lineNumber => $composableBuilder(
+    column: $table.lineNumber,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<String> get description => $composableBuilder(
     column: $table.description,
@@ -37398,6 +38428,7 @@ class $$JournalEntryLinesTableTableManager
                 Value<Decimal> debitCents = const Value.absent(),
                 Value<Decimal> creditCents = const Value.absent(),
                 Value<int> currencyId = const Value.absent(),
+                Value<int> lineNumber = const Value.absent(),
                 Value<String?> description = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
               }) => JournalEntryLinesCompanion(
@@ -37407,6 +38438,7 @@ class $$JournalEntryLinesTableTableManager
                 debitCents: debitCents,
                 creditCents: creditCents,
                 currencyId: currencyId,
+                lineNumber: lineNumber,
                 description: description,
                 createdAt: createdAt,
               ),
@@ -37418,6 +38450,7 @@ class $$JournalEntryLinesTableTableManager
                 Value<Decimal> debitCents = const Value.absent(),
                 Value<Decimal> creditCents = const Value.absent(),
                 required int currencyId,
+                Value<int> lineNumber = const Value.absent(),
                 Value<String?> description = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
               }) => JournalEntryLinesCompanion.insert(
@@ -37427,6 +38460,7 @@ class $$JournalEntryLinesTableTableManager
                 debitCents: debitCents,
                 creditCents: creditCents,
                 currencyId: currencyId,
+                lineNumber: lineNumber,
                 description: description,
                 createdAt: createdAt,
               ),

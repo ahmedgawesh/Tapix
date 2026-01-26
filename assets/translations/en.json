@@ -303,6 +303,8 @@
     "selected": "Selected",
     "select_all": "Select All",
     "deselect_all": "Deselect All",
+    "print_label": "Print Label",
+    "products_search_voice": "Voice Search",
     "permission": {
       "required_permission_or_role": "Either requiredPermission or requiredRole must be provided",
       "allowed_roles_or_min_role": "Either allowedRoles or minRole must be provided"

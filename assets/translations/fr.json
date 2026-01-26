@@ -301,6 +301,8 @@
     "selected": "sélectionné",
     "select_all": "Tout sélectionner",
     "deselect_all": "Tout désélectionner",
+    "print_label": "Imprimer l'étiquette",
+    "products_search_voice": "Recherche Vocale",
     "permission": {
       "required_permission_or_role": "Soit requiredPermission ou requiredRole doit être fourni",
       "allowed_roles_or_min_role": "Soit allowedRoles ou minRole doit être fourni"

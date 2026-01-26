@@ -300,6 +300,8 @@
     "selected": "محدد",
     "select_all": "تحديد الكل",
     "deselect_all": "إلغاء تحديد الكل",
+    "print_label": "طباعة البطاقة",
+    "products_search_voice": "بحث صوتي",
     "permission": {
       "required_permission_or_role": "يجب توفير requiredPermission أو requiredRole",
       "allowed_roles_or_min_role": "يجب توفير allowedRoles أو minRole"
