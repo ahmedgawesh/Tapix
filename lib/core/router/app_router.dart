@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../features/auth/auth.dart';
@@ -12,6 +13,9 @@ import '../../features/products/presentation/screens/bulk_product_form_screen.da
 import '../../features/products/presentation/screens/edit_prices_screen.dart';
 import '../../features/products/presentation/screens/import_products_screen.dart';
 import '../../features/products/presentation/screens/simple_export_screen.dart';
+import '../../features/products/presentation/screens/categories_screen.dart';
+import '../../features/products/presentation/screens/category_form_screen.dart';
+import '../../features/products/presentation/bloc/categories_bloc.dart';
 import '../../features/products/domain/entities/product_entity.dart';
 import '../../features/barcode/presentation/screens/barcode_scanner_screen.dart';
 import '../../features/barcode/presentation/screens/barcode_label_designer_screen.dart';
@@ -190,6 +194,29 @@ class AppRouter {
           GoRoute(
             path: 'export',
             builder: (context, state) => const SimpleExportScreen(),
+          ),
+          GoRoute(
+            path: 'categories',
+            builder: (context, state) => const CategoriesScreen(),
+            routes: [
+              GoRoute(
+                path: 'new',
+                builder: (context, state) => BlocProvider(
+                  create: (_) => sl<CategoriesBloc>(),
+                  child: const CategoryFormScreen(),
+                ),
+              ),
+              GoRoute(
+                path: ':id/edit',
+                builder: (context, state) {
+                  final id = int.tryParse(state.pathParameters['id'] ?? '');
+                  return BlocProvider(
+                    create: (_) => sl<CategoriesBloc>(),
+                    child: CategoryFormScreen(categoryId: id),
+                  );
+                },
+              ),
+            ],
           ),
         ],
       ),

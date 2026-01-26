@@ -21174,6 +21174,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final ProductColorDao productColorDao = ProductColorDao(
     this as AppDatabase,
   );
+  late final CategoryDao categoryDao = CategoryDao(this as AppDatabase);
   late final SizeDao sizeDao = SizeDao(this as AppDatabase);
   late final SaleDao saleDao = SaleDao(this as AppDatabase);
   late final CustomerDao customerDao = CustomerDao(this as AppDatabase);

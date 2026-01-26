@@ -515,5 +515,30 @@
     "column_name": "الاسم",
     "column_price_cents": "السعر (بالسنت)",
     "column_stock": "المخزون"
+  },
+  "categories": {
+    "title": "التصنيفات",
+    "add_category": "إضافة تصنيف",
+    "edit_category": "تعديل التصنيف",
+    "search_hint": "البحث في التصنيفات...",
+    "no_categories": "لا توجد تصنيفات",
+    "add_first_category": "أضف تصنيفك الأول لتنظيم المنتجات",
+    "operation_success": "تمت العملية بنجاح",
+    "error_loading": "خطأ في تحميل التصنيفات",
+    "error_loading_category": "خطأ في تحميل تفاصيل التصنيف",
+    "error_saving": "فشل حفظ التصنيف",
+    "delete_confirm_title": "حذف التصنيف",
+    "delete_confirm_message": "هل أنت متأكد من حذف '{}'؟",
+    "delete_with_products": "لا يمكن حذف التصنيف. {} منتجات مرتبطة بهذا التصنيف.",
+    "product_count": "{} منتجات",
+    "basic_info": "المعلومات الأساسية",
+    "name": "اسم التصنيف",
+    "name_hint": "أدخل اسم التصنيف",
+    "name_required": "اسم التصنيف مطلوب",
+    "description": "الوصف",
+    "description_hint": "أدخل وصف التصنيف (اختياري)",
+    "parent_category": "التصنيف الأب",
+    "parent_category_hint": "اختر التصنيف الأب (اختياري)",
+    "no_parent": "بدون أب (المستوى الأعلى)"
   }
 }

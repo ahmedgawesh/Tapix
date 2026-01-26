@@ -515,5 +515,30 @@
     "column_name": "Name",
     "column_price_cents": "Price (Cents)",
     "column_stock": "Stock"
+  },
+  "categories": {
+    "title": "Categories",
+    "add_category": "Add Category",
+    "edit_category": "Edit Category",
+    "search_hint": "Search categories...",
+    "no_categories": "No Categories",
+    "add_first_category": "Add your first category to organize products",
+    "operation_success": "Operation completed successfully",
+    "error_loading": "Error loading categories",
+    "error_loading_category": "Error loading category details",
+    "error_saving": "Failed to save category",
+    "delete_confirm_title": "Delete Category",
+    "delete_confirm_message": "Are you sure you want to delete '{}'?",
+    "delete_with_products": "Cannot delete category. {} products are assigned to this category.",
+    "product_count": "{} products",
+    "basic_info": "Basic Information",
+    "name": "Category Name",
+    "name_hint": "Enter category name",
+    "name_required": "Category name is required",
+    "description": "Description",
+    "description_hint": "Enter category description (optional)",
+    "parent_category": "Parent Category",
+    "parent_category_hint": "Select parent category (optional)",
+    "no_parent": "No Parent (Top Level)"
   }
 }

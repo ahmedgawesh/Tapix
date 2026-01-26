@@ -7,6 +7,7 @@ import '../database/app_database.dart';
 import '../database/daos/product_dao.dart';
 import '../database/daos/product_variant_dao.dart';
 import '../database/daos/product_color_dao.dart';
+import '../database/daos/category_dao.dart';
 import '../database/daos/size_dao.dart';
 import '../database/daos/settings_dao.dart';
 import '../database/daos/barcode_template_dao.dart';
@@ -16,8 +17,10 @@ import '../services/theme_service.dart';
 import '../../features/auth/auth.dart';
 import '../../features/products/domain/repositories/product_repository.dart';
 import '../../features/products/domain/repositories/product_variant_repository.dart';
+import '../../features/products/domain/repositories/category_repository.dart';
 import '../../features/products/data/repositories/product_repository_impl.dart';
 import '../../features/products/data/repositories/product_variant_repository_impl.dart';
+import '../../features/products/data/repositories/category_repository_impl.dart';
 import '../../features/products/data/datasources/product_local_datasource.dart';
 import '../../features/products/data/datasources/variant_local_datasource.dart';
 import '../../features/products/presentation/bloc/products_bloc.dart';
@@ -27,6 +30,7 @@ import '../../features/products/presentation/bloc/bulk_product_bloc.dart';
 import '../../features/products/presentation/bloc/edit_prices_bloc.dart';
 import '../../features/products/presentation/bloc/import_products_bloc.dart';
 import '../../features/products/presentation/bloc/export_bloc.dart';
+import '../../features/products/presentation/bloc/categories_bloc.dart';
 import '../../features/products/services/file_import_service.dart';
 import '../../features/products/services/import_validation_service.dart';
 import '../../features/products/services/product_import_service.dart';
@@ -54,6 +58,7 @@ Future<void> init() async {
   sl.registerLazySingleton(() => ProductDao(sl()));
   sl.registerLazySingleton(() => ProductVariantDao(sl()));
   sl.registerLazySingleton(() => ProductColorDao(sl()));
+  sl.registerLazySingleton(() => CategoryDao(sl()));
   sl.registerLazySingleton(() => SizeDao(sl()));
   sl.registerLazySingleton(() => SettingsDao(sl()));
   sl.registerLazySingleton(() => BarcodeTemplateDao(sl()));
@@ -90,6 +95,9 @@ Future<void> init() async {
   sl.registerLazySingleton<ProductVariantRepository>(
     () => ProductVariantRepositoryImpl(sl()),
   );
+  sl.registerLazySingleton<CategoryRepository>(
+    () => CategoryRepositoryImpl(sl()),
+  );
 
   // Blocs
   sl.registerFactory(() => ThemeBloc(sl()));
@@ -120,6 +128,7 @@ Future<void> init() async {
   sl.registerFactory(() => EditPricesBloc(sl<ProductRepository>()));
   sl.registerFactory(() => ColorsBloc(sl<ProductVariantRepository>()));
   sl.registerFactory(() => SizesBloc(sl<ProductVariantRepository>()));
+  sl.registerFactory(() => CategoriesBloc(sl<CategoryRepository>()));
   sl.registerFactory(() => ImportProductsBloc(
     parseImportFile: sl<ParseImportFile>(),
     validateImportData: sl<ValidateImportData>(),

@@ -17,6 +17,7 @@ import 'converters/timestamp_converter.dart';
 import 'daos/product_dao.dart';
 import 'daos/product_variant_dao.dart';
 import 'daos/product_color_dao.dart';
+import 'daos/category_dao.dart';
 import 'daos/size_dao.dart';
 import 'daos/sale_dao.dart';
 import 'daos/customer_dao.dart';
@@ -71,6 +72,7 @@ part 'app_database.g.dart';
     ProductDao,
     ProductVariantDao,
     ProductColorDao,
+    CategoryDao,
     SizeDao,
     SaleDao,
     CustomerDao,

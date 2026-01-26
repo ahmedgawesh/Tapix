@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../services/logging_service.dart';
 
 /// Base state class for all realtime bloc states
 abstract class RealtimeState<T> {
@@ -163,19 +164,28 @@ abstract class RealtimeBloc<T, E extends RealtimeEvent>
   }
 
   void _subscribe() {
+    LoggingService.methodEntry('_subscribe', tag: runtimeType.toString());
     _subscription?.cancel();
     _subscription = dataStream.listen(
       (data) {
         if (!_isDisposed) {
+          LoggingService.debug('Stream data received', tag: runtimeType.toString());
           add(RealtimeDataUpdated<T>(data));
         }
       },
       onError: (Object error, StackTrace stackTrace) {
+        LoggingService.error(
+          'Stream error occurred',
+          error: error,
+          stackTrace: stackTrace,
+          tag: runtimeType.toString(),
+        );
         if (!_isDisposed) {
           add(RealtimeErrorOccurred(error, stackTrace));
         }
       },
     );
+    LoggingService.methodExit('_subscribe', tag: runtimeType.toString());
   }
 
   void _onDataUpdated(
@@ -192,6 +202,14 @@ abstract class RealtimeBloc<T, E extends RealtimeEvent>
     RealtimeErrorOccurred event,
     Emitter<RealtimeState<T>> emit,
   ) {
+    // Log the error to console for debugging
+    LoggingService.error(
+      'RealtimeBloc error occurred',
+      error: event.error,
+      stackTrace: event.stackTrace,
+      tag: runtimeType.toString(),
+    );
+    
     final previousData = _extractData(state);
     emit(
       mapErrorToState(
@@ -280,6 +298,12 @@ abstract class RealtimeBloc<T, E extends RealtimeEvent>
     required T optimisticData,
     required Future<void> Function() operation,
   }) async {
+    LoggingService.methodEntry(
+      'performOptimisticUpdate',
+      params: {'operationId': operationId},
+      tag: runtimeType.toString(),
+    );
+    
     add(RealtimeOptimisticUpdate<T>(
       optimisticData: optimisticData,
       operationId: operationId,
@@ -287,10 +311,19 @@ abstract class RealtimeBloc<T, E extends RealtimeEvent>
 
     try {
       await operation();
+      LoggingService.debug('Optimistic operation succeeded', tag: runtimeType.toString());
       add(RealtimeOptimisticConfirmed(operationId));
-    } catch (e) {
+    } catch (e, st) {
+      LoggingService.error(
+        'Optimistic operation failed',
+        error: e,
+        stackTrace: st,
+        tag: runtimeType.toString(),
+      );
       add(RealtimeOptimisticRollback(operationId, e));
       rethrow;
+    } finally {
+      LoggingService.methodExit('performOptimisticUpdate', tag: runtimeType.toString());
     }
   }
 

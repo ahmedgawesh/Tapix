@@ -515,5 +515,30 @@
     "column_name": "Nom",
     "column_price_cents": "Prix (Centimes)",
     "column_stock": "Stock"
+  },
+  "categories": {
+    "title": "Catégories",
+    "add_category": "Ajouter une Catégorie",
+    "edit_category": "Modifier la Catégorie",
+    "search_hint": "Rechercher des catégories...",
+    "no_categories": "Aucune Catégorie",
+    "add_first_category": "Ajoutez votre première catégorie pour organiser les produits",
+    "operation_success": "Opération réussie",
+    "error_loading": "Erreur lors du chargement des catégories",
+    "error_loading_category": "Erreur lors du chargement des détails de la catégorie",
+    "error_saving": "Échec de l'enregistrement de la catégorie",
+    "delete_confirm_title": "Supprimer la Catégorie",
+    "delete_confirm_message": "Êtes-vous sûr de vouloir supprimer '{}'?",
+    "delete_with_products": "Impossible de supprimer la catégorie. {} produits sont assignés à cette catégorie.",
+    "product_count": "{} produits",
+    "basic_info": "Informations de Base",
+    "name": "Nom de la Catégorie",
+    "name_hint": "Entrez le nom de la catégorie",
+    "name_required": "Le nom de la catégorie est requis",
+    "description": "Description",
+    "description_hint": "Entrez la description de la catégorie (optionnel)",
+    "parent_category": "Catégorie Parente",
+    "parent_category_hint": "Sélectionnez la catégorie parente (optionnel)",
+    "no_parent": "Aucun Parent (Niveau Supérieur)"
   }
 }
