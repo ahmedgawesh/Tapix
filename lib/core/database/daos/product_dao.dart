@@ -83,6 +83,53 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
     return query.watch();
   }
 
+  Stream<List<Product>> watchProductsForExport({
+    int? categoryId,
+    int? supplierId,
+    bool activeOnly = true,
+  }) {
+    final query = select(products);
+
+    if (activeOnly) {
+      query.where((p) => p.isActive.equals(true));
+    }
+    if (categoryId != null) {
+      query.where((p) => p.categoryId.equals(categoryId));
+    }
+    if (supplierId != null) {
+      query.where((p) => p.supplierId.equals(supplierId));
+    }
+
+    query.orderBy([(p) => OrderingTerm(expression: p.name)]);
+    return query.watch();
+  }
+
+  Future<List<Product>> fetchProductsForExport({
+    int? categoryId,
+    int? supplierId,
+    bool activeOnly = true,
+    int limit = 1000,
+    int offset = 0,
+  }) {
+    final query = select(products);
+
+    if (activeOnly) {
+      query.where((p) => p.isActive.equals(true));
+    }
+    if (categoryId != null) {
+      query.where((p) => p.categoryId.equals(categoryId));
+    }
+    if (supplierId != null) {
+      query.where((p) => p.supplierId.equals(supplierId));
+    }
+
+    query
+      ..orderBy([(p) => OrderingTerm(expression: p.name)])
+      ..limit(limit, offset: offset);
+
+    return query.get();
+  }
+
   Future<Product?> findBySku(String sku) {
     return (select(products)..where((p) => p.sku.equals(sku))).getSingleOrNull();
   }
