@@ -370,5 +370,31 @@
     "return_on_scan": "returnOnScan",
     "price_cents": "priceCents",
     "wholesale_price_cents": "wholesalePriceCents"
+  },
+  "export_products": {
+    "title": "تصدير المنتجات",
+    "format_selection": "صيغة التصدير",
+    "csv_format": "CSV",
+    "excel_format": "إكسل",
+    "csv_description": "تنسيق نصي، متوافق مع جميع تطبيقات جداول البيانات",
+    "excel_description": "تنسيق مايكروسوفت إكسل مع تنسيق غني",
+    "filters": "فلاتر التصدير",
+    "filters_description": "سيتم تصدير جميع المنتجات النشطة",
+    "preview": "معاينة",
+    "preview_description": "عرض أول {} منتجات",
+    "no_products": "لا توجد منتجات للتصدير",
+    "export_button": "تصدير المنتجات",
+    "exporting": "جاري التصدير...",
+    "progress": "جاري تحضير التصدير...",
+    "success": "تم حفظ التصدير بنجاح",
+    "error": "فشل التصدير",
+    "save_error": "فشل حفظ الملف",
+    "share_message": "تصدير المنتجات",
+    "open_folder": "فتح المجلد",
+    "column_id": "المعرف",
+    "column_sku": "رمز المنتج",
+    "column_name": "الاسم",
+    "column_price_cents": "السعر (بالسنت)",
+    "column_stock": "المخزون"
   }
 }

@@ -371,5 +371,31 @@
     "return_on_scan": "returnOnScan",
     "price_cents": "priceCents",
     "wholesale_price_cents": "wholesalePriceCents"
+  },
+  "export_products": {
+    "title": "Exporter les Produits",
+    "format_selection": "Format d'Exportation",
+    "csv_format": "CSV",
+    "excel_format": "Excel",
+    "csv_description": "Format texte, compatible avec toutes les applications de feuilles de calcul",
+    "excel_description": "Format Microsoft Excel avec mise en forme enrichie",
+    "filters": "Filtres d'Exportation",
+    "filters_description": "Tous les produits actifs seront exportés",
+    "preview": "Aperçu",
+    "preview_description": "Affichage des premiers {} produits",
+    "no_products": "Aucun produit à exporter",
+    "export_button": "Exporter les Produits",
+    "exporting": "Exportation en cours...",
+    "progress": "Préparation de l'exportation...",
+    "success": "Exportation enregistrée avec succès",
+    "error": "Échec de l'exportation",
+    "save_error": "Échec de l'enregistrement du fichier",
+    "share_message": "Exportation des Produits",
+    "open_folder": "Ouvrir le Dossier",
+    "column_id": "ID",
+    "column_sku": "SKU",
+    "column_name": "Nom",
+    "column_price_cents": "Prix (Centimes)",
+    "column_stock": "Stock"
   }
 }

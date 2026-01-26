@@ -25,9 +25,11 @@ import '../../features/products/presentation/bloc/product_variants_bloc.dart';
 import '../../features/products/presentation/bloc/bulk_product_bloc.dart';
 import '../../features/products/presentation/bloc/edit_prices_bloc.dart';
 import '../../features/products/presentation/bloc/import_products_bloc.dart';
+import '../../features/products/presentation/bloc/export_bloc.dart';
 import '../../features/products/services/file_import_service.dart';
 import '../../features/products/services/import_validation_service.dart';
 import '../../features/products/services/product_import_service.dart';
+import '../../features/products/services/export_service.dart';
 import '../../features/products/domain/usecases/parse_import_file.dart';
 import '../../features/products/domain/usecases/validate_import_data.dart';
 import '../../features/products/domain/usecases/import_products.dart';
@@ -101,6 +103,11 @@ Future<void> init() async {
     () => ProductImportService(sl<ProductRepository>()),
   );
 
+  // Export Products Services
+  sl.registerLazySingleton<ExportService>(
+    () => ExportServiceImpl(sl<ProductRepository>()),
+  );
+
   // Feature Blocs
   sl.registerFactory(() => ProductsBloc(sl()));
   sl.registerFactory(() => ProductFormBloc(sl()));
@@ -115,6 +122,7 @@ Future<void> init() async {
     importProducts: sl<ImportProducts>(),
     currencyService: sl<CurrencyService>(),
   ));
+  sl.registerFactory(() => ExportBloc(sl<ExportService>()));
 
   // Barcode Services
   sl.registerLazySingleton(() => BarcodeValidationService());

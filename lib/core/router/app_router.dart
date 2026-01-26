@@ -10,6 +10,7 @@ import '../../features/products/presentation/screens/product_form_screen.dart';
 import '../../features/products/presentation/screens/bulk_product_form_screen.dart';
 import '../../features/products/presentation/screens/edit_prices_screen.dart';
 import '../../features/products/presentation/screens/import_products_screen.dart';
+import '../../features/products/presentation/screens/simple_export_screen.dart';
 import '../../features/products/domain/entities/product_entity.dart';
 import '../../features/barcode/presentation/screens/barcode_scanner_screen.dart';
 import '../../features/barcode/presentation/screens/barcode_label_designer_screen.dart';
@@ -182,6 +183,10 @@ class AppRouter {
           GoRoute(
             path: 'import',
             builder: (context, state) => const ImportProductsScreen(),
+          ),
+          GoRoute(
+            path: 'export',
+            builder: (context, state) => const SimpleExportScreen(),
           ),
         ],
       ),

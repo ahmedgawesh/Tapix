@@ -373,5 +373,31 @@
     "return_on_scan": "returnOnScan",
     "price_cents": "priceCents",
     "wholesale_price_cents": "wholesalePriceCents"
+  },
+  "export_products": {
+    "title": "Export Products",
+    "format_selection": "Export Format",
+    "csv_format": "CSV",
+    "excel_format": "Excel",
+    "csv_description": "Text format, compatible with all spreadsheet apps",
+    "excel_description": "Microsoft Excel format with rich formatting",
+    "filters": "Export Filters",
+    "filters_description": "All active products will be exported",
+    "preview": "Preview",
+    "preview_description": "Showing first {} products",
+    "no_products": "No products to export",
+    "export_button": "Export Products",
+    "exporting": "Exporting...",
+    "progress": "Preparing export...",
+    "success": "Export saved successfully",
+    "error": "Export failed",
+    "save_error": "Failed to save file",
+    "share_message": "Products Export",
+    "open_folder": "Open Folder",
+    "column_id": "ID",
+    "column_sku": "SKU",
+    "column_name": "Name",
+    "column_price_cents": "Price (Cents)",
+    "column_stock": "Stock"
   }
 }
