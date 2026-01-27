@@ -1,0 +1,180 @@
+import 'package:decimal/decimal.dart';
+import 'package:drift/drift.dart';
+import '../../../../core/database/app_database.dart' as db;
+import '../../domain/entities/product_variant_entity.dart';
+import '../../domain/entities/product_color_entity.dart';
+import '../../domain/entities/size_entity.dart';
+import '../../domain/repositories/product_variant_repository.dart';
+import '../datasources/variant_local_datasource.dart';
+import '../models/product_variant_model.dart';
+import '../models/product_color_model.dart';
+import '../models/size_model.dart';
+
+class ProductVariantRepositoryImpl implements ProductVariantRepository {
+  final VariantLocalDatasource _datasource;
+
+  ProductVariantRepositoryImpl(this._datasource);
+
+  // Variants
+  @override
+  Stream<List<ProductVariant>> watchAllVariants() {
+    return _datasource.watchAllVariants();
+  }
+
+  @override
+  Stream<List<ProductVariant>> watchVariantsByProduct(int productId) {
+    return _datasource.watchVariantsByProduct(productId);
+  }
+
+  @override
+  Future<List<ProductVariant>> getVariantsByProduct(int productId) {
+    return _datasource.getVariantsByProduct(productId);
+  }
+
+  @override
+  Future<ProductVariant?> getVariantById(int id) {
+    return _datasource.getVariantById(id);
+  }
+
+  @override
+  Future<int> createVariant({
+    required int productId,
+    String? sku,
+    String? barcode,
+    int? colorId,
+    int? sizeId,
+    required Decimal costCents,
+    required Decimal priceCents,
+    required int stockQuantity,
+    bool isActive = true,
+  }) {
+    return _datasource.createVariant(
+      db.ProductVariantsCompanion(
+        productId: Value(productId),
+        sku: Value(sku),
+        barcode: Value(barcode),
+        colorId: Value(colorId),
+        sizeId: Value(sizeId),
+        costCents: Value(costCents),
+        priceCents: Value(priceCents),
+        priceAdjustmentCents: Value(Decimal.zero),
+        stockQuantity: Value(stockQuantity),
+        isActive: Value(isActive),
+      ),
+    );
+  }
+
+  @override
+  Future<bool> updateVariant(ProductVariant variant) {
+    if (variant is ProductVariantModel) {
+      return _datasource.updateVariant(variant);
+    } else {
+      return _datasource.updateVariant(
+        ProductVariantModel(
+          id: variant.id,
+          productId: variant.productId,
+          sku: variant.sku,
+          barcode: variant.barcode,
+          colorId: variant.colorId,
+          sizeId: variant.sizeId,
+          costCents: variant.costCents,
+          priceCents: variant.priceCents,
+          priceAdjustmentCents: variant.priceAdjustmentCents,
+          stockQuantity: variant.stockQuantity,
+          isActive: variant.isActive,
+        ),
+      );
+    }
+  }
+
+  @override
+  Future<int> deleteVariant(int id) {
+    return _datasource.deleteVariant(id);
+  }
+
+  // Colors
+  @override
+  Stream<List<ProductColor>> watchAllColors() {
+    return _datasource.watchAllColors();
+  }
+
+  @override
+  Future<List<ProductColor>> getAllColors() {
+    return _datasource.getAllColors();
+  }
+
+  @override
+  Future<int> createColor(String name, String? hexCode) {
+    return _datasource.createColor(
+      db.ProductColorsCompanion(
+        name: Value(name),
+        hexCode: Value(hexCode),
+      ),
+    );
+  }
+
+  @override
+  Future<bool> updateColor(ProductColor color) {
+    if (color is ProductColorModel) {
+      return _datasource.updateColor(color);
+    } else {
+      return _datasource.updateColor(
+        ProductColorModel(
+          id: color.id,
+          name: color.name,
+          hexCode: color.hexCode,
+          isActive: color.isActive,
+        ),
+      );
+    }
+  }
+
+  @override
+  Future<int> deleteColor(int id) {
+    return _datasource.deleteColor(id);
+  }
+
+  // Sizes
+  @override
+  Stream<List<Size>> watchAllSizes() {
+    return _datasource.watchAllSizes();
+  }
+
+  @override
+  Future<List<Size>> getAllSizes() {
+    return _datasource.getAllSizes();
+  }
+
+  @override
+  Future<int> createSize(String name, int sortOrder, String? description) {
+    return _datasource.createSize(
+      db.SizesCompanion(
+        name: Value(name),
+        sortOrder: Value(sortOrder),
+        description: Value(description),
+      ),
+    );
+  }
+
+  @override
+  Future<bool> updateSize(Size size) {
+    if (size is SizeModel) {
+      return _datasource.updateSize(size);
+    } else {
+      return _datasource.updateSize(
+        SizeModel(
+          id: size.id,
+          name: size.name,
+          description: size.description,
+          sortOrder: size.sortOrder,
+          isActive: size.isActive,
+        ),
+      );
+    }
+  }
+
+  @override
+  Future<int> deleteSize(int id) {
+    return _datasource.deleteSize(id);
+  }
+}

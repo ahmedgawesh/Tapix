@@ -1,0 +1,51 @@
+import 'package:drift/drift.dart';
+import '../../../../core/database/app_database.dart' as db;
+import '../../domain/entities/product_variant_entity.dart';
+
+class ProductVariantModel extends ProductVariant {
+  const ProductVariantModel({
+    required super.id,
+    required super.productId,
+    super.sku,
+    super.barcode,
+    super.colorId,
+    super.sizeId,
+    required super.costCents,
+    required super.priceCents,
+    required super.priceAdjustmentCents,
+    required super.stockQuantity,
+    required super.isActive,
+  });
+
+  factory ProductVariantModel.fromDrift(db.ProductVariant variant) {
+    return ProductVariantModel(
+      id: variant.id,
+      productId: variant.productId,
+      sku: variant.sku,
+      barcode: variant.barcode,
+      colorId: variant.colorId,
+      sizeId: variant.sizeId,
+      costCents: variant.costCents,
+      priceCents: variant.priceCents,
+      priceAdjustmentCents: variant.priceAdjustmentCents,
+      stockQuantity: variant.stockQuantity,
+      isActive: variant.isActive,
+    );
+  }
+
+  db.ProductVariantsCompanion toCompanion() {
+    return db.ProductVariantsCompanion(
+      id: Value(id),
+      productId: Value(productId),
+      sku: Value(sku),
+      barcode: Value(barcode),
+      colorId: Value(colorId),
+      sizeId: Value(sizeId),
+      costCents: Value(costCents),
+      priceCents: Value(priceCents),
+      priceAdjustmentCents: Value(priceAdjustmentCents),
+      stockQuantity: Value(stockQuantity),
+      isActive: Value(isActive),
+    );
+  }
+}

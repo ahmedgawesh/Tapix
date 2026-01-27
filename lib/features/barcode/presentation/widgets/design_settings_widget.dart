@@ -1,0 +1,394 @@
+import 'package:easy_localization/easy_localization.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:lucide_icons/lucide_icons.dart';
+
+import '../../domain/models/barcode_design_state.dart';
+import '../bloc/barcode_design_bloc.dart';
+import '../bloc/barcode_design_event.dart';
+
+class DesignSettingsWidget extends StatelessWidget {
+  final BarcodeDesignSettings settings;
+  final bool isCompact;
+
+  const DesignSettingsWidget({
+    super.key,
+    required this.settings,
+    this.isCompact = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (isCompact) {
+      return _CompactSettings(settings: settings);
+    }
+    return _FullSettings(settings: settings);
+  }
+}
+
+class _CompactSettings extends StatelessWidget {
+  final BarcodeDesignSettings settings;
+
+  const _CompactSettings({required this.settings});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Copies row
+          Row(
+            children: [
+              Text('barcode.copies'.tr()),
+              const Spacer(),
+              IconButton(
+                icon: const Icon(LucideIcons.minus, size: 18),
+                onPressed: settings.copies > 1
+                    ? () => context
+                        .read<BarcodeDesignBloc>()
+                        .add(UpdateCopies(settings.copies - 1))
+                    : null,
+                visualDensity: VisualDensity.compact,
+              ),
+              Text(
+                '${settings.copies}',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              IconButton(
+                icon: const Icon(LucideIcons.plus, size: 18),
+                onPressed: () => context
+                    .read<BarcodeDesignBloc>()
+                    .add(UpdateCopies(settings.copies + 1)),
+                visualDensity: VisualDensity.compact,
+              ),
+            ],
+          ),
+          const Divider(),
+          // Quick toggles
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: [
+              _QuickToggle(
+                label: 'barcode.name'.tr(),
+                value: settings.includeName,
+                onChanged: (v) => context
+                    .read<BarcodeDesignBloc>()
+                    .add(ToggleIncludeName(v)),
+              ),
+              _QuickToggle(
+                label: 'barcode.price'.tr(),
+                value: settings.includePrice,
+                onChanged: (v) => context
+                    .read<BarcodeDesignBloc>()
+                    .add(ToggleIncludePrice(v)),
+              ),
+              _QuickToggle(
+                label: 'barcode.sku'.tr(),
+                value: settings.includeSku,
+                onChanged: (v) => context
+                    .read<BarcodeDesignBloc>()
+                    .add(ToggleIncludeSku(v)),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _QuickToggle extends StatelessWidget {
+  final String label;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  const _QuickToggle({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return FilterChip(
+      label: Text(label),
+      selected: value,
+      onSelected: onChanged,
+      selectedColor: colorScheme.primaryContainer,
+      checkmarkColor: colorScheme.primary,
+      visualDensity: VisualDensity.compact,
+    );
+  }
+}
+
+class _FullSettings extends StatelessWidget {
+  final BarcodeDesignSettings settings;
+
+  const _FullSettings({required this.settings});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Label dimensions
+        _SectionHeader(title: 'barcode.label_size'.tr()),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: _DimensionField(
+                label: 'barcode.width_mm'.tr(),
+                value: settings.labelWidthMm,
+                onChanged: (v) => context
+                    .read<BarcodeDesignBloc>()
+                    .add(UpdateLabelDimensions(widthMm: v)),
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: _DimensionField(
+                label: 'barcode.height_mm'.tr(),
+                value: settings.labelHeightMm,
+                onChanged: (v) => context
+                    .read<BarcodeDesignBloc>()
+                    .add(UpdateLabelDimensions(heightMm: v)),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 24),
+
+        // Barcode type
+        _SectionHeader(title: 'barcode.type'.tr()),
+        const SizedBox(height: 8),
+        InputDecorator(
+          decoration: const InputDecoration(
+            border: OutlineInputBorder(),
+            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            prefixIcon: Icon(LucideIcons.scan),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: settings.barcodeType,
+              isExpanded: true,
+              isDense: true,
+              items: [
+                DropdownMenuItem(value: 'auto', child: Text('barcode.type_auto'.tr())),
+                DropdownMenuItem(value: 'code128', child: Text('barcode.type_code128'.tr())),
+                DropdownMenuItem(value: 'ean13', child: Text('barcode.type_ean13'.tr())),
+                DropdownMenuItem(value: 'ean8', child: Text('barcode.type_ean8'.tr())),
+                DropdownMenuItem(value: 'upca', child: Text('barcode.type_upca'.tr())),
+                DropdownMenuItem(value: 'qr', child: Text('barcode.type_qr'.tr())),
+              ],
+              onChanged: (v) {
+                if (v != null) {
+                  context.read<BarcodeDesignBloc>().add(UpdateBarcodeType(v));
+                }
+              },
+            ),
+          ),
+        ),
+        const SizedBox(height: 24),
+
+        // Copies
+        _SectionHeader(title: 'barcode.copies'.tr()),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            IconButton.filled(
+              icon: const Icon(LucideIcons.minus),
+              onPressed: settings.copies > 1
+                  ? () => context
+                      .read<BarcodeDesignBloc>()
+                      .add(UpdateCopies(settings.copies - 1))
+                  : null,
+            ),
+            Expanded(
+              child: Center(
+                child: Text(
+                  '${settings.copies}',
+                  style: Theme.of(context).textTheme.headlineMedium,
+                ),
+              ),
+            ),
+            IconButton.filled(
+              icon: const Icon(LucideIcons.plus),
+              onPressed: () => context
+                  .read<BarcodeDesignBloc>()
+                  .add(UpdateCopies(settings.copies + 1)),
+            ),
+          ],
+        ),
+        const SizedBox(height: 24),
+
+        // Print type
+        _SectionHeader(title: 'barcode.print_type'.tr()),
+        const SizedBox(height: 8),
+        SegmentedButton<String>(
+          segments: [
+            ButtonSegment(
+              value: 'single',
+              label: Text('barcode.single'.tr()),
+              icon: const Icon(LucideIcons.file),
+            ),
+            ButtonSegment(
+              value: 'batch',
+              label: Text('barcode.batch'.tr()),
+              icon: const Icon(LucideIcons.files),
+            ),
+            ButtonSegment(
+              value: 'all_quantity',
+              label: Text('barcode.all_qty'.tr()),
+              icon: const Icon(LucideIcons.layers),
+            ),
+          ],
+          selected: {settings.printType},
+          onSelectionChanged: (selected) {
+            context.read<BarcodeDesignBloc>().add(UpdatePrintType(selected.first));
+          },
+        ),
+        const SizedBox(height: 24),
+
+        // Label content toggles
+        _SectionHeader(title: 'barcode.label_content'.tr()),
+        const SizedBox(height: 8),
+        SwitchListTile(
+          title: Text('barcode.include_name'.tr()),
+          value: settings.includeName,
+          onChanged: (v) => context
+              .read<BarcodeDesignBloc>()
+              .add(ToggleIncludeName(v)),
+          dense: true,
+        ),
+        SwitchListTile(
+          title: Text('barcode.include_price'.tr()),
+          value: settings.includePrice,
+          onChanged: (v) => context
+              .read<BarcodeDesignBloc>()
+              .add(ToggleIncludePrice(v)),
+          dense: true,
+        ),
+        SwitchListTile(
+          title: Text('barcode.include_sku'.tr()),
+          value: settings.includeSku,
+          onChanged: (v) => context
+              .read<BarcodeDesignBloc>()
+              .add(ToggleIncludeSku(v)),
+          dense: true,
+        ),
+        SwitchListTile(
+          title: Text('barcode.include_company'.tr()),
+          value: settings.includeCompanyName,
+          onChanged: (v) => context
+              .read<BarcodeDesignBloc>()
+              .add(ToggleIncludeCompanyName(v)),
+          dense: true,
+        ),
+        SwitchListTile(
+          title: Text('barcode.include_company_contact'.tr()),
+          value: settings.includeCompanyContact,
+          onChanged: (v) => context
+              .read<BarcodeDesignBloc>()
+              .add(ToggleIncludeCompanyContact(v)),
+          dense: true,
+        ),
+        SwitchListTile(
+          title: Text('barcode.include_variant'.tr()),
+          subtitle: Text('barcode.variant_hint'.tr()),
+          value: settings.includeVariantInfo,
+          onChanged: (v) => context
+              .read<BarcodeDesignBloc>()
+              .add(ToggleIncludeVariantInfo(v)),
+          dense: true,
+        ),
+      ],
+    );
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  final String title;
+
+  const _SectionHeader({required this.title});
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      title,
+      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+    );
+  }
+}
+
+class _DimensionField extends StatefulWidget {
+  final String label;
+  final double value;
+  final ValueChanged<double> onChanged;
+
+  const _DimensionField({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  State<_DimensionField> createState() => _DimensionFieldState();
+}
+
+class _DimensionFieldState extends State<_DimensionField> {
+  late TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.value.toStringAsFixed(1));
+  }
+
+  @override
+  void didUpdateWidget(_DimensionField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.value != widget.value) {
+      _controller.text = widget.value.toStringAsFixed(1);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: _controller,
+      decoration: InputDecoration(
+        labelText: widget.label,
+        border: const OutlineInputBorder(),
+        suffixText: 'mm',
+      ),
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      onChanged: (v) {
+        final parsed = double.tryParse(v);
+        if (parsed != null && parsed > 0) {
+          widget.onChanged(parsed);
+        }
+      },
+      onTap: () {
+        // Clear placeholder on focus per project-context.md
+        if (_controller.text == '0.0' || _controller.text == '0') {
+          _controller.clear();
+        }
+      },
+    );
+  }
+}
