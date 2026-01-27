@@ -86,6 +86,21 @@ class AppDatabase extends _$AppDatabase {
   
   AppDatabase.connect(DatabaseConnection connection) : super.connect(connection);
 
+  Future<void> _dedupeUniqueSkuBarcodeIfNeeded() async {
+    await customStatement(
+      'UPDATE product_variants SET sku = NULL WHERE sku IS NOT NULL AND id NOT IN (SELECT MIN(id) FROM product_variants WHERE sku IS NOT NULL GROUP BY sku)',
+    );
+    await customStatement(
+      'UPDATE product_variants SET barcode = NULL WHERE barcode IS NOT NULL AND id NOT IN (SELECT MIN(id) FROM product_variants WHERE barcode IS NOT NULL GROUP BY barcode)',
+    );
+    await customStatement(
+      'UPDATE products SET sku = NULL WHERE sku IS NOT NULL AND id NOT IN (SELECT MIN(id) FROM products WHERE sku IS NOT NULL GROUP BY sku)',
+    );
+    await customStatement(
+      'UPDATE products SET barcode = NULL WHERE barcode IS NOT NULL AND id NOT IN (SELECT MIN(id) FROM products WHERE barcode IS NOT NULL GROUP BY barcode)',
+    );
+  }
+
   Future<void> _repairProductVariantsSkuNullabilityIfNeeded() async {
     var foreignKeysDisabled = false;
     try {
@@ -291,6 +306,7 @@ FROM product_variants__old
         await customStatement('PRAGMA foreign_keys = ON');
         await _ensureSchemaIntegrity();
         await _repairProductVariantsSkuNullabilityIfNeeded();
+        await _dedupeUniqueSkuBarcodeIfNeeded();
       },
     );
   }

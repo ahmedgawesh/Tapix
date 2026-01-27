@@ -37,13 +37,29 @@ class ProductVariantDao extends DatabaseAccessor<AppDatabase> with _$ProductVari
         .getSingleOrNull();
   }
 
-  Future<ProductVariant?> getDefaultVariantByProduct(int productId) {
+  Future<ProductVariant?> getVariantBySku(String sku) {
     return (select(productVariants)
-          ..where((v) => v.productId.equals(productId))
-          ..where((v) => v.colorId.isNull())
-          ..where((v) => v.sizeId.isNull())
+          ..where((v) => v.sku.equals(sku))
           ..where((v) => v.isActive.equals(true)))
         .getSingleOrNull();
+  }
+
+  Future<ProductVariant?> getDefaultVariantByProduct(int productId) {
+    return transaction(() async {
+      final strictDefault = await (select(productVariants)
+            ..where((v) => v.productId.equals(productId))
+            ..where((v) => v.colorId.isNull())
+            ..where((v) => v.sizeId.isNull())
+            ..where((v) => v.isActive.equals(true)))
+          .getSingleOrNull();
+      if (strictDefault != null) return strictDefault;
+
+      return (select(productVariants)
+            ..where((v) => v.productId.equals(productId))
+            ..where((v) => v.isActive.equals(true))
+            ..orderBy([(v) => OrderingTerm(expression: v.id)]))
+          .getSingleOrNull();
+    });
   }
 
   Future<int> createVariant(ProductVariantsCompanion variant) {

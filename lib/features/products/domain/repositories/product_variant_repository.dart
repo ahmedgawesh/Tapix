@@ -9,6 +9,7 @@ abstract class ProductVariantRepository {
   Future<List<ProductVariant>> getVariantsByProduct(int productId);
   Future<ProductVariant?> getVariantById(int id);
   Future<ProductVariant?> getVariantByBarcode(String barcode);
+  Future<ProductVariant?> getVariantBySku(String sku);
   Future<ProductVariant?> getDefaultVariantByProduct(int productId);
   Future<int> ensureDefaultVariantForProduct({
     required int productId,

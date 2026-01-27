@@ -564,6 +564,7 @@ class _ProductFormViewState extends State<_ProductFormView> {
                 controller: _skuController,
                 decoration: InputDecoration(
                   labelText: 'product_form_sku'.tr(),
+                  errorText: state.fieldErrors['sku']?.tr(args: [state.sku ?? '']),
                   border: const OutlineInputBorder(),
                 ),
                 onChanged: (value) {
@@ -577,6 +578,7 @@ class _ProductFormViewState extends State<_ProductFormView> {
                 controller: _barcodeController,
                 decoration: InputDecoration(
                   labelText: 'product_form_barcode'.tr(),
+                  errorText: state.fieldErrors['barcode']?.tr(args: [state.barcode ?? '']),
                   border: const OutlineInputBorder(),
                   suffixIcon: Row(
                     mainAxisSize: MainAxisSize.min,

@@ -47,6 +47,11 @@ class ProductVariantRepositoryImpl implements ProductVariantRepository {
   }
 
   @override
+  Future<ProductVariant?> getVariantBySku(String sku) {
+    return _datasource.getVariantBySku(sku);
+  }
+
+  @override
   Future<ProductVariant?> getDefaultVariantByProduct(int productId) {
     return _datasource.getDefaultVariantByProduct(productId);
   }

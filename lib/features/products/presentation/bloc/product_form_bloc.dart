@@ -265,12 +265,14 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
             priceCents = defaultVariant.priceCents;
             stockQuantity = defaultVariant.stockQuantity;
             selectedColorId = defaultVariant.colorId;
-            selectedSizeId = defaultVariant.sizeId;
+            selectedSizeId = _normalizeOptionalId(defaultVariant.sizeId);
           }
         }
 
         emit(state.copyWith(
           isLoading: false,
+          error: null,
+          fieldErrors: const {},
           name: product.name,
           nameAr: product.nameAr,
           nameFr: product.nameFr,
@@ -429,6 +431,72 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
     return errors;
   }
 
+  Future<Map<String, String>> _validateSkuUniqueness() async {
+    final errors = <String, String>{};
+    final sku = state.sku?.trim();
+    if (sku == null || sku.isEmpty) return errors;
+
+    final existingProduct = await _repository.findBySku(sku);
+    if (existingProduct != null && existingProduct.id != state.productId) {
+      errors['sku'] = 'import_products.validation_sku_exists';
+      return errors;
+    }
+
+    if (!state.hasVariants) {
+      final existingVariant = await _variantRepository.getVariantBySku(sku);
+
+      int? allowedVariantId;
+      if (state.productId != null) {
+        final currentDefault = await _variantRepository.getDefaultVariantByProduct(state.productId!);
+        allowedVariantId = currentDefault?.id;
+      }
+
+      if (existingVariant != null && existingVariant.id != allowedVariantId) {
+        errors['sku'] = 'import_products.validation_sku_exists';
+        return errors;
+      }
+    }
+
+    return errors;
+  }
+
+  int? _normalizeOptionalId(int? id) {
+    if (id == null) return null;
+    if (id == 0) return null;
+    return id;
+  }
+
+  Future<Map<String, String>> _validateBarcodeUniqueness() async {
+    final errors = <String, String>{};
+    final barcode = state.barcode?.trim();
+    if (barcode == null || barcode.isEmpty) return errors;
+
+    // Check product-level uniqueness
+    final existingProduct = await _repository.findByBarcode(barcode);
+    if (existingProduct != null && existingProduct.id != state.productId) {
+      errors['barcode'] = 'import_products.validation_barcode_exists';
+      return errors;
+    }
+
+    // For non-variant products, the barcode is also stored on the default variant.
+    if (!state.hasVariants) {
+      final existingVariant = await _variantRepository.getVariantByBarcode(barcode);
+
+      int? allowedVariantId;
+      if (state.productId != null) {
+        final currentDefault = await _variantRepository.getDefaultVariantByProduct(state.productId!);
+        allowedVariantId = currentDefault?.id;
+      }
+
+      if (existingVariant != null && existingVariant.id != allowedVariantId) {
+        errors['barcode'] = 'import_products.validation_barcode_exists';
+        return errors;
+      }
+    }
+
+    return errors;
+  }
+
   Future<void> _onSubmitted(
     ProductFormSubmitted event,
     Emitter<ProductFormState> emit,
@@ -436,6 +504,20 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
     final errors = _validate();
     if (errors.isNotEmpty) {
       emit(state.copyWith(fieldErrors: errors));
+      return;
+    }
+
+    emit(state.copyWith(fieldErrors: const {}, error: null));
+
+    final barcodeErrors = await _validateBarcodeUniqueness();
+    if (barcodeErrors.isNotEmpty) {
+      emit(state.copyWith(fieldErrors: {...state.fieldErrors, ...barcodeErrors}));
+      return;
+    }
+
+    final skuErrors = await _validateSkuUniqueness();
+    if (skuErrors.isNotEmpty) {
+      emit(state.copyWith(fieldErrors: {...state.fieldErrors, ...skuErrors}));
       return;
     }
 
@@ -486,7 +568,7 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
               priceCents: state.priceCents,
               stockQuantity: state.stockQuantity,
               colorId: state.selectedColorId,
-              sizeId: state.selectedSizeId,
+              sizeId: _normalizeOptionalId(state.selectedSizeId),
             );
             await _variantRepository.updateVariant(updated);
           }
@@ -533,7 +615,7 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
               priceCents: state.priceCents,
               stockQuantity: state.stockQuantity,
               colorId: state.selectedColorId,
-              sizeId: state.selectedSizeId,
+              sizeId: _normalizeOptionalId(state.selectedSizeId),
             );
             await _variantRepository.updateVariant(updated);
           }
@@ -543,6 +625,33 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
       emit(state.copyWith(isSubmitting: false, isSuccess: true));
     } catch (e) {
       final msg = e.toString();
+      if (msg.contains('UNIQUE constraint failed: product_variants.barcode') ||
+          msg.contains('UNIQUE constraint failed: products.barcode')) {
+        emit(
+          state.copyWith(
+            isSubmitting: false,
+            fieldErrors: {
+              ...state.fieldErrors,
+              'barcode': 'import_products.validation_barcode_exists',
+            },
+          ),
+        );
+        return;
+      }
+
+      if (msg.contains('UNIQUE constraint failed: product_variants.sku') ||
+          msg.contains('UNIQUE constraint failed: products.sku')) {
+        emit(
+          state.copyWith(
+            isSubmitting: false,
+            fieldErrors: {
+              ...state.fieldErrors,
+              'sku': 'import_products.validation_sku_exists',
+            },
+          ),
+        );
+        return;
+      }
       final missingColumnMatch = RegExp(r'no column named ([a-zA-Z0-9_]+)').firstMatch(msg);
       if (missingColumnMatch != null) {
         final missingColumn = missingColumnMatch.group(1);

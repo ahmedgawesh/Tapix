@@ -177,6 +177,14 @@ Deliverable:
   - Screen shows all variants with realtime updates (via `ProductVariantsBloc` in all-variants mode).
   - Responsive layout (mobile list, tablet/desktop grid).
   - Search filters locally by barcode/SKU/color/size.
+- Product form inventory correctness:
+  - For `hasVariants=true`, product stock input is disabled and total stock is shown as the sum of variant stocks.
+  - For `hasVariants=false`, cost/price/stock are mapped to the product's single variant.
+- Reliability fixes:
+  - Variant add/edit dialog made responsive to avoid layout overflows.
+  - Size selector dropdown deduplicates IDs and no longer crashes when duplicate items exist.
+  - Product form now validates SKU/barcode uniqueness against both products and variants and shows field errors instead of crashing.
+  - Database open includes an idempotent dedupe repair for legacy duplicate SKUs/barcodes to avoid edit-time UNIQUE failures.
 - Routing & permissions:
   - Added route permission entry for `/products/variants`.
   - Added Products menu entry to navigate to Variants screen.
