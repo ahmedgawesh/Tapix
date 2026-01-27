@@ -219,6 +219,9 @@
     "decrease_stock": "Decrease Stock",
     "increase_stock": "Increase Stock",
     "select_product": "Select Product",
+    "product_search_hint": "Search by name, barcode, or SKU",
+    "category_filter": "Category",
+    "all_categories": "All Categories",
     "bulk_activated": "Selected variants activated",
     "bulk_deactivated": "Selected variants deactivated"
   },

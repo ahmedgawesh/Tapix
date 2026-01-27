@@ -219,6 +219,9 @@
     "decrease_stock": "إنقاص المخزون",
     "increase_stock": "زيادة المخزون",
     "select_product": "اختر المنتج",
+    "product_search_hint": "ابحث بالاسم أو الباركود أو الرمز",
+    "category_filter": "التصنيف",
+    "all_categories": "كل التصنيفات",
     "bulk_activated": "تم تفعيل المتغيرات المحددة",
     "bulk_deactivated": "تم إلغاء تفعيل المتغيرات المحددة"
   },

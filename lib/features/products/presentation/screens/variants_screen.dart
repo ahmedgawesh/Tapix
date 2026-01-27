@@ -11,12 +11,15 @@ import '../../domain/entities/product_variant_entity.dart';
 import '../../domain/entities/product_color_entity.dart';
 import '../../domain/entities/size_entity.dart';
 import '../../domain/entities/product_entity.dart';
+import '../../domain/entities/category_entity.dart';
 import '../bloc/product_variants_bloc.dart';
 import '../bloc/products_bloc.dart';
 import '../bloc/colors_bloc.dart';
 import '../bloc/colors_event.dart';
 import '../bloc/sizes_bloc.dart';
 import '../bloc/sizes_event.dart';
+import '../bloc/categories_bloc.dart';
+import '../bloc/categories_event.dart';
 import '../widgets/variant_edit_dialog.dart';
 
 enum StockFilter { all, inStock, lowStock, outOfStock }
@@ -34,6 +37,9 @@ class VariantsScreen extends StatelessWidget {
         ),
         BlocProvider(
           create: (context) => sl<ProductsBloc>(),
+        ),
+        BlocProvider(
+          create: (context) => sl<CategoriesBloc>()..add(const LoadCategories()),
         ),
         BlocProvider(
           create: (context) => sl<ColorsBloc>()..add(const LoadColors()),
@@ -736,31 +742,20 @@ class _VariantsViewState extends State<_VariantsView> {
   void _showAddVariantDialog(BuildContext context) {
     // Show product selection first, then variant dialog
     final productsBloc = context.read<ProductsBloc>();
+    final categoriesBloc = context.read<CategoriesBloc>();
 
     showDialog<void>(
       context: context,
       builder: (ctx) {
-        return BlocProvider.value(
-          value: productsBloc,
-          child: BlocBuilder<ProductsBloc, RealtimeState<List<Product>>>(
-            builder: (context, state) {
-              final products = state is RealtimeSuccess<List<Product>>
-                  ? state.data
-                  : <Product>[];
-              return SimpleDialog(
-                title: Text('variants.select_product'.tr()),
-                children: products
-                    .map(
-                      (p) => SimpleDialogOption(
-                        onPressed: () {
-                          Navigator.pop(ctx);
-                          VariantEditDialog.show(context, productId: p.id);
-                        },
-                        child: Text(p.name),
-                      ),
-                    )
-                    .toList(),
-              );
+        return MultiBlocProvider(
+          providers: [
+            BlocProvider.value(value: productsBloc),
+            BlocProvider.value(value: categoriesBloc),
+          ],
+          child: _ProductPickerDialog(
+            onSelected: (p) {
+              Navigator.pop(ctx);
+              VariantEditDialog.show(context, productId: p.id);
             },
           ),
         );
@@ -945,5 +940,181 @@ class _VariantsViewState extends State<_VariantsView> {
       SnackBar(content: Text(active ? 'variants.bulk_activated'.tr() : 'variants.bulk_deactivated'.tr())),
     );
     setState(() => _selectedVariantIds.clear());
+  }
+}
+
+class _ProductPickerDialog extends StatefulWidget {
+  final ValueChanged<Product> onSelected;
+
+  const _ProductPickerDialog({required this.onSelected});
+
+  @override
+  State<_ProductPickerDialog> createState() => _ProductPickerDialogState();
+}
+
+class _ProductPickerDialogState extends State<_ProductPickerDialog> {
+  final TextEditingController _searchController = TextEditingController();
+  int? _categoryId;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  bool _matches(Product p, String query) {
+    final q = query.trim().toLowerCase();
+    if (q.isEmpty) return true;
+
+    final fields = <String?>[
+      p.name,
+      p.nameAr,
+      p.nameFr,
+      p.sku,
+      p.barcode,
+    ];
+
+    for (final f in fields) {
+      final v = f?.toLowerCase();
+      if (v != null && v.contains(q)) return true;
+    }
+    return false;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text('variants.select_product'.tr()),
+      content: SizedBox(
+        width: 520,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: 'variants.product_search_hint'.tr(),
+                prefixIcon: const Icon(LucideIcons.search),
+                suffixIcon: ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: _searchController,
+                  builder: (context, value, _) {
+                    if (value.text.isEmpty) return const SizedBox.shrink();
+                    return IconButton(
+                      icon: const Icon(Icons.clear),
+                      onPressed: () {
+                        _searchController.clear();
+                        setState(() {});
+                      },
+                    );
+                  },
+                ),
+                border: const OutlineInputBorder(),
+                isDense: true,
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: 12),
+            BlocBuilder<CategoriesBloc, RealtimeState<List<Category>>>(
+              builder: (context, state) {
+                final categories = state is RealtimeSuccess<List<Category>>
+                    ? state.data
+                    : <Category>[];
+
+                final activeCategories = categories.where((c) => c.isActive).toList();
+                activeCategories.sort(
+                  (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+                );
+
+                return DropdownButtonFormField<int?>(
+                  initialValue: _categoryId,
+                  decoration: InputDecoration(
+                    labelText: 'variants.category_filter'.tr(),
+                    border: const OutlineInputBorder(),
+                    isDense: true,
+                    prefixIcon: const Icon(LucideIcons.folderTree),
+                  ),
+                  items: [
+                    DropdownMenuItem<int?>(
+                      value: null,
+                      child: Text('variants.all_categories'.tr()),
+                    ),
+                    ...activeCategories.map(
+                      (c) => DropdownMenuItem<int?>(
+                        value: c.id,
+                        child: Text(c.name),
+                      ),
+                    ),
+                  ],
+                  onChanged: (v) => setState(() => _categoryId = v),
+                );
+              },
+            ),
+            const SizedBox(height: 12),
+            Flexible(
+              child: BlocBuilder<ProductsBloc, RealtimeState<List<Product>>>(
+                builder: (context, state) {
+                  final products = state is RealtimeSuccess<List<Product>>
+                      ? state.data
+                      : <Product>[];
+                  final query = _searchController.text;
+
+                  final filtered = products.where((p) {
+                    if (_categoryId != null && p.categoryId != _categoryId) {
+                      return false;
+                    }
+                    return _matches(p, query);
+                  }).toList();
+
+                  filtered.sort(
+                    (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+                  );
+
+                  if (filtered.isEmpty) {
+                    return Center(child: Text('variants.no_results'.tr()));
+                  }
+
+                  final skuLabel = 'variants.sku'.tr();
+                  final barcodeLabel = 'variants.barcode'.tr();
+
+                  return ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: filtered.length,
+                    separatorBuilder: (_, dividerIndex) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final p = filtered[index];
+                      final subtitleParts = <String>[];
+                      if (p.sku != null && p.sku!.trim().isNotEmpty) {
+                        subtitleParts.add('$skuLabel: ${p.sku}');
+                      }
+                      if (p.barcode != null && p.barcode!.trim().isNotEmpty) {
+                        subtitleParts.add('$barcodeLabel: ${p.barcode}');
+                      }
+
+                      return ListTile(
+                        title: Text(p.name),
+                        subtitle: subtitleParts.isEmpty
+                            ? null
+                            : Text(
+                                subtitleParts.join(' • '),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                        onTap: () => widget.onSelected(p),
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text('common.cancel'.tr()),
+        ),
+      ],
+    );
   }
 }
