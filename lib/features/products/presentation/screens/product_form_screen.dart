@@ -17,9 +17,14 @@ import '../../domain/repositories/product_repository.dart';
 import '../bloc/product_form_bloc.dart';
 import '../bloc/product_variants_bloc.dart';
 import '../bloc/colors_bloc.dart';
+import '../bloc/colors_event.dart';
 import '../bloc/sizes_bloc.dart';
+import '../bloc/sizes_event.dart';
 import '../widgets/money_input_widget.dart';
 import '../widgets/variant_management_widget.dart';
+import '../../../../core/bloc/realtime_bloc.dart';
+import '../../domain/entities/product_color_entity.dart';
+import '../../domain/entities/size_entity.dart';
 
 class ProductFormScreen extends StatelessWidget {
   final int? productId;
@@ -35,16 +40,16 @@ class ProductFormScreen extends StatelessWidget {
           create: (context) => sl<ProductFormBloc>()
             ..add(ProductFormInitialized(productId: productId, initialBarcode: initialBarcode)),
         ),
+        BlocProvider(
+          create: (context) => sl<ColorsBloc>()..add(const LoadColors()),
+        ),
+        BlocProvider(
+          create: (context) => sl<SizesBloc>()..add(const LoadSizes()),
+        ),
         if (productId != null) ...[
           BlocProvider(
             create: (context) => sl<ProductVariantsBloc>()
               ..add(ProductVariantsInitialized(productId!)),
-          ),
-          BlocProvider(
-            create: (context) => sl<ColorsBloc>(),
-          ),
-          BlocProvider(
-            create: (context) => sl<SizesBloc>(),
           ),
         ],
       ],
@@ -63,8 +68,6 @@ class _ProductFormView extends StatefulWidget {
 class _ProductFormViewState extends State<_ProductFormView> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
-  final _nameArController = TextEditingController();
-  final _nameFrController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _skuController = TextEditingController();
   final _barcodeController = TextEditingController();
@@ -113,8 +116,6 @@ class _ProductFormViewState extends State<_ProductFormView> {
   @override
   void dispose() {
     _nameController.dispose();
-    _nameArController.dispose();
-    _nameFrController.dispose();
     _descriptionController.dispose();
     _skuController.dispose();
     _barcodeController.dispose();
@@ -129,12 +130,6 @@ class _ProductFormViewState extends State<_ProductFormView> {
   void _initControllers(ProductFormState state) {
     if (_nameController.text.isEmpty && state.name.isNotEmpty) {
       _nameController.text = state.name;
-    }
-    if (_nameArController.text.isEmpty && state.nameAr != null) {
-      _nameArController.text = state.nameAr!;
-    }
-    if (_nameFrController.text.isEmpty && state.nameFr != null) {
-      _nameFrController.text = state.nameFr!;
     }
     if (_descriptionController.text.isEmpty && state.description != null) {
       _descriptionController.text = state.description!;
@@ -507,35 +502,11 @@ class _ProductFormViewState extends State<_ProductFormView> {
           },
         ),
         const SizedBox(height: 16),
-        Row(
-          children: [
-            Expanded(
-              child: TextFormField(
-                controller: _nameArController,
-                decoration: InputDecoration(
-                  labelText: 'product_form_nameAr'.tr(),
-                  border: const OutlineInputBorder(),
-                ),
-                textAlign: TextAlign.right,
-                onChanged: (value) {
-                  bloc.add(ProductFormFieldChanged(field: 'nameAr', value: value));
-                },
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: TextFormField(
-                controller: _nameFrController,
-                decoration: InputDecoration(
-                  labelText: 'product_form_nameFr'.tr(),
-                  border: const OutlineInputBorder(),
-                ),
-                onChanged: (value) {
-                  bloc.add(ProductFormFieldChanged(field: 'nameFr', value: value));
-                },
-              ),
-            ),
-          ],
+        _ColorSizePickerRow(
+          selectedColorId: state.selectedColorId,
+          selectedSizeId: state.selectedSizeId,
+          onColorSelected: (id) => bloc.add(ProductFormFieldChanged(field: 'selectedColorId', value: id)),
+          onSizeSelected: (id) => bloc.add(ProductFormFieldChanged(field: 'selectedSizeId', value: id)),
         ),
         const SizedBox(height: 16),
         TextFormField(
@@ -852,5 +823,261 @@ class _ProductFormViewState extends State<_ProductFormView> {
         VariantManagementWidget(productId: productId),
       ],
     );
+  }
+
+}
+
+class _ColorSizePickerRow extends StatelessWidget {
+  final int? selectedColorId;
+  final int? selectedSizeId;
+  final ValueChanged<int?> onColorSelected;
+  final ValueChanged<int?> onSizeSelected;
+
+  const _ColorSizePickerRow({
+    required this.selectedColorId,
+    required this.selectedSizeId,
+    required this.onColorSelected,
+    required this.onSizeSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: _ColorPickerField(
+            selectedColorId: selectedColorId,
+            onSelected: onColorSelected,
+          ),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: _SizePickerField(
+            selectedSizeId: selectedSizeId,
+            onSelected: onSizeSelected,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ColorPickerField extends StatelessWidget {
+  final int? selectedColorId;
+  final ValueChanged<int?> onSelected;
+
+  const _ColorPickerField({
+    required this.selectedColorId,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<ColorsBloc, RealtimeState<List<ProductColor>>>(
+      builder: (context, state) {
+        final colors = state is RealtimeSuccess<List<ProductColor>> ? state.data : <ProductColor>[];
+        final selected = selectedColorId == null
+            ? null
+            : colors.cast<ProductColor?>().firstWhere(
+                  (c) => c?.id == selectedColorId,
+                  orElse: () => null,
+                );
+
+        return InkWell(
+          onTap: () => _showColorPickerBottomSheet(context, colors),
+          child: InputDecorator(
+            decoration: InputDecoration(
+              labelText: 'product_form_variantColor'.tr(),
+              border: const OutlineInputBorder(),
+              prefixIcon: const Icon(LucideIcons.palette),
+            ),
+            child: Text(selected?.name ?? 'common.none'.tr()),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _showColorPickerBottomSheet(BuildContext context, List<ProductColor> colors) async {
+    final selected = await showModalBottomSheet<int?>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) {
+        String query = '';
+        return StatefulBuilder(
+          builder: (context, setState) {
+            final filtered = query.isEmpty
+                ? colors
+                : colors.where((c) => c.name.toLowerCase().contains(query.toLowerCase())).toList();
+
+            return SafeArea(
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: 16,
+                  right: 16,
+                  top: 12,
+                  bottom: MediaQuery.of(context).viewInsets.bottom + 12,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      decoration: InputDecoration(
+                        hintText: 'colors.search_hint'.tr(),
+                        prefixIcon: const Icon(LucideIcons.search),
+                        border: const OutlineInputBorder(),
+                      ),
+                      onChanged: (v) => setState(() => query = v),
+                    ),
+                    const SizedBox(height: 12),
+                    Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      child: TextButton.icon(
+                        onPressed: () => context.push('/products/colors'),
+                        icon: const Icon(LucideIcons.settings),
+                        label: Text('manage_colors'.tr()),
+                      ),
+                    ),
+                    Flexible(
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: filtered.length + 1,
+                        itemBuilder: (context, index) {
+                          if (index == 0) {
+                            return ListTile(
+                              title: Text('common.none'.tr()),
+                              onTap: () => Navigator.of(context).pop(null),
+                            );
+                          }
+                          final color = filtered[index - 1];
+                          return ListTile(
+                            title: Text(color.name),
+                            onTap: () => Navigator.of(context).pop(color.id),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    if (selected != null || selectedColorId != null) {
+      onSelected(selected);
+    }
+  }
+}
+
+class _SizePickerField extends StatelessWidget {
+  final int? selectedSizeId;
+  final ValueChanged<int?> onSelected;
+
+  const _SizePickerField({
+    required this.selectedSizeId,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<SizesBloc, RealtimeState<List<Size>>>(
+      builder: (context, state) {
+        final sizes = state is RealtimeSuccess<List<Size>> ? state.data : <Size>[];
+        final selected = selectedSizeId == null
+            ? null
+            : sizes.cast<Size?>().firstWhere(
+                  (s) => s?.id == selectedSizeId,
+                  orElse: () => null,
+                );
+
+        return InkWell(
+          onTap: () => _showSizePickerBottomSheet(context, sizes),
+          child: InputDecorator(
+            decoration: InputDecoration(
+              labelText: 'product_form_variantSize'.tr(),
+              border: const OutlineInputBorder(),
+              prefixIcon: const Icon(LucideIcons.ruler),
+            ),
+            child: Text(selected?.name ?? 'common.none'.tr()),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _showSizePickerBottomSheet(BuildContext context, List<Size> sizes) async {
+    final selected = await showModalBottomSheet<int?>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) {
+        String query = '';
+        return StatefulBuilder(
+          builder: (context, setState) {
+            final filtered = query.isEmpty
+                ? sizes
+                : sizes.where((s) => s.name.toLowerCase().contains(query.toLowerCase())).toList();
+
+            return SafeArea(
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: 16,
+                  right: 16,
+                  top: 12,
+                  bottom: MediaQuery.of(context).viewInsets.bottom + 12,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      decoration: InputDecoration(
+                        hintText: 'sizes.search_hint'.tr(),
+                        prefixIcon: const Icon(LucideIcons.search),
+                        border: const OutlineInputBorder(),
+                      ),
+                      onChanged: (v) => setState(() => query = v),
+                    ),
+                    const SizedBox(height: 12),
+                    Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      child: TextButton.icon(
+                        onPressed: () => context.push('/products/sizes'),
+                        icon: const Icon(LucideIcons.settings),
+                        label: Text('manage_sizes'.tr()),
+                      ),
+                    ),
+                    Flexible(
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: filtered.length + 1,
+                        itemBuilder: (context, index) {
+                          if (index == 0) {
+                            return ListTile(
+                              title: Text('common.none'.tr()),
+                              onTap: () => Navigator.of(context).pop(null),
+                            );
+                          }
+                          final size = filtered[index - 1];
+                          return ListTile(
+                            title: Text(size.name),
+                            onTap: () => Navigator.of(context).pop(size.id),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    if (selected != null || selectedSizeId != null) {
+      onSelected(selected);
+    }
   }
 }

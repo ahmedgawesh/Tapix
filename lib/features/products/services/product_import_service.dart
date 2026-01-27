@@ -3,12 +3,14 @@ import 'package:easy_localization/easy_localization.dart';
 import '../domain/entities/import_file_data.dart';
 import '../domain/entities/import_result.dart';
 import '../domain/repositories/product_repository.dart';
+import '../domain/repositories/product_variant_repository.dart';
 import '../domain/usecases/import_products.dart';
 
 class ProductImportService implements ImportProducts {
   final ProductRepository _productRepository;
+  final ProductVariantRepository _variantRepository;
 
-  ProductImportService(this._productRepository);
+  ProductImportService(this._productRepository, this._variantRepository);
 
   @override
   Future<ImportResult> call({
@@ -21,6 +23,9 @@ class ProductImportService implements ImportProducts {
     final rowToProductId = <int, int>{};
     final bulkProducts = <BulkProductData>[];
 
+    final rowToColorName = <int, String>{};
+    final rowToSizeName = <int, String>{};
+
     for (var rowIndex = 0; rowIndex < fileData.rows.length; rowIndex++) {
       final row = fileData.rows[rowIndex];
       
@@ -30,6 +35,8 @@ class ProductImportService implements ImportProducts {
           rowIndex,
           columnMapping,
           fileData.headers,
+          rowToColorName: rowToColorName,
+          rowToSizeName: rowToSizeName,
         );
         bulkProducts.add(productData);
       } catch (e) {
@@ -48,6 +55,56 @@ class ProductImportService implements ImportProducts {
       try {
         insertedProducts = await _productRepository.bulkCreateProducts(bulkProducts);
         rowToProductId.addAll(insertedProducts);
+
+        if (insertedProducts.isNotEmpty) {
+          final colors = await _variantRepository.getAllColors();
+          final sizes = await _variantRepository.getAllSizes();
+          final colorIdByLowerName = {for (final c in colors) c.name.toLowerCase(): c.id};
+          final sizeIdByLowerName = {for (final s in sizes) s.name.toLowerCase(): s.id};
+
+          for (final entry in insertedProducts.entries) {
+            final rowIndex = entry.key;
+            final productId = entry.value;
+
+            final colorName = (rowToColorName[rowIndex] ?? '').trim();
+            final sizeName = (rowToSizeName[rowIndex] ?? '').trim();
+
+            int? colorId;
+            int? sizeId;
+
+            if (colorName.isNotEmpty) {
+              final key = colorName.toLowerCase();
+              colorId = colorIdByLowerName[key];
+              if (colorId == null) {
+                final createdId = await _variantRepository.createColor(colorName, null);
+                colorIdByLowerName[key] = createdId;
+                colorId = createdId;
+              }
+            }
+
+            if (sizeName.isNotEmpty) {
+              final key = sizeName.toLowerCase();
+              sizeId = sizeIdByLowerName[key];
+              if (sizeId == null) {
+                final createdId = await _variantRepository.createSize(sizeName, 0, null);
+                sizeIdByLowerName[key] = createdId;
+                sizeId = createdId;
+              }
+            }
+
+            if (colorId != null || sizeId != null) {
+              final product = bulkProducts.firstWhere((p) => p.rowIndex == rowIndex);
+              await _variantRepository.createVariant(
+                productId: productId,
+                colorId: colorId,
+                sizeId: sizeId,
+                costCents: product.costCents,
+                priceCents: product.priceCents,
+                stockQuantity: product.stockQuantity,
+              );
+            }
+          }
+        }
       } catch (e) {
         errors.add(ImportError(
           rowIndex: -1,
@@ -75,14 +132,24 @@ class ProductImportService implements ImportProducts {
     int rowIndex,
     ColumnMapping columnMapping,
     List<String> headers,
+    {
+    required Map<int, String> rowToColorName,
+    required Map<int, String> rowToSizeName,
+  }
   ) {
     final name = _getCellValue(row, columnMapping, 'name');
     if (name.isEmpty) {
       throw Exception('import_products.validation_name_required'.tr());
     }
 
-    final nameAr = _getCellValue(row, columnMapping, 'name_ar');
-    final nameFr = _getCellValue(row, columnMapping, 'name_fr');
+    final color = _getCellValue(row, columnMapping, 'color');
+    final size = _getCellValue(row, columnMapping, 'size');
+    if (color.isNotEmpty) {
+      rowToColorName[rowIndex] = color;
+    }
+    if (size.isNotEmpty) {
+      rowToSizeName[rowIndex] = size;
+    }
     final sku = _getCellValue(row, columnMapping, 'sku');
     final barcode = _getCellValue(row, columnMapping, 'barcode');
 
@@ -121,8 +188,6 @@ class ProductImportService implements ImportProducts {
     return BulkProductData(
       rowIndex: rowIndex,
       name: name,
-      nameAr: nameAr.isEmpty ? null : nameAr,
-      nameFr: nameFr.isEmpty ? null : nameFr,
       sku: sku.isEmpty ? null : sku,
       barcode: barcode.isEmpty ? null : barcode,
       costCents: costCents,

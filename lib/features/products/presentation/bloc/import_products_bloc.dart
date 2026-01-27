@@ -168,14 +168,14 @@ class ImportProductsBloc extends Bloc<ImportProductsEvent, ImportProductsState> 
         hint: 'import_products.field_required_hint'.tr(),
       ),
       ImportFieldDefinition(
-        fieldName: 'name_ar',
-        displayName: 'import_products.field_name_ar'.tr(),
+        fieldName: 'color',
+        displayName: 'import_products.field_color'.tr(),
         isRequired: false,
         fieldType: ImportFieldType.text,
       ),
       ImportFieldDefinition(
-        fieldName: 'name_fr',
-        displayName: 'import_products.field_name_fr'.tr(),
+        fieldName: 'size',
+        displayName: 'import_products.field_size'.tr(),
         isRequired: false,
         fieldType: ImportFieldType.text,
       ),

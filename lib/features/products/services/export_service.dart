@@ -2,6 +2,7 @@ import 'dart:typed_data';
 import 'package:csv/csv.dart';
 import 'package:excel/excel.dart';
 import '../domain/repositories/product_repository.dart';
+import '../domain/repositories/product_variant_repository.dart';
 import '../domain/entities/product_entity.dart';
 import '../../../core/services/logging_service.dart';
 
@@ -35,8 +36,19 @@ abstract class ExportService {
 
 class ExportServiceImpl implements ExportService {
   final ProductRepository _productRepository;
+  final ProductVariantRepository _variantRepository;
 
-  ExportServiceImpl(this._productRepository);
+  ExportServiceImpl(this._productRepository, this._variantRepository);
+
+  Future<Map<int, String>> _buildColorNameById() async {
+    final colors = await _variantRepository.getAllColors();
+    return {for (final c in colors) c.id: c.name};
+  }
+
+  Future<Map<int, String>> _buildSizeNameById() async {
+    final sizes = await _variantRepository.getAllSizes();
+    return {for (final s in sizes) s.id: s.name};
+  }
 
   @override
   Stream<List<Product>> watchProducts({
@@ -87,14 +99,17 @@ class ExportServiceImpl implements ExportService {
         tag: 'ExportService',
       );
 
+    final colorNameById = await _buildColorNameById();
+    final sizeNameById = await _buildSizeNameById();
+
     final rows = <List<dynamic>>[
       [
         'id',
         'sku',
         'barcode',
         'name',
-        'name_ar',
-        'name_fr',
+        'color',
+        'size',
         'description',
         'category_id',
         'supplier_id',
@@ -113,13 +128,31 @@ class ExportServiceImpl implements ExportService {
     ];
 
     for (final product in filteredProducts) {
+      String colorName = '';
+      String sizeName = '';
+
+      try {
+        final variants = await _variantRepository.getVariantsByProduct(product.id);
+        if (variants.isNotEmpty) {
+          final v = variants.first;
+          if (v.colorId != null) {
+            colorName = colorNameById[v.colorId!] ?? '';
+          }
+          if (v.sizeId != null) {
+            sizeName = sizeNameById[v.sizeId!] ?? '';
+          }
+        }
+      } catch (_) {
+        // Keep color/size empty on lookup issues
+      }
+
       rows.add([
         product.id,
         product.sku ?? '',
         product.barcode ?? '',
         product.name,
-        product.nameAr ?? '',
-        product.nameFr ?? '',
+        colorName,
+        sizeName,
         product.description ?? '',
         product.categoryId ?? '',
         product.supplierId ?? '',
@@ -206,14 +239,17 @@ class ExportServiceImpl implements ExportService {
     final excel = Excel.createExcel();
     final sheet = excel['Products'];
 
+    final colorNameById = await _buildColorNameById();
+    final sizeNameById = await _buildSizeNameById();
+
     // Header row
     final headers = [
       'ID',
       'SKU',
       'Barcode',
       'Name',
-      'Name (Arabic)',
-      'Name (French)',
+      'Color',
+      'Size',
       'Description',
       'Category ID',
       'Supplier ID',
@@ -234,13 +270,31 @@ class ExportServiceImpl implements ExportService {
 
     // Data rows
     for (final product in filteredProducts) {
+      String colorName = '';
+      String sizeName = '';
+
+      try {
+        final variants = await _variantRepository.getVariantsByProduct(product.id);
+        if (variants.isNotEmpty) {
+          final v = variants.first;
+          if (v.colorId != null) {
+            colorName = colorNameById[v.colorId!] ?? '';
+          }
+          if (v.sizeId != null) {
+            sizeName = sizeNameById[v.sizeId!] ?? '';
+          }
+        }
+      } catch (_) {
+        // Keep color/size empty on lookup issues
+      }
+
       sheet.appendRow([
         IntCellValue(product.id),
         TextCellValue(product.sku ?? ''),
         TextCellValue(product.barcode ?? ''),
         TextCellValue(product.name),
-        TextCellValue(product.nameAr ?? ''),
-        TextCellValue(product.nameFr ?? ''),
+        TextCellValue(colorName),
+        TextCellValue(sizeName),
         TextCellValue(product.description ?? ''),
         product.categoryId != null ? IntCellValue(product.categoryId!) : TextCellValue(''),
         product.supplierId != null ? IntCellValue(product.supplierId!) : TextCellValue(''),

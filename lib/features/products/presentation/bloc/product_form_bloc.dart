@@ -4,6 +4,7 @@ import 'package:equatable/equatable.dart';
 
 import '../../domain/entities/product_entity.dart';
 import '../../domain/repositories/product_repository.dart';
+import '../../domain/repositories/product_variant_repository.dart';
 
 // Events
 abstract class ProductFormEvent extends Equatable {
@@ -72,6 +73,9 @@ class ProductFormState extends Equatable {
   final bool isActive;
   final bool trackInventory;
 
+  final int? selectedColorId;
+  final int? selectedSizeId;
+
   // Validation errors
   final Map<String, String> fieldErrors;
 
@@ -102,6 +106,8 @@ class ProductFormState extends Equatable {
     this.taxRateBps = 0,
     this.isActive = true,
     this.trackInventory = true,
+    this.selectedColorId,
+    this.selectedSizeId,
     this.fieldErrors = const {},
   })  : costCents = costCents ?? Decimal.zero,
         priceCents = priceCents ?? Decimal.zero;
@@ -145,6 +151,8 @@ class ProductFormState extends Equatable {
     int? taxRateBps,
     bool? isActive,
     bool? trackInventory,
+    int? selectedColorId,
+    int? selectedSizeId,
     Map<String, String>? fieldErrors,
   }) {
     return ProductFormState(
@@ -174,6 +182,8 @@ class ProductFormState extends Equatable {
       taxRateBps: taxRateBps ?? this.taxRateBps,
       isActive: isActive ?? this.isActive,
       trackInventory: trackInventory ?? this.trackInventory,
+      selectedColorId: selectedColorId ?? this.selectedColorId,
+      selectedSizeId: selectedSizeId ?? this.selectedSizeId,
       fieldErrors: fieldErrors ?? this.fieldErrors,
     );
   }
@@ -206,6 +216,8 @@ class ProductFormState extends Equatable {
         taxRateBps,
         isActive,
         trackInventory,
+        selectedColorId,
+        selectedSizeId,
         fieldErrors,
       ];
 }
@@ -213,8 +225,9 @@ class ProductFormState extends Equatable {
 // Bloc
 class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
   final ProductRepository _repository;
+  final ProductVariantRepository _variantRepository;
 
-  ProductFormBloc(this._repository) : super(ProductFormState()) {
+  ProductFormBloc(this._repository, this._variantRepository) : super(ProductFormState()) {
     on<ProductFormInitialized>(_onInitialized);
     on<ProductFormFieldChanged>(_onFieldChanged);
     on<ProductFormSubmitted>(_onSubmitted);
@@ -338,6 +351,12 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
       case 'trackInventory':
         emit(state.copyWith(trackInventory: event.value as bool, fieldErrors: newErrors));
         break;
+      case 'selectedColorId':
+        emit(state.copyWith(selectedColorId: event.value as int?, fieldErrors: newErrors));
+        break;
+      case 'selectedSizeId':
+        emit(state.copyWith(selectedSizeId: event.value as int?, fieldErrors: newErrors));
+        break;
     }
   }
 
@@ -424,7 +443,7 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
         await _repository.updateProduct(product);
       } else {
         // Create new product
-        await _repository.createProduct(
+        final createdProductId = await _repository.createProduct(
           name: state.name,
           nameAr: state.nameAr,
           nameFr: state.nameFr,
@@ -446,6 +465,17 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
           isActive: state.isActive,
           trackInventory: state.trackInventory,
         );
+
+        if (state.selectedColorId != null || state.selectedSizeId != null) {
+          await _variantRepository.createVariant(
+            productId: createdProductId,
+            colorId: state.selectedColorId,
+            sizeId: state.selectedSizeId,
+            costCents: state.costCents,
+            priceCents: state.priceCents,
+            stockQuantity: state.stockQuantity,
+          );
+        }
       }
 
       emit(state.copyWith(isSubmitting: false, isSuccess: true));

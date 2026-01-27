@@ -376,6 +376,8 @@
     "error_validation_errors": "Cannot import with validation errors",
     "error_import": "Import failed: {}",
     "field_name": "Product Name",
+    "field_color": "Color",
+    "field_size": "Size",
     "field_name_ar": "Product Name (Arabic)",
     "field_name_fr": "Product Name (French)",
     "field_sku": "SKU",

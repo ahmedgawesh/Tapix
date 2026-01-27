@@ -3,9 +3,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:tapix/features/products/domain/entities/product_entity.dart';
 import 'package:tapix/features/products/domain/repositories/product_repository.dart';
+import 'package:tapix/features/products/domain/repositories/product_variant_repository.dart';
 import 'package:tapix/features/products/presentation/bloc/product_form_bloc.dart';
 
 class MockProductRepository extends Mock implements ProductRepository {}
+
+class MockProductVariantRepository extends Mock implements ProductVariantRepository {}
 
 class FakeProduct extends Fake implements Product {}
 
@@ -19,11 +22,13 @@ void main() {
 
   group('ProductFormBloc', () {
     late MockProductRepository repository;
+    late MockProductVariantRepository variantRepository;
     late ProductFormBloc bloc;
 
     setUp(() {
       repository = MockProductRepository();
-      bloc = ProductFormBloc(repository);
+      variantRepository = MockProductVariantRepository();
+      bloc = ProductFormBloc(repository, variantRepository);
     });
 
     tearDown(() {

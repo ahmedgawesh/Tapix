@@ -210,6 +210,8 @@
     "error_validation_errors": "لا يمكن الاستيراد مع وجود أخطاء في التحقق",
     "error_import": "فشل الاستيراد: {}",
     "field_name": "اسم المنتج",
+    "field_color": "اللون",
+    "field_size": "المقاس",
     "field_name_ar": "اسم المنتج (العربي)",
     "field_name_fr": "اسم المنتج (الفرنسي)",
     "field_sku": "الرمز التعريفي",

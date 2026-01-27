@@ -2,18 +2,30 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:tapix/features/products/services/export_service.dart';
 import 'package:tapix/features/products/domain/repositories/product_repository.dart';
+import 'package:tapix/features/products/domain/repositories/product_variant_repository.dart';
 import 'package:tapix/features/products/domain/entities/product_entity.dart';
+import 'package:tapix/features/products/domain/entities/product_color_entity.dart';
+import 'package:tapix/features/products/domain/entities/size_entity.dart';
 import 'package:decimal/decimal.dart';
 
 class MockProductRepository extends Mock implements ProductRepository {}
 
+class MockProductVariantRepository extends Mock implements ProductVariantRepository {}
+
 void main() {
   late ExportService exportService;
   late MockProductRepository mockRepository;
+  late MockProductVariantRepository mockVariantRepository;
 
   setUp(() {
     mockRepository = MockProductRepository();
-    exportService = ExportServiceImpl(mockRepository);
+    mockVariantRepository = MockProductVariantRepository();
+
+    when(() => mockVariantRepository.getAllColors()).thenAnswer((_) async => <ProductColor>[]);
+    when(() => mockVariantRepository.getAllSizes()).thenAnswer((_) async => <Size>[]);
+    when(() => mockVariantRepository.getVariantsByProduct(any())).thenAnswer((_) async => []);
+
+    exportService = ExportServiceImpl(mockRepository, mockVariantRepository);
   });
 
   group('ExportService', () {
@@ -63,7 +75,7 @@ void main() {
         final result = await exportService.exportToCSV();
 
         expect(result, isNotNull);
-        expect(result, contains('id,sku,barcode,name'));
+        expect(result, contains('id,sku,barcode,name,color,size'));
         expect(result, contains('1,SKU001,BAR001,Product 1'));
         expect(result, contains('1000')); // cost in cents
         expect(result, contains('1500')); // price in cents
@@ -82,7 +94,7 @@ void main() {
         final result = await exportService.exportToCSV();
 
         expect(result, isNotNull);
-        expect(result, contains('id,sku,barcode,name')); // Header only
+        expect(result, contains('id,sku,barcode,name,color,size')); // Header only
       });
 
       test('respects category filter', () async {
