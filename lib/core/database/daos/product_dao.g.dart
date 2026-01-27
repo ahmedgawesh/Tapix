@@ -13,6 +13,8 @@ mixin _$ProductDaoMixin on DatabaseAccessor<AppDatabase> {
   $SizesTable get sizes => attachedDatabase.sizes;
   $ProductVariantsTable get productVariants => attachedDatabase.productVariants;
   $ProductBatchesTable get productBatches => attachedDatabase.productBatches;
+  $PurchasesTable get purchases => attachedDatabase.purchases;
+  $PurchaseItemsTable get purchaseItems => attachedDatabase.purchaseItems;
   ProductDaoManager get managers => ProductDaoManager(this);
 }
 
@@ -44,4 +46,8 @@ class ProductDaoManager {
         _db.attachedDatabase,
         _db.productBatches,
       );
+  $$PurchasesTableTableManager get purchases =>
+      $$PurchasesTableTableManager(_db.attachedDatabase, _db.purchases);
+  $$PurchaseItemsTableTableManager get purchaseItems =>
+      $$PurchaseItemsTableTableManager(_db.attachedDatabase, _db.purchaseItems);
 }

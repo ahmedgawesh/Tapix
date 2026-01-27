@@ -481,6 +481,41 @@ FROM product_variants__old
       value: usdId.toString(),
       description: 'Default currency ID',
     );
+
+    await _seedDefaultColors();
+  }
+
+  Future<void> _seedDefaultColors() async {
+    Future<void> upsertColor({
+      required String name,
+      String? hexCode,
+    }) async {
+      final existing = await (select(productColors)
+            ..where((c) => c.name.equals(name)))
+          .getSingleOrNull();
+
+      if (existing == null) {
+        await into(productColors).insert(
+          ProductColorsCompanion.insert(
+            name: name,
+            hexCode: Value(hexCode),
+          ),
+        );
+      }
+    }
+
+    // Seed common colors
+    await upsertColor(name: 'Red', hexCode: '#FF0000');
+    await upsertColor(name: 'Green', hexCode: '#00FF00');
+    await upsertColor(name: 'Blue', hexCode: '#0000FF');
+    await upsertColor(name: 'Yellow', hexCode: '#FFFF00');
+    await upsertColor(name: 'Orange', hexCode: '#FFA500');
+    await upsertColor(name: 'Purple', hexCode: '#800080');
+    await upsertColor(name: 'Pink', hexCode: '#FFC0CB');
+    await upsertColor(name: 'Brown', hexCode: '#964B00');
+    await upsertColor(name: 'Gray', hexCode: '#808080');
+    await upsertColor(name: 'Black', hexCode: '#000000');
+    await upsertColor(name: 'White', hexCode: '#FFFFFF');
   }
 
   Future<void> _seedDefaultBarcodeTemplates() async {

@@ -15,7 +15,11 @@ import '../../features/products/presentation/screens/import_products_screen.dart
 import '../../features/products/presentation/screens/simple_export_screen.dart';
 import '../../features/products/presentation/screens/categories_screen.dart';
 import '../../features/products/presentation/screens/category_form_screen.dart';
+import '../../features/products/presentation/screens/colors_screen.dart';
+import '../../features/products/presentation/screens/color_form_screen.dart';
+import '../../features/products/presentation/screens/color_magazine_screen.dart';
 import '../../features/products/presentation/bloc/categories_bloc.dart';
+import '../../features/products/presentation/bloc/colors_bloc.dart';
 import '../../features/products/domain/entities/product_entity.dart';
 import '../../features/barcode/presentation/screens/barcode_scanner_screen.dart';
 import '../../features/barcode/presentation/screens/barcode_label_designer_screen.dart';
@@ -213,6 +217,33 @@ class AppRouter {
                   return BlocProvider(
                     create: (_) => sl<CategoriesBloc>(),
                     child: CategoryFormScreen(categoryId: id),
+                  );
+                },
+              ),
+            ],
+          ),
+          GoRoute(
+            path: 'colors',
+            builder: (context, state) => const ColorsScreen(),
+            routes: [
+              GoRoute(
+                path: 'magazine',
+                builder: (context, state) => const ColorMagazineScreen(),
+              ),
+              GoRoute(
+                path: 'new',
+                builder: (context, state) => BlocProvider(
+                  create: (_) => sl<ColorsBloc>(),
+                  child: const ColorFormScreen(),
+                ),
+              ),
+              GoRoute(
+                path: ':id/edit',
+                builder: (context, state) {
+                  final id = int.tryParse(state.pathParameters['id'] ?? '');
+                  return BlocProvider(
+                    create: (_) => sl<ColorsBloc>(),
+                    child: ColorFormScreen(colorId: id),
                   );
                 },
               ),

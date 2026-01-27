@@ -547,5 +547,51 @@
     "parent_category": "Catégorie Parente",
     "parent_category_hint": "Sélectionnez la catégorie parente (optionnel)",
     "no_parent": "Aucun Parent (Niveau Supérieur)"
+  },
+  "colors": {
+    "title": "Couleurs",
+    "add_color": "Ajouter une Couleur",
+    "edit_color": "Modifier la Couleur",
+    "name": "Nom de la Couleur",
+    "hex_code": "Code Hexadécimal",
+    "active": "Actif",
+    "inactive": "Inactif",
+    "search_hint": "Rechercher des couleurs...",
+    "no_colors": "Aucune Couleur",
+    "add_first_color": "Ajoutez votre première couleur pour organiser les variantes de produits",
+    "delete_confirm_title": "Supprimer la Couleur",
+    "delete_confirm_message": "Êtes-vous sûr de vouloir supprimer '{}'?",
+    "delete_with_products": "Impossible de supprimer '{}' - utilisé par {} produits",
+    "product_count": "{} produits",
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "delete": "Supprimer",
+    "error_loading": "Erreur lors du chargement des couleurs",
+    "picker": {
+      "title": "Choisir une couleur"
+    },
+    "form": {
+      "name_hint": "ex: Rouge, Bleu, Vert",
+      "pick_color": "Choisir la couleur",
+      "active_hint": "Cette couleur est active et peut être utilisée",
+      "inactive_hint": "Cette couleur est inactive et masquée",
+      "success_created": "Couleur créée avec succès",
+      "success_updated": "Couleur mise à jour avec succès",
+      "error_loading_color": "Échec du chargement de la couleur : {}",
+      "error_saving_color": "Échec de l'enregistrement de la couleur : {}",
+      "error_update_failed": "Échec de la mise à jour de la couleur",
+      "error_color_not_found": "Couleur introuvable",
+      "validation_invalid_hex": "Format hexadécimal invalide (ex: #FF0000 ou #F00)",
+      "validation_name_required": "Le nom de la couleur est requis",
+      "validation_name_max": "Le nom de la couleur doit contenir 50 caractères ou moins"
+    },
+    "magazine": {
+      "title": "Magazine des couleurs",
+      "open": "Magazine des couleurs",
+      "search_hint": "Rechercher par nom ou par hex...",
+      "no_results": "Aucun résultat",
+      "tap_to_copy": "Appuyez pour copier",
+      "copied": "Copié {}"
+    }
   }
 }

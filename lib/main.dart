@@ -13,6 +13,7 @@ import 'core/theme/app_theme.dart';
 import 'features/auth/auth.dart';
 import 'core/services/currency_service.dart';
 import 'core/bloc/simple_bloc_observer.dart';
+import 'features/settings/presentation/bloc/company_bloc.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -54,6 +55,7 @@ class MyApp extends StatelessWidget {
           BlocProvider(create: (_) => di.sl<ThemeBloc>()),
           BlocProvider(create: (_) => di.sl<LocalizationBloc>()),
           BlocProvider(create: (_) => di.sl<CurrencyBloc>()),
+          BlocProvider(create: (_) => di.sl<CompanyBloc>()),
           BlocProvider.value(value: authBloc),
         ],
         child: BlocListener<LocalizationBloc, RealtimeState<Locale>>(

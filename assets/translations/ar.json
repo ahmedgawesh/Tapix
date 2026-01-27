@@ -547,5 +547,51 @@
     "parent_category": "التصنيف الأب",
     "parent_category_hint": "اختر التصنيف الأب (اختياري)",
     "no_parent": "بدون أب (المستوى الأعلى)"
+  },
+  "colors": {
+    "title": "الألوان",
+    "add_color": "إضافة لون",
+    "edit_color": "تعديل اللون",
+    "name": "اسم اللون",
+    "hex_code": "الكود السداسي",
+    "active": "نشط",
+    "inactive": "غير نشط",
+    "search_hint": "البحث في الألوان...",
+    "no_colors": "لا توجد ألوان",
+    "add_first_color": "أضف لونك الأول لتنظيم متغيرات المنتجات",
+    "delete_confirm_title": "حذف اللون",
+    "delete_confirm_message": "هل أنت متأكد من حذف '{}'؟",
+    "delete_with_products": "لا يمكن حذف '{}' - مستخدم في {} منتجات",
+    "product_count": "{} منتجات",
+    "save": "حفظ",
+    "cancel": "إلغاء",
+    "delete": "حذف",
+    "error_loading": "خطأ في تحميل الألوان",
+    "picker": {
+      "title": "اختر لوناً"
+    },
+    "form": {
+      "name_hint": "مثال: أحمر، أزرق، أخضر",
+      "pick_color": "اختر اللون",
+      "active_hint": "هذا اللون نشط ويمكن استخدامه",
+      "inactive_hint": "هذا اللون غير نشط ومخفي",
+      "success_created": "تم إنشاء اللون بنجاح",
+      "success_updated": "تم تحديث اللون بنجاح",
+      "error_loading_color": "فشل تحميل اللون: {}",
+      "error_saving_color": "فشل حفظ اللون: {}",
+      "error_update_failed": "فشل تحديث اللون",
+      "error_color_not_found": "اللون غير موجود",
+      "validation_invalid_hex": "تنسيق الكود السداسي غير صحيح (مثل #FF0000 أو #F00)",
+      "validation_name_required": "اسم اللون مطلوب",
+      "validation_name_max": "يجب ألا يزيد اسم اللون عن 50 حرفاً"
+    },
+    "magazine": {
+      "title": "مجلة الألوان",
+      "open": "مجلة الألوان",
+      "search_hint": "ابحث بالاسم أو بالكود...",
+      "no_results": "لا توجد نتائج",
+      "tap_to_copy": "اضغط للنسخ",
+      "copied": "تم نسخ {}"
+    }
   }
 }

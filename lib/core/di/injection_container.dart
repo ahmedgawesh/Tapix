@@ -18,9 +18,11 @@ import '../../features/auth/auth.dart';
 import '../../features/products/domain/repositories/product_repository.dart';
 import '../../features/products/domain/repositories/product_variant_repository.dart';
 import '../../features/products/domain/repositories/category_repository.dart';
+import '../../features/products/domain/repositories/product_color_repository.dart';
 import '../../features/products/data/repositories/product_repository_impl.dart';
 import '../../features/products/data/repositories/product_variant_repository_impl.dart';
 import '../../features/products/data/repositories/category_repository_impl.dart';
+import '../../features/products/data/repositories/product_color_repository_impl.dart';
 import '../../features/products/data/datasources/product_local_datasource.dart';
 import '../../features/products/data/datasources/variant_local_datasource.dart';
 import '../../features/products/presentation/bloc/products_bloc.dart';
@@ -31,6 +33,7 @@ import '../../features/products/presentation/bloc/edit_prices_bloc.dart';
 import '../../features/products/presentation/bloc/import_products_bloc.dart';
 import '../../features/products/presentation/bloc/export_bloc.dart';
 import '../../features/products/presentation/bloc/categories_bloc.dart';
+import '../../features/products/presentation/bloc/colors_bloc.dart';
 import '../../features/products/services/file_import_service.dart';
 import '../../features/products/services/import_validation_service.dart';
 import '../../features/products/services/product_import_service.dart';
@@ -43,6 +46,7 @@ import '../../features/barcode/services/barcode_printer_service.dart';
 import '../../features/barcode/presentation/bloc/barcode_scanner_bloc.dart';
 import '../../features/barcode/presentation/bloc/barcode_design_bloc.dart';
 import '../../features/settings/data/services/company_profile_service.dart';
+import '../../features/settings/presentation/bloc/company_bloc.dart';
 
 final sl = GetIt.instance;
 
@@ -98,6 +102,9 @@ Future<void> init() async {
   sl.registerLazySingleton<CategoryRepository>(
     () => CategoryRepositoryImpl(sl()),
   );
+  sl.registerLazySingleton<ProductColorRepository>(
+    () => ProductColorRepositoryImpl(sl()),
+  );
 
   // Blocs
   sl.registerFactory(() => ThemeBloc(sl()));
@@ -126,9 +133,9 @@ Future<void> init() async {
   sl.registerFactory(() => ProductVariantsBloc(sl<ProductVariantRepository>()));
   sl.registerFactory(() => BulkProductBloc(sl<ProductRepository>()));
   sl.registerFactory(() => EditPricesBloc(sl<ProductRepository>()));
-  sl.registerFactory(() => ColorsBloc(sl<ProductVariantRepository>()));
   sl.registerFactory(() => SizesBloc(sl<ProductVariantRepository>()));
   sl.registerFactory(() => CategoriesBloc(sl<CategoryRepository>()));
+  sl.registerFactory(() => ColorsBloc(sl<ProductColorRepository>()));
   sl.registerFactory(() => ImportProductsBloc(
     parseImportFile: sl<ParseImportFile>(),
     validateImportData: sl<ValidateImportData>(),
@@ -143,6 +150,9 @@ Future<void> init() async {
 
   // Settings Services
   sl.registerLazySingleton(() => CompanyProfileService(sl()));
+  
+  // Settings Blocs
+  sl.registerFactory(() => CompanyBloc(sl<CompanyProfileService>()));
   
   // Barcode Blocs
   sl.registerFactory(() => BarcodeScannerBloc(

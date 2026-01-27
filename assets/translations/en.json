@@ -547,5 +547,51 @@
     "parent_category": "Parent Category",
     "parent_category_hint": "Select parent category (optional)",
     "no_parent": "No Parent (Top Level)"
+  },
+  "colors": {
+    "title": "Colors",
+    "add_color": "Add Color",
+    "edit_color": "Edit Color",
+    "name": "Color Name",
+    "hex_code": "Hex Code",
+    "active": "Active",
+    "inactive": "Inactive",
+    "search_hint": "Search colors...",
+    "no_colors": "No Colors",
+    "add_first_color": "Add your first color to organize product variants",
+    "delete_confirm_title": "Delete Color",
+    "delete_confirm_message": "Are you sure you want to delete '{}' ?",
+    "delete_with_products": "Cannot delete '{}' - used by {} products",
+    "product_count": "{} products",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "error_loading": "Error loading colors",
+    "picker": {
+      "title": "Pick a Color"
+    },
+    "form": {
+      "name_hint": "e.g., Red, Blue, Green",
+      "pick_color": "Pick color",
+      "active_hint": "This color is active and can be used",
+      "inactive_hint": "This color is inactive and hidden",
+      "success_created": "Color created successfully",
+      "success_updated": "Color updated successfully",
+      "error_loading_color": "Failed to load color: {}",
+      "error_saving_color": "Failed to save color: {}",
+      "error_update_failed": "Failed to update color",
+      "error_color_not_found": "Color not found",
+      "validation_invalid_hex": "Invalid hex code format (e.g., #FF0000 or #F00)",
+      "validation_name_required": "Color name is required",
+      "validation_name_max": "Color name must be 50 characters or less"
+    },
+    "magazine": {
+      "title": "Color Magazine",
+      "open": "Color Magazine",
+      "search_hint": "Search by name or hex...",
+      "no_results": "No matching colors",
+      "tap_to_copy": "Tap to copy",
+      "copied": "Copied {}"
+    }
   }
 }
