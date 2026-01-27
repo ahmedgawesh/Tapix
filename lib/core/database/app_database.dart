@@ -483,6 +483,7 @@ FROM product_variants__old
     );
 
     await _seedDefaultColors();
+    await _seedStandardSizes();
   }
 
   Future<void> _seedDefaultColors() async {
@@ -516,6 +517,35 @@ FROM product_variants__old
     await upsertColor(name: 'Gray', hexCode: '#808080');
     await upsertColor(name: 'Black', hexCode: '#000000');
     await upsertColor(name: 'White', hexCode: '#FFFFFF');
+  }
+
+  Future<void> _seedStandardSizes() async {
+    Future<void> upsertSize({
+      required String name,
+      String? description,
+      required int sortOrder,
+    }) async {
+      final existing = await (select(sizes)
+            ..where((s) => s.name.equals(name)))
+          .getSingleOrNull();
+
+      if (existing == null) {
+        await into(sizes).insert(
+          SizesCompanion.insert(
+            name: name,
+            description: Value(description),
+            sortOrder: Value(sortOrder),
+          ),
+        );
+      }
+    }
+
+    await upsertSize(name: 'Extra Small', description: 'XS', sortOrder: 1);
+    await upsertSize(name: 'Small', description: 'S', sortOrder: 2);
+    await upsertSize(name: 'Medium', description: 'M', sortOrder: 3);
+    await upsertSize(name: 'Large', description: 'L', sortOrder: 4);
+    await upsertSize(name: 'Extra Large', description: 'XL', sortOrder: 5);
+    await upsertSize(name: 'Double Extra Large', description: 'XXL', sortOrder: 6);
   }
 
   Future<void> _seedDefaultBarcodeTemplates() async {

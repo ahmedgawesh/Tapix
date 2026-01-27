@@ -18,6 +18,8 @@ import '../../features/products/presentation/screens/category_form_screen.dart';
 import '../../features/products/presentation/screens/colors_screen.dart';
 import '../../features/products/presentation/screens/color_form_screen.dart';
 import '../../features/products/presentation/screens/color_magazine_screen.dart';
+import '../../features/products/presentation/screens/sizes_screen.dart';
+import '../../features/products/presentation/screens/size_form_screen.dart';
 import '../../features/products/presentation/bloc/categories_bloc.dart';
 import '../../features/products/presentation/bloc/colors_bloc.dart';
 import '../../features/products/domain/entities/product_entity.dart';
@@ -249,6 +251,23 @@ class AppRouter {
               ),
             ],
           ),
+          GoRoute(
+            path: 'sizes',
+            builder: (context, state) => const SizesScreen(),
+            routes: [
+              GoRoute(
+                path: 'new',
+                builder: (context, state) => const SizeFormScreen(),
+              ),
+              GoRoute(
+                path: ':id/edit',
+                builder: (context, state) {
+                  final id = int.tryParse(state.pathParameters['id'] ?? '');
+                  return SizeFormScreen(sizeId: id);
+                },
+              ),
+            ],
+          ),
         ],
       ),
       GoRoute(
@@ -278,14 +297,16 @@ class AppRouter {
       GoRoute(
         path: '/settings',
         builder: (context, state) => const SettingsScreen(),
-      ),
-      GoRoute(
-        path: '/settings/company',
-        builder: (context, state) => const CompanyProfileScreen(),
-      ),
-      GoRoute(
-        path: '/settings/admin-tools',
-        builder: (context, state) => const AdminToolsScreen(),
+        routes: [
+          GoRoute(
+            path: 'company',
+            builder: (context, state) => const CompanyProfileScreen(),
+          ),
+          GoRoute(
+            path: 'admin-tools',
+            builder: (context, state) => const AdminToolsScreen(),
+          ),
+        ],
       ),
       GoRoute(
         path: '/barcode-scanner',

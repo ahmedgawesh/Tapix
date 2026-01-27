@@ -54,7 +54,9 @@
       "email": "البريد الإلكتروني",
       "tax_number": "الرقم الضريبي",
       "website": "الموقع الإلكتروني",
-      "saved": "تم حفظ بيانات الشركة"
+      "saved": "تم حفظ بيانات الشركة",
+      "basic_info": "المعلومات الأساسية",
+      "additional_info": "معلومات إضافية"
     },
     "currency": "العملة",
     "currency_preview": "معاينة: {}",
@@ -593,5 +595,37 @@
       "tap_to_copy": "اضغط للنسخ",
       "copied": "تم نسخ {}"
     }
+  },
+  "sizes": {
+    "title": "المقاسات",
+    "add_size": "إضافة مقاس",
+    "edit_size": "تعديل المقاس",
+    "name": "اسم المقاس",
+    "description": "الوصف",
+    "sort_order": "ترتيب العرض",
+    "active": "نشط",
+    "inactive": "غير نشط",
+    "search_hint": "البحث في المقاسات...",
+    "no_sizes": "لا توجد مقاسات",
+    "add_first_size": "أضف مقاسك الأول لتنظيم متغيرات المنتجات",
+    "delete_confirm_title": "حذف المقاس",
+    "delete_confirm_message": "هل أنت متأكد من حذف '{}'؟",
+    "delete_with_products": "لا يمكن حذف '{}' - مستخدم في {} منتجات",
+    "product_count": "{} منتجات",
+    "save": "حفظ",
+    "cancel": "إلغاء",
+    "delete": "حذف",
+    "basic_info": "المعلومات الأساسية",
+    "name_hint": "مثال: صغير، متوسط، كبير",
+    "description_hint": "وصف اختياري",
+    "sort_order_hint": "ترتيب العرض (0 = الأول)",
+    "name_required": "اسم المقاس مطلوب",
+    "name_too_long": "يجب ألا يزيد اسم المقاس عن 50 حرفاً",
+    "sort_order_required": "ترتيب العرض مطلوب",
+    "sort_order_invalid": "يجب أن يكون ترتيب العرض رقماً موجباً",
+    "active_description": "هذا المقاس نشط ويمكن استخدامه",
+    "inactive_description": "هذا المقاس غير نشط ومخفي",
+    "size_created": "تم إنشاء المقاس بنجاح",
+    "size_updated": "تم تحديث المقاس بنجاح"
   }
 }

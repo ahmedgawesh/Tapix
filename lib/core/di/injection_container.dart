@@ -19,10 +19,12 @@ import '../../features/products/domain/repositories/product_repository.dart';
 import '../../features/products/domain/repositories/product_variant_repository.dart';
 import '../../features/products/domain/repositories/category_repository.dart';
 import '../../features/products/domain/repositories/product_color_repository.dart';
+import '../../features/products/domain/repositories/size_repository.dart';
 import '../../features/products/data/repositories/product_repository_impl.dart';
 import '../../features/products/data/repositories/product_variant_repository_impl.dart';
 import '../../features/products/data/repositories/category_repository_impl.dart';
 import '../../features/products/data/repositories/product_color_repository_impl.dart';
+import '../../features/products/data/repositories/size_repository_impl.dart';
 import '../../features/products/data/datasources/product_local_datasource.dart';
 import '../../features/products/data/datasources/variant_local_datasource.dart';
 import '../../features/products/presentation/bloc/products_bloc.dart';
@@ -34,6 +36,7 @@ import '../../features/products/presentation/bloc/import_products_bloc.dart';
 import '../../features/products/presentation/bloc/export_bloc.dart';
 import '../../features/products/presentation/bloc/categories_bloc.dart';
 import '../../features/products/presentation/bloc/colors_bloc.dart';
+import '../../features/products/presentation/bloc/sizes_bloc.dart';
 import '../../features/products/services/file_import_service.dart';
 import '../../features/products/services/import_validation_service.dart';
 import '../../features/products/services/product_import_service.dart';
@@ -105,6 +108,9 @@ Future<void> init() async {
   sl.registerLazySingleton<ProductColorRepository>(
     () => ProductColorRepositoryImpl(sl()),
   );
+  sl.registerLazySingleton<SizeRepository>(
+    () => SizeRepositoryImpl(sl()),
+  );
 
   // Blocs
   sl.registerFactory(() => ThemeBloc(sl()));
@@ -133,9 +139,9 @@ Future<void> init() async {
   sl.registerFactory(() => ProductVariantsBloc(sl<ProductVariantRepository>()));
   sl.registerFactory(() => BulkProductBloc(sl<ProductRepository>()));
   sl.registerFactory(() => EditPricesBloc(sl<ProductRepository>()));
-  sl.registerFactory(() => SizesBloc(sl<ProductVariantRepository>()));
   sl.registerFactory(() => CategoriesBloc(sl<CategoryRepository>()));
   sl.registerFactory(() => ColorsBloc(sl<ProductColorRepository>()));
+  sl.registerFactory(() => SizesBloc(sl<SizeRepository>()));
   sl.registerFactory(() => ImportProductsBloc(
     parseImportFile: sl<ParseImportFile>(),
     validateImportData: sl<ValidateImportData>(),

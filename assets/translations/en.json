@@ -54,7 +54,9 @@
       "email": "Email",
       "tax_number": "Tax number",
       "website": "Website",
-      "saved": "Company details saved"
+      "saved": "Company details saved",
+      "basic_info": "Basic Information",
+      "additional_info": "Additional Information"
     },
     "currency": "Currency",
     "currency_preview": "Preview: {}",
@@ -593,5 +595,37 @@
       "tap_to_copy": "Tap to copy",
       "copied": "Copied {}"
     }
+  },
+  "sizes": {
+    "title": "Sizes",
+    "add_size": "Add Size",
+    "edit_size": "Edit Size",
+    "name": "Size Name",
+    "description": "Description",
+    "sort_order": "Sort Order",
+    "active": "Active",
+    "inactive": "Inactive",
+    "search_hint": "Search sizes...",
+    "no_sizes": "No Sizes",
+    "add_first_size": "Add your first size to organize product variants",
+    "delete_confirm_title": "Delete Size",
+    "delete_confirm_message": "Are you sure you want to delete '{}'?",
+    "delete_with_products": "Cannot delete '{}' - used by {} products",
+    "product_count": "{} products",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "basic_info": "Basic Information",
+    "name_hint": "e.g., Small, Medium, Large",
+    "description_hint": "Optional description",
+    "sort_order_hint": "Order for display (0 = first)",
+    "name_required": "Size name is required",
+    "name_too_long": "Size name must be 50 characters or less",
+    "sort_order_required": "Sort order is required",
+    "sort_order_invalid": "Sort order must be a positive number",
+    "active_description": "This size is active and can be used",
+    "inactive_description": "This size is inactive and hidden",
+    "size_created": "Size created successfully",
+    "size_updated": "Size updated successfully"
   }
 }

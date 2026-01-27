@@ -54,7 +54,9 @@
       "email": "E-mail",
       "tax_number": "Numéro fiscal",
       "website": "Site web",
-      "saved": "Détails de l'entreprise enregistrés"
+      "saved": "Détails de l'entreprise enregistrés",
+      "basic_info": "Informations de base",
+      "additional_info": "Informations supplémentaires"
     },
     "currency": "Devise",
     "currency_preview": "Aperçu: {}",
@@ -593,5 +595,37 @@
       "tap_to_copy": "Appuyez pour copier",
       "copied": "Copié {}"
     }
+  },
+  "sizes": {
+    "title": "Tailles",
+    "add_size": "Ajouter une Taille",
+    "edit_size": "Modifier la Taille",
+    "name": "Nom de la Taille",
+    "description": "Description",
+    "sort_order": "Ordre de Tri",
+    "active": "Actif",
+    "inactive": "Inactif",
+    "search_hint": "Rechercher des tailles...",
+    "no_sizes": "Aucune Taille",
+    "add_first_size": "Ajoutez votre première taille pour organiser les variantes de produits",
+    "delete_confirm_title": "Supprimer la Taille",
+    "delete_confirm_message": "Êtes-vous sûr de vouloir supprimer '{}'?",
+    "delete_with_products": "Impossible de supprimer '{}' - utilisé par {} produits",
+    "product_count": "{} produits",
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "delete": "Supprimer",
+    "basic_info": "Informations de Base",
+    "name_hint": "ex: Petit, Moyen, Grand",
+    "description_hint": "Description optionnelle",
+    "sort_order_hint": "Ordre d'affichage (0 = premier)",
+    "name_required": "Le nom de la taille est requis",
+    "name_too_long": "Le nom de la taille doit contenir 50 caractères ou moins",
+    "sort_order_required": "L'ordre de tri est requis",
+    "sort_order_invalid": "L'ordre de tri doit être un nombre positif",
+    "active_description": "Cette taille est active et peut être utilisée",
+    "inactive_description": "Cette taille est inactive et masquée",
+    "size_created": "Taille créée avec succès",
+    "size_updated": "Taille mise à jour avec succès"
   }
 }

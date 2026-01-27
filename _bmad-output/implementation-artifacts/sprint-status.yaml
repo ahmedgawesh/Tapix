@@ -65,8 +65,8 @@ development_status:
   3-7-simple-export-screen: done
   3-8-barcode-design-screen: done  # Code review fixes completed 2026-01-26
   3-9-categories-screen: done
-  3-10-colors-screen: review
-  3-11-sizes-screen: backlog
+  3-10-colors-screen: done
+  3-11-sizes-screen: done
   3-12-products-main-screen: backlog
   epic-3-retrospective: optional
 
