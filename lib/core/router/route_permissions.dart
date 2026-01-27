@@ -4,6 +4,7 @@ class RoutePermissions {
   static final Map<String, List<UserRole>> map = {
     '/dashboard': [UserRole.owner, UserRole.manager, UserRole.cashier, UserRole.salesperson],
     '/products': [UserRole.owner, UserRole.manager, UserRole.cashier, UserRole.salesperson],
+    '/products/variants': [UserRole.owner, UserRole.manager, UserRole.cashier, UserRole.salesperson],
     '/products/export': [UserRole.owner, UserRole.manager],
     '/sales': [UserRole.owner, UserRole.manager, UserRole.cashier, UserRole.salesperson],
     '/customers': [UserRole.owner, UserRole.manager, UserRole.cashier],

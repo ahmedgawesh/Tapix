@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
+import 'package:easy_localization/easy_localization.dart';
 
 import '../../domain/entities/product_entity.dart';
 import '../../../../core/services/currency_service.dart';
@@ -123,7 +124,7 @@ class ProductTileWidget extends StatelessWidget {
           ),
           const SizedBox(width: 4),
           Text(
-            'Variants',
+            'products.variants_badge'.tr(),
             style: theme.textTheme.labelSmall?.copyWith(
               color: colorScheme.onSurfaceVariant,
               fontWeight: FontWeight.w600,

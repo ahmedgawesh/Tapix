@@ -404,6 +404,11 @@ class _ProductListViewState extends State<_ProductListView> {
                 ),
               ]
             : [
+          IconButton(
+            icon: const Icon(LucideIcons.layers),
+            onPressed: () => context.push('/products/variants'),
+            tooltip: 'variants.title'.tr(),
+          ),
           PopupMenuButton<String>(
             icon: const Icon(LucideIcons.moreVertical),
             onSelected: (value) {
@@ -419,6 +424,9 @@ class _ProductListViewState extends State<_ProductListView> {
                   break;
                 case 'export':
                   context.push('/products/export');
+                  break;
+                case 'variants':
+                  context.push('/products/variants');
                   break;
                 case 'categories':
                   context.push('/products/categories');
@@ -469,6 +477,16 @@ class _ProductListViewState extends State<_ProductListView> {
                     const Icon(LucideIcons.download),
                     const SizedBox(width: 12),
                     Text('export_products.title'.tr()),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: 'variants',
+                child: Row(
+                  children: [
+                    const Icon(LucideIcons.layers),
+                    const SizedBox(width: 12),
+                    Text('variants.title'.tr()),
                   ],
                 ),
               ),

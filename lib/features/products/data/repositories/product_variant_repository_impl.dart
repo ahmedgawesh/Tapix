@@ -15,6 +15,11 @@ class ProductVariantRepositoryImpl implements ProductVariantRepository {
 
   ProductVariantRepositoryImpl(this._datasource);
 
+  String _buildAutoBarcode(int variantId) {
+    final padded = variantId.toString().padLeft(11, '0');
+    return '29$padded';
+  }
+
   // Variants
   @override
   Stream<List<ProductVariant>> watchAllVariants() {
@@ -34,6 +39,37 @@ class ProductVariantRepositoryImpl implements ProductVariantRepository {
   @override
   Future<ProductVariant?> getVariantById(int id) {
     return _datasource.getVariantById(id);
+  }
+
+  @override
+  Future<ProductVariant?> getVariantByBarcode(String barcode) {
+    return _datasource.getVariantByBarcode(barcode);
+  }
+
+  @override
+  Future<ProductVariant?> getDefaultVariantByProduct(int productId) {
+    return _datasource.getDefaultVariantByProduct(productId);
+  }
+
+  @override
+  Future<int> ensureDefaultVariantForProduct({
+    required int productId,
+    required Decimal costCents,
+    required Decimal priceCents,
+    required int stockQuantity,
+  }) async {
+    final existing = await _datasource.getDefaultVariantByProduct(productId);
+    if (existing != null) {
+      return existing.id;
+    }
+
+    final id = await createVariant(
+      productId: productId,
+      costCents: costCents,
+      priceCents: priceCents,
+      stockQuantity: stockQuantity,
+    );
+    return id;
   }
 
   @override
@@ -61,7 +97,14 @@ class ProductVariantRepositoryImpl implements ProductVariantRepository {
         stockQuantity: Value(stockQuantity),
         isActive: Value(isActive),
       ),
-    );
+    ).then((id) async {
+      final shouldAutoGenerate = barcode == null || barcode.trim().isEmpty;
+      if (shouldAutoGenerate) {
+        final autoBarcode = _buildAutoBarcode(id);
+        await _datasource.updateVariantBarcode(variantId: id, barcode: autoBarcode);
+      }
+      return id;
+    });
   }
 
   @override

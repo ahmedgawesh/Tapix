@@ -11,23 +11,24 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:easy_localization/easy_localization.dart';
 
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/widgets/theme_toggle_button.dart';
 import '../../domain/entities/product_entity.dart';
+import '../../domain/entities/product_variant_entity.dart';
+import '../../domain/entities/category_entity.dart';
 import '../../domain/repositories/product_repository.dart';
 import '../bloc/product_form_bloc.dart';
 import '../bloc/product_variants_bloc.dart';
+import '../bloc/categories_bloc.dart';
 import '../bloc/colors_bloc.dart';
 import '../bloc/colors_event.dart';
 import '../bloc/sizes_bloc.dart';
 import '../bloc/sizes_event.dart';
-import '../bloc/categories_bloc.dart';
 import '../bloc/categories_event.dart';
 import '../widgets/money_input_widget.dart';
 import '../widgets/variant_management_widget.dart';
-import '../../../../core/bloc/realtime_bloc.dart';
 import '../../domain/entities/product_color_entity.dart';
 import '../../domain/entities/size_entity.dart';
-import '../../domain/entities/category_entity.dart';
 
 class ProductFormScreen extends StatelessWidget {
   final int? productId;
@@ -146,10 +147,10 @@ class _ProductFormViewState extends State<_ProductFormView> {
     if (_barcodeController.text.isEmpty && state.barcode != null) {
       _barcodeController.text = state.barcode!;
     }
-    if (_stockController.text.isEmpty) {
+    if (!_stockFocusNode.hasFocus) {
       _stockController.text = state.stockQuantity.toString();
     }
-    if (_minStockController.text.isEmpty) {
+    if (!_minStockFocusNode.hasFocus) {
       _minStockController.text = state.minQuantity.toString();
     }
     if (_taxRateController.text.isEmpty && state.taxRateBps > 0) {
@@ -508,12 +509,39 @@ class _ProductFormViewState extends State<_ProductFormView> {
           },
         ),
         const SizedBox(height: 16),
-        _ColorSizePickerRow(
-          selectedColorId: state.selectedColorId,
-          selectedSizeId: state.selectedSizeId,
-          onColorSelected: (id) => bloc.add(ProductFormFieldChanged(field: 'selectedColorId', value: id)),
-          onSizeSelected: (id) => bloc.add(ProductFormFieldChanged(field: 'selectedSizeId', value: id)),
-        ),
+        if (!state.hasVariants)
+          _ColorSizePickerRow(
+            selectedColorId: state.selectedColorId,
+            selectedSizeId: state.selectedSizeId,
+            onColorSelected: (id) => bloc.add(ProductFormFieldChanged(field: 'selectedColorId', value: id)),
+            onSizeSelected: (id) => bloc.add(ProductFormFieldChanged(field: 'selectedSizeId', value: id)),
+          )
+        else
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  LucideIcons.layers,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'product_form.color_size_disabled_when_has_variants'.tr(),
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ),
+              ],
+            ),
+          ),
         const SizedBox(height: 16),
         _buildCategoryPicker(context, state),
         const SizedBox(height: 16),
@@ -773,31 +801,87 @@ class _ProductFormViewState extends State<_ProductFormView> {
 
   Widget _buildInventorySection(BuildContext context, ProductFormState state) {
     final bloc = context.read<ProductFormBloc>();
+    final productId = state.productId;
 
     return _buildSectionCard(
       title: 'product_form_inventory'.tr(),
       icon: LucideIcons.warehouse,
       children: [
+        if (state.hasVariants)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  LucideIcons.layers,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'product_form.stock_is_sum_of_variants'.tr(),
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        if (state.hasVariants) const SizedBox(height: 16),
         Row(
           children: [
             Expanded(
-              child: TextFormField(
-                controller: _stockController,
-                focusNode: _stockFocusNode,
-                decoration: InputDecoration(
-                  labelText: 'product_form_quantity'.tr(),
-                  errorText: state.fieldErrors['stockQuantity'],
-                  border: const OutlineInputBorder(),
-                ),
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                onChanged: (value) {
-                  bloc.add(ProductFormFieldChanged(
-                    field: 'stockQuantity',
-                    value: int.tryParse(value) ?? 0,
-                  ));
-                },
-              ),
+              child: state.hasVariants && productId != null
+                  ? BlocBuilder<ProductVariantsBloc, RealtimeState<List<ProductVariant>>>(
+                      builder: (context, variantsState) {
+                        List<ProductVariant?> variants = const [];
+                        if (variantsState is RealtimeSuccess<List<ProductVariant>>) {
+                          variants = variantsState.data;
+                        } else if (variantsState is RealtimeLoading<List<ProductVariant>>) {
+                          variants = variantsState.previousData ?? const [];
+                        } else if (variantsState is RealtimeError<List<ProductVariant>>) {
+                          variants = variantsState.previousData ?? const [];
+                        } else if (variantsState is RealtimeOptimistic<List<ProductVariant>>) {
+                          variants = variantsState.optimisticData;
+                        }
+
+                        final totalStock = variants.fold<int>(0, (sum, v) => sum + (v?.stockQuantity ?? 0));
+
+                        return TextFormField(
+                          initialValue: totalStock.toString(),
+                          decoration: InputDecoration(
+                            labelText: 'product_form.totalStock'.tr(),
+                            border: const OutlineInputBorder(),
+                            suffixIcon: const Icon(LucideIcons.lock),
+                          ),
+                          enabled: false,
+                        );
+                      },
+                    )
+                  : TextFormField(
+                      controller: _stockController,
+                      focusNode: _stockFocusNode,
+                      decoration: InputDecoration(
+                        labelText: 'product_form_quantity'.tr(),
+                        errorText: state.fieldErrors['stockQuantity'],
+                        border: const OutlineInputBorder(),
+                      ),
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      onChanged: (value) {
+                        bloc.add(ProductFormFieldChanged(
+                          field: 'stockQuantity',
+                          value: int.tryParse(value) ?? 0,
+                        ));
+                      },
+                    ),
             ),
             const SizedBox(width: 16),
             Expanded(

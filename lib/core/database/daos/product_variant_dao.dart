@@ -30,16 +30,47 @@ class ProductVariantDao extends DatabaseAccessor<AppDatabase> with _$ProductVari
     return (select(productVariants)..where((v) => v.id.equals(id))).getSingleOrNull();
   }
 
+  Future<ProductVariant?> getVariantByBarcode(String barcode) {
+    return (select(productVariants)
+          ..where((v) => v.barcode.equals(barcode))
+          ..where((v) => v.isActive.equals(true)))
+        .getSingleOrNull();
+  }
+
+  Future<ProductVariant?> getDefaultVariantByProduct(int productId) {
+    return (select(productVariants)
+          ..where((v) => v.productId.equals(productId))
+          ..where((v) => v.colorId.isNull())
+          ..where((v) => v.sizeId.isNull())
+          ..where((v) => v.isActive.equals(true)))
+        .getSingleOrNull();
+  }
+
   Future<int> createVariant(ProductVariantsCompanion variant) {
     return transaction(() async {
       final id = await into(productVariants).insert(variant);
       final productId = variant.productId.value;
-      await customStatement(
-        'UPDATE products SET has_variants = 1 WHERE id = ?',
-        [productId],
-      );
+
+      final hasDimensions =
+          variant.colorId.present && variant.colorId.value != null ||
+              variant.sizeId.present && variant.sizeId.value != null;
+      if (hasDimensions) {
+        await customStatement(
+          'UPDATE products SET has_variants = 1 WHERE id = ?',
+          [productId],
+        );
+      }
       return id;
     });
+  }
+
+  Future<void> updateVariantBarcode({required int variantId, required String barcode}) {
+    return (update(productVariants)..where((v) => v.id.equals(variantId))).write(
+      ProductVariantsCompanion(
+        barcode: Value(barcode),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
   }
 
   Future<bool> updateVariant(ProductVariant variant) {

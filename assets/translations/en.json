@@ -114,10 +114,13 @@
     "taxRate": "Tax Rate",
     "inventory": "Inventory",
     "quantity": "Current Stock",
+    "totalStock": "Total Stock",
     "minQuantity": "Minimum Stock",
     "trackInventory": "Track Inventory",
     "hasVariants": "Has Variants",
     "hasVariants_hint": "Enable if product has multiple variants (colors, sizes)",
+    "color_size_disabled_when_has_variants": "Color and size are managed in the variants section when this product has variants.",
+    "stock_is_sum_of_variants": "Stock is calculated from variants. Edit stock on each variant.",
     "isActive": "Active",
     "variants": "Product Variants",
     "addVariant": "Add Variant",
@@ -137,6 +140,7 @@
     "imageUpload": "Upload Image",
     "variant_item_title": "Variant {}",
     "variant_item_stock": "Stock: {}",
+    "variant_item_barcode": "Barcode: {}",
     "created": "Product created successfully",
     "updated": "Product updated successfully",
     "error": "Error",
@@ -153,6 +157,7 @@
     "enter_barcode": "Enter Barcode",
     "barcode_sku_hint": "Barcode or SKU",
     "sku": "SKU",
+    "variants_badge": "Variants",
     "price": "Price",
     "stock": "Stock",
     "select_for_print": "Select products to print labels",
@@ -163,6 +168,13 @@
     "delete_blocked_stock": "Cannot delete products that have stock",
     "delete_blocked_open_purchase": "Cannot delete products linked to an open supplier purchase",
     "delete_blocked_linked_records": "Cannot delete products linked to existing invoices/transactions"
+  },
+  "variants": {
+    "title": "Variants",
+    "search_hint": "Search by barcode, SKU, color, or size",
+    "empty": "No variants",
+    "no_results": "No results",
+    "color_size": "Color: {} | Size: {}"
   },
   "barcode": {
     "scanner_title": "Barcode Scanner",

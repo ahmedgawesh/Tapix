@@ -273,6 +273,27 @@ class BulkProductBloc extends Bloc<BulkProductEvent, BulkProductState> {
             priceCents: row.priceCents,
             stockQuantity: row.stockQuantity,
           );
+        } else if (!row.hasVariants) {
+          await _variantRepository.ensureDefaultVariantForProduct(
+            productId: productId,
+            costCents: row.costCents,
+            priceCents: row.priceCents,
+            stockQuantity: row.stockQuantity,
+          );
+
+          final defaultVariant = await _variantRepository.getDefaultVariantByProduct(productId);
+          if (defaultVariant != null) {
+            final updated = defaultVariant.copyWith(
+              sku: (row.sku?.trim().isNotEmpty ?? false) ? row.sku : null,
+              barcode: (row.barcode?.trim().isNotEmpty ?? false) ? row.barcode : null,
+              costCents: row.costCents,
+              priceCents: row.priceCents,
+              stockQuantity: row.stockQuantity,
+              colorId: null,
+              sizeId: null,
+            );
+            await _variantRepository.updateVariant(updated);
+          }
         }
       }
 

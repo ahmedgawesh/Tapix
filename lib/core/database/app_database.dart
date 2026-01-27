@@ -310,6 +310,10 @@ FROM product_variants__old
     await customStatement('CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku)');
     await customStatement('CREATE UNIQUE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode) WHERE barcode IS NOT NULL');
     await customStatement('CREATE UNIQUE INDEX IF NOT EXISTS idx_product_variants_barcode ON product_variants(barcode) WHERE barcode IS NOT NULL');
+    await customStatement(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_product_variants_product_color_size_unique '
+      'ON product_variants(product_id, IFNULL(color_id, -1), IFNULL(size_id, -1))',
+    );
     await customStatement('CREATE INDEX IF NOT EXISTS idx_customers_active ON customers(is_active)');
     await customStatement('CREATE INDEX IF NOT EXISTS idx_suppliers_active ON suppliers(is_active)');
     await customStatement('CREATE INDEX IF NOT EXISTS idx_currency_active ON currencies(is_active)');

@@ -252,18 +252,21 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
     try {
       final product = await _repository.watchProduct(event.productId!).first;
       if (product != null) {
+        Decimal costCents = product.costCents;
+        Decimal priceCents = product.priceCents;
+        int stockQuantity = product.stockQuantity;
         int? selectedColorId;
         int? selectedSizeId;
-        try {
-          final variants = await _variantRepository.getVariantsByProduct(product.id);
-          if (variants.isNotEmpty) {
-            final v = variants.first;
-            selectedColorId = v.colorId;
-            selectedSizeId = v.sizeId;
+
+        if (!product.hasVariants) {
+          final defaultVariant = await _variantRepository.getDefaultVariantByProduct(product.id);
+          if (defaultVariant != null) {
+            costCents = defaultVariant.costCents;
+            priceCents = defaultVariant.priceCents;
+            stockQuantity = defaultVariant.stockQuantity;
+            selectedColorId = defaultVariant.colorId;
+            selectedSizeId = defaultVariant.sizeId;
           }
-        } catch (_) {
-          selectedColorId = null;
-          selectedSizeId = null;
         }
 
         emit(state.copyWith(
@@ -274,10 +277,10 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
           description: product.description,
           sku: product.sku,
           barcode: product.barcode,
-          costCents: product.costCents,
-          priceCents: product.priceCents,
+          costCents: costCents,
+          priceCents: priceCents,
           wholesalePriceCents: product.wholesalePriceCents,
-          stockQuantity: product.stockQuantity,
+          stockQuantity: stockQuantity,
           minQuantity: product.minQuantity,
           categoryId: product.categoryId,
           supplierId: product.supplierId,
@@ -288,8 +291,8 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
           taxRateBps: product.taxRateBps,
           isActive: product.isActive,
           trackInventory: product.trackInventory,
-          selectedColorId: selectedColorId,
-          selectedSizeId: selectedSizeId,
+          selectedColorId: product.hasVariants ? null : selectedColorId,
+          selectedSizeId: product.hasVariants ? null : selectedSizeId,
         ));
       } else {
         emit(state.copyWith(isLoading: false, error: 'Product not found'));
@@ -353,7 +356,15 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
         emit(state.copyWith(imagePath: event.value as String?, fieldErrors: newErrors));
         break;
       case 'hasVariants':
-        emit(state.copyWith(hasVariants: event.value as bool, fieldErrors: newErrors));
+        final hasVariants = event.value as bool;
+        emit(
+          state.copyWith(
+            hasVariants: hasVariants,
+            selectedColorId: hasVariants ? null : state.selectedColorId,
+            selectedSizeId: hasVariants ? null : state.selectedSizeId,
+            fieldErrors: newErrors,
+          ),
+        );
         break;
       case 'isTaxable':
         emit(state.copyWith(isTaxable: event.value as bool, fieldErrors: newErrors));
@@ -458,26 +469,27 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
         );
         await _repository.updateProduct(product);
 
-        final variants = await _variantRepository.getVariantsByProduct(state.productId!);
-        if (variants.isNotEmpty) {
-          final v = variants.first;
-          final updated = v.copyWith(
-            colorId: state.selectedColorId,
-            sizeId: state.selectedSizeId,
-            costCents: state.costCents,
-            priceCents: state.priceCents,
-            stockQuantity: state.stockQuantity,
-          );
-          await _variantRepository.updateVariant(updated);
-        } else if (state.selectedColorId != null || state.selectedSizeId != null) {
-          await _variantRepository.createVariant(
+        if (!state.hasVariants) {
+          await _variantRepository.ensureDefaultVariantForProduct(
             productId: state.productId!,
-            colorId: state.selectedColorId,
-            sizeId: state.selectedSizeId,
             costCents: state.costCents,
             priceCents: state.priceCents,
             stockQuantity: state.stockQuantity,
           );
+
+          final defaultVariant = await _variantRepository.getDefaultVariantByProduct(state.productId!);
+          if (defaultVariant != null) {
+            final updated = defaultVariant.copyWith(
+              sku: (state.sku?.trim().isNotEmpty ?? false) ? state.sku : null,
+              barcode: (state.barcode?.trim().isNotEmpty ?? false) ? state.barcode : null,
+              costCents: state.costCents,
+              priceCents: state.priceCents,
+              stockQuantity: state.stockQuantity,
+              colorId: state.selectedColorId,
+              sizeId: state.selectedSizeId,
+            );
+            await _variantRepository.updateVariant(updated);
+          }
         }
       } else {
         // Create new product
@@ -504,15 +516,27 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
           trackInventory: state.trackInventory,
         );
 
-        if (state.selectedColorId != null || state.selectedSizeId != null) {
-          await _variantRepository.createVariant(
+        if (!state.hasVariants) {
+          await _variantRepository.ensureDefaultVariantForProduct(
             productId: createdProductId,
-            colorId: state.selectedColorId,
-            sizeId: state.selectedSizeId,
             costCents: state.costCents,
             priceCents: state.priceCents,
             stockQuantity: state.stockQuantity,
           );
+
+          final defaultVariant = await _variantRepository.getDefaultVariantByProduct(createdProductId);
+          if (defaultVariant != null) {
+            final updated = defaultVariant.copyWith(
+              sku: (state.sku?.trim().isNotEmpty ?? false) ? state.sku : null,
+              barcode: (state.barcode?.trim().isNotEmpty ?? false) ? state.barcode : null,
+              costCents: state.costCents,
+              priceCents: state.priceCents,
+              stockQuantity: state.stockQuantity,
+              colorId: state.selectedColorId,
+              sizeId: state.selectedSizeId,
+            );
+            await _variantRepository.updateVariant(updated);
+          }
         }
       }
 

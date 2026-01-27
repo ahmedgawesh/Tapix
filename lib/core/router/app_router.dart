@@ -20,6 +20,7 @@ import '../../features/products/presentation/screens/color_form_screen.dart';
 import '../../features/products/presentation/screens/color_magazine_screen.dart';
 import '../../features/products/presentation/screens/sizes_screen.dart';
 import '../../features/products/presentation/screens/size_form_screen.dart';
+import '../../features/products/presentation/screens/variants_screen.dart';
 import '../../features/products/presentation/bloc/categories_bloc.dart';
 import '../../features/products/presentation/bloc/colors_bloc.dart';
 import '../../features/products/domain/entities/product_entity.dart';
@@ -200,6 +201,10 @@ class AppRouter {
           GoRoute(
             path: 'export',
             builder: (context, state) => const SimpleExportScreen(),
+          ),
+          GoRoute(
+            path: 'variants',
+            builder: (context, state) => const VariantsScreen(),
           ),
           GoRoute(
             path: 'categories',

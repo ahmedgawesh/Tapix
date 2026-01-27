@@ -8,6 +8,14 @@ abstract class ProductVariantRepository {
   Stream<List<ProductVariant>> watchVariantsByProduct(int productId);
   Future<List<ProductVariant>> getVariantsByProduct(int productId);
   Future<ProductVariant?> getVariantById(int id);
+  Future<ProductVariant?> getVariantByBarcode(String barcode);
+  Future<ProductVariant?> getDefaultVariantByProduct(int productId);
+  Future<int> ensureDefaultVariantForProduct({
+    required int productId,
+    required Decimal costCents,
+    required Decimal priceCents,
+    required int stockQuantity,
+  });
   
   Future<int> createVariant({
     required int productId,

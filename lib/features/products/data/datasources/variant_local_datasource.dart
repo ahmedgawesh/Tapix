@@ -12,7 +12,10 @@ abstract class VariantLocalDatasource {
   Stream<List<ProductVariantModel>> watchVariantsByProduct(int productId);
   Future<List<ProductVariantModel>> getVariantsByProduct(int productId);
   Future<ProductVariantModel?> getVariantById(int id);
+  Future<ProductVariantModel?> getVariantByBarcode(String barcode);
+  Future<ProductVariantModel?> getDefaultVariantByProduct(int productId);
   Future<int> createVariant(ProductVariantsCompanion variant);
+  Future<void> updateVariantBarcode({required int variantId, required String barcode});
   Future<bool> updateVariant(ProductVariantModel variant);
   Future<int> deleteVariant(int id);
 
@@ -72,8 +75,25 @@ class VariantLocalDatasourceImpl implements VariantLocalDatasource {
   }
 
   @override
+  Future<ProductVariantModel?> getVariantByBarcode(String barcode) async {
+    final variant = await _variantDao.getVariantByBarcode(barcode);
+    return variant == null ? null : ProductVariantModel.fromDrift(variant);
+  }
+
+  @override
+  Future<ProductVariantModel?> getDefaultVariantByProduct(int productId) async {
+    final variant = await _variantDao.getDefaultVariantByProduct(productId);
+    return variant == null ? null : ProductVariantModel.fromDrift(variant);
+  }
+
+  @override
   Future<int> createVariant(ProductVariantsCompanion variant) {
     return _variantDao.createVariant(variant);
+  }
+
+  @override
+  Future<void> updateVariantBarcode({required int variantId, required String barcode}) {
+    return _variantDao.updateVariantBarcode(variantId: variantId, barcode: barcode);
   }
 
   @override

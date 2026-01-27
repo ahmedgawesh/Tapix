@@ -132,6 +132,28 @@ class ProductImportService implements ImportProducts {
                 priceCents: product.priceCents,
                 stockQuantity: product.stockQuantity,
               );
+            } else {
+              final product = bulkProducts.firstWhere((p) => p.rowIndex == rowIndex);
+              await _variantRepository.ensureDefaultVariantForProduct(
+                productId: productId,
+                costCents: product.costCents,
+                priceCents: product.priceCents,
+                stockQuantity: product.stockQuantity,
+              );
+
+              final defaultVariant = await _variantRepository.getDefaultVariantByProduct(productId);
+              if (defaultVariant != null) {
+                final updated = defaultVariant.copyWith(
+                  sku: (product.sku?.trim().isNotEmpty ?? false) ? product.sku : null,
+                  barcode: (product.barcode?.trim().isNotEmpty ?? false) ? product.barcode : null,
+                  costCents: product.costCents,
+                  priceCents: product.priceCents,
+                  stockQuantity: product.stockQuantity,
+                  colorId: null,
+                  sizeId: null,
+                );
+                await _variantRepository.updateVariant(updated);
+              }
             }
 
             if (categoryId != null) {

@@ -112,10 +112,13 @@
     "taxRate": "Taux de Taxe",
     "inventory": "Inventaire",
     "quantity": "Stock Actuel",
+    "totalStock": "Stock Total",
     "minQuantity": "Stock Minimum",
     "trackInventory": "Suivre l'Inventaire",
     "hasVariants": "A des Variantes",
     "hasVariants_hint": "Activer si le produit a plusieurs variantes (couleurs, tailles)",
+    "color_size_disabled_when_has_variants": "La couleur et la taille sont gérées dans la section des variantes lorsque ce produit a des variantes.",
+    "stock_is_sum_of_variants": "Le stock est calculé à partir des variantes. Modifiez le stock sur chaque variante.",
     "isActive": "Actif",
     "variants": "Variantes de Produit",
     "addVariant": "Ajouter une Variante",
@@ -135,6 +138,7 @@
     "imageUpload": "Télécharger une Image",
     "variant_item_title": "Variante {}",
     "variant_item_stock": "Stock: {}",
+    "variant_item_barcode": "Code-barres: {}",
     "created": "Produit créé avec succès",
     "updated": "Produit mis à jour avec succès",
     "error": "Erreur",
@@ -153,6 +157,7 @@
     "enter_barcode": "Entrer le code-barres",
     "barcode_sku_hint": "Code-barres ou SKU",
     "sku": "SKU",
+    "variants_badge": "Variantes",
     "price": "Prix",
     "stock": "Stock",
     "select_for_print": "Sélectionner des produits pour imprimer des étiquettes",
@@ -163,6 +168,13 @@
     "delete_blocked_stock": "Impossible de supprimer des produits qui ont du stock",
     "delete_blocked_open_purchase": "Impossible de supprimer des produits liés à un achat fournisseur ouvert",
     "delete_blocked_linked_records": "Impossible de supprimer des produits liés à des factures/transactions existantes"
+  },
+  "variants": {
+    "title": "Variantes",
+    "search_hint": "Rechercher par code-barres, SKU, couleur ou taille",
+    "empty": "Aucune variante",
+    "no_results": "Aucun résultat",
+    "color_size": "Couleur: {} | Taille: {}"
   },
   "import_products": {
     "title": "Importer des produits",

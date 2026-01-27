@@ -17,6 +17,10 @@ class ProductVariantsInitialized extends ProductVariantsEvent {
   const ProductVariantsInitialized(this.productId);
 }
 
+class AllVariantsInitialized extends ProductVariantsEvent {
+  const AllVariantsInitialized();
+}
+
 class VariantCreateRequested extends ProductVariantsEvent {
   final int productId;
   final String? sku;
@@ -72,6 +76,7 @@ class ProductVariantsBloc extends RealtimeBloc<List<ProductVariant>, ProductVari
   @override
   void registerEventHandlers() {
     on<ProductVariantsInitialized>(_onInitialized);
+    on<AllVariantsInitialized>(_onAllInitialized);
     on<VariantCreateRequested>(_onVariantCreate);
     on<VariantUpdateRequested>(_onVariantUpdate);
     on<VariantDeleteRequested>(_onVariantDelete);
@@ -81,7 +86,7 @@ class ProductVariantsBloc extends RealtimeBloc<List<ProductVariant>, ProductVari
   @override
   Stream<List<ProductVariant>> get dataStream {
     if (_productId == null) {
-      return const Stream.empty();
+      return _repository.watchAllVariants();
     }
     return _repository.watchVariantsByProduct(_productId!);
   }
@@ -91,6 +96,14 @@ class ProductVariantsBloc extends RealtimeBloc<List<ProductVariant>, ProductVari
     Emitter<RealtimeState<List<ProductVariant>>> emit,
   ) {
     _productId = event.productId;
+    refresh();
+  }
+
+  void _onAllInitialized(
+    AllVariantsInitialized event,
+    Emitter<RealtimeState<List<ProductVariant>>> emit,
+  ) {
+    _productId = null;
     refresh();
   }
 

@@ -112,10 +112,13 @@
     "taxRate": "نسبة الضريبة",
     "inventory": "المخزون",
     "quantity": "المخزون الحالي",
+    "totalStock": "إجمالي المخزون",
     "minQuantity": "الحد الأدنى للمخزون",
     "trackInventory": "تتبع المخزون",
     "hasVariants": "له متغيرات",
     "hasVariants_hint": "فعّل إذا كان للمنتج متغيرات متعددة (ألوان، مقاسات)",
+    "color_size_disabled_when_has_variants": "يتم إدارة اللون والمقاس من قسم المتغيرات عندما يكون لهذا المنتج متغيرات.",
+    "stock_is_sum_of_variants": "يتم احتساب المخزون من المتغيرات. عدّل المخزون داخل كل متغير.",
     "isActive": "نشط",
     "variants": "متغيرات المنتج",
     "addVariant": "إضافة متغير",
@@ -135,6 +138,7 @@
     "imageUpload": "رفع صورة",
     "variant_item_title": "متغير {}",
     "variant_item_stock": "المخزون: {}",
+    "variant_item_barcode": "الباركود: {}",
     "created": "تم إنشاء المنتج بنجاح",
     "updated": "تم تحديث المنتج بنجاح",
     "error": "خطأ",
@@ -153,6 +157,7 @@
     "enter_barcode": "أدخل الباركود",
     "barcode_sku_hint": "الباركود أو رمز المنتج",
     "sku": "رمز المنتج",
+    "variants_badge": "متغيرات",
     "price": "السعر",
     "stock": "المخزون",
     "select_for_print": "اختر المنتجات لطباعة البطاقات",
@@ -163,6 +168,13 @@
     "delete_blocked_stock": "لا يمكن حذف منتجات لها رصيد",
     "delete_blocked_open_purchase": "لا يمكن حذف منتجات مرتبطة بفاتورة مورد غير مُقفلة",
     "delete_blocked_linked_records": "لا يمكن حذف منتجات مرتبطة بفواتير أو حركات موجودة"
+  },
+  "variants": {
+    "title": "المتغيرات",
+    "search_hint": "ابحث بالباركود أو الرمز أو اللون أو المقاس",
+    "empty": "لا توجد متغيرات",
+    "no_results": "لا توجد نتائج",
+    "color_size": "اللون: {} | المقاس: {}"
   },
   "import_products": {
     "title": "استيراد المنتجات",

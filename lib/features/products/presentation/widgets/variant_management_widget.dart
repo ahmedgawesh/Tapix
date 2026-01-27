@@ -66,9 +66,22 @@ class VariantManagementWidget extends StatelessWidget {
                   return Card(
                     margin: const EdgeInsets.only(bottom: 8),
                     child: ListTile(
-                      title: Text(variant.sku ?? 'Variant #${variant.id}'),
-                      subtitle: Text(
-                        'Stock: ${variant.stockQuantity} | Price Adj: ${variant.priceAdjustmentCents}',
+                      title: Text(
+                        variant.sku?.isNotEmpty == true
+                            ? variant.sku!
+                            : 'product_form.variant_item_title'.tr(args: ['${variant.id}']),
+                      ),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'product_form.variant_item_stock'.tr(args: ['${variant.stockQuantity}']),
+                          ),
+                          if (variant.barcode?.isNotEmpty == true)
+                            Text(
+                              'product_form.variant_item_barcode'.tr(args: [variant.barcode!]),
+                            ),
+                        ],
                       ),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -197,102 +210,131 @@ class _VariantDialogState extends State<_VariantDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(widget.variant == null 
-          ? 'product_form.addVariant'.tr() 
-          : 'product_form.editVariant'.tr()),
-      content: SizedBox(
-        width: 500,
-        child: SingleChildScrollView(
-          child: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final dialogWidth = constraints.maxWidth >= 560 ? 560.0 : constraints.maxWidth;
+        final isNarrow = dialogWidth < 480;
+
+        return AlertDialog(
+          title: Text(
+            widget.variant == null ? 'product_form.addVariant'.tr() : 'product_form.editVariant'.tr(),
+          ),
+          content: SizedBox(
+            width: dialogWidth,
+            child: SingleChildScrollView(
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Expanded(
-                      child: ColorPickerWidget(
-                        selectedColorId: _colorId,
-                        onColorSelected: (id) => setState(() => _colorId = id),
+                    if (isNarrow)
+                      Column(
+                        children: [
+                          ColorPickerWidget(
+                            selectedColorId: _colorId,
+                            onColorSelected: (id) => setState(() => _colorId = id),
+                          ),
+                          const SizedBox(height: 16),
+                          SizeSelectorWidget(
+                            selectedSizeId: _sizeId,
+                            onSizeSelected: (id) => setState(() => _sizeId = id),
+                          ),
+                        ],
+                      )
+                    else
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ColorPickerWidget(
+                              selectedColorId: _colorId,
+                              onColorSelected: (id) => setState(() => _colorId = id),
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: SizeSelectorWidget(
+                              selectedSizeId: _sizeId,
+                              onSizeSelected: (id) => setState(() => _sizeId = id),
+                            ),
+                          ),
+                        ],
+                      ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _skuController,
+                      decoration: InputDecoration(
+                        labelText: 'product_form.variantSku'.tr(),
+                        border: const OutlineInputBorder(),
                       ),
                     ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: SizeSelectorWidget(
-                        selectedSizeId: _sizeId,
-                        onSizeSelected: (id) => setState(() => _sizeId = id),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _barcodeController,
+                      decoration: InputDecoration(
+                        labelText: 'product_form.variantBarcode'.tr(),
+                        border: const OutlineInputBorder(),
                       ),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _skuController,
-                  decoration: InputDecoration(
-                    labelText: 'product_form.variantSku'.tr(),
-                    border: const OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _barcodeController,
-                  decoration: InputDecoration(
-                    labelText: 'product_form.variantBarcode'.tr(),
-                    border: const OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: MoneyInputWidget(
-                        value: _costCents,
-                        label: 'product_form.cost'.tr(),
-                        onChanged: (value) => setState(() => _costCents = value),
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: MoneyInputWidget(
-                        value: _priceCents,
-                        label: 'product_form.price'.tr(),
-                        onChanged: (value) => setState(() => _priceCents = value),
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: TextFormField(
-                        controller: _stockController,
-                        decoration: InputDecoration(
-                          labelText: 'product_form.quantity'.tr(),
-                          border: const OutlineInputBorder(),
+                    const SizedBox(height: 16),
+                    Wrap(
+                      spacing: 16,
+                      runSpacing: 16,
+                      children: [
+                        SizedBox(
+                          width: isNarrow ? dialogWidth : (dialogWidth - 16) / 2,
+                          child: MoneyInputWidget(
+                            value: _costCents,
+                            label: 'product_form.cost'.tr(),
+                            onChanged: (value) => setState(() => _costCents = value),
+                          ),
                         ),
-                        keyboardType: TextInputType.number,
-                        validator: (value) {
-                          if (value == null || value.isEmpty) return 'required';
-                          if (int.tryParse(value) == null) return 'invalid';
-                          return null;
-                        },
-                      ),
+                        SizedBox(
+                          width: isNarrow ? dialogWidth : (dialogWidth - 16) / 2,
+                          child: MoneyInputWidget(
+                            value: _priceCents,
+                            label: 'product_form.price'.tr(),
+                            onChanged: (value) => setState(() => _priceCents = value),
+                          ),
+                        ),
+                        SizedBox(
+                          width: dialogWidth,
+                          child: TextFormField(
+                            controller: _stockController,
+                            decoration: InputDecoration(
+                              labelText: 'product_form.quantity'.tr(),
+                              border: const OutlineInputBorder(),
+                            ),
+                            keyboardType: TextInputType.number,
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'common.required'.tr();
+                              }
+                              if (int.tryParse(value) == null) {
+                                return 'common.invalidNumber'.tr();
+                              }
+                              return null;
+                            },
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              ],
+              ),
             ),
           ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text('common.cancel'.tr()),
-        ),
-        FilledButton(
-          onPressed: _submit,
-          child: Text('common.save'.tr()),
-        ),
-      ],
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('common.cancel'.tr()),
+            ),
+            FilledButton(
+              onPressed: _submit,
+              child: Text('common.save'.tr()),
+            ),
+          ],
+        );
+      },
     );
   }
 
