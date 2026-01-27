@@ -6,8 +6,12 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/di/injection_container.dart';
 import '../bloc/bulk_product_bloc.dart';
+import '../bloc/categories_bloc.dart';
+import '../bloc/categories_event.dart';
 import '../bloc/colors_bloc.dart';
+import '../bloc/colors_event.dart';
 import '../bloc/sizes_bloc.dart';
+import '../bloc/sizes_event.dart';
 import '../widgets/bulk_product_row.dart';
 
 class BulkProductFormScreen extends StatelessWidget {
@@ -21,10 +25,13 @@ class BulkProductFormScreen extends StatelessWidget {
           create: (context) => sl<BulkProductBloc>()..add(const BulkProductRowAdded()),
         ),
         BlocProvider(
-          create: (context) => sl<ColorsBloc>(),
+          create: (context) => sl<ColorsBloc>()..add(const LoadColors()),
         ),
         BlocProvider(
-          create: (context) => sl<SizesBloc>(),
+          create: (context) => sl<SizesBloc>()..add(const LoadSizes()),
+        ),
+        BlocProvider(
+          create: (context) => sl<CategoriesBloc>()..add(const LoadCategories()),
         ),
       ],
       child: const _BulkProductFormView(),

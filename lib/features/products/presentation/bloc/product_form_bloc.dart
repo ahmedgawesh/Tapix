@@ -252,6 +252,20 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
     try {
       final product = await _repository.watchProduct(event.productId!).first;
       if (product != null) {
+        int? selectedColorId;
+        int? selectedSizeId;
+        try {
+          final variants = await _variantRepository.getVariantsByProduct(product.id);
+          if (variants.isNotEmpty) {
+            final v = variants.first;
+            selectedColorId = v.colorId;
+            selectedSizeId = v.sizeId;
+          }
+        } catch (_) {
+          selectedColorId = null;
+          selectedSizeId = null;
+        }
+
         emit(state.copyWith(
           isLoading: false,
           name: product.name,
@@ -274,6 +288,8 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
           taxRateBps: product.taxRateBps,
           isActive: product.isActive,
           trackInventory: product.trackInventory,
+          selectedColorId: selectedColorId,
+          selectedSizeId: selectedSizeId,
         ));
       } else {
         emit(state.copyWith(isLoading: false, error: 'Product not found'));
@@ -441,6 +457,28 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
           trackInventory: state.trackInventory,
         );
         await _repository.updateProduct(product);
+
+        final variants = await _variantRepository.getVariantsByProduct(state.productId!);
+        if (variants.isNotEmpty) {
+          final v = variants.first;
+          final updated = v.copyWith(
+            colorId: state.selectedColorId,
+            sizeId: state.selectedSizeId,
+            costCents: state.costCents,
+            priceCents: state.priceCents,
+            stockQuantity: state.stockQuantity,
+          );
+          await _variantRepository.updateVariant(updated);
+        } else if (state.selectedColorId != null || state.selectedSizeId != null) {
+          await _variantRepository.createVariant(
+            productId: state.productId!,
+            colorId: state.selectedColorId,
+            sizeId: state.selectedSizeId,
+            costCents: state.costCents,
+            priceCents: state.priceCents,
+            stockQuantity: state.stockQuantity,
+          );
+        }
       } else {
         // Create new product
         final createdProductId = await _repository.createProduct(

@@ -3,6 +3,7 @@ import 'package:csv/csv.dart';
 import 'package:excel/excel.dart';
 import '../domain/repositories/product_repository.dart';
 import '../domain/repositories/product_variant_repository.dart';
+import '../domain/repositories/category_repository.dart';
 import '../domain/entities/product_entity.dart';
 import '../../../core/services/logging_service.dart';
 
@@ -37,8 +38,9 @@ abstract class ExportService {
 class ExportServiceImpl implements ExportService {
   final ProductRepository _productRepository;
   final ProductVariantRepository _variantRepository;
+  final CategoryRepository _categoryRepository;
 
-  ExportServiceImpl(this._productRepository, this._variantRepository);
+  ExportServiceImpl(this._productRepository, this._variantRepository, this._categoryRepository);
 
   Future<Map<int, String>> _buildColorNameById() async {
     final colors = await _variantRepository.getAllColors();
@@ -48,6 +50,11 @@ class ExportServiceImpl implements ExportService {
   Future<Map<int, String>> _buildSizeNameById() async {
     final sizes = await _variantRepository.getAllSizes();
     return {for (final s in sizes) s.id: s.name};
+  }
+
+  Future<Map<int, String>> _buildCategoryNameById() async {
+    final categories = await _categoryRepository.getAllCategories();
+    return {for (final c in categories) c.id: c.name};
   }
 
   @override
@@ -101,6 +108,7 @@ class ExportServiceImpl implements ExportService {
 
     final colorNameById = await _buildColorNameById();
     final sizeNameById = await _buildSizeNameById();
+    final categoryNameById = await _buildCategoryNameById();
 
     final rows = <List<dynamic>>[
       [
@@ -111,6 +119,7 @@ class ExportServiceImpl implements ExportService {
         'color',
         'size',
         'description',
+        'category',
         'category_id',
         'supplier_id',
         'cost_cents',
@@ -154,6 +163,7 @@ class ExportServiceImpl implements ExportService {
         colorName,
         sizeName,
         product.description ?? '',
+        product.categoryId == null ? '' : (categoryNameById[product.categoryId!] ?? ''),
         product.categoryId ?? '',
         product.supplierId ?? '',
         product.costCents.toBigInt().toInt(),
@@ -241,6 +251,7 @@ class ExportServiceImpl implements ExportService {
 
     final colorNameById = await _buildColorNameById();
     final sizeNameById = await _buildSizeNameById();
+    final categoryNameById = await _buildCategoryNameById();
 
     // Header row
     final headers = [
@@ -251,6 +262,7 @@ class ExportServiceImpl implements ExportService {
       'Color',
       'Size',
       'Description',
+      'Category',
       'Category ID',
       'Supplier ID',
       'Cost (Cents)',
@@ -288,6 +300,8 @@ class ExportServiceImpl implements ExportService {
         // Keep color/size empty on lookup issues
       }
 
+      final categoryName = product.categoryId == null ? '' : (categoryNameById[product.categoryId!] ?? '');
+
       sheet.appendRow([
         IntCellValue(product.id),
         TextCellValue(product.sku ?? ''),
@@ -296,6 +310,7 @@ class ExportServiceImpl implements ExportService {
         TextCellValue(colorName),
         TextCellValue(sizeName),
         TextCellValue(product.description ?? ''),
+        TextCellValue(categoryName),
         product.categoryId != null ? IntCellValue(product.categoryId!) : TextCellValue(''),
         product.supplierId != null ? IntCellValue(product.supplierId!) : TextCellValue(''),
         IntCellValue(product.costCents.toBigInt().toInt()),

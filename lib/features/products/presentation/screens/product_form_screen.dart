@@ -20,11 +20,14 @@ import '../bloc/colors_bloc.dart';
 import '../bloc/colors_event.dart';
 import '../bloc/sizes_bloc.dart';
 import '../bloc/sizes_event.dart';
+import '../bloc/categories_bloc.dart';
+import '../bloc/categories_event.dart';
 import '../widgets/money_input_widget.dart';
 import '../widgets/variant_management_widget.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../domain/entities/product_color_entity.dart';
 import '../../domain/entities/size_entity.dart';
+import '../../domain/entities/category_entity.dart';
 
 class ProductFormScreen extends StatelessWidget {
   final int? productId;
@@ -39,6 +42,9 @@ class ProductFormScreen extends StatelessWidget {
         BlocProvider(
           create: (context) => sl<ProductFormBloc>()
             ..add(ProductFormInitialized(productId: productId, initialBarcode: initialBarcode)),
+        ),
+        BlocProvider(
+          create: (context) => sl<CategoriesBloc>()..add(const LoadCategories()),
         ),
         BlocProvider(
           create: (context) => sl<ColorsBloc>()..add(const LoadColors()),
@@ -509,6 +515,8 @@ class _ProductFormViewState extends State<_ProductFormView> {
           onSizeSelected: (id) => bloc.add(ProductFormFieldChanged(field: 'selectedSizeId', value: id)),
         ),
         const SizedBox(height: 16),
+        _buildCategoryPicker(context, state),
+        const SizedBox(height: 16),
         TextFormField(
           controller: _descriptionController,
           decoration: InputDecoration(
@@ -577,6 +585,114 @@ class _ProductFormViewState extends State<_ProductFormView> {
         ),
       ],
     );
+  }
+
+  Widget _buildCategoryPicker(BuildContext context, ProductFormState state) {
+    return BlocBuilder<CategoriesBloc, RealtimeState<List<Category>>>(
+      builder: (context, categoriesState) {
+        final categories = categoriesState is RealtimeSuccess<List<Category>>
+            ? categoriesState.data
+            : <Category>[];
+        final selected = state.categoryId == null
+            ? null
+            : categories.cast<Category?>().firstWhere(
+                  (c) => c?.id == state.categoryId,
+                  orElse: () => null,
+                );
+
+        return InkWell(
+          onTap: () => _showCategoryPickerBottomSheet(context, state.categoryId),
+          child: InputDecorator(
+            decoration: InputDecoration(
+              labelText: 'product_form.category'.tr(),
+              border: const OutlineInputBorder(),
+              prefixIcon: const Icon(LucideIcons.tags),
+            ),
+            child: Text(selected?.name ?? 'common.none'.tr()),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _showCategoryPickerBottomSheet(BuildContext context, int? currentId) async {
+    final categoriesBloc = context.read<CategoriesBloc>();
+    final bloc = context.read<ProductFormBloc>();
+
+    final selectedId = await showModalBottomSheet<int?>(
+      context: context,
+      isScrollControlled: true,
+      useRootNavigator: false,
+      builder: (sheetContext) {
+        return BlocProvider.value(
+          value: categoriesBloc,
+          child: SafeArea(
+            child: Padding(
+              padding: EdgeInsets.only(
+                left: 16,
+                right: 16,
+                top: 12,
+                bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 12,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    decoration: InputDecoration(
+                      hintText: 'categories.search_hint'.tr(),
+                      prefixIcon: const Icon(LucideIcons.search),
+                      border: const OutlineInputBorder(),
+                    ),
+                    onChanged: (v) => categoriesBloc.add(SearchCategories(v)),
+                  ),
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: TextButton.icon(
+                      onPressed: () => sheetContext.push('/products/categories'),
+                      icon: const Icon(LucideIcons.settings),
+                      label: Text('categories.title'.tr()),
+                    ),
+                  ),
+                  Flexible(
+                    child: BlocBuilder<CategoriesBloc, RealtimeState<List<Category>>>(
+                      bloc: categoriesBloc,
+                      builder: (context, state) {
+                        final categories = state is RealtimeSuccess<List<Category>> ? state.data : <Category>[];
+                        return ListView.builder(
+                          shrinkWrap: true,
+                          itemCount: categories.length + 1,
+                          itemBuilder: (context, index) {
+                            if (index == 0) {
+                              return ListTile(
+                                title: Text('common.none'.tr()),
+                                onTap: () => Navigator.of(context).pop(null),
+                              );
+                            }
+                            final cat = categories[index - 1];
+                            return ListTile(
+                              title: Text(cat.name),
+                              onTap: () => Navigator.of(context).pop(cat.id),
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    if (!mounted) return;
+
+    categoriesBloc.add(const LoadCategories());
+    if (selectedId != null || currentId != null) {
+      bloc.add(ProductFormFieldChanged(field: 'categoryId', value: selectedId));
+    }
   }
 
   Widget _buildPricingSection(BuildContext context, ProductFormState state) {

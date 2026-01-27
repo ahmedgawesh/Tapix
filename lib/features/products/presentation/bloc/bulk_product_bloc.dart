@@ -4,14 +4,16 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../domain/repositories/product_repository.dart';
+import '../../domain/repositories/product_variant_repository.dart';
 
 part 'bulk_product_event.dart';
 part 'bulk_product_state.dart';
 
 class BulkProductBloc extends Bloc<BulkProductEvent, BulkProductState> {
   final ProductRepository _repository;
+  final ProductVariantRepository _variantRepository;
 
-  BulkProductBloc(this._repository) : super(BulkProductInitial()) {
+  BulkProductBloc(this._repository, this._variantRepository) : super(BulkProductInitial()) {
     on<BulkProductRowAdded>(_onRowAdded);
     on<BulkProductRowRemoved>(_onRowRemoved);
     on<BulkProductRowUpdated>(_onRowUpdated);
@@ -256,6 +258,23 @@ class BulkProductBloc extends Bloc<BulkProductEvent, BulkProductState> {
       final results = await _repository.bulkCreateProducts(bulkData);
       
       debugPrint('BulkProductBloc: Created ${results.length} products in transaction');
+
+      for (final entry in results.entries) {
+        final rowIndex = entry.key;
+        final productId = entry.value;
+        final row = currentState.rows.firstWhere((r) => r.rowIndex == rowIndex);
+
+        if (row.colorId != null || row.sizeId != null) {
+          await _variantRepository.createVariant(
+            productId: productId,
+            colorId: row.colorId,
+            sizeId: row.sizeId,
+            costCents: row.costCents,
+            priceCents: row.priceCents,
+            stockQuantity: row.stockQuantity,
+          );
+        }
+      }
 
       emit(BulkProductSuccess(
         successCount: results.length,

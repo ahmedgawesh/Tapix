@@ -4,14 +4,18 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:tapix/features/products/domain/entities/product_entity.dart';
 import 'package:tapix/features/products/domain/repositories/product_repository.dart';
+import 'package:tapix/features/products/domain/repositories/product_variant_repository.dart';
 import 'package:tapix/features/products/presentation/bloc/bulk_product_bloc.dart';
 
 class MockProductRepository extends Mock implements ProductRepository {}
+
+class MockProductVariantRepository extends Mock implements ProductVariantRepository {}
 
 class FakeBulkProductData extends Fake implements BulkProductData {}
 
 void main() {
   late MockProductRepository mockRepository;
+  late MockProductVariantRepository mockVariantRepository;
 
   setUpAll(() {
     registerFallbackValue(Decimal.zero);
@@ -21,18 +25,31 @@ void main() {
 
   setUp(() {
     mockRepository = MockProductRepository();
+    mockVariantRepository = MockProductVariantRepository();
+
+    when(() => mockVariantRepository.createVariant(
+          productId: any(named: 'productId'),
+          sku: any(named: 'sku'),
+          barcode: any(named: 'barcode'),
+          colorId: any(named: 'colorId'),
+          sizeId: any(named: 'sizeId'),
+          costCents: any(named: 'costCents'),
+          priceCents: any(named: 'priceCents'),
+          stockQuantity: any(named: 'stockQuantity'),
+          isActive: any(named: 'isActive'),
+        )).thenAnswer((_) async => 1);
   });
 
   group('BulkProductBloc', () {
     test('initial state is BulkProductInitial', () {
-      final bloc = BulkProductBloc(mockRepository);
+      final bloc = BulkProductBloc(mockRepository, mockVariantRepository);
       expect(bloc.state, isA<BulkProductInitial>());
       bloc.close();
     });
 
     blocTest<BulkProductBloc, BulkProductState>(
       'emits state with new row when BulkProductRowAdded is added',
-      build: () => BulkProductBloc(mockRepository),
+      build: () => BulkProductBloc(mockRepository, mockVariantRepository),
       act: (bloc) => bloc.add(const BulkProductRowAdded()),
       expect: () => [
         isA<BulkProductEditing>().having(
@@ -45,7 +62,7 @@ void main() {
 
     blocTest<BulkProductBloc, BulkProductState>(
       'emits state with removed row when BulkProductRowRemoved is added',
-      build: () => BulkProductBloc(mockRepository),
+      build: () => BulkProductBloc(mockRepository, mockVariantRepository),
       seed: () => BulkProductEditing(
         rows: [
           BulkProductRowData.empty(0),
@@ -65,7 +82,7 @@ void main() {
 
     blocTest<BulkProductBloc, BulkProductState>(
       'emits state with updated row when BulkProductRowUpdated is added',
-      build: () => BulkProductBloc(mockRepository),
+      build: () => BulkProductBloc(mockRepository, mockVariantRepository),
       seed: () => BulkProductEditing(
         rows: [BulkProductRowData.empty(0)],
         validationErrors: const {},
@@ -90,7 +107,7 @@ void main() {
       'emits validation error for empty required fields',
       build: () {
         when(() => mockRepository.findBySku(any())).thenAnswer((_) async => null);
-        return BulkProductBloc(mockRepository);
+        return BulkProductBloc(mockRepository, mockVariantRepository);
       },
       seed: () => BulkProductEditing(
         rows: [
@@ -121,7 +138,7 @@ void main() {
         when(() => mockRepository.findBySku(any())).thenAnswer((_) async => null);
         when(() => mockRepository.bulkCreateProducts(any()))
             .thenAnswer((_) async => {0: 1});
-        return BulkProductBloc(mockRepository);
+        return BulkProductBloc(mockRepository, mockVariantRepository);
       },
       seed: () => BulkProductEditing(
         rows: [
@@ -154,7 +171,7 @@ void main() {
         when(() => mockRepository.findBySku(any())).thenAnswer((_) async => null);
         when(() => mockRepository.bulkCreateProducts(any()))
             .thenThrow(Exception('Database error'));
-        return BulkProductBloc(mockRepository);
+        return BulkProductBloc(mockRepository, mockVariantRepository);
       },
       seed: () => BulkProductEditing(
         rows: [
@@ -201,7 +218,7 @@ void main() {
               isActive: true,
               trackInventory: true,
             ));
-        return BulkProductBloc(mockRepository);
+        return BulkProductBloc(mockRepository, mockVariantRepository);
       },
       seed: () => BulkProductEditing(
         rows: [
@@ -234,7 +251,7 @@ void main() {
             .thenAnswer((_) async => Map.fromEntries(
               List.generate(100, (i) => MapEntry(i, i + 1)),
             ));
-        return BulkProductBloc(mockRepository);
+        return BulkProductBloc(mockRepository, mockVariantRepository);
       },
       seed: () => BulkProductEditing(
         rows: List.generate(

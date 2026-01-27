@@ -212,6 +212,7 @@
     "field_name": "Nom du produit",
     "field_color": "Couleur",
     "field_size": "Taille",
+    "field_category": "Catégorie",
     "field_name_ar": "Nom du produit (Arabe)",
     "field_name_fr": "Nom du produit (Français)",
     "field_sku": "SKU",

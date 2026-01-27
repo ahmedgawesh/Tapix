@@ -3,16 +3,22 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/bloc/currency_bloc.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../../barcode/services/barcode_validation_service.dart';
+import '../../domain/entities/category_entity.dart';
 import '../../domain/entities/product_color_entity.dart';
 import '../../domain/entities/size_entity.dart';
 import '../bloc/bulk_product_bloc.dart';
+import '../bloc/categories_bloc.dart';
+import '../bloc/categories_event.dart';
 import '../bloc/colors_bloc.dart';
+import '../bloc/colors_event.dart';
 import '../bloc/sizes_bloc.dart';
+import '../bloc/sizes_event.dart';
 
 class BulkProductRow extends StatefulWidget {
   final BulkProductRowData rowData;
@@ -40,8 +46,6 @@ class BulkProductRow extends StatefulWidget {
 
 class _BulkProductRowState extends State<BulkProductRow> {
   late TextEditingController _nameController;
-  late TextEditingController _nameArController;
-  late TextEditingController _nameFrController;
   late TextEditingController _skuController;
   late TextEditingController _barcodeController;
   late TextEditingController _costController;
@@ -56,8 +60,6 @@ class _BulkProductRowState extends State<BulkProductRow> {
   void initState() {
     super.initState();
     _nameController = TextEditingController(text: widget.rowData.name);
-    _nameArController = TextEditingController(text: widget.rowData.nameAr ?? '');
-    _nameFrController = TextEditingController(text: widget.rowData.nameFr ?? '');
     _skuController = TextEditingController(text: widget.rowData.sku ?? '');
     _barcodeController = TextEditingController(text: widget.rowData.barcode ?? '');
     _costController = TextEditingController(
@@ -101,8 +103,6 @@ class _BulkProductRowState extends State<BulkProductRow> {
   @override
   void dispose() {
     _nameController.dispose();
-    _nameArController.dispose();
-    _nameFrController.dispose();
     _skuController.dispose();
     _barcodeController.dispose();
     _costController.dispose();
@@ -247,16 +247,7 @@ class _BulkProductRowState extends State<BulkProductRow> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Row 1: Names
-          Row(
-            children: [
-              Expanded(child: _buildNameField(context)),
-              const SizedBox(width: 16),
-              Expanded(child: _buildNameArField(context)),
-              const SizedBox(width: 16),
-              Expanded(child: _buildNameFrField(context)),
-            ],
-          ),
+          _buildNameField(context),
           const SizedBox(height: 16),
           // Row 2: SKU, Barcode, Category
           Row(
@@ -265,7 +256,7 @@ class _BulkProductRowState extends State<BulkProductRow> {
               const SizedBox(width: 16),
               Expanded(child: _buildBarcodeField(context)),
               const SizedBox(width: 16),
-              Expanded(child: _buildCategoryDropdown(context)),
+              Expanded(child: _buildCategoryPicker(context)),
             ],
           ),
           const SizedBox(height: 16),
@@ -287,9 +278,9 @@ class _BulkProductRowState extends State<BulkProductRow> {
               const SizedBox(width: 16),
               Expanded(child: _buildMinStockField(context)),
               const SizedBox(width: 16),
-              Expanded(child: _buildColorDropdown(context)),
+              Expanded(child: _buildColorPicker(context)),
               const SizedBox(width: 16),
-              Expanded(child: _buildSizeDropdown(context)),
+              Expanded(child: _buildSizePicker(context)),
             ],
           ),
           if (widget.errors != null && widget.errors!.isNotEmpty)
@@ -305,19 +296,9 @@ class _BulkProductRowState extends State<BulkProductRow> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Row 1: Name
           _buildNameField(context),
           const SizedBox(height: 16),
-          // Row 2: Names localized
-          Row(
-            children: [
-              Expanded(child: _buildNameArField(context)),
-              const SizedBox(width: 16),
-              Expanded(child: _buildNameFrField(context)),
-            ],
-          ),
-          const SizedBox(height: 16),
-          // Row 3: SKU, Barcode
+          // Row 2: SKU, Barcode
           Row(
             children: [
               Expanded(child: _buildSkuField(context)),
@@ -326,7 +307,9 @@ class _BulkProductRowState extends State<BulkProductRow> {
             ],
           ),
           const SizedBox(height: 16),
-          // Row 4: Prices
+          _buildCategoryPicker(context),
+          const SizedBox(height: 16),
+          // Row 3: Prices
           Row(
             children: [
               Expanded(child: _buildCostField(context)),
@@ -337,7 +320,7 @@ class _BulkProductRowState extends State<BulkProductRow> {
             ],
           ),
           const SizedBox(height: 16),
-          // Row 5: Stock and variants
+          // Row 4: Stock and variants
           Row(
             children: [
               Expanded(child: _buildStockField(context)),
@@ -346,12 +329,12 @@ class _BulkProductRowState extends State<BulkProductRow> {
             ],
           ),
           const SizedBox(height: 16),
-          // Row 6: Color, Size
+          // Row 5: Color, Size
           Row(
             children: [
-              Expanded(child: _buildColorDropdown(context)),
+              Expanded(child: _buildColorPicker(context)),
               const SizedBox(width: 16),
-              Expanded(child: _buildSizeDropdown(context)),
+              Expanded(child: _buildSizePicker(context)),
             ],
           ),
           if (widget.errors != null && widget.errors!.isNotEmpty)
@@ -369,10 +352,6 @@ class _BulkProductRowState extends State<BulkProductRow> {
         children: [
           _buildNameField(context),
           const SizedBox(height: 16),
-          _buildNameArField(context),
-          const SizedBox(height: 16),
-          _buildNameFrField(context),
-          const SizedBox(height: 16),
           Row(
             children: [
               Expanded(child: _buildSkuField(context)),
@@ -380,6 +359,8 @@ class _BulkProductRowState extends State<BulkProductRow> {
               Expanded(child: _buildBarcodeField(context)),
             ],
           ),
+          const SizedBox(height: 16),
+          _buildCategoryPicker(context),
           const SizedBox(height: 16),
           Row(
             children: [
@@ -401,9 +382,9 @@ class _BulkProductRowState extends State<BulkProductRow> {
           const SizedBox(height: 16),
           Row(
             children: [
-              Expanded(child: _buildColorDropdown(context)),
+              Expanded(child: _buildColorPicker(context)),
               const SizedBox(width: 16),
-              Expanded(child: _buildSizeDropdown(context)),
+              Expanded(child: _buildSizePicker(context)),
             ],
           ),
           if (widget.errors != null && widget.errors!.isNotEmpty)
@@ -425,34 +406,6 @@ class _BulkProductRowState extends State<BulkProductRow> {
       ),
       onChanged: (value) {
         widget.onUpdate({'name': value});
-      },
-    );
-  }
-
-  Widget _buildNameArField(BuildContext context) {
-    return TextFormField(
-      controller: _nameArController,
-      decoration: InputDecoration(
-        labelText: 'product_form.nameAr'.tr(),
-        hintText: 'product_form.nameAr'.tr(),
-        border: const OutlineInputBorder(),
-      ),
-      onChanged: (value) {
-        widget.onUpdate({'nameAr': value});
-      },
-    );
-  }
-
-  Widget _buildNameFrField(BuildContext context) {
-    return TextFormField(
-      controller: _nameFrController,
-      decoration: InputDecoration(
-        labelText: 'product_form.nameFr'.tr(),
-        hintText: 'product_form.nameFr'.tr(),
-        border: const OutlineInputBorder(),
-      ),
-      onChanged: (value) {
-        widget.onUpdate({'nameFr': value});
       },
     );
   }
@@ -638,109 +591,316 @@ class _BulkProductRowState extends State<BulkProductRow> {
     );
   }
 
-  Widget _buildCategoryDropdown(BuildContext context) {
-    return DropdownButtonFormField<int?>(
-      initialValue: widget.rowData.categoryId,
-      decoration: InputDecoration(
-        labelText: 'product_form.category'.tr(),
-        border: const OutlineInputBorder(),
-      ),
-      items: [
-        DropdownMenuItem<int?>(
-          value: null,
-          child: Text('common.none'.tr()),
-        ),
-      ],
-      onChanged: (value) {
-        widget.onUpdate({'categoryId': value});
-      },
-    );
-  }
-
-  Widget _buildColorDropdown(BuildContext context) {
-    return BlocBuilder<ColorsBloc, RealtimeState<List<ProductColor>>>(
+  Widget _buildCategoryPicker(BuildContext context) {
+    return BlocBuilder<CategoriesBloc, RealtimeState<List<Category>>>(
       builder: (context, state) {
-        final colors = state is RealtimeSuccess<List<ProductColor>> 
-            ? state.data 
-            : <ProductColor>[];
-        
-        return DropdownButtonFormField<int?>(
-          initialValue: widget.rowData.colorId,
-          decoration: InputDecoration(
-            labelText: 'product_form.variantColor'.tr(),
-            border: const OutlineInputBorder(),
-          ),
-          items: [
-            DropdownMenuItem<int?>(
-              value: null,
-              child: Text('common.none'.tr()),
+        final categories = state is RealtimeSuccess<List<Category>> ? state.data : <Category>[];
+        final selected = widget.rowData.categoryId == null
+            ? null
+            : categories.cast<Category?>().firstWhere(
+                  (c) => c?.id == widget.rowData.categoryId,
+                  orElse: () => null,
+                );
+
+        return InkWell(
+          onTap: () => _showCategoryPickerBottomSheet(context),
+          child: InputDecorator(
+            decoration: InputDecoration(
+              labelText: 'product_form.category'.tr(),
+              border: const OutlineInputBorder(),
+              prefixIcon: const Icon(Icons.category_outlined),
             ),
-            ...colors.map((color) => DropdownMenuItem<int?>(
-              value: color.id,
-              child: Row(
-                children: [
-                  if (color.hexCode != null)
-                    Container(
-                      width: 16,
-                      height: 16,
-                      margin: const EdgeInsets.only(right: 8),
-                      decoration: BoxDecoration(
-                        color: _parseHexColor(color.hexCode!),
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: Colors.grey.shade300),
-                      ),
-                    ),
-                  Text(color.name),
-                ],
-              ),
-            )),
-          ],
-          onChanged: (value) {
-            widget.onUpdate({'colorId': value});
-          },
+            child: Text(selected?.name ?? 'common.none'.tr()),
+          ),
         );
       },
     );
   }
 
-  Color _parseHexColor(String hexCode) {
-    try {
-      final hex = hexCode.replaceFirst('#', '');
-      return Color(int.parse('FF$hex', radix: 16));
-    } catch (_) {
-      return Colors.grey;
+  Future<void> _showCategoryPickerBottomSheet(BuildContext context) async {
+    final categoriesBloc = context.read<CategoriesBloc>();
+    final selectedId = await showModalBottomSheet<int?>(
+      context: context,
+      isScrollControlled: true,
+      useRootNavigator: false,
+      builder: (sheetContext) {
+        return BlocProvider.value(
+          value: categoriesBloc,
+          child: SafeArea(
+            child: Padding(
+              padding: EdgeInsets.only(
+                left: 16,
+                right: 16,
+                top: 12,
+                bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 12,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    decoration: InputDecoration(
+                      hintText: 'categories.search_hint'.tr(),
+                      prefixIcon: const Icon(Icons.search),
+                      border: const OutlineInputBorder(),
+                    ),
+                    onChanged: (v) => categoriesBloc.add(SearchCategories(v)),
+                  ),
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: TextButton.icon(
+                      onPressed: () => sheetContext.push('/products/categories'),
+                      icon: const Icon(Icons.settings),
+                      label: Text('categories.title'.tr()),
+                    ),
+                  ),
+                  Flexible(
+                    child: BlocBuilder<CategoriesBloc, RealtimeState<List<Category>>>(
+                      bloc: categoriesBloc,
+                      builder: (context, state) {
+                        final categories = state is RealtimeSuccess<List<Category>> ? state.data : <Category>[];
+                        return ListView.builder(
+                          shrinkWrap: true,
+                          itemCount: categories.length + 1,
+                          itemBuilder: (context, index) {
+                            if (index == 0) {
+                              return ListTile(
+                                title: Text('common.none'.tr()),
+                                onTap: () => Navigator.of(context).pop(null),
+                              );
+                            }
+                            final cat = categories[index - 1];
+                            return ListTile(
+                              title: Text(cat.name),
+                              onTap: () => Navigator.of(context).pop(cat.id),
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    if (!mounted) return;
+
+    categoriesBloc.add(const LoadCategories());
+    if (selectedId != null || widget.rowData.categoryId != null) {
+      widget.onUpdate({'categoryId': selectedId});
     }
   }
 
-  Widget _buildSizeDropdown(BuildContext context) {
-    return BlocBuilder<SizesBloc, RealtimeState<List<Size>>>(
+  Widget _buildColorPicker(BuildContext context) {
+    return BlocBuilder<ColorsBloc, RealtimeState<List<ProductColor>>>(
       builder: (context, state) {
-        final sizes = state is RealtimeSuccess<List<Size>> 
-            ? state.data 
-            : <Size>[];
-        
-        return DropdownButtonFormField<int?>(
-          initialValue: widget.rowData.sizeId,
-          decoration: InputDecoration(
-            labelText: 'product_form.variantSize'.tr(),
-            border: const OutlineInputBorder(),
-          ),
-          items: [
-            DropdownMenuItem<int?>(
-              value: null,
-              child: Text('common.none'.tr()),
+        final colors = state is RealtimeSuccess<List<ProductColor>> ? state.data : <ProductColor>[];
+        final selected = widget.rowData.colorId == null
+            ? null
+            : colors.cast<ProductColor?>().firstWhere(
+                  (c) => c?.id == widget.rowData.colorId,
+                  orElse: () => null,
+                );
+
+        return InkWell(
+          onTap: () => _showColorPickerBottomSheet(context),
+          child: InputDecorator(
+            decoration: InputDecoration(
+              labelText: 'product_form.variantColor'.tr(),
+              border: const OutlineInputBorder(),
+              prefixIcon: const Icon(Icons.palette_outlined),
             ),
-            ...sizes.map((size) => DropdownMenuItem<int?>(
-              value: size.id,
-              child: Text(size.name),
-            )),
-          ],
-          onChanged: (value) {
-            widget.onUpdate({'sizeId': value});
-          },
+            child: Text(selected?.name ?? 'common.none'.tr()),
+          ),
         );
       },
     );
+  }
+
+  Future<void> _showColorPickerBottomSheet(BuildContext context) async {
+    final colorsBloc = context.read<ColorsBloc>();
+    final selectedId = await showModalBottomSheet<int?>(
+      context: context,
+      isScrollControlled: true,
+      useRootNavigator: false,
+      builder: (sheetContext) {
+        return BlocProvider.value(
+          value: colorsBloc,
+          child: SafeArea(
+            child: Padding(
+              padding: EdgeInsets.only(
+                left: 16,
+                right: 16,
+                top: 12,
+                bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 12,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    decoration: InputDecoration(
+                      hintText: 'colors.search_hint'.tr(),
+                      prefixIcon: const Icon(Icons.search),
+                      border: const OutlineInputBorder(),
+                    ),
+                    onChanged: (v) => colorsBloc.add(SearchColors(v)),
+                  ),
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: TextButton.icon(
+                      onPressed: () => sheetContext.push('/products/colors'),
+                      icon: const Icon(Icons.settings),
+                      label: Text('manage_colors'.tr()),
+                    ),
+                  ),
+                  Flexible(
+                    child: BlocBuilder<ColorsBloc, RealtimeState<List<ProductColor>>>(
+                      bloc: colorsBloc,
+                      builder: (context, state) {
+                        final colors = state is RealtimeSuccess<List<ProductColor>> ? state.data : <ProductColor>[];
+                        return ListView.builder(
+                          shrinkWrap: true,
+                          itemCount: colors.length + 1,
+                          itemBuilder: (context, index) {
+                            if (index == 0) {
+                              return ListTile(
+                                title: Text('common.none'.tr()),
+                                onTap: () => Navigator.of(context).pop(null),
+                              );
+                            }
+                            final color = colors[index - 1];
+                            return ListTile(
+                              title: Text(color.name),
+                              onTap: () => Navigator.of(context).pop(color.id),
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    if (!mounted) return;
+
+    colorsBloc.add(const LoadColors());
+    if (selectedId != null || widget.rowData.colorId != null) {
+      widget.onUpdate({'colorId': selectedId});
+    }
+  }
+
+  Widget _buildSizePicker(BuildContext context) {
+    return BlocBuilder<SizesBloc, RealtimeState<List<Size>>>(
+      builder: (context, state) {
+        final sizes = state is RealtimeSuccess<List<Size>> ? state.data : <Size>[];
+        final selected = widget.rowData.sizeId == null
+            ? null
+            : sizes.cast<Size?>().firstWhere(
+                  (s) => s?.id == widget.rowData.sizeId,
+                  orElse: () => null,
+                );
+
+        return InkWell(
+          onTap: () => _showSizePickerBottomSheet(context),
+          child: InputDecorator(
+            decoration: InputDecoration(
+              labelText: 'product_form.variantSize'.tr(),
+              border: const OutlineInputBorder(),
+              prefixIcon: const Icon(Icons.straighten_outlined),
+            ),
+            child: Text(selected?.name ?? 'common.none'.tr()),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _showSizePickerBottomSheet(BuildContext context) async {
+    final sizesBloc = context.read<SizesBloc>();
+    final selectedId = await showModalBottomSheet<int?>(
+      context: context,
+      isScrollControlled: true,
+      useRootNavigator: false,
+      builder: (sheetContext) {
+        return BlocProvider.value(
+          value: sizesBloc,
+          child: SafeArea(
+            child: Padding(
+              padding: EdgeInsets.only(
+                left: 16,
+                right: 16,
+                top: 12,
+                bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 12,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    decoration: InputDecoration(
+                      hintText: 'sizes.search_hint'.tr(),
+                      prefixIcon: const Icon(Icons.search),
+                      border: const OutlineInputBorder(),
+                    ),
+                    onChanged: (v) => sizesBloc.add(SearchSizes(v)),
+                  ),
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: TextButton.icon(
+                      onPressed: () => sheetContext.push('/products/sizes'),
+                      icon: const Icon(Icons.settings),
+                      label: Text('manage_sizes'.tr()),
+                    ),
+                  ),
+                  Flexible(
+                    child: BlocBuilder<SizesBloc, RealtimeState<List<Size>>>(
+                      bloc: sizesBloc,
+                      builder: (context, state) {
+                        final sizes = state is RealtimeSuccess<List<Size>> ? state.data : <Size>[];
+                        return ListView.builder(
+                          shrinkWrap: true,
+                          itemCount: sizes.length + 1,
+                          itemBuilder: (context, index) {
+                            if (index == 0) {
+                              return ListTile(
+                                title: Text('common.none'.tr()),
+                                onTap: () => Navigator.of(context).pop(null),
+                              );
+                            }
+                            final size = sizes[index - 1];
+                            return ListTile(
+                              title: Text(size.name),
+                              onTap: () => Navigator.of(context).pop(size.id),
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    if (!mounted) return;
+
+    sizesBloc.add(const LoadSizes());
+    if (selectedId != null || widget.rowData.sizeId != null) {
+      widget.onUpdate({'sizeId': selectedId});
+    }
   }
 
   Widget _buildErrorMessages(BuildContext context) {

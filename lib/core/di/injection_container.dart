@@ -125,19 +125,27 @@ Future<void> init() async {
     () => ImportValidationService(sl<ProductRepository>()),
   );
   sl.registerLazySingleton<ImportProducts>(
-    () => ProductImportService(sl<ProductRepository>(), sl<ProductVariantRepository>()),
+    () => ProductImportService(
+      sl<ProductRepository>(),
+      sl<ProductVariantRepository>(),
+      sl<CategoryRepository>(),
+    ),
   );
 
   // Export Products Services
   sl.registerLazySingleton<ExportService>(
-    () => ExportServiceImpl(sl<ProductRepository>(), sl<ProductVariantRepository>()),
+    () => ExportServiceImpl(
+      sl<ProductRepository>(),
+      sl<ProductVariantRepository>(),
+      sl<CategoryRepository>(),
+    ),
   );
 
   // Feature Blocs
   sl.registerFactory(() => ProductsBloc(sl()));
   sl.registerFactory(() => ProductFormBloc(sl<ProductRepository>(), sl<ProductVariantRepository>()));
   sl.registerFactory(() => ProductVariantsBloc(sl<ProductVariantRepository>()));
-  sl.registerFactory(() => BulkProductBloc(sl<ProductRepository>()));
+  sl.registerFactory(() => BulkProductBloc(sl<ProductRepository>(), sl<ProductVariantRepository>()));
   sl.registerFactory(() => EditPricesBloc(sl<ProductRepository>()));
   sl.registerFactory(() => CategoriesBloc(sl<CategoryRepository>()));
   sl.registerFactory(() => ColorsBloc(sl<ProductColorRepository>()));

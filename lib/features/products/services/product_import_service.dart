@@ -4,13 +4,16 @@ import '../domain/entities/import_file_data.dart';
 import '../domain/entities/import_result.dart';
 import '../domain/repositories/product_repository.dart';
 import '../domain/repositories/product_variant_repository.dart';
+import '../domain/repositories/category_repository.dart';
+import '../data/models/category_model.dart';
 import '../domain/usecases/import_products.dart';
 
 class ProductImportService implements ImportProducts {
   final ProductRepository _productRepository;
   final ProductVariantRepository _variantRepository;
+  final CategoryRepository _categoryRepository;
 
-  ProductImportService(this._productRepository, this._variantRepository);
+  ProductImportService(this._productRepository, this._variantRepository, this._categoryRepository);
 
   @override
   Future<ImportResult> call({
@@ -25,6 +28,7 @@ class ProductImportService implements ImportProducts {
 
     final rowToColorName = <int, String>{};
     final rowToSizeName = <int, String>{};
+    final rowToCategoryName = <int, String>{};
 
     for (var rowIndex = 0; rowIndex < fileData.rows.length; rowIndex++) {
       final row = fileData.rows[rowIndex];
@@ -37,6 +41,7 @@ class ProductImportService implements ImportProducts {
           fileData.headers,
           rowToColorName: rowToColorName,
           rowToSizeName: rowToSizeName,
+          rowToCategoryName: rowToCategoryName,
         );
         bulkProducts.add(productData);
       } catch (e) {
@@ -57,6 +62,9 @@ class ProductImportService implements ImportProducts {
         rowToProductId.addAll(insertedProducts);
 
         if (insertedProducts.isNotEmpty) {
+          final categories = await _categoryRepository.getAllCategories();
+          final categoryIdByLowerName = {for (final c in categories) c.name.toLowerCase(): c.id};
+
           final colors = await _variantRepository.getAllColors();
           final sizes = await _variantRepository.getAllSizes();
           final colorIdByLowerName = {for (final c in colors) c.name.toLowerCase(): c.id};
@@ -68,9 +76,31 @@ class ProductImportService implements ImportProducts {
 
             final colorName = (rowToColorName[rowIndex] ?? '').trim();
             final sizeName = (rowToSizeName[rowIndex] ?? '').trim();
+            final categoryName = (rowToCategoryName[rowIndex] ?? '').trim();
 
             int? colorId;
             int? sizeId;
+            int? categoryId;
+
+            if (categoryName.isNotEmpty) {
+              final key = categoryName.toLowerCase();
+              categoryId = categoryIdByLowerName[key];
+              if (categoryId == null) {
+                final createdId = await _categoryRepository.createCategory(
+                  CategoryModel(
+                    id: 0,
+                    name: categoryName,
+                    description: null,
+                    parentId: null,
+                    isActive: true,
+                    createdAt: DateTime.now(),
+                    updatedAt: DateTime.now(),
+                  ),
+                );
+                categoryIdByLowerName[key] = createdId;
+                categoryId = createdId;
+              }
+            }
 
             if (colorName.isNotEmpty) {
               final key = colorName.toLowerCase();
@@ -102,6 +132,13 @@ class ProductImportService implements ImportProducts {
                 priceCents: product.priceCents,
                 stockQuantity: product.stockQuantity,
               );
+            }
+
+            if (categoryId != null) {
+              final product = await _productRepository.watchProduct(productId).first;
+              if (product != null) {
+                await _productRepository.updateProduct(product.copyWith(categoryId: categoryId));
+              }
             }
           }
         }
@@ -135,6 +172,7 @@ class ProductImportService implements ImportProducts {
     {
     required Map<int, String> rowToColorName,
     required Map<int, String> rowToSizeName,
+    required Map<int, String> rowToCategoryName,
   }
   ) {
     final name = _getCellValue(row, columnMapping, 'name');
@@ -152,6 +190,11 @@ class ProductImportService implements ImportProducts {
     }
     final sku = _getCellValue(row, columnMapping, 'sku');
     final barcode = _getCellValue(row, columnMapping, 'barcode');
+
+    final category = _getCellValue(row, columnMapping, 'category');
+    if (category.isNotEmpty) {
+      rowToCategoryName[rowIndex] = category;
+    }
 
     final costIndex = columnMapping.getColumnIndex('cost');
     final costHeader = _getHeader(headers, costIndex);
@@ -195,6 +238,7 @@ class ProductImportService implements ImportProducts {
       wholesalePriceCents: wholesalePriceCents,
       stockQuantity: stockQuantity,
       minQuantity: minQuantity,
+      categoryId: null,
       isTaxable: isTaxable,
       isActive: isActive,
     );

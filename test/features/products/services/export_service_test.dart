@@ -3,6 +3,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:tapix/features/products/services/export_service.dart';
 import 'package:tapix/features/products/domain/repositories/product_repository.dart';
 import 'package:tapix/features/products/domain/repositories/product_variant_repository.dart';
+import 'package:tapix/features/products/domain/repositories/category_repository.dart';
 import 'package:tapix/features/products/domain/entities/product_entity.dart';
 import 'package:tapix/features/products/domain/entities/product_color_entity.dart';
 import 'package:tapix/features/products/domain/entities/size_entity.dart';
@@ -12,20 +13,25 @@ class MockProductRepository extends Mock implements ProductRepository {}
 
 class MockProductVariantRepository extends Mock implements ProductVariantRepository {}
 
+class MockCategoryRepository extends Mock implements CategoryRepository {}
+
 void main() {
   late ExportService exportService;
-  late MockProductRepository mockRepository;
+  late MockProductRepository mockProductRepository;
   late MockProductVariantRepository mockVariantRepository;
+  late MockCategoryRepository mockCategoryRepository;
 
   setUp(() {
-    mockRepository = MockProductRepository();
+    mockProductRepository = MockProductRepository();
     mockVariantRepository = MockProductVariantRepository();
+    mockCategoryRepository = MockCategoryRepository();
 
     when(() => mockVariantRepository.getAllColors()).thenAnswer((_) async => <ProductColor>[]);
     when(() => mockVariantRepository.getAllSizes()).thenAnswer((_) async => <Size>[]);
     when(() => mockVariantRepository.getVariantsByProduct(any())).thenAnswer((_) async => []);
+    when(() => mockCategoryRepository.getAllCategories()).thenAnswer((_) async => []);
 
-    exportService = ExportServiceImpl(mockRepository, mockVariantRepository);
+    exportService = ExportServiceImpl(mockProductRepository, mockVariantRepository, mockCategoryRepository);
   });
 
   group('ExportService', () {
@@ -64,7 +70,7 @@ void main() {
 
     group('exportToCSV', () {
       test('generates CSV with all product fields in cents', () async {
-        when(() => mockRepository.fetchProductsForExport(
+        when(() => mockProductRepository.fetchProductsForExport(
               categoryId: any(named: 'categoryId'),
               supplierId: any(named: 'supplierId'),
               activeOnly: any(named: 'activeOnly'),
@@ -83,7 +89,7 @@ void main() {
       });
 
       test('handles empty product list', () async {
-        when(() => mockRepository.fetchProductsForExport(
+        when(() => mockProductRepository.fetchProductsForExport(
               categoryId: any(named: 'categoryId'),
               supplierId: any(named: 'supplierId'),
               activeOnly: any(named: 'activeOnly'),
@@ -98,7 +104,7 @@ void main() {
       });
 
       test('respects category filter', () async {
-        when(() => mockRepository.fetchProductsForExport(
+        when(() => mockProductRepository.fetchProductsForExport(
               categoryId: 5,
               supplierId: any(named: 'supplierId'),
               activeOnly: any(named: 'activeOnly'),
@@ -109,7 +115,7 @@ void main() {
         final result = await exportService.exportToCSV(categoryId: 5);
 
         expect(result, isNotNull);
-        verify(() => mockRepository.fetchProductsForExport(
+        verify(() => mockProductRepository.fetchProductsForExport(
               categoryId: 5,
               supplierId: any(named: 'supplierId'),
               activeOnly: any(named: 'activeOnly'),
@@ -120,8 +126,8 @@ void main() {
     });
 
     group('exportToExcel', () {
-      test('generates Excel file with all product fields', () async {
-        when(() => mockRepository.fetchProductsForExport(
+      test('generates Excel file bytes', () async {
+        when(() => mockProductRepository.fetchProductsForExport(
               categoryId: any(named: 'categoryId'),
               supplierId: any(named: 'supplierId'),
               activeOnly: any(named: 'activeOnly'),
@@ -154,7 +160,7 @@ void main() {
           ),
         );
 
-        when(() => mockRepository.fetchProductsForExport(
+        when(() => mockProductRepository.fetchProductsForExport(
               categoryId: any(named: 'categoryId'),
               supplierId: any(named: 'supplierId'),
               activeOnly: any(named: 'activeOnly'),
@@ -192,7 +198,7 @@ void main() {
           ),
         );
 
-        when(() => mockRepository.fetchProductsForExport(
+        when(() => mockProductRepository.fetchProductsForExport(
               categoryId: any(named: 'categoryId'),
               supplierId: any(named: 'supplierId'),
               activeOnly: any(named: 'activeOnly'),
@@ -203,7 +209,7 @@ void main() {
         final result = await exportService.getExportPreview();
 
         expect(result.length, equals(10));
-        verify(() => mockRepository.fetchProductsForExport(
+        verify(() => mockProductRepository.fetchProductsForExport(
               categoryId: any(named: 'categoryId'),
               supplierId: any(named: 'supplierId'),
               activeOnly: any(named: 'activeOnly'),

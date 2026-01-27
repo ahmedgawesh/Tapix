@@ -180,6 +180,12 @@ class ImportProductsBloc extends Bloc<ImportProductsEvent, ImportProductsState> 
         fieldType: ImportFieldType.text,
       ),
       ImportFieldDefinition(
+        fieldName: 'category',
+        displayName: 'import_products.field_category'.tr(),
+        isRequired: false,
+        fieldType: ImportFieldType.text,
+      ),
+      ImportFieldDefinition(
         fieldName: 'sku',
         displayName: 'import_products.field_sku'.tr(),
         isRequired: false,

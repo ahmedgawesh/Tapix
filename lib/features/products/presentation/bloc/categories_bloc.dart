@@ -35,6 +35,7 @@ class CategoriesBloc extends RealtimeBloc<List<Category>, RealtimeEvent> {
     Emitter<RealtimeState<List<Category>>> emit,
   ) async {
     _currentSearchQuery = '';
+    add(const RealtimeRefreshRequested());
   }
 
   Future<void> _onSearchCategories(
@@ -42,6 +43,7 @@ class CategoriesBloc extends RealtimeBloc<List<Category>, RealtimeEvent> {
     Emitter<RealtimeState<List<Category>>> emit,
   ) async {
     _currentSearchQuery = event.query;
+    add(const RealtimeRefreshRequested());
   }
 
   Future<void> _onCreateCategory(
