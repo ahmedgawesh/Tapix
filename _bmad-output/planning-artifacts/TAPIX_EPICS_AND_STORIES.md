@@ -163,6 +163,77 @@
 - [ ] Supplier balance tracking
 - [ ] Payment recording dialog
 
+### STORY-04-03: Employee Management
+**As a** Manager
+**I want** to manage employee records and track their performance
+**So that** I can oversee my staff effectively.
+
+**Acceptance Criteria:**
+- [ ] Employee CRUD (Name, Position, Phone, Email, Hire date)
+- [ ] Salary and commission rate tracking for salespeople
+- [ ] Monthly target setting and performance monitoring
+- [ ] Active/Inactive status management
+- [ ] Employee list with search and filtering by position
+- [ ] Employee profile screen showing complete details and sales history
+
+### STORY-04-04: Employee Form Screen
+**As a** HR Manager
+**I want** to add and edit employee details with validation
+**So that** employee records are accurate and complete.
+
+**Acceptance Criteria:**
+- [ ] Comprehensive employee form with all fields from specification
+- [ ] Position-based conditional fields (commission for salespeople)
+- [ ] Phone and email validation
+- [ ] Salary input in integer cents with proper formatting
+- [ ] Commission rate as percentage with validation
+- [ ] Hire date picker with calendar
+- [ ] Active/Inactive toggle with confirmation
+
+### STORY-04-05: User Account Management
+**As a** Owner
+**I want** to create user accounts with role-based permissions
+**So that** I can control system access securely.
+
+**Acceptance Criteria:**
+- [ ] User CRUD (Username, Password, Role)
+- [ ] Optional linkage to employee records
+- [ ] Role-based permission matrix (Owner, Manager, Cashier, Salesperson)
+- [ ] Password hashing and security measures
+- [ ] Session management with auto-logout
+- [ ] User list with role filtering
+- [ ] Permission validation on all protected actions
+
+### STORY-04-06: User Role Permissions
+**As a** System Administrator
+**I want** to configure granular permissions for each user role
+**So that** access control matches business requirements.
+
+**Acceptance Criteria:**
+- [ ] Permission matrix implementation as per specification:
+  - Owner: Full access to all features
+  - Manager: View Dashboard, Create/Edit Sales, View Reports, Export Reports, Manage Products, Manage Users
+  - Cashier: View Dashboard, Create Sales, View Reports
+  - Salesperson: View Dashboard, Create Sales
+- [ ] Dynamic UI hiding/disabling based on user permissions
+- [ ] Permission validation on backend operations
+- [ ] Role assignment interface for user management
+- [ ] Permission override capability for Owners
+
+### STORY-04-07: Employee Performance Tracking
+**As a** Manager
+**I want** to track employee sales performance against targets
+**So that** I can evaluate staff effectiveness.
+
+**Acceptance Criteria:**
+- [ ] Monthly sales target setting per employee
+- [ ] Real-time performance tracking dashboard
+- [ ] Commission calculation based on sales
+- [ ] Performance reports (monthly, quarterly)
+- [ ] Top performers ranking
+- [ ] Employee productivity metrics
+- [ ] Target vs actual achievement analysis
+
 ---
 
 ## 🛒 EPIC-05: Sales & POS

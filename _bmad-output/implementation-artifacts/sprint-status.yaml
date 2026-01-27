@@ -84,6 +84,11 @@ development_status:
   4-10-supplier-payment-dialog: backlog
   4-11-supplier-discount-dialog: backlog
   4-12-supplier-return-dialog: backlog
+  4-13-employee-management: backlog
+  4-14-employee-form-screen: backlog
+  4-15-user-account-management: backlog
+  4-16-user-role-permissions: backlog
+  4-17-employee-performance-tracking: backlog
   epic-4-retrospective: optional
 
   # EPIC-05: Sales & POS
