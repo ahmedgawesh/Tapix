@@ -25,7 +25,12 @@ class ProductImportService implements ImportProducts {
       final row = fileData.rows[rowIndex];
       
       try {
-        final productData = _parseRowToProductData(row, rowIndex, columnMapping);
+        final productData = _parseRowToProductData(
+          row,
+          rowIndex,
+          columnMapping,
+          fileData.headers,
+        );
         bulkProducts.add(productData);
       } catch (e) {
         errors.add(ImportError(
@@ -69,6 +74,7 @@ class ProductImportService implements ImportProducts {
     List<String> row,
     int rowIndex,
     ColumnMapping columnMapping,
+    List<String> headers,
   ) {
     final name = _getCellValue(row, columnMapping, 'name');
     if (name.isEmpty) {
@@ -80,21 +86,25 @@ class ProductImportService implements ImportProducts {
     final sku = _getCellValue(row, columnMapping, 'sku');
     final barcode = _getCellValue(row, columnMapping, 'barcode');
 
+    final costIndex = columnMapping.getColumnIndex('cost');
+    final costHeader = _getHeader(headers, costIndex);
     final costStr = _getCellValue(row, columnMapping, 'cost');
-    final costCents = costStr.isEmpty 
-        ? Decimal.zero 
-        : _parseMoneyToCents(costStr);
+    final costCents = costStr.isEmpty ? Decimal.zero : _parseMoneyLikeToCents(costStr, header: costHeader);
 
+    final priceIndex = columnMapping.getColumnIndex('price');
+    final priceHeader = _getHeader(headers, priceIndex);
     final priceStr = _getCellValue(row, columnMapping, 'price');
     if (priceStr.isEmpty) {
       throw Exception('import_products.validation_price_required'.tr());
     }
-    final priceCents = _parseMoneyToCents(priceStr);
+    final priceCents = _parseMoneyLikeToCents(priceStr, header: priceHeader);
 
+    final wholesaleIndex = columnMapping.getColumnIndex('wholesale_price');
+    final wholesaleHeader = _getHeader(headers, wholesaleIndex);
     final wholesalePriceStr = _getCellValue(row, columnMapping, 'wholesale_price');
     final wholesalePriceCents = wholesalePriceStr.isEmpty
         ? null
-        : _parseMoneyToCents(wholesalePriceStr);
+        : _parseMoneyLikeToCents(wholesalePriceStr, header: wholesaleHeader);
 
     final stockQuantityStr = _getCellValue(row, columnMapping, 'stock_quantity');
     final stockQuantity = stockQuantityStr.isEmpty ? 0 : int.parse(stockQuantityStr);
@@ -131,8 +141,23 @@ class ProductImportService implements ImportProducts {
     return row[index].trim();
   }
 
-  Decimal _parseMoneyToCents(String value) {
+  String? _getHeader(List<String> headers, int? index) {
+    if (index == null || index < 0 || index >= headers.length) return null;
+    return headers[index].trim();
+  }
+
+  Decimal _parseMoneyLikeToCents(
+    String value, {
+    required String? header,
+  }) {
     final cleanedValue = value.replaceAll(',', '').replaceAll(' ', '');
+
+    final normalizedHeader = (header ?? '').toLowerCase();
+    final isCentsColumn = normalizedHeader.contains('cents') || normalizedHeader.endsWith('_cents');
+    if (isCentsColumn) {
+      return Decimal.parse(cleanedValue);
+    }
+
     final decimal = Decimal.parse(cleanedValue);
     return decimal * Decimal.fromInt(100);
   }

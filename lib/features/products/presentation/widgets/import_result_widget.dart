@@ -126,8 +126,10 @@ class ImportResultWidget extends StatelessWidget {
                     ),
                 ],
                 const SizedBox(height: 32),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 16,
+                  runSpacing: 12,
                   children: [
                     OutlinedButton.icon(
                       onPressed: () {
@@ -136,7 +138,6 @@ class ImportResultWidget extends StatelessWidget {
                       icon: const Icon(LucideIcons.upload),
                       label: Text('import_products.import_another'.tr()),
                     ),
-                    const SizedBox(width: 16),
                     FilledButton.icon(
                       onPressed: () {
                         context.go('/products');

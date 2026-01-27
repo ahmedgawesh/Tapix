@@ -154,7 +154,13 @@
     "price": "Price",
     "stock": "Stock",
     "select_for_print": "Select products to print labels",
-    "selected_count": "{} selected"
+    "selected_count": "{} selected",
+    "delete_title": "Delete Products",
+    "delete_confirm": "Are you sure you want to delete {} products?",
+    "delete_success": "Products deleted successfully",
+    "delete_blocked_stock": "Cannot delete products that have stock",
+    "delete_blocked_open_purchase": "Cannot delete products linked to an open supplier purchase",
+    "delete_blocked_linked_records": "Cannot delete products linked to existing invoices/transactions"
   },
   "barcode": {
     "scanner_title": "Barcode Scanner",
@@ -513,6 +519,7 @@
     "column_id": "ID",
     "column_sku": "SKU",
     "column_name": "Name",
+    "column_cost_cents": "Cost (Cents)",
     "column_price_cents": "Price (Cents)",
     "column_stock": "Stock"
   },

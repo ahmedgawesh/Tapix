@@ -148,75 +148,100 @@ class _ColumnMappingWidgetState extends State<ColumnMappingWidget> {
   ) {
     final selectedIndex = _fieldToColumnIndex[field.fieldName];
 
+    final isNarrow = MediaQuery.of(context).size.width < 520;
+
+    final labelWidget = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                field.displayName,
+                style: Theme.of(context).textTheme.bodyLarge,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (field.isRequired) ...[
+              const SizedBox(width: 4),
+              Text(
+                '*',
+                style: TextStyle(color: colorScheme.error),
+              ),
+            ],
+          ],
+        ),
+        if (field.hint != null)
+          Text(
+            field.hint!,
+            style: Theme.of(context).textTheme.bodySmall,
+            overflow: TextOverflow.ellipsis,
+            maxLines: 2,
+          ),
+      ],
+    );
+
+    final dropdownWidget = DropdownButtonFormField<int?>(
+        initialValue: selectedIndex,
+        isExpanded: true,
+        decoration: InputDecoration(
+          border: const OutlineInputBorder(),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 8,
+          ),
+          errorText: field.isRequired && selectedIndex == null
+              ? 'import_products.required_field'.tr()
+              : null,
+        ),
+        hint: Text(
+          'import_products.select_column'.tr(),
+          overflow: TextOverflow.ellipsis,
+        ),
+        items: [
+          DropdownMenuItem<int?>(
+            value: null,
+            child: Text(
+              'import_products.skip_field'.tr(),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          ...headers.asMap().entries.map((entry) {
+            return DropdownMenuItem<int?>(
+              value: entry.key,
+              child: Text(
+                '${entry.value} ${'import_products.column_reference'.tr()} ${entry.key + 1})',
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
+            );
+          }),
+        ],
+        onChanged: (value) {
+          setState(() {
+            _fieldToColumnIndex[field.fieldName] = value;
+          });
+        },
+      );
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        children: [
-          Expanded(
-            flex: 2,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      child: isNarrow
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Row(
-                  children: [
-                    Text(
-                      field.displayName,
-                      style: Theme.of(context).textTheme.bodyLarge,
-                    ),
-                    if (field.isRequired) ...[
-                      const SizedBox(width: 4),
-                      Text(
-                        '*',
-                        style: TextStyle(color: colorScheme.error),
-                      ),
-                    ],
-                  ],
-                ),
-                if (field.hint != null)
-                  Text(
-                    field.hint!,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
+                labelWidget,
+                const SizedBox(height: 8),
+                dropdownWidget,
+              ],
+            )
+          : Row(
+              children: [
+                Expanded(flex: 2, child: labelWidget),
+                const SizedBox(width: 16),
+                Expanded(flex: 3, child: dropdownWidget),
               ],
             ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            flex: 3,
-            child: DropdownButtonFormField<int?>(
-              initialValue: selectedIndex,
-              decoration: InputDecoration(
-                border: const OutlineInputBorder(),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                errorText: field.isRequired && selectedIndex == null
-                    ? 'import_products.required_field'.tr()
-                    : null,
-              ),
-              hint: Text('import_products.select_column'.tr()),
-              items: [
-                DropdownMenuItem<int?>(
-                  value: null,
-                  child: Text('import_products.skip_field'.tr()),
-                ),
-                ...headers.asMap().entries.map((entry) {
-                  return DropdownMenuItem<int?>(
-                    value: entry.key,
-                    child: Text('${entry.value} ${'import_products.column_reference'.tr()} ${entry.key + 1})'),
-                  );
-                }),
-              ],
-              onChanged: (value) {
-                setState(() {
-                  _fieldToColumnIndex[field.fieldName] = value;
-                });
-              },
-            ),
-          ),
-        ],
-      ),
     );
   }
 

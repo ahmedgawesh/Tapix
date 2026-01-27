@@ -154,7 +154,13 @@
     "price": "Prix",
     "stock": "Stock",
     "select_for_print": "Sélectionner des produits pour imprimer des étiquettes",
-    "selected_count": "{} sélectionné"
+    "selected_count": "{} sélectionné",
+    "delete_title": "Supprimer des produits",
+    "delete_confirm": "Êtes-vous sûr de vouloir supprimer {} produits ?",
+    "delete_success": "Produits supprimés avec succès",
+    "delete_blocked_stock": "Impossible de supprimer des produits qui ont du stock",
+    "delete_blocked_open_purchase": "Impossible de supprimer des produits liés à un achat fournisseur ouvert",
+    "delete_blocked_linked_records": "Impossible de supprimer des produits liés à des factures/transactions existantes"
   },
   "import_products": {
     "title": "Importer des produits",
@@ -513,6 +519,7 @@
     "column_id": "ID",
     "column_sku": "SKU",
     "column_name": "Nom",
+    "column_cost_cents": "Coût (Centimes)",
     "column_price_cents": "Prix (Centimes)",
     "column_stock": "Stock"
   },

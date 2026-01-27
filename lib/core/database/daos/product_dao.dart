@@ -1,10 +1,20 @@
 import 'package:drift/drift.dart';
 import '../app_database.dart';
 import '../tables/products.dart';
+import '../tables/transactions.dart';
 
 part 'product_dao.g.dart';
 
-@DriftAccessor(tables: [Products, ProductVariants, ProductCategories, ProductColors, Sizes, ProductBatches])
+@DriftAccessor(tables: [
+  Products,
+  ProductVariants,
+  ProductCategories,
+  ProductColors,
+  Sizes,
+  ProductBatches,
+  Purchases,
+  PurchaseItems,
+])
 class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
   ProductDao(super.db);
 
@@ -148,6 +158,55 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
 
   Future<int> deleteProduct(int id) {
     return (delete(products)..where((p) => p.id.equals(id))).go();
+  }
+
+  Future<int> bulkDeleteProducts(List<int> ids) {
+    if (ids.isEmpty) return Future.value(0);
+    return (delete(products)..where((p) => p.id.isIn(ids))).go();
+  }
+
+  Future<int> deactivateProduct(int id) {
+    return (update(products)..where((p) => p.id.equals(id))).write(
+      const ProductsCompanion(
+        isActive: Value(false),
+      ),
+    );
+  }
+
+  Future<int> bulkDeactivateProducts(List<int> ids) {
+    if (ids.isEmpty) return Future.value(0);
+    return (update(products)..where((p) => p.id.isIn(ids))).write(
+      const ProductsCompanion(
+        isActive: Value(false),
+      ),
+    );
+  }
+
+  Future<List<int>> findProductIdsReferencedByOpenPurchases(
+    List<int> productIds, {
+    Set<String> closedPurchaseStatuses = const {'closed', 'paid', 'completed', 'posted'},
+  }) async {
+    if (productIds.isEmpty) return const [];
+
+    final purchases = db.purchases;
+    final purchaseItems = db.purchaseItems;
+
+    final query = selectOnly(purchaseItems, distinct: true)
+      ..addColumns([purchaseItems.productId])
+      ..join([
+        innerJoin(
+          purchases,
+          purchases.id.equalsExp(purchaseItems.purchaseId),
+        ),
+      ])
+      ..where(purchaseItems.productId.isIn(productIds));
+    query.where(purchases.status.isNotIn(closedPurchaseStatuses.toList()));
+
+    final rows = await query.get();
+    return rows
+        .map((r) => r.read(purchaseItems.productId))
+        .whereType<int>()
+        .toList();
   }
 
   Stream<List<ProductVariant>> watchProductVariants(int productId) {

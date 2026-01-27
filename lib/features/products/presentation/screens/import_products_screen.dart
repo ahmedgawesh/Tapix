@@ -279,26 +279,72 @@ class _ImportProductsView extends StatelessWidget {
 
   Future<void> _pickFile(BuildContext context) async {
     try {
+      try {
+        await FilePicker.platform.clearTemporaryFiles();
+      } catch (e) {
+        debugPrint('[ImportProductsScreen] clearTemporaryFiles failed: $e');
+      }
+
+      debugPrint('[ImportProductsScreen] Opening file picker');
+
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['csv', 'xlsx', 'xls'],
         allowMultiple: false,
+        withData: true,
+        withReadStream: true,
+      );
+
+      debugPrint(
+        '[ImportProductsScreen] File picker result: ${result == null ? 'null' : 'files=${result.files.length}'}',
       );
 
       if (result != null && result.files.isNotEmpty) {
         final file = result.files.first;
-        if (file.bytes != null) {
+
+        debugPrint(
+          '[ImportProductsScreen] Selected: name=${file.name}, size=${file.size}, bytes=${file.bytes?.length}, path=${file.path}, readStream=${file.readStream != null}',
+        );
+
+        final bytes = file.bytes ??
+            (file.readStream == null
+                ? null
+                : await file.readStream!.fold<List<int>>(
+                    <int>[],
+                    (acc, chunk) => acc..addAll(chunk),
+                  ));
+
+        if (bytes != null) {
           if (!context.mounted) return;
           context.read<ImportProductsBloc>().add(
                 ImportFileSelected(
-                  fileBytes: file.bytes!,
+                  fileBytes: bytes,
                   fileName: file.name,
                 ),
               );
+        } else {
+          if (!context.mounted) return;
+          debugPrint('[ImportProductsScreen] File bytes are null (cannot read file)');
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('import_products.file_pick_error'.tr()),
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+          );
         }
+      } else {
+        if (!context.mounted) return;
+        debugPrint('[ImportProductsScreen] No file selected (cancelled or empty result)');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('import_products.file_pick_error'.tr()),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
       }
     } catch (e) {
       if (!context.mounted) return;
+      debugPrint('[ImportProductsScreen] File picker error: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('import_products.file_pick_error'.tr()),

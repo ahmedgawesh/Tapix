@@ -154,7 +154,13 @@
     "price": "السعر",
     "stock": "المخزون",
     "select_for_print": "اختر المنتجات لطباعة البطاقات",
-    "selected_count": "{} محدد"
+    "selected_count": "{} محدد",
+    "delete_title": "حذف المنتجات",
+    "delete_confirm": "هل أنت متأكد أنك تريد حذف {} منتج؟",
+    "delete_success": "تم حذف المنتجات بنجاح",
+    "delete_blocked_stock": "لا يمكن حذف منتجات لها رصيد",
+    "delete_blocked_open_purchase": "لا يمكن حذف منتجات مرتبطة بفاتورة مورد غير مُقفلة",
+    "delete_blocked_linked_records": "لا يمكن حذف منتجات مرتبطة بفواتير أو حركات موجودة"
   },
   "import_products": {
     "title": "استيراد المنتجات",
@@ -513,6 +519,7 @@
     "column_id": "المعرف",
     "column_sku": "رمز المنتج",
     "column_name": "الاسم",
+    "column_cost_cents": "التكلفة (بالسنت)",
     "column_price_cents": "السعر (بالسنت)",
     "column_stock": "المخزون"
   },

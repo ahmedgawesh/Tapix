@@ -62,10 +62,10 @@ development_status:
   3-4-bulk-product-form: done
   3-5-edit-prices-screen: done
   3-6-import-products-screen: done  # Code review completed 2026-01-26
-  3-7-simple-export-screen: ready-for-review
+  3-7-simple-export-screen: done
   3-8-barcode-design-screen: done  # Code review fixes completed 2026-01-26
-  3-9-categories-screen: ready-for-review
-  3-10-colors-screen: backlog
+  3-9-categories-screen: done
+  3-10-colors-screen: ready-for-dev
   3-11-sizes-screen: backlog
   3-12-products-main-screen: backlog
   epic-3-retrospective: optional
