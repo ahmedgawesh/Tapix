@@ -5,7 +5,9 @@
   - Example: `29 + zeroPad(variantId, 11)` → `2900000001234`
   - Must be **unique** and stable.
 - **Invoices**: line items should point to a **Variant**, not a Product, to keep inventory math correct.
-- **Default Variant**: products without variants use **one default Variant** (`colorId=null`, `sizeId=null`).
+- **Default Variant** (aka **single variant**): products without variants use **one Variant** as the canonical sellable unit.
+  - **Important**: this “single variant” may still carry `colorId` / `sizeId` (coming from product form fields).
+  - DAO fallback: if a strict `(colorId=null,sizeId=null)` default is not found, we fallback to the **first active variant** for the product.
   - This unifies: purchase/sales, printing, export/import, and inventory logic.
 - **Printing from invoice**: default label count = **invoice line quantity**.
 - **UI rule**: when `hasVariants=true`, the **main product-level color/size fields are disabled/hidden**; management moves to “Variants Manager”.
@@ -183,14 +185,41 @@ Deliverable:
 - Reliability fixes:
   - Variant add/edit dialog made responsive to avoid layout overflows.
   - Size selector dropdown deduplicates IDs and no longer crashes when duplicate items exist.
-  - Product form now validates SKU/barcode uniqueness against both products and variants and shows field errors instead of crashing.
-  - Database open includes an idempotent dedupe repair for legacy duplicate SKUs/barcodes to avoid edit-time UNIQUE failures.
+  - Product form now validates SKU/barcode uniqueness against both `products` and `product_variants` and shows field errors.
+  - Database open includes an idempotent dedupe repair for legacy duplicate SKU/barcode values (nulling duplicates) to avoid UNIQUE failures.
+  - Product form stock/minQuantity controllers are focus-safe and stay in sync with bloc state (no fighting user edits).
 - Routing & permissions:
   - Added route permission entry for `/products/variants`.
   - Added Products menu entry to navigate to Variants screen.
 - Localization:
   - Added `variants.*` keys for EN/AR/FR.
 - Verification: `flutter analyze` => **No issues found**.
+
+### Phase 2 — What is considered complete vs pending
+
+#### Complete (Phase 2)
+- Variants manager inside Product Form (`VariantManagementWidget`): add/edit/delete variants per product.
+- Dialog UI is responsive.
+- Size dropdown dedupe + safe selection handling.
+- Product Form inventory correctness:
+  - `hasVariants=true` shows **total stock = sum(variant.stockQuantity)** and disables direct editing.
+  - `hasVariants=false` uses the product's **single variant** as the source of truth.
+- SKU/Barcode uniqueness validation:
+  - Prevents duplicates across both `products` and `product_variants`.
+  - Errors displayed on the specific fields (SKU / Barcode).
+- DB repair on open (idempotent): clears legacy duplicates in SKU/Barcode to prevent runtime UNIQUE constraint failures.
+- Standalone `VariantsScreen` is now a **full CRUD view**.
+  - Create, edit, and delete actions are available from this screen.
+
+#### ✅ Phase 2 Complete (2026-01-27)
+- Product list display improvements:
+  - `ProductTileWidget` now supports optional `variantCount` and `totalVariantStock` parameters.
+  - When provided, displays "N × Stock" format (e.g., "3 × 150" for 3 variants with 150 total stock).
+  - ✅ `VariantSummariesBloc` created to watch variant summaries (count + total stock per product).
+  - ✅ `ProductListScreen` now wires up variant summaries to `ProductTileWidget`.
+- Bug fixes:
+  - ✅ Fixed `ProductVariantsBloc` initialization (was watching wrong stream before init event).
+  - ✅ Fixed `ProductFormScreen` total stock display (now correctly shows sum of variant stocks).
 
 ### 2.1 Product details: Variants tab
 Add a “Variants” section:
@@ -220,15 +249,31 @@ Rules:
   - show total stock = sum variants
   - show “Variants: N”
 
-Optional later:
-- A separate “Variants screen” with barcode search.
-
 Deliverable:
 - You can manage all variants of a product and see accurate stock.
 
 ---
 
 ## Phase 3 — Invoices (Purchases first) Using Variants
+
+### Phase 3 Status
+- ✅ **Implemented** (2026-01-27) - *Needs end-to-end verification*
+
+### What was implemented
+- `PurchaseDao` with full CRUD operations and stock posting logic
+- `PurchaseEntity`, `PurchaseItemEntity` domain entities
+- `PurchaseRepository` with variant-aware item creation
+- `PurchasesBloc` for list management with status filtering
+- `PurchaseFormBloc` for form state management with line items
+- `PurchaseListScreen` with status filter (all/pending/posted)
+- `PurchaseFormScreen` with:
+  - Date picker
+  - Product/variant selection via bottom sheet
+  - Line item management (add/remove/quantity adjustment)
+  - Totals calculation
+  - Save and Post actions
+- Routes: `/purchases`, `/purchases/new`, `/purchases/:id`
+- Translations for EN/AR/FR
 
 ### 3.1 Purchase invoice line model
 Update purchase invoice line to include:
@@ -256,6 +301,15 @@ Deliverable:
 ---
 
 ## Phase 4 — Printing (A4 Labels) Including “Print from Invoice”
+
+### Phase 4 Status
+- ✅ **Implemented** (2026-01-27) - *Needs end-to-end verification*
+
+### What was implemented
+- Print labels button added to `PurchaseFormScreen` app bar
+- When clicked, navigates to `/products/barcode-design` with purchase products
+- Existing barcode design screen handles the printing workflow
+- Translations added for EN/AR/FR
 
 ### 4.1 Label data model (in-memory)
 Create a simple structure (not necessarily DB):
@@ -286,6 +340,15 @@ Deliverable:
 
 ## Phase 5 — Export/Import Variant-Aware
 
+### Phase 5 Status
+- ✅ **Implemented** - *Needs end-to-end verification*
+
+### What was implemented
+- `ExportService` exports products with color/size from first variant
+- `ProductImportService` creates colors/sizes automatically during import
+- Import creates variants with proper color/size associations
+- Default variant created for products without color/size
+
 ### 5.1 Export format
 CSV/Excel (each row = Variant):
 - product fields: name, category, has_variants
@@ -307,6 +370,9 @@ Deliverable:
 ---
 
 ## Phase 6 — Reporting (No math mistakes)
+
+### Phase 6 Status
+- ⏳ **Pending** - Basic infrastructure exists, full reporting screens not yet implemented
 
 ### 6.1 Variant-level reporting
 - stock by variant
@@ -355,6 +421,6 @@ Deliverable:
 ---
 
 ## Open Items to Confirm Before Coding (Quick answers)
-- What is the desired barcode length? (proposal above is 13 digits)
-- Should barcode be regenerated if variant is deleted and recreated? (recommended: **no**, keep stable per id)
-- Do you want price shown on label by default?
+- Barcode length: **13 digits** (locked by current implementation).
+- Barcode regeneration: **No** (barcode is stable per `variantId`).
+- Print defaults (still open): show price by default on labels?

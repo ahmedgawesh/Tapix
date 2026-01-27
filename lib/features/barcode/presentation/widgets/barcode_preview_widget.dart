@@ -13,6 +13,7 @@ class BarcodePreviewWidget extends StatelessWidget {
   final Product product;
   final BarcodeDesignSettings settings;
   final CompanyProfile companyProfile;
+  final String? variantInfo;
   final double scale;
 
   const BarcodePreviewWidget({
@@ -20,6 +21,7 @@ class BarcodePreviewWidget extends StatelessWidget {
     required this.product,
     required this.settings,
     required this.companyProfile,
+    this.variantInfo,
     this.scale = 1.0,
   });
 
@@ -113,7 +115,9 @@ class BarcodePreviewWidget extends StatelessWidget {
             // Variant info (if enabled)
             if (settings.includeVariantInfo) ...[
               Text(
-                'barcode.variant_placeholder'.tr(),
+                (variantInfo != null && variantInfo!.trim().isNotEmpty)
+                    ? variantInfo!
+                    : 'barcode.variant_placeholder'.tr(),
                 style: TextStyle(
                   fontSize: 7 * scale,
                   color: Colors.black54,

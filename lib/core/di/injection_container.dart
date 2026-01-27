@@ -11,6 +11,7 @@ import '../database/daos/category_dao.dart';
 import '../database/daos/size_dao.dart';
 import '../database/daos/settings_dao.dart';
 import '../database/daos/barcode_template_dao.dart';
+import '../database/daos/purchase_dao.dart';
 import '../services/currency_service.dart';
 import '../services/localization_service.dart';
 import '../services/theme_service.dart';
@@ -37,6 +38,12 @@ import '../../features/products/presentation/bloc/export_bloc.dart';
 import '../../features/products/presentation/bloc/categories_bloc.dart';
 import '../../features/products/presentation/bloc/colors_bloc.dart';
 import '../../features/products/presentation/bloc/sizes_bloc.dart';
+import '../../features/products/presentation/bloc/variant_summaries_bloc.dart';
+import '../../features/purchases/domain/repositories/purchase_repository.dart';
+import '../../features/purchases/data/repositories/purchase_repository_impl.dart';
+import '../../features/purchases/data/datasources/purchase_local_datasource.dart';
+import '../../features/purchases/presentation/bloc/purchases_bloc.dart';
+import '../../features/purchases/presentation/bloc/purchase_form_bloc.dart';
 import '../../features/products/services/file_import_service.dart';
 import '../../features/products/services/import_validation_service.dart';
 import '../../features/products/services/product_import_service.dart';
@@ -69,6 +76,7 @@ Future<void> init() async {
   sl.registerLazySingleton(() => SizeDao(sl()));
   sl.registerLazySingleton(() => SettingsDao(sl()));
   sl.registerLazySingleton(() => BarcodeTemplateDao(sl()));
+  sl.registerLazySingleton(() => PurchaseDao(sl()));
 
   // Auth Services
   sl.registerLazySingleton(() => PasswordService());
@@ -94,6 +102,9 @@ Future<void> init() async {
   sl.registerLazySingleton<VariantLocalDatasource>(
     () => VariantLocalDatasourceImpl(sl(), sl(), sl()),
   );
+  sl.registerLazySingleton<PurchaseLocalDatasource>(
+    () => PurchaseLocalDatasourceImpl(sl()),
+  );
 
   // Feature Repositories
   sl.registerLazySingleton<ProductRepository>(
@@ -110,6 +121,9 @@ Future<void> init() async {
   );
   sl.registerLazySingleton<SizeRepository>(
     () => SizeRepositoryImpl(sl()),
+  );
+  sl.registerLazySingleton<PurchaseRepository>(
+    () => PurchaseRepositoryImpl(sl()),
   );
 
   // Blocs
@@ -150,6 +164,9 @@ Future<void> init() async {
   sl.registerFactory(() => CategoriesBloc(sl<CategoryRepository>()));
   sl.registerFactory(() => ColorsBloc(sl<ProductColorRepository>()));
   sl.registerFactory(() => SizesBloc(sl<SizeRepository>()));
+  sl.registerFactory(() => VariantSummariesBloc(sl<ProductVariantRepository>()));
+  sl.registerFactory(() => PurchasesBloc(sl<PurchaseRepository>()));
+  sl.registerFactory(() => PurchaseFormBloc(sl<PurchaseRepository>()));
   sl.registerFactory(() => ImportProductsBloc(
     parseImportFile: sl<ParseImportFile>(),
     validateImportData: sl<ValidateImportData>(),
@@ -177,5 +194,6 @@ Future<void> init() async {
     templateDao: sl<BarcodeTemplateDao>(),
     printerService: sl<BarcodePrinterService>(),
     companyProfileService: sl<CompanyProfileService>(),
+    productVariantDao: sl<ProductVariantDao>(),
   ));
 }

@@ -21,6 +21,8 @@ import '../../features/products/presentation/screens/color_magazine_screen.dart'
 import '../../features/products/presentation/screens/sizes_screen.dart';
 import '../../features/products/presentation/screens/size_form_screen.dart';
 import '../../features/products/presentation/screens/variants_screen.dart';
+import '../../features/purchases/presentation/screens/purchase_list_screen.dart';
+import '../../features/purchases/presentation/screens/purchase_form_screen.dart';
 import '../../features/products/presentation/bloc/categories_bloc.dart';
 import '../../features/products/presentation/bloc/colors_bloc.dart';
 import '../../features/products/domain/entities/product_entity.dart';
@@ -289,7 +291,20 @@ class AppRouter {
       ),
       GoRoute(
         path: '/purchases',
-        builder: (context, state) => const PlaceholderScreen(title: 'Purchases'),
+        builder: (context, state) => const PurchaseListScreen(),
+        routes: [
+          GoRoute(
+            path: 'new',
+            builder: (context, state) => const PurchaseFormScreen(),
+          ),
+          GoRoute(
+            path: ':id',
+            builder: (context, state) {
+              final id = int.tryParse(state.pathParameters['id'] ?? '');
+              return PurchaseFormScreen(purchaseId: id);
+            },
+          ),
+        ],
       ),
       GoRoute(
         path: '/expenses',
@@ -333,7 +348,11 @@ class AppRouter {
         builder: (context, state) {
           final extra = state.extra as Map<String, dynamic>?;
           final products = extra?['products'] as List<Product>?;
-          return BarcodeDesignScreen(initialProducts: products);
+          final variantInfoByProductId = extra?['variantInfoByProductId'] as Map<int, String>?;
+          return BarcodeDesignScreen(
+            initialProducts: products,
+            variantInfoByProductId: variantInfoByProductId,
+          );
         },
       ),
       GoRoute(

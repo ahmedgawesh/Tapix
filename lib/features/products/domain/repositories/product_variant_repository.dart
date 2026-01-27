@@ -32,6 +32,20 @@ abstract class ProductVariantRepository {
 
   Future<bool> updateVariant(ProductVariant variant);
   Future<int> deleteVariant(int id);
+  
+  // Validation helpers
+  Future<bool> isSkuTaken(String sku, {int? excludeVariantId});
+  Future<bool> isBarcodeTaken(String barcode, {int? excludeVariantId});
+  Future<bool> variantExists({
+    required int productId,
+    int? colorId,
+    int? sizeId,
+    int? excludeVariantId,
+  });
+  
+  // Variant summaries
+  Stream<Map<int, ({int count, int totalStock})>> watchVariantSummaries();
+  Future<({int count, int totalStock})?> getVariantSummaryByProduct(int productId);
 
   // Colors
   Stream<List<ProductColor>> watchAllColors();

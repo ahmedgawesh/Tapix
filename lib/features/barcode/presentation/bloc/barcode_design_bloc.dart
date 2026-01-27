@@ -1,10 +1,12 @@
 import 'dart:async';
 
 import 'package:drift/drift.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart' hide Product;
+import '../../../../core/database/daos/product_variant_dao.dart';
 import '../../../../core/database/daos/barcode_template_dao.dart';
 import '../../../products/domain/entities/product_entity.dart';
 import '../../../settings/data/services/company_profile_service.dart';
@@ -17,6 +19,7 @@ class BarcodeDesignBloc extends RealtimeBloc<BarcodeDesignData, BarcodeDesignEve
   final BarcodeTemplateDao _templateDao;
   final BarcodePrinterService _printerService;
   final CompanyProfileService _companyProfileService;
+  final ProductVariantDao _productVariantDao;
 
   final StreamController<BarcodeDesignData> _dataController =
       StreamController<BarcodeDesignData>.broadcast();
@@ -24,6 +27,7 @@ class BarcodeDesignBloc extends RealtimeBloc<BarcodeDesignData, BarcodeDesignEve
   StreamSubscription<CompanyProfile>? _companyProfileSubscription;
 
   List<Product> _selectedProducts = [];
+  Map<int, String> _variantInfoByProductId = {};
   List<BarcodeTemplate> _templates = [];
   BarcodeTemplate? _selectedTemplate;
   BarcodeDesignSettings _settings = const BarcodeDesignSettings();
@@ -37,9 +41,11 @@ class BarcodeDesignBloc extends RealtimeBloc<BarcodeDesignData, BarcodeDesignEve
     required BarcodeTemplateDao templateDao,
     required BarcodePrinterService printerService,
     required CompanyProfileService companyProfileService,
+    required ProductVariantDao productVariantDao,
   })  : _templateDao = templateDao,
         _printerService = printerService,
         _companyProfileService = companyProfileService,
+        _productVariantDao = productVariantDao,
         super(const RealtimeLoading()) {
     _initializeSubscriptions();
   }
@@ -110,6 +116,7 @@ class BarcodeDesignBloc extends RealtimeBloc<BarcodeDesignData, BarcodeDesignEve
 
   BarcodeDesignData get _currentData => BarcodeDesignData(
         selectedProducts: _selectedProducts,
+        variantInfoByProductId: _variantInfoByProductId,
         templates: _templates,
         selectedTemplate: _selectedTemplate,
         settings: _settings,
@@ -141,6 +148,15 @@ class BarcodeDesignBloc extends RealtimeBloc<BarcodeDesignData, BarcodeDesignEve
         _selectedProducts = List.from(event.initialProducts!);
       }
 
+      if (event.variantInfoByProductId != null) {
+        _variantInfoByProductId = Map<int, String>.from(event.variantInfoByProductId!);
+      }
+
+      if (_variantInfoByProductId.isEmpty && _selectedProducts.isNotEmpty) {
+        final ids = _selectedProducts.map((p) => p.id).toList();
+        _variantInfoByProductId = await _productVariantDao.getVariantInfoByProductIds(ids);
+      }
+
       // Subscribe to template changes
       _companyProfile = await _companyProfileService.getProfile();
 
@@ -155,11 +171,25 @@ class BarcodeDesignBloc extends RealtimeBloc<BarcodeDesignData, BarcodeDesignEve
   void _onAddProducts(
     AddProductsToSelection event,
     Emitter<RealtimeState<BarcodeDesignData>> emit,
-  ) {
+  ) async {
     final existingIds = _selectedProducts.map((p) => p.id).toSet();
     final newProducts = event.products.where((p) => !existingIds.contains(p.id)).toList();
     _selectedProducts = [..._selectedProducts, ...newProducts];
     emit(RealtimeSuccess(data: _currentData));
+
+    if (newProducts.isEmpty) return;
+    try {
+      final ids = newProducts.map((p) => p.id).toList();
+      final info = await _productVariantDao.getVariantInfoByProductIds(ids);
+      if (info.isEmpty) return;
+      _variantInfoByProductId = {
+        ..._variantInfoByProductId,
+        ...info,
+      };
+      emit(RealtimeSuccess(data: _currentData));
+    } catch (_) {
+      // ignore
+    }
   }
 
   void _onRemoveProduct(
@@ -286,7 +316,7 @@ class BarcodeDesignBloc extends RealtimeBloc<BarcodeDesignData, BarcodeDesignEve
     Emitter<RealtimeState<BarcodeDesignData>> emit,
   ) async {
     if (_selectedProducts.isEmpty) {
-      _errorMessage = 'No products selected for printing';
+      _errorMessage = 'barcode.no_products_selected'.tr();
       emit(RealtimeSuccess(data: _currentData));
       return;
     }
@@ -341,7 +371,7 @@ class BarcodeDesignBloc extends RealtimeBloc<BarcodeDesignData, BarcodeDesignEve
       emit(RealtimeSuccess(data: _currentData));
     } catch (e) {
       _operationStatus = PrintOperationStatus.error;
-      _errorMessage = e.toString();
+      _errorMessage = 'barcode.unexpected_error'.tr();
       _progress = null;
       emit(RealtimeSuccess(data: _currentData));
     }
@@ -352,7 +382,7 @@ class BarcodeDesignBloc extends RealtimeBloc<BarcodeDesignData, BarcodeDesignEve
     Emitter<RealtimeState<BarcodeDesignData>> emit,
   ) async {
     if (_selectedProducts.isEmpty) {
-      _errorMessage = 'No products selected for sharing';
+      _errorMessage = 'barcode.no_products_selected'.tr();
       emit(RealtimeSuccess(data: _currentData));
       return;
     }
@@ -391,7 +421,7 @@ class BarcodeDesignBloc extends RealtimeBloc<BarcodeDesignData, BarcodeDesignEve
       emit(RealtimeSuccess(data: _currentData));
     } catch (e) {
       _operationStatus = PrintOperationStatus.error;
-      _errorMessage = e.toString();
+      _errorMessage = 'barcode.unexpected_error'.tr();
       emit(RealtimeSuccess(data: _currentData));
     }
   }
@@ -422,7 +452,7 @@ class BarcodeDesignBloc extends RealtimeBloc<BarcodeDesignData, BarcodeDesignEve
       _templates = await _templateDao.getTemplates();
       emit(RealtimeSuccess(data: _currentData));
     } catch (e) {
-      _errorMessage = 'Failed to save template: $e';
+      _errorMessage = 'barcode.save_template_error'.tr();
       emit(RealtimeSuccess(data: _currentData));
     }
   }

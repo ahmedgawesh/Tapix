@@ -140,6 +140,47 @@ class ProductVariantRepositoryImpl implements ProductVariantRepository {
     return _datasource.deleteVariant(id);
   }
 
+  @override
+  Future<bool> isSkuTaken(String sku, {int? excludeVariantId}) async {
+    final variant = await _datasource.getVariantBySku(sku);
+    if (variant == null) return false;
+    if (excludeVariantId != null && variant.id == excludeVariantId) return false;
+    return true;
+  }
+
+  @override
+  Future<bool> isBarcodeTaken(String barcode, {int? excludeVariantId}) async {
+    final variant = await _datasource.getVariantByBarcode(barcode);
+    if (variant == null) return false;
+    if (excludeVariantId != null && variant.id == excludeVariantId) return false;
+    return true;
+  }
+
+  @override
+  Future<bool> variantExists({
+    required int productId,
+    int? colorId,
+    int? sizeId,
+    int? excludeVariantId,
+  }) async {
+    final variants = await _datasource.getVariantsByProduct(productId);
+    for (final v in variants) {
+      if (excludeVariantId != null && v.id == excludeVariantId) continue;
+      if (v.colorId == colorId && v.sizeId == sizeId) return true;
+    }
+    return false;
+  }
+
+  @override
+  Stream<Map<int, ({int count, int totalStock})>> watchVariantSummaries() {
+    return _datasource.watchVariantSummaries();
+  }
+
+  @override
+  Future<({int count, int totalStock})?> getVariantSummaryByProduct(int productId) {
+    return _datasource.getVariantSummaryByProduct(productId);
+  }
+
   // Colors
   @override
   Stream<List<ProductColor>> watchAllColors() {

@@ -19,6 +19,10 @@ abstract class VariantLocalDatasource {
   Future<void> updateVariantBarcode({required int variantId, required String barcode});
   Future<bool> updateVariant(ProductVariantModel variant);
   Future<int> deleteVariant(int id);
+  
+  // Variant summaries (count + total stock per product)
+  Stream<Map<int, ({int count, int totalStock})>> watchVariantSummaries();
+  Future<({int count, int totalStock})?> getVariantSummaryByProduct(int productId);
 
   // Colors
   Stream<List<ProductColorModel>> watchAllColors();
@@ -127,6 +131,16 @@ class VariantLocalDatasourceImpl implements VariantLocalDatasource {
   @override
   Future<int> deleteVariant(int id) {
     return _variantDao.deleteVariant(id);
+  }
+
+  @override
+  Stream<Map<int, ({int count, int totalStock})>> watchVariantSummaries() {
+    return _variantDao.watchVariantSummaries();
+  }
+
+  @override
+  Future<({int count, int totalStock})?> getVariantSummaryByProduct(int productId) {
+    return _variantDao.getVariantSummaryByProduct(productId);
   }
 
   // Colors

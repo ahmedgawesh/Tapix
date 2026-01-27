@@ -6,6 +6,7 @@ import 'package:mockito/mockito.dart';
 import 'package:tapix/core/bloc/realtime_bloc.dart';
 import 'package:tapix/core/database/app_database.dart' hide Product;
 import 'package:tapix/core/database/daos/barcode_template_dao.dart';
+import 'package:tapix/core/database/daos/product_variant_dao.dart';
 import 'package:tapix/features/barcode/domain/models/barcode_design_state.dart';
 import 'package:tapix/features/barcode/presentation/bloc/barcode_design_bloc.dart';
 import 'package:tapix/features/barcode/presentation/bloc/barcode_design_event.dart';
@@ -18,11 +19,19 @@ import 'package:decimal/decimal.dart';
 @GenerateMocks([BarcodeTemplateDao, BarcodePrinterService, CompanyProfileService])
 import 'barcode_design_bloc_test.mocks.dart';
 
+class MockProductVariantDao extends Mock implements ProductVariantDao {
+  @override
+  Future<Map<int, String>> getVariantInfoByProductIds(List<int> productIds) async {
+    return <int, String>{};
+  }
+}
+
 void main() {
   late BarcodeDesignBloc bloc;
   late MockBarcodeTemplateDao mockTemplateDao;
   late MockBarcodePrinterService mockPrinterService;
   late MockCompanyProfileService mockCompanyProfileService;
+  late MockProductVariantDao mockProductVariantDao;
 
   final testProduct = Product(
     id: 1,
@@ -64,6 +73,7 @@ void main() {
     mockTemplateDao = MockBarcodeTemplateDao();
     mockPrinterService = MockBarcodePrinterService();
     mockCompanyProfileService = MockCompanyProfileService();
+    mockProductVariantDao = MockProductVariantDao();
 
     when(mockCompanyProfileService.watchProfile())
         .thenAnswer((_) => Stream.value(CompanyProfile.empty()));
@@ -82,6 +92,7 @@ void main() {
       templateDao: mockTemplateDao,
       printerService: mockPrinterService,
       companyProfileService: mockCompanyProfileService,
+      productVariantDao: mockProductVariantDao,
     );
   });
 

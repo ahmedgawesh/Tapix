@@ -30,6 +30,68 @@ class ProductVariantDao extends DatabaseAccessor<AppDatabase> with _$ProductVari
     return (select(productVariants)..where((v) => v.id.equals(id))).getSingleOrNull();
   }
 
+  /// Returns a map of productId -> (variantCount, totalStock) for all products with variants
+  Stream<Map<int, ({int count, int totalStock})>> watchVariantSummaries() {
+    return customSelect(
+      'SELECT product_id, COUNT(*) as cnt, SUM(stock_quantity) as total_stock '
+      'FROM product_variants WHERE is_active = 1 GROUP BY product_id',
+    ).watch().map((rows) {
+      final result = <int, ({int count, int totalStock})>{};
+      for (final row in rows) {
+        final productId = row.read<int>('product_id');
+        final count = row.read<int>('cnt');
+        final totalStock = row.read<int>('total_stock');
+        result[productId] = (count: count, totalStock: totalStock);
+      }
+      return result;
+    });
+  }
+
+  Future<Map<int, String>> getVariantInfoByProductIds(List<int> productIds) async {
+    final result = <int, String>{};
+    for (final productId in productIds) {
+      final v = await getDefaultVariantByProduct(productId);
+      if (v == null) continue;
+
+      String? colorName;
+      if (v.colorId != null) {
+        final color = await (select(productColors)..where((c) => c.id.equals(v.colorId!)))
+            .getSingleOrNull();
+        colorName = color?.name;
+      }
+
+      String? sizeName;
+      if (v.sizeId != null) {
+        final size = await (select(sizes)..where((s) => s.id.equals(v.sizeId!)))
+            .getSingleOrNull();
+        sizeName = size?.name;
+      }
+
+      final info = [sizeName, colorName]
+          .whereType<String>()
+          .where((x) => x.trim().isNotEmpty)
+          .join(' / ');
+      if (info.isNotEmpty) {
+        result[productId] = info;
+      }
+    }
+    return result;
+  }
+
+  /// Returns variant summary for a single product
+  Future<({int count, int totalStock})?> getVariantSummaryByProduct(int productId) async {
+    final row = await customSelect(
+      'SELECT COUNT(*) as cnt, SUM(stock_quantity) as total_stock '
+      'FROM product_variants WHERE product_id = ? AND is_active = 1',
+      variables: [Variable.withInt(productId)],
+    ).getSingleOrNull();
+    if (row == null) return null;
+    final count = row.read<int>('cnt');
+    if (count == 0) return null;
+    final totalStock = row.read<int>('total_stock');
+    return (count: count, totalStock: totalStock);
+  }
+
   Future<ProductVariant?> getVariantByBarcode(String barcode) {
     return (select(productVariants)
           ..where((v) => v.barcode.equals(barcode))
@@ -46,19 +108,23 @@ class ProductVariantDao extends DatabaseAccessor<AppDatabase> with _$ProductVari
 
   Future<ProductVariant?> getDefaultVariantByProduct(int productId) {
     return transaction(() async {
-      final strictDefault = await (select(productVariants)
+      final strictDefaults = await (select(productVariants)
             ..where((v) => v.productId.equals(productId))
             ..where((v) => v.colorId.isNull())
             ..where((v) => v.sizeId.isNull())
-            ..where((v) => v.isActive.equals(true)))
-          .getSingleOrNull();
-      if (strictDefault != null) return strictDefault;
+            ..where((v) => v.isActive.equals(true))
+            ..limit(1))
+          .get();
+      if (strictDefaults.isNotEmpty) return strictDefaults.first;
 
-      return (select(productVariants)
+      final anyVariants = await (select(productVariants)
             ..where((v) => v.productId.equals(productId))
             ..where((v) => v.isActive.equals(true))
-            ..orderBy([(v) => OrderingTerm(expression: v.id)]))
-          .getSingleOrNull();
+            ..orderBy([(v) => OrderingTerm(expression: v.id)])
+            ..limit(1))
+          .get();
+      if (anyVariants.isNotEmpty) return anyVariants.first;
+      return null;
     });
   }
 

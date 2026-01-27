@@ -7,6 +7,7 @@ import '../../../settings/domain/entities/company_profile.dart';
 /// Represents the UI state for barcode design screen
 class BarcodeDesignData extends Equatable {
   final List<Product> selectedProducts;
+  final Map<int, String> variantInfoByProductId;
   final List<BarcodeTemplate> templates;
   final BarcodeTemplate? selectedTemplate;
   final BarcodeDesignSettings settings;
@@ -18,6 +19,7 @@ class BarcodeDesignData extends Equatable {
 
   const BarcodeDesignData({
     this.selectedProducts = const [],
+    this.variantInfoByProductId = const {},
     this.templates = const [],
     this.selectedTemplate,
     this.settings = const BarcodeDesignSettings(),
@@ -30,6 +32,7 @@ class BarcodeDesignData extends Equatable {
 
   BarcodeDesignData copyWith({
     List<Product>? selectedProducts,
+    Map<int, String>? variantInfoByProductId,
     List<BarcodeTemplate>? templates,
     BarcodeTemplate? selectedTemplate,
     BarcodeDesignSettings? settings,
@@ -43,6 +46,7 @@ class BarcodeDesignData extends Equatable {
   }) {
     return BarcodeDesignData(
       selectedProducts: selectedProducts ?? this.selectedProducts,
+      variantInfoByProductId: variantInfoByProductId ?? this.variantInfoByProductId,
       templates: templates ?? this.templates,
       selectedTemplate: clearTemplate ? null : (selectedTemplate ?? this.selectedTemplate),
       settings: settings ?? this.settings,
@@ -59,6 +63,7 @@ class BarcodeDesignData extends Equatable {
   @override
   List<Object?> get props => [
         selectedProducts,
+        variantInfoByProductId,
         templates,
         selectedTemplate,
         settings,

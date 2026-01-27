@@ -69,6 +69,7 @@ class VariantStockAdjusted extends ProductVariantsEvent {
 class ProductVariantsBloc extends RealtimeBloc<List<ProductVariant>, ProductVariantsEvent> {
   final ProductVariantRepository _repository;
   int? _productId;
+  bool _initialized = false;
   final _uuid = const Uuid();
 
   ProductVariantsBloc(this._repository) : super(const RealtimeLoading());
@@ -85,6 +86,10 @@ class ProductVariantsBloc extends RealtimeBloc<List<ProductVariant>, ProductVari
 
   @override
   Stream<List<ProductVariant>> get dataStream {
+    // Return empty stream until initialized to avoid watching wrong data
+    if (!_initialized) {
+      return const Stream.empty();
+    }
     if (_productId == null) {
       return _repository.watchAllVariants();
     }
@@ -96,6 +101,7 @@ class ProductVariantsBloc extends RealtimeBloc<List<ProductVariant>, ProductVari
     Emitter<RealtimeState<List<ProductVariant>>> emit,
   ) {
     _productId = event.productId;
+    _initialized = true;
     refresh();
   }
 
@@ -104,6 +110,7 @@ class ProductVariantsBloc extends RealtimeBloc<List<ProductVariant>, ProductVari
     Emitter<RealtimeState<List<ProductVariant>>> emit,
   ) {
     _productId = null;
+    _initialized = true;
     refresh();
   }
 

@@ -843,7 +843,7 @@ class _ProductFormViewState extends State<_ProductFormView> {
               child: state.hasVariants && productId != null
                   ? BlocBuilder<ProductVariantsBloc, RealtimeState<List<ProductVariant>>>(
                       builder: (context, variantsState) {
-                        List<ProductVariant?> variants = const [];
+                        List<ProductVariant> variants = const [];
                         if (variantsState is RealtimeSuccess<List<ProductVariant>>) {
                           variants = variantsState.data;
                         } else if (variantsState is RealtimeLoading<List<ProductVariant>>) {
@@ -854,9 +854,10 @@ class _ProductFormViewState extends State<_ProductFormView> {
                           variants = variantsState.optimisticData;
                         }
 
-                        final totalStock = variants.fold<int>(0, (sum, v) => sum + (v?.stockQuantity ?? 0));
+                        final totalStock = variants.fold<int>(0, (sum, v) => sum + v.stockQuantity);
 
                         return TextFormField(
+                          key: ValueKey('total_stock_$totalStock'),
                           initialValue: totalStock.toString(),
                           decoration: InputDecoration(
                             labelText: 'product_form.totalStock'.tr(),

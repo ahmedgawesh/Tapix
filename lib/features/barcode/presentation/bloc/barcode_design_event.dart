@@ -10,8 +10,12 @@ abstract class BarcodeDesignEvent extends RealtimeEvent {
 /// Load initial data (templates, default settings)
 class LoadBarcodeDesignData extends BarcodeDesignEvent {
   final List<Product>? initialProducts;
+  final Map<int, String>? variantInfoByProductId;
 
-  const LoadBarcodeDesignData({this.initialProducts});
+  const LoadBarcodeDesignData({
+    this.initialProducts,
+    this.variantInfoByProductId,
+  });
 }
 
 /// Add products to selection

@@ -13,6 +13,11 @@ class ProductTileWidget extends StatelessWidget {
   final void Function(Product)? onTap;
   final void Function(Product)? onLongPress;
   final bool? isSelected;
+  
+  /// For products with variants: number of variants and total stock across all variants.
+  /// If provided, these override the product's stockQuantity for display purposes.
+  final int? variantCount;
+  final int? totalVariantStock;
 
   const ProductTileWidget({
     super.key,
@@ -20,6 +25,8 @@ class ProductTileWidget extends StatelessWidget {
     this.onTap,
     this.onLongPress,
     this.isSelected,
+    this.variantCount,
+    this.totalVariantStock,
   });
 
   bool get _isOutOfStock => product.stockQuantity <= 0;
@@ -108,6 +115,16 @@ class ProductTileWidget extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
+    // Build display text: show variant count and/or total stock if available
+    String displayText;
+    if (variantCount != null && totalVariantStock != null) {
+      displayText = '$variantCount × $totalVariantStock';
+    } else if (variantCount != null) {
+      displayText = '×$variantCount';
+    } else {
+      displayText = 'products.variants_badge'.tr();
+    }
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
@@ -124,7 +141,7 @@ class ProductTileWidget extends StatelessWidget {
           ),
           const SizedBox(width: 4),
           Text(
-            'products.variants_badge'.tr(),
+            displayText,
             style: theme.textTheme.labelSmall?.copyWith(
               color: colorScheme.onSurfaceVariant,
               fontWeight: FontWeight.w600,

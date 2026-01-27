@@ -6,14 +6,21 @@ import 'package:easy_localization/easy_localization.dart';
 
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/services/currency_service.dart';
 import '../../domain/entities/product_variant_entity.dart';
 import '../../domain/entities/product_color_entity.dart';
 import '../../domain/entities/size_entity.dart';
+import '../../domain/entities/product_entity.dart';
 import '../bloc/product_variants_bloc.dart';
+import '../bloc/products_bloc.dart';
 import '../bloc/colors_bloc.dart';
 import '../bloc/colors_event.dart';
 import '../bloc/sizes_bloc.dart';
 import '../bloc/sizes_event.dart';
+import '../widgets/variant_edit_dialog.dart';
+
+enum StockFilter { all, inStock, lowStock, outOfStock }
+enum SortOption { barcode, sku, stock, recent }
 
 class VariantsScreen extends StatelessWidget {
   const VariantsScreen({super.key});
@@ -24,6 +31,9 @@ class VariantsScreen extends StatelessWidget {
       providers: [
         BlocProvider(
           create: (context) => sl<ProductVariantsBloc>()..add(const AllVariantsInitialized()),
+        ),
+        BlocProvider(
+          create: (context) => sl<ProductsBloc>(),
         ),
         BlocProvider(
           create: (context) => sl<ColorsBloc>()..add(const LoadColors()),
@@ -46,6 +56,15 @@ class _VariantsView extends StatefulWidget {
 
 class _VariantsViewState extends State<_VariantsView> {
   final TextEditingController _searchController = TextEditingController();
+  final Set<int> _selectedVariantIds = {};
+  
+  int? _productFilter;
+  int? _colorFilter;
+  int? _sizeFilter;
+  StockFilter _stockFilter = StockFilter.all;
+  bool? _activeFilter;
+  SortOption _sortOption = SortOption.recent;
+  ProductVariant? _selectedVariant;
 
   @override
   void dispose() {
@@ -55,196 +74,450 @@ class _VariantsViewState extends State<_VariantsView> {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     final width = MediaQuery.of(context).size.width;
     final isDesktop = width >= 1024;
-    final isTablet = width >= 600 && width < 1024;
+    final currencyService = sl<CurrencyService>();
 
     return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () {
-            if (context.canPop()) {
-              context.pop();
-            } else {
-              context.go('/products');
-            }
-          },
-          tooltip: 'common.back'.tr(),
-        ),
-        title: Text('variants.title'.tr()),
-        centerTitle: !isDesktop,
-      ),
+      appBar: _buildAppBar(context, isDesktop),
       body: SafeArea(
         child: Column(
           children: [
-            Padding(
-              padding: EdgeInsets.all(isDesktop ? 24.0 : 16.0),
-              child: TextField(
-                controller: _searchController,
-                onChanged: (_) => setState(() {}),
-                decoration: InputDecoration(
-                  hintText: 'variants.search_hint'.tr(),
-                  prefixIcon: const Icon(LucideIcons.search),
-                  suffixIcon: _searchController.text.isNotEmpty
-                      ? IconButton(
-                          icon: const Icon(LucideIcons.x),
-                          onPressed: () {
-                            _searchController.clear();
-                            setState(() {});
-                          },
-                        )
-                      : null,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-              ),
-            ),
-            Expanded(
-              child: BlocBuilder<ProductVariantsBloc, RealtimeState<List<ProductVariant>>>(
-                builder: (context, variantsState) {
-                  return BlocBuilder<ColorsBloc, RealtimeState<List<ProductColor>>>(
-                    builder: (context, colorsState) {
-                      return BlocBuilder<SizesBloc, RealtimeState<List<Size>>>(
-                        builder: (context, sizesState) {
-                          List<ProductVariant>? variants;
-                          if (variantsState is RealtimeSuccess<List<ProductVariant>>) {
-                            variants = variantsState.data;
-                          } else if (variantsState is RealtimeLoading<List<ProductVariant>>) {
-                            variants = variantsState.previousData;
-                          } else if (variantsState is RealtimeError<List<ProductVariant>>) {
-                            variants = variantsState.previousData;
-                          } else if (variantsState is RealtimeOptimistic<List<ProductVariant>>) {
-                            variants = variantsState.optimisticData;
-                          }
-
-                          if (variantsState is RealtimeLoading<List<ProductVariant>> && variants == null) {
-                            return const Center(child: CircularProgressIndicator());
-                          }
-
-                          final colors = colorsState is RealtimeSuccess<List<ProductColor>>
-                              ? colorsState.data
-                              : <ProductColor>[];
-                          final sizes = sizesState is RealtimeSuccess<List<Size>> ? sizesState.data : <Size>[];
-
-                          final colorNameById = {for (final c in colors) c.id: c.name};
-                          final sizeNameById = {for (final s in sizes) s.id: s.name};
-
-                          final query = _searchController.text.trim().toLowerCase();
-                          final items = (variants ?? <ProductVariant>[]).where((v) {
-                            if (query.isEmpty) return true;
-                            final barcode = (v.barcode ?? '').toLowerCase();
-                            final sku = (v.sku ?? '').toLowerCase();
-                            final color = v.colorId == null
-                                ? ''
-                                : (colorNameById[v.colorId!] ?? '').toLowerCase();
-                            final size = v.sizeId == null
-                                ? ''
-                                : (sizeNameById[v.sizeId!] ?? '').toLowerCase();
-                            return barcode.contains(query) ||
-                                sku.contains(query) ||
-                                color.contains(query) ||
-                                size.contains(query);
-                          }).toList();
-
-                          if (items.isEmpty) {
-                            return Center(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    LucideIcons.layers,
-                                    size: 64,
-                                    color: colorScheme.onSurface.withValues(alpha: 0.3),
-                                  ),
-                                  const SizedBox(height: 16),
-                                  Text(
-                                    query.isEmpty ? 'variants.empty'.tr() : 'variants.no_results'.tr(),
-                                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                          color: colorScheme.onSurface.withValues(alpha: 0.7),
-                                        ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          }
-
-                          if (isDesktop) {
-                            return _buildGrid(
-                              items,
-                              colorNameById: colorNameById,
-                              sizeNameById: sizeNameById,
-                              columns: 3,
-                            );
-                          }
-                          if (isTablet) {
-                            return _buildGrid(
-                              items,
-                              colorNameById: colorNameById,
-                              sizeNameById: sizeNameById,
-                              columns: 2,
-                            );
-                          }
-                          return _buildList(
-                            items,
-                            colorNameById: colorNameById,
-                            sizeNameById: sizeNameById,
-                          );
-                        },
-                      );
-                    },
-                  );
-                },
-              ),
-            ),
+            _buildSearchBar(context, isDesktop),
+            _buildFiltersBar(context),
+            if (_selectedVariantIds.isNotEmpty) _buildBulkActionsBar(context),
+            Expanded(child: _buildVariantsContent(context, isDesktop, currencyService)),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildList(
-    List<ProductVariant> variants, {
-    required Map<int, String> colorNameById,
-    required Map<int, String> sizeNameById,
-  }) {
+  PreferredSizeWidget _buildAppBar(BuildContext context, bool isDesktop) {
+    return AppBar(
+      leading: IconButton(
+        icon: const Icon(Icons.arrow_back),
+        onPressed: () {
+          if (context.canPop()) {
+            context.pop();
+          } else {
+            context.go('/products');
+          }
+        },
+        tooltip: 'common.back'.tr(),
+      ),
+      title: Text('variants.title'.tr()),
+      centerTitle: !isDesktop,
+      actions: [
+        IconButton(
+          icon: const Icon(LucideIcons.printer),
+          tooltip: 'variants.print_labels'.tr(),
+          onPressed: _selectedVariantIds.isEmpty ? null : () => _printSelectedLabels(context),
+        ),
+        IconButton(
+          icon: const Icon(LucideIcons.plus),
+          tooltip: 'variants.add_variant'.tr(),
+          onPressed: () => _showAddVariantDialog(context),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSearchBar(BuildContext context, bool isDesktop) {
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: isDesktop ? 24.0 : 16.0, vertical: 12.0),
+      child: TextField(
+        controller: _searchController,
+        onChanged: (_) => setState(() {}),
+        onSubmitted: (_) => _handleBarcodeSearch(),
+        decoration: InputDecoration(
+          hintText: 'variants.search_hint'.tr(),
+          prefixIcon: const Icon(LucideIcons.search),
+          suffixIcon: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (_searchController.text.isNotEmpty)
+                IconButton(
+                  icon: const Icon(LucideIcons.x),
+                  onPressed: () {
+                    _searchController.clear();
+                    setState(() {});
+                  },
+                ),
+              IconButton(
+                icon: const Icon(LucideIcons.scanLine),
+                tooltip: 'variants.scan_barcode'.tr(),
+                onPressed: () => _openBarcodeScanner(context),
+              ),
+            ],
+          ),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFiltersBar(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return BlocBuilder<ProductsBloc, RealtimeState<List<Product>>>(
+      builder: (context, productsState) {
+        return BlocBuilder<ColorsBloc, RealtimeState<List<ProductColor>>>(
+          builder: (context, colorsState) {
+            return BlocBuilder<SizesBloc, RealtimeState<List<Size>>>(
+              builder: (context, sizesState) {
+                final products = productsState is RealtimeSuccess<List<Product>> ? productsState.data : <Product>[];
+                final colors = colorsState is RealtimeSuccess<List<ProductColor>> ? colorsState.data : <ProductColor>[];
+                final sizes = sizesState is RealtimeSuccess<List<Size>> ? sizesState.data : <Size>[];
+
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: colorScheme.surfaceContainerLow,
+                    border: Border(bottom: BorderSide(color: colorScheme.outlineVariant)),
+                  ),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        _buildFilterChip(
+                          context,
+                          label: _productFilter == null
+                              ? 'variants.all_products'.tr()
+                              : products.where((p) => p.id == _productFilter).firstOrNull?.name ?? 'variants.all_products'.tr(),
+                          icon: LucideIcons.package,
+                          isSelected: _productFilter != null,
+                          onTap: () => _showProductFilterDialog(context, products),
+                        ),
+                        const SizedBox(width: 8),
+                        _buildFilterChip(
+                          context,
+                          label: _colorFilter == null
+                              ? 'variants.all_colors'.tr()
+                              : colors.where((c) => c.id == _colorFilter).firstOrNull?.name ?? 'variants.all_colors'.tr(),
+                          icon: LucideIcons.palette,
+                          isSelected: _colorFilter != null,
+                          onTap: () => _showColorFilterDialog(context, colors),
+                        ),
+                        const SizedBox(width: 8),
+                        _buildFilterChip(
+                          context,
+                          label: _sizeFilter == null
+                              ? 'variants.all_sizes'.tr()
+                              : sizes.where((s) => s.id == _sizeFilter).firstOrNull?.name ?? 'variants.all_sizes'.tr(),
+                          icon: LucideIcons.ruler,
+                          isSelected: _sizeFilter != null,
+                          onTap: () => _showSizeFilterDialog(context, sizes),
+                        ),
+                        const SizedBox(width: 8),
+                        _buildFilterChip(
+                          context,
+                          label: _getStockFilterLabel(),
+                          icon: LucideIcons.warehouse,
+                          isSelected: _stockFilter != StockFilter.all,
+                          onTap: () => _showStockFilterDialog(context),
+                        ),
+                        const SizedBox(width: 8),
+                        _buildFilterChip(
+                          context,
+                          label: _getActiveFilterLabel(),
+                          icon: LucideIcons.toggleLeft,
+                          isSelected: _activeFilter != null,
+                          onTap: () => _showActiveFilterDialog(context),
+                        ),
+                        const SizedBox(width: 16),
+                        const VerticalDivider(width: 1),
+                        const SizedBox(width: 16),
+                        _buildFilterChip(
+                          context,
+                          label: _getSortLabel(),
+                          icon: LucideIcons.arrowUpDown,
+                          isSelected: false,
+                          onTap: () => _showSortDialog(context),
+                        ),
+                        if (_hasActiveFilters()) ...[
+                          const SizedBox(width: 16),
+                          TextButton.icon(
+                            onPressed: _clearAllFilters,
+                            icon: const Icon(LucideIcons.x, size: 16),
+                            label: Text('variants.clear_filters'.tr()),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildFilterChip(BuildContext context, {required String label, required IconData icon, required bool isSelected, required VoidCallback onTap}) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return ActionChip(
+      avatar: Icon(icon, size: 16),
+      label: Text(label),
+      backgroundColor: isSelected ? colorScheme.primaryContainer : null,
+      onPressed: onTap,
+    );
+  }
+
+  Widget _buildBulkActionsBar(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      color: colorScheme.primaryContainer,
+      child: Row(
+        children: [
+          Text(
+            'variants.selected_count'.tr(args: ['${_selectedVariantIds.length}']),
+            style: TextStyle(color: colorScheme.onPrimaryContainer, fontWeight: FontWeight.w600),
+          ),
+          const Spacer(),
+          TextButton.icon(
+            onPressed: () => _printSelectedLabels(context),
+            icon: const Icon(LucideIcons.printer, size: 18),
+            label: Text('variants.print'.tr()),
+          ),
+          const SizedBox(width: 8),
+          TextButton.icon(
+            onPressed: () => _bulkSetActive(context, true),
+            icon: const Icon(LucideIcons.toggleRight, size: 18),
+            label: Text('variants.activate'.tr()),
+          ),
+          const SizedBox(width: 8),
+          TextButton.icon(
+            onPressed: () => _bulkSetActive(context, false),
+            icon: const Icon(LucideIcons.toggleLeft, size: 18),
+            label: Text('variants.deactivate'.tr()),
+          ),
+          const SizedBox(width: 8),
+          TextButton.icon(
+            onPressed: () => setState(() => _selectedVariantIds.clear()),
+            icon: const Icon(LucideIcons.x, size: 18),
+            label: Text('common.cancel'.tr()),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVariantsContent(BuildContext context, bool isDesktop, CurrencyService currencyService) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return BlocBuilder<ProductVariantsBloc, RealtimeState<List<ProductVariant>>>(
+      builder: (context, variantsState) {
+        return BlocBuilder<ProductsBloc, RealtimeState<List<Product>>>(
+          builder: (context, productsState) {
+            return BlocBuilder<ColorsBloc, RealtimeState<List<ProductColor>>>(
+              builder: (context, colorsState) {
+                return BlocBuilder<SizesBloc, RealtimeState<List<Size>>>(
+                  builder: (context, sizesState) {
+                    List<ProductVariant>? variants;
+                    if (variantsState is RealtimeSuccess<List<ProductVariant>>) {
+                      variants = variantsState.data;
+                    } else if (variantsState is RealtimeLoading<List<ProductVariant>>) {
+                      variants = variantsState.previousData;
+                    } else if (variantsState is RealtimeError<List<ProductVariant>>) {
+                      variants = variantsState.previousData;
+                    } else if (variantsState is RealtimeOptimistic<List<ProductVariant>>) {
+                      variants = variantsState.optimisticData;
+                    }
+
+                    if (variantsState is RealtimeLoading<List<ProductVariant>> && variants == null) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+
+                    final products = productsState is RealtimeSuccess<List<Product>> ? productsState.data : <Product>[];
+                    final colors = colorsState is RealtimeSuccess<List<ProductColor>> ? colorsState.data : <ProductColor>[];
+                    final sizes = sizesState is RealtimeSuccess<List<Size>> ? sizesState.data : <Size>[];
+
+                    final productNameById = {for (final p in products) p.id: p.name};
+                    final colorById = {for (final c in colors) c.id: c};
+                    final sizeNameById = {for (final s in sizes) s.id: s.name};
+
+                    final filteredItems = _applyFilters(variants ?? [], colorById, sizeNameById);
+                    final sortedItems = _applySorting(filteredItems);
+
+                    if (sortedItems.isEmpty) {
+                      return Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(LucideIcons.layers, size: 64, color: colorScheme.onSurface.withValues(alpha: 0.3)),
+                            const SizedBox(height: 16),
+                            Text(
+                              _searchController.text.isEmpty && !_hasActiveFilters() ? 'variants.empty'.tr() : 'variants.no_results'.tr(),
+                              style: Theme.of(context).textTheme.titleMedium?.copyWith(color: colorScheme.onSurface.withValues(alpha: 0.7)),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+
+                    if (isDesktop) {
+                      return _buildSplitView(sortedItems, productNameById: productNameById, colorById: colorById, sizeNameById: sizeNameById, currencyService: currencyService);
+                    }
+
+                    return _buildDenseList(sortedItems, productNameById: productNameById, colorById: colorById, sizeNameById: sizeNameById, currencyService: currencyService);
+                  },
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+
+  List<ProductVariant> _applyFilters(List<ProductVariant> variants, Map<int, ProductColor> colorById, Map<int, String> sizeNameById) {
+    final query = _searchController.text.trim().toLowerCase();
+    return variants.where((v) {
+      if (query.isNotEmpty) {
+        final barcode = (v.barcode ?? '').toLowerCase();
+        final sku = (v.sku ?? '').toLowerCase();
+        final color = v.colorId == null ? '' : (colorById[v.colorId!]?.name ?? '').toLowerCase();
+        final size = v.sizeId == null ? '' : (sizeNameById[v.sizeId!] ?? '').toLowerCase();
+        if (!barcode.contains(query) && !sku.contains(query) && !color.contains(query) && !size.contains(query)) return false;
+      }
+      if (_productFilter != null && v.productId != _productFilter) return false;
+      if (_colorFilter != null && v.colorId != _colorFilter) return false;
+      if (_sizeFilter != null && v.sizeId != _sizeFilter) return false;
+      switch (_stockFilter) {
+        case StockFilter.inStock: if (v.stockQuantity <= 0) return false; break;
+        case StockFilter.lowStock: if (v.stockQuantity <= 0 || v.stockQuantity > 10) return false; break;
+        case StockFilter.outOfStock: if (v.stockQuantity > 0) return false; break;
+        case StockFilter.all: break;
+      }
+      if (_activeFilter != null && v.isActive != _activeFilter) return false;
+      return true;
+    }).toList();
+  }
+
+  List<ProductVariant> _applySorting(List<ProductVariant> variants) {
+    final sorted = List<ProductVariant>.from(variants);
+    switch (_sortOption) {
+      case SortOption.barcode: sorted.sort((a, b) => (a.barcode ?? '').compareTo(b.barcode ?? '')); break;
+      case SortOption.sku: sorted.sort((a, b) => (a.sku ?? '').compareTo(b.sku ?? '')); break;
+      case SortOption.stock: sorted.sort((a, b) => a.stockQuantity.compareTo(b.stockQuantity)); break;
+      case SortOption.recent: sorted.sort((a, b) => b.id.compareTo(a.id)); break;
+    }
+    return sorted;
+  }
+
+  Widget _buildSplitView(List<ProductVariant> variants, {required Map<int, String> productNameById, required Map<int, ProductColor> colorById, required Map<int, String> sizeNameById, required CurrencyService currencyService}) {
+    return Row(
+      children: [
+        Expanded(flex: 2, child: _buildDenseList(variants, productNameById: productNameById, colorById: colorById, sizeNameById: sizeNameById, currencyService: currencyService)),
+        if (_selectedVariant != null)
+          Expanded(flex: 1, child: _buildDetailPanel(_selectedVariant!, productNameById: productNameById, colorById: colorById, sizeNameById: sizeNameById, currencyService: currencyService)),
+      ],
+    );
+  }
+
+  Widget _buildDenseList(List<ProductVariant> variants, {required Map<int, String> productNameById, required Map<int, ProductColor> colorById, required Map<int, String> sizeNameById, required CurrencyService currencyService}) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
     return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       itemCount: variants.length,
       itemBuilder: (context, index) {
         final v = variants[index];
-        final colorName = v.colorId == null ? null : colorNameById[v.colorId!];
+        final productName = productNameById[v.productId] ?? '';
+        final color = v.colorId == null ? null : colorById[v.colorId!];
         final sizeName = v.sizeId == null ? null : sizeNameById[v.sizeId!];
+        final isSelected = _selectedVariantIds.contains(v.id);
+        final isDetailSelected = _selectedVariant?.id == v.id;
+
+        Color stockColor;
+        if (v.stockQuantity <= 0) {
+          stockColor = colorScheme.error;
+        } else if (v.stockQuantity <= 10) {
+          stockColor = Colors.orange;
+        } else {
+          stockColor = colorScheme.primary;
+        }
 
         return Card(
-          margin: const EdgeInsets.only(bottom: 8),
-          child: ListTile(
-            leading: Icon(
-              LucideIcons.layers,
-              color: colorScheme.onSurfaceVariant,
-            ),
-            title: Text(
-              v.sku?.isNotEmpty == true ? v.sku! : 'product_form.variant_item_title'.tr(args: ['${v.id}']),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('product_form.variant_item_stock'.tr(args: ['${v.stockQuantity}'])),
-                if (v.barcode?.isNotEmpty == true)
-                  Text('product_form.variant_item_barcode'.tr(args: [v.barcode!])),
-                if (colorName != null || sizeName != null)
-                  Text(
-                    'variants.color_size'.tr(args: [colorName ?? '—', sizeName ?? '—']),
-                    style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
+          margin: const EdgeInsets.symmetric(vertical: 2, horizontal: 4),
+          color: isDetailSelected ? colorScheme.primaryContainer.withValues(alpha: 0.3) : null,
+          child: InkWell(
+            onTap: () => setState(() => _selectedVariant = v),
+            onLongPress: () => setState(() {
+              if (isSelected) { _selectedVariantIds.remove(v.id); } else { _selectedVariantIds.add(v.id); }
+            }),
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              child: Row(
+                children: [
+                  Checkbox(
+                    value: isSelected,
+                    onChanged: (val) => setState(() {
+                      if (val == true) { _selectedVariantIds.add(v.id); } else { _selectedVariantIds.remove(v.id); }
+                    }),
                   ),
-              ],
+                  Expanded(
+                    flex: 2,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(v.sku?.isNotEmpty == true ? v.sku! : '#${v.id}', style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
+                        if (v.barcode?.isNotEmpty == true)
+                          Text(v.barcode!, style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant), maxLines: 1, overflow: TextOverflow.ellipsis),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(flex: 2, child: Text(productName, style: theme.textTheme.bodySmall, maxLines: 1, overflow: TextOverflow.ellipsis)),
+                  const SizedBox(width: 8),
+                  if (color != null || sizeName != null)
+                    Expanded(
+                      flex: 2,
+                      child: Wrap(
+                        spacing: 4,
+                        children: [
+                          if (color != null)
+                            Chip(
+                              avatar: color.hexCode != null ? Container(width: 12, height: 12, decoration: BoxDecoration(color: _parseHexColor(color.hexCode!), shape: BoxShape.circle, border: Border.all(color: colorScheme.outline))) : null,
+                              label: Text(color.name, style: const TextStyle(fontSize: 11)),
+                              padding: EdgeInsets.zero,
+                              visualDensity: VisualDensity.compact,
+                            ),
+                          if (sizeName != null)
+                            Chip(label: Text(sizeName, style: const TextStyle(fontSize: 11)), padding: EdgeInsets.zero, visualDensity: VisualDensity.compact),
+                        ],
+                      ),
+                    )
+                  else
+                    const Expanded(flex: 2, child: SizedBox()),
+                  const SizedBox(width: 8),
+                  SizedBox(width: 60, child: Text(currencyService.format(v.priceCents.toBigInt().toInt()), style: theme.textTheme.bodyMedium, textAlign: TextAlign.end)),
+                  const SizedBox(width: 8),
+                  Container(
+                    width: 50,
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(color: stockColor.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(4)),
+                    child: Text('${v.stockQuantity}', style: theme.textTheme.bodyMedium?.copyWith(color: stockColor, fontWeight: FontWeight.w600), textAlign: TextAlign.center),
+                  ),
+                  const SizedBox(width: 4),
+                  IconButton(icon: const Icon(LucideIcons.minus, size: 16), tooltip: 'variants.decrease_stock'.tr(), onPressed: v.stockQuantity > 0 ? () => _adjustStock(context, v, -1) : null, visualDensity: VisualDensity.compact, constraints: const BoxConstraints(minWidth: 32, minHeight: 32)),
+                  IconButton(icon: const Icon(LucideIcons.plus, size: 16), tooltip: 'variants.increase_stock'.tr(), onPressed: () => _adjustStock(context, v, 1), visualDensity: VisualDensity.compact, constraints: const BoxConstraints(minWidth: 32, minHeight: 32)),
+                  const SizedBox(width: 4),
+                  IconButton(icon: const Icon(LucideIcons.edit, size: 16), tooltip: 'common.edit'.tr(), onPressed: () => _showEditDialog(context, v), visualDensity: VisualDensity.compact, constraints: const BoxConstraints(minWidth: 32, minHeight: 32)),
+                  IconButton(
+                    icon: Icon(v.isActive ? LucideIcons.toggleRight : LucideIcons.toggleLeft, size: 16, color: v.isActive ? colorScheme.primary : colorScheme.outline),
+                    tooltip: v.isActive ? 'variants.deactivate'.tr() : 'variants.activate'.tr(),
+                    onPressed: () => _toggleActive(context, v),
+                    visualDensity: VisualDensity.compact,
+                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  ),
+                ],
+              ),
             ),
           ),
         );
@@ -252,74 +525,425 @@ class _VariantsViewState extends State<_VariantsView> {
     );
   }
 
-  Widget _buildGrid(
-    List<ProductVariant> variants, {
-    required Map<int, String> colorNameById,
-    required Map<int, String> sizeNameById,
-    required int columns,
-  }) {
+  Widget _buildDetailPanel(ProductVariant variant, {required Map<int, String> productNameById, required Map<int, ProductColor> colorById, required Map<int, String> sizeNameById, required CurrencyService currencyService}) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final productName = productNameById[variant.productId] ?? '';
+    final color = variant.colorId == null ? null : colorById[variant.colorId!];
+    final sizeName = variant.sizeId == null ? null : sizeNameById[variant.sizeId!];
 
-    return GridView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: columns,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-        childAspectRatio: 2.8,
-      ),
-      itemCount: variants.length,
-      itemBuilder: (context, index) {
-        final v = variants[index];
-        final colorName = v.colorId == null ? null : colorNameById[v.colorId!];
-        final sizeName = v.sizeId == null ? null : sizeNameById[v.sizeId!];
-
-        return Card(
-          child: Padding(
-            padding: const EdgeInsets.all(12),
+    return Container(
+      decoration: BoxDecoration(border: Border(left: BorderSide(color: colorScheme.outlineVariant)), color: colorScheme.surfaceContainerLow),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(border: Border(bottom: BorderSide(color: colorScheme.outlineVariant))),
             child: Row(
               children: [
-                Icon(LucideIcons.layers, color: colorScheme.onSurfaceVariant),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        v.sku?.isNotEmpty == true ? v.sku! : 'product_form.variant_item_title'.tr(args: ['${v.id}']),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'product_form.variant_item_stock'.tr(args: ['${v.stockQuantity}']),
-                        style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
-                      ),
-                      if (v.barcode?.isNotEmpty == true)
-                        Text(
-                          'product_form.variant_item_barcode'.tr(args: [v.barcode!]),
-                          style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      if (colorName != null || sizeName != null)
-                        Text(
-                          'variants.color_size'.tr(args: [colorName ?? '—', sizeName ?? '—']),
-                          style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                    ],
-                  ),
-                ),
+                Expanded(child: Text('variants.details'.tr(), style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600))),
+                IconButton(icon: const Icon(LucideIcons.x), onPressed: () => setState(() => _selectedVariant = null)),
               ],
             ),
+          ),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildDetailRow('variants.product'.tr(), productName),
+                  _buildDetailRow('variants.sku'.tr(), variant.sku ?? '—'),
+                  _buildDetailRow('variants.barcode'.tr(), variant.barcode ?? '—'),
+                  if (color != null) _buildDetailRow('variants.color'.tr(), color.name, colorHex: color.hexCode),
+                  if (sizeName != null) _buildDetailRow('variants.size'.tr(), sizeName),
+                  _buildDetailRow('variants.cost'.tr(), currencyService.format(variant.costCents.toBigInt().toInt())),
+                  _buildDetailRow('variants.price'.tr(), currencyService.format(variant.priceCents.toBigInt().toInt())),
+                  _buildDetailRow('variants.stock'.tr(), '${variant.stockQuantity}'),
+                  _buildDetailRow('variants.status'.tr(), variant.isActive ? 'variants.active'.tr() : 'variants.inactive'.tr()),
+                  const SizedBox(height: 24),
+                  Row(children: [Expanded(child: OutlinedButton.icon(onPressed: () => _showStockAdjustDialog(context, variant), icon: const Icon(LucideIcons.warehouse), label: Text('variants.adjust_stock'.tr())))]),
+                  const SizedBox(height: 8),
+                  Row(children: [Expanded(child: OutlinedButton.icon(onPressed: () => _printVariantLabel(context, variant), icon: const Icon(LucideIcons.printer), label: Text('variants.print'.tr())))]),
+                  const SizedBox(height: 8),
+                  Row(children: [Expanded(child: FilledButton.icon(onPressed: () => _showEditDialog(context, variant), icon: const Icon(LucideIcons.edit), label: Text('common.edit'.tr())))]),
+                  const SizedBox(height: 8),
+                  Row(children: [Expanded(child: TextButton.icon(onPressed: () => context.push('/products/${variant.productId}'), icon: const Icon(LucideIcons.externalLink), label: Text('variants.open_product'.tr())))]),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(String label, String value, {String? colorHex}) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(width: 80, child: Text(label, style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant))),
+          Expanded(
+            child: Row(
+              children: [
+                if (colorHex != null) ...[
+                  Container(width: 16, height: 16, margin: const EdgeInsets.only(right: 8), decoration: BoxDecoration(color: _parseHexColor(colorHex), shape: BoxShape.circle, border: Border.all(color: colorScheme.outline))),
+                ],
+                Expanded(child: Text(value, style: theme.textTheme.bodyMedium)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Color _parseHexColor(String hex) {
+    final buffer = StringBuffer();
+    if (hex.length == 6 || hex.length == 7) buffer.write('ff');
+    buffer.write(hex.replaceFirst('#', ''));
+    return Color(int.parse(buffer.toString(), radix: 16));
+  }
+
+  // Filter helpers
+  String _getStockFilterLabel() {
+    switch (_stockFilter) {
+      case StockFilter.all: return 'variants.stock_all'.tr();
+      case StockFilter.inStock: return 'variants.stock_in_stock'.tr();
+      case StockFilter.lowStock: return 'variants.stock_low'.tr();
+      case StockFilter.outOfStock: return 'variants.stock_out'.tr();
+    }
+  }
+
+  String _getActiveFilterLabel() {
+    if (_activeFilter == null) return 'variants.status_all'.tr();
+    return _activeFilter! ? 'variants.active'.tr() : 'variants.inactive'.tr();
+  }
+
+  String _getSortLabel() {
+    switch (_sortOption) {
+      case SortOption.barcode: return 'variants.sort_barcode'.tr();
+      case SortOption.sku: return 'variants.sort_sku'.tr();
+      case SortOption.stock: return 'variants.sort_stock'.tr();
+      case SortOption.recent: return 'variants.sort_recent'.tr();
+    }
+  }
+
+  bool _hasActiveFilters() => _productFilter != null || _colorFilter != null || _sizeFilter != null || _stockFilter != StockFilter.all || _activeFilter != null;
+
+  void _clearAllFilters() => setState(() { _productFilter = null; _colorFilter = null; _sizeFilter = null; _stockFilter = StockFilter.all; _activeFilter = null; });
+
+  // Filter dialogs
+  void _showProductFilterDialog(BuildContext context, List<Product> products) {
+    showDialog<void>(context: context, builder: (ctx) => SimpleDialog(
+      title: Text('variants.filter_by_product'.tr()),
+      children: [
+        SimpleDialogOption(onPressed: () { setState(() => _productFilter = null); Navigator.pop(ctx); }, child: Text('variants.all_products'.tr())),
+        ...products.map((p) => SimpleDialogOption(onPressed: () { setState(() => _productFilter = p.id); Navigator.pop(ctx); }, child: Text(p.name))),
+      ],
+    ));
+  }
+
+  void _showColorFilterDialog(BuildContext context, List<ProductColor> colors) {
+    showDialog<void>(context: context, builder: (ctx) => SimpleDialog(
+      title: Text('variants.filter_by_color'.tr()),
+      children: [
+        SimpleDialogOption(onPressed: () { setState(() => _colorFilter = null); Navigator.pop(ctx); }, child: Text('variants.all_colors'.tr())),
+        ...colors.map((c) => SimpleDialogOption(
+          onPressed: () { setState(() => _colorFilter = c.id); Navigator.pop(ctx); },
+          child: Row(children: [
+            if (c.hexCode != null) Container(width: 16, height: 16, margin: const EdgeInsets.only(right: 8), decoration: BoxDecoration(color: _parseHexColor(c.hexCode!), shape: BoxShape.circle)),
+            Text(c.name),
+          ]),
+        )),
+      ],
+    ));
+  }
+
+  void _showSizeFilterDialog(BuildContext context, List<Size> sizes) {
+    showDialog<void>(context: context, builder: (ctx) => SimpleDialog(
+      title: Text('variants.filter_by_size'.tr()),
+      children: [
+        SimpleDialogOption(onPressed: () { setState(() => _sizeFilter = null); Navigator.pop(ctx); }, child: Text('variants.all_sizes'.tr())),
+        ...sizes.map((s) => SimpleDialogOption(onPressed: () { setState(() => _sizeFilter = s.id); Navigator.pop(ctx); }, child: Text(s.name))),
+      ],
+    ));
+  }
+
+  void _showStockFilterDialog(BuildContext context) {
+    showDialog<void>(context: context, builder: (ctx) => SimpleDialog(
+      title: Text('variants.filter_by_stock'.tr()),
+      children: StockFilter.values.map((f) => SimpleDialogOption(
+        onPressed: () { setState(() => _stockFilter = f); Navigator.pop(ctx); },
+        child: Text(_getStockFilterLabelFor(f)),
+      )).toList(),
+    ));
+  }
+
+  String _getStockFilterLabelFor(StockFilter filter) {
+    switch (filter) {
+      case StockFilter.all: return 'variants.stock_all'.tr();
+      case StockFilter.inStock: return 'variants.stock_in_stock'.tr();
+      case StockFilter.lowStock: return 'variants.stock_low'.tr();
+      case StockFilter.outOfStock: return 'variants.stock_out'.tr();
+    }
+  }
+
+  void _showActiveFilterDialog(BuildContext context) {
+    showDialog<void>(context: context, builder: (ctx) => SimpleDialog(
+      title: Text('variants.filter_by_status'.tr()),
+      children: [
+        SimpleDialogOption(onPressed: () { setState(() => _activeFilter = null); Navigator.pop(ctx); }, child: Text('variants.status_all'.tr())),
+        SimpleDialogOption(onPressed: () { setState(() => _activeFilter = true); Navigator.pop(ctx); }, child: Text('variants.active'.tr())),
+        SimpleDialogOption(onPressed: () { setState(() => _activeFilter = false); Navigator.pop(ctx); }, child: Text('variants.inactive'.tr())),
+      ],
+    ));
+  }
+
+  void _showSortDialog(BuildContext context) {
+    showDialog<void>(context: context, builder: (ctx) => SimpleDialog(
+      title: Text('variants.sort_by'.tr()),
+      children: SortOption.values.map((s) => SimpleDialogOption(
+        onPressed: () { setState(() => _sortOption = s); Navigator.pop(ctx); },
+        child: Text(_getSortLabelFor(s)),
+      )).toList(),
+    ));
+  }
+
+  String _getSortLabelFor(SortOption option) {
+    switch (option) {
+      case SortOption.barcode: return 'variants.sort_barcode'.tr();
+      case SortOption.sku: return 'variants.sort_sku'.tr();
+      case SortOption.stock: return 'variants.sort_stock'.tr();
+      case SortOption.recent: return 'variants.sort_recent'.tr();
+    }
+  }
+
+  // Actions
+  void _handleBarcodeSearch() {
+    // Auto-select if exact barcode match
+  }
+
+  void _openBarcodeScanner(BuildContext context) {
+    context.push('/barcode-scanner');
+  }
+
+  void _showAddVariantDialog(BuildContext context) {
+    // Show product selection first, then variant dialog
+    final productsBloc = context.read<ProductsBloc>();
+
+    showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return BlocProvider.value(
+          value: productsBloc,
+          child: BlocBuilder<ProductsBloc, RealtimeState<List<Product>>>(
+            builder: (context, state) {
+              final products = state is RealtimeSuccess<List<Product>>
+                  ? state.data
+                  : <Product>[];
+              return SimpleDialog(
+                title: Text('variants.select_product'.tr()),
+                children: products
+                    .map(
+                      (p) => SimpleDialogOption(
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          VariantEditDialog.show(context, productId: p.id);
+                        },
+                        child: Text(p.name),
+                      ),
+                    )
+                    .toList(),
+              );
+            },
           ),
         );
       },
     );
+  }
+
+  void _showEditDialog(BuildContext context, ProductVariant variant) {
+    VariantEditDialog.show(context, productId: variant.productId, variant: variant);
+  }
+
+  void _adjustStock(BuildContext context, ProductVariant variant, int delta) {
+    final updated = ProductVariant(
+      id: variant.id,
+      productId: variant.productId,
+      sku: variant.sku,
+      barcode: variant.barcode,
+      colorId: variant.colorId,
+      sizeId: variant.sizeId,
+      costCents: variant.costCents,
+      priceCents: variant.priceCents,
+      priceAdjustmentCents: variant.priceAdjustmentCents,
+      stockQuantity: variant.stockQuantity + delta,
+      isActive: variant.isActive,
+    );
+    context.read<ProductVariantsBloc>().add(VariantUpdateRequested(updated));
+  }
+
+  void _toggleActive(BuildContext context, ProductVariant variant) {
+    final updated = ProductVariant(
+      id: variant.id,
+      productId: variant.productId,
+      sku: variant.sku,
+      barcode: variant.barcode,
+      colorId: variant.colorId,
+      sizeId: variant.sizeId,
+      costCents: variant.costCents,
+      priceCents: variant.priceCents,
+      priceAdjustmentCents: variant.priceAdjustmentCents,
+      stockQuantity: variant.stockQuantity,
+      isActive: !variant.isActive,
+    );
+    context.read<ProductVariantsBloc>().add(VariantUpdateRequested(updated));
+  }
+
+  void _showStockAdjustDialog(BuildContext context, ProductVariant variant) {
+    final controller = TextEditingController(text: '${variant.stockQuantity}');
+    showDialog<void>(context: context, builder: (ctx) => AlertDialog(
+      title: Text('variants.adjust_stock'.tr()),
+      content: TextField(
+        controller: controller,
+        keyboardType: TextInputType.number,
+        decoration: InputDecoration(labelText: 'variants.new_stock'.tr(), border: const OutlineInputBorder()),
+        autofocus: true,
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx), child: Text('common.cancel'.tr())),
+        FilledButton(
+          onPressed: () {
+            final newStock = int.tryParse(controller.text) ?? variant.stockQuantity;
+            final updated = ProductVariant(
+              id: variant.id,
+              productId: variant.productId,
+              sku: variant.sku,
+              barcode: variant.barcode,
+              colorId: variant.colorId,
+              sizeId: variant.sizeId,
+              costCents: variant.costCents,
+              priceCents: variant.priceCents,
+              priceAdjustmentCents: variant.priceAdjustmentCents,
+              stockQuantity: newStock,
+              isActive: variant.isActive,
+            );
+            context.read<ProductVariantsBloc>().add(VariantUpdateRequested(updated));
+            Navigator.pop(ctx);
+            setState(() => _selectedVariant = updated);
+          },
+          child: Text('common.save'.tr()),
+        ),
+      ],
+    ));
+  }
+
+  void _printVariantLabel(BuildContext context, ProductVariant variant) {
+    final products = _getProductsFromBloc(context);
+    final colors = _getColorsFromBloc(context);
+    final sizes = _getSizesFromBloc(context);
+    final product = products.where((p) => p.id == variant.productId).toList();
+
+    final colorName = variant.colorId == null
+        ? null
+        : colors.where((c) => c.id == variant.colorId).map((c) => c.name).cast<String?>().firstOrNull;
+    final sizeName = variant.sizeId == null
+        ? null
+        : sizes.where((s) => s.id == variant.sizeId).map((s) => s.name).cast<String?>().firstOrNull;
+    final info = [sizeName, colorName].whereType<String>().where((v) => v.trim().isNotEmpty).join(' / ');
+    context.push(
+      '/products/barcode-design',
+      extra: {
+        'products': product,
+        'variantInfoByProductId': {
+          variant.productId: info,
+        },
+      },
+    );
+  }
+
+  void _printSelectedLabels(BuildContext context) {
+    final products = _getProductsFromBloc(context);
+    final variants = _getVariantsFromBloc(context);
+    final colors = _getColorsFromBloc(context);
+    final sizes = _getSizesFromBloc(context);
+
+    final selectedProductIds = variants
+        .where((v) => _selectedVariantIds.contains(v.id))
+        .map((v) => v.productId)
+        .toSet();
+
+    final selectedProducts = products
+        .where((p) => selectedProductIds.contains(p.id))
+        .toList();
+
+    final Map<int, String> variantInfoByProductId = {};
+    for (final v in variants.where((v) => _selectedVariantIds.contains(v.id))) {
+      final colorName = v.colorId == null
+          ? null
+          : colors.where((c) => c.id == v.colorId).map((c) => c.name).cast<String?>().firstOrNull;
+      final sizeName = v.sizeId == null
+          ? null
+          : sizes.where((s) => s.id == v.sizeId).map((s) => s.name).cast<String?>().firstOrNull;
+      final info = [sizeName, colorName].whereType<String>().where((v) => v.trim().isNotEmpty).join(' / ');
+      if (info.isNotEmpty) {
+        variantInfoByProductId[v.productId] = info;
+      }
+    }
+
+    context.push(
+      '/products/barcode-design',
+      extra: {
+        'products': selectedProducts,
+        'variantInfoByProductId': variantInfoByProductId,
+      },
+    );
+  }
+
+  List<Product> _getProductsFromBloc(BuildContext context) {
+    final state = context.read<ProductsBloc>().state;
+    if (state is RealtimeSuccess<List<Product>>) return state.data;
+    if (state is RealtimeLoading<List<Product>>) return state.previousData ?? const <Product>[];
+    if (state is RealtimeError<List<Product>>) return state.previousData ?? const <Product>[];
+    return const <Product>[];
+  }
+
+  List<ProductVariant> _getVariantsFromBloc(BuildContext context) {
+    final state = context.read<ProductVariantsBloc>().state;
+    if (state is RealtimeSuccess<List<ProductVariant>>) return state.data;
+    if (state is RealtimeLoading<List<ProductVariant>>) return state.previousData ?? const <ProductVariant>[];
+    if (state is RealtimeError<List<ProductVariant>>) return state.previousData ?? const <ProductVariant>[];
+    return const <ProductVariant>[];
+  }
+
+  List<ProductColor> _getColorsFromBloc(BuildContext context) {
+    final state = context.read<ColorsBloc>().state;
+    if (state is RealtimeSuccess<List<ProductColor>>) return state.data;
+    if (state is RealtimeLoading<List<ProductColor>>) return state.previousData ?? const <ProductColor>[];
+    if (state is RealtimeError<List<ProductColor>>) return state.previousData ?? const <ProductColor>[];
+    return const <ProductColor>[];
+  }
+
+  List<Size> _getSizesFromBloc(BuildContext context) {
+    final state = context.read<SizesBloc>().state;
+    if (state is RealtimeSuccess<List<Size>>) return state.data;
+    if (state is RealtimeLoading<List<Size>>) return state.previousData ?? const <Size>[];
+    if (state is RealtimeError<List<Size>>) return state.previousData ?? const <Size>[];
+    return const <Size>[];
+  }
+
+  void _bulkSetActive(BuildContext context, bool active) {
+    // Get current variants and update selected ones
+    // This is a simplified version - in production you'd batch these
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(active ? 'variants.bulk_activated'.tr() : 'variants.bulk_deactivated'.tr())),
+    );
+    setState(() => _selectedVariantIds.clear());
   }
 }

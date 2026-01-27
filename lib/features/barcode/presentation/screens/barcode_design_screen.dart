@@ -17,14 +17,24 @@ import '../widgets/product_selection_widget.dart';
 
 class BarcodeDesignScreen extends StatelessWidget {
   final List<Product>? initialProducts;
+  final Map<int, String>? variantInfoByProductId;
 
-  const BarcodeDesignScreen({super.key, this.initialProducts});
+  const BarcodeDesignScreen({
+    super.key,
+    this.initialProducts,
+    this.variantInfoByProductId,
+  });
 
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
       create: (context) => sl<BarcodeDesignBloc>()
-        ..add(LoadBarcodeDesignData(initialProducts: initialProducts)),
+        ..add(
+          LoadBarcodeDesignData(
+            initialProducts: initialProducts,
+            variantInfoByProductId: variantInfoByProductId,
+          ),
+        ),
       child: const _BarcodeDesignScreenContent(),
     );
   }
@@ -125,7 +135,7 @@ class _BarcodeDesignScreenContent extends StatelessWidget {
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
                     const SizedBox(height: 8),
-                    Text(state.error.toString()),
+                    Text('barcode.unexpected_error'.tr()),
                     const SizedBox(height: 24),
                     FilledButton(
                       onPressed: () => context
@@ -206,6 +216,7 @@ class _MobileLayout extends StatelessWidget {
                         product: data.selectedProducts.first,
                         settings: data.settings,
                         companyProfile: data.companyProfile,
+                        variantInfo: data.variantInfoByProductId[data.selectedProducts.first.id],
                       )
                     : _EmptyPreview(),
               ),
@@ -267,33 +278,18 @@ class _TabletLayout extends StatelessWidget {
                 ),
               ),
               const Divider(height: 1),
-              // Templates - Scrollable list
-              Expanded(
-                child: ListView.builder(
-                  padding: const EdgeInsets.all(8),
-                  itemCount: data.templates.length,
-                  itemBuilder: (context, index) {
-                    final template = data.templates[index];
-                    final isSelected = data.selectedTemplate?.id == template.id;
-                    return ListTile(
-                      title: Text(
-                        template.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      subtitle: Text('${template.widthMm.toInt()}x${template.heightMm.toInt()}${'common.unit_mm'.tr()}'),
-                      selected: isSelected,
-                      onTap: () => context
-                          .read<BarcodeDesignBloc>()
-                          .add(SelectTemplate(template)),
-                      trailing: template.isDefault
-                          ? const Icon(LucideIcons.star, size: 16)
-                          : null,
-                      dense: true,
-                    );
-                  },
+              // Templates - compact cards (same as mobile/desktop)
+              if (data.templates.isNotEmpty)
+                SizedBox(
+                  height: 100,
+                  child: TemplateSelectorWidget(
+                    templates: data.templates,
+                    selectedTemplate: data.selectedTemplate,
+                    onSelect: (template) => context
+                        .read<BarcodeDesignBloc>()
+                        .add(SelectTemplate(template)),
+                  ),
                 ),
-              ),
             ],
           ),
         ),
@@ -313,6 +309,7 @@ class _TabletLayout extends StatelessWidget {
                               product: data.selectedProducts.first,
                               settings: data.settings,
                               companyProfile: data.companyProfile,
+                              variantInfo: data.variantInfoByProductId[data.selectedProducts.first.id],
                               scale: 1.5,
                             )
                           : _EmptyPreview(),
@@ -412,6 +409,7 @@ class _DesktopLayout extends StatelessWidget {
                                 product: data.selectedProducts.first,
                                 settings: data.settings,
                                 companyProfile: data.companyProfile,
+                                variantInfo: data.variantInfoByProductId[data.selectedProducts.first.id],
                                 scale: 2.0,
                               )
                             : _EmptyPreview(),

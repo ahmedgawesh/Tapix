@@ -24,6 +24,7 @@ import 'daos/customer_dao.dart';
 import 'daos/accounting_dao.dart';
 import 'daos/settings_dao.dart';
 import 'daos/barcode_template_dao.dart';
+import 'daos/purchase_dao.dart';
 
 import 'database_native.dart' if (dart.library.html) 'database_web.dart';
 
@@ -79,6 +80,7 @@ part 'app_database.g.dart';
     AccountingDao,
     SettingsDao,
     BarcodeTemplateDao,
+    PurchaseDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -307,6 +309,12 @@ FROM product_variants__old
         await _ensureSchemaIntegrity();
         await _repairProductVariantsSkuNullabilityIfNeeded();
         await _dedupeUniqueSkuBarcodeIfNeeded();
+        try {
+          await _seedDefaultBarcodeTemplates();
+        } catch (e, st) {
+          debugPrint('DB seed skipped (barcode templates): $e');
+          debugPrint('$st');
+        }
       },
     );
   }
@@ -504,6 +512,12 @@ FROM product_variants__old
 
     await _seedDefaultColors();
     await _seedStandardSizes();
+    try {
+      await _seedDefaultBarcodeTemplates();
+    } catch (e, st) {
+      debugPrint('DB seed skipped (barcode templates): $e');
+      debugPrint('$st');
+    }
   }
 
   Future<void> _seedDefaultColors() async {

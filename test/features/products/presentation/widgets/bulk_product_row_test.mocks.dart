@@ -171,6 +171,48 @@ class MockProductVariantRepository extends _i1.Mock
           as _i3.Future<_i6.ProductVariant?>);
 
   @override
+  _i3.Future<_i6.ProductVariant?> getVariantByBarcode(String? barcode) =>
+      (super.noSuchMethod(
+            Invocation.method(#getVariantByBarcode, [barcode]),
+            returnValue: _i3.Future<_i6.ProductVariant?>.value(),
+          )
+          as _i3.Future<_i6.ProductVariant?>);
+
+  @override
+  _i3.Future<_i6.ProductVariant?> getVariantBySku(String? sku) =>
+      (super.noSuchMethod(
+            Invocation.method(#getVariantBySku, [sku]),
+            returnValue: _i3.Future<_i6.ProductVariant?>.value(),
+          )
+          as _i3.Future<_i6.ProductVariant?>);
+
+  @override
+  _i3.Future<_i6.ProductVariant?> getDefaultVariantByProduct(int? productId) =>
+      (super.noSuchMethod(
+            Invocation.method(#getDefaultVariantByProduct, [productId]),
+            returnValue: _i3.Future<_i6.ProductVariant?>.value(),
+          )
+          as _i3.Future<_i6.ProductVariant?>);
+
+  @override
+  _i3.Future<int> ensureDefaultVariantForProduct({
+    required int? productId,
+    required _i7.Decimal? costCents,
+    required _i7.Decimal? priceCents,
+    required int? stockQuantity,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(#ensureDefaultVariantForProduct, [], {
+              #productId: productId,
+              #costCents: costCents,
+              #priceCents: priceCents,
+              #stockQuantity: stockQuantity,
+            }),
+            returnValue: _i3.Future<int>.value(0),
+          )
+          as _i3.Future<int>);
+
+  @override
   _i3.Future<int> createVariant({
     required int? productId,
     String? sku,
@@ -213,6 +255,25 @@ class MockProductVariantRepository extends _i1.Mock
             returnValue: _i3.Future<int>.value(0),
           )
           as _i3.Future<int>);
+
+  @override
+  _i3.Stream<Map<int, ({int count, int totalStock})>> watchVariantSummaries() =>
+      (super.noSuchMethod(
+            Invocation.method(#watchVariantSummaries, []),
+            returnValue:
+                _i3.Stream<Map<int, ({int count, int totalStock})>>.empty(),
+          )
+          as _i3.Stream<Map<int, ({int count, int totalStock})>>);
+
+  @override
+  _i3.Future<({int count, int totalStock})?> getVariantSummaryByProduct(
+    int? productId,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#getVariantSummaryByProduct, [productId]),
+            returnValue: _i3.Future<({int count, int totalStock})?>.value(),
+          )
+          as _i3.Future<({int count, int totalStock})?>);
 
   @override
   _i3.Stream<List<_i8.ProductColor>> watchAllColors() =>

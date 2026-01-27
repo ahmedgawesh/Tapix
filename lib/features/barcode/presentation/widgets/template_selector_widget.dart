@@ -89,7 +89,7 @@ class _TemplateCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         child: Container(
           width: cardWidth,
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.symmetric(horizontal: 8),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
@@ -97,46 +97,57 @@ class _TemplateCard extends StatelessWidget {
               width: isSelected ? 2 : 1,
             ),
           ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                _getIconForPaperSize(template.paperSize),
-                size: 18,
-                color: isSelected ? colorScheme.primary : colorScheme.onSurface,
-              ),
-              if (template.isDefault) 
-                Icon(
-                  LucideIcons.star,
-                  size: 10,
-                  color: colorScheme.tertiary,
-                ),
-              const SizedBox(height: 2),
-              Flexible(
-                child: Text(
-                  template.name,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                        color: isSelected ? colorScheme.onPrimaryContainer : colorScheme.onSurface,
-                        fontSize: 9,
-                      ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                ),
-              ),
-              const SizedBox(height: 1),
-              Text(
-                '${template.widthMm.toInt()}x${template.heightMm.toInt()}mm',
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: isSelected
-                          ? colorScheme.onPrimaryContainer.withValues(alpha: 0.7)
-                          : colorScheme.outline,
-                      fontSize: 8,
+          child: ClipRect(
+            child: Center(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.center,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      _getIconForPaperSize(template.paperSize),
+                      size: 16,
+                      color: isSelected ? colorScheme.primary : colorScheme.onSurface,
                     ),
+                    if (template.isDefault)
+                      Icon(
+                        LucideIcons.star,
+                        size: 10,
+                        color: colorScheme.tertiary,
+                      ),
+                    const SizedBox(height: 1),
+                    SizedBox(
+                      width: cardWidth - 16,
+                      child: Text(
+                        template.name,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                              color: isSelected
+                                  ? colorScheme.onPrimaryContainer
+                                  : colorScheme.onSurface,
+                              fontSize: 9,
+                            ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                    const SizedBox(height: 1),
+                    Text(
+                      '${template.widthMm.toInt()}x${template.heightMm.toInt()}mm',
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color: isSelected
+                                ? colorScheme.onPrimaryContainer.withValues(alpha: 0.7)
+                                : colorScheme.outline,
+                            fontSize: 8,
+                          ),
+                    ),
+                  ],
+                ),
               ),
-            ],
+            ),
           ),
         ),
       ),

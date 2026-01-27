@@ -11,6 +11,7 @@ import '../../../../core/widgets/theme_toggle_button.dart';
 import '../../domain/entities/product_entity.dart';
 import '../../domain/repositories/product_repository.dart';
 import '../bloc/products_bloc.dart';
+import '../bloc/variant_summaries_bloc.dart';
 import '../widgets/product_tile_widget.dart';
 import '../widgets/product_search_widget.dart';
 import '../widgets/product_filter_widget.dart';
@@ -20,8 +21,11 @@ class ProductListScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (context) => sl<ProductsBloc>(),
+    return MultiBlocProvider(
+      providers: [
+        BlocProvider(create: (context) => sl<ProductsBloc>()),
+        BlocProvider(create: (context) => sl<VariantSummariesBloc>()),
+      ],
       child: const _ProductListView(),
     );
   }
@@ -635,50 +639,64 @@ class _ProductListViewState extends State<_ProductListView> {
                   );
                 }
 
-                return ListView.builder(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.only(bottom: 80),
-                  itemCount: displayProducts.length + (bloc.isLoadingMore ? 1 : 0),
-                  itemBuilder: (context, index) {
-                    if (index >= displayProducts.length) {
-                      return const Center(
-                        child: Padding(
-                          padding: EdgeInsets.all(16.0),
-                          child: CircularProgressIndicator(),
-                        ),
-                      );
+                return BlocBuilder<VariantSummariesBloc, RealtimeState<Map<int, VariantSummary>>>(
+                  builder: (context, summariesState) {
+                    Map<int, VariantSummary> summaries = const {};
+                    if (summariesState is RealtimeSuccess<Map<int, VariantSummary>>) {
+                      summaries = summariesState.data;
+                    } else if (summariesState is RealtimeLoading<Map<int, VariantSummary>>) {
+                      summaries = summariesState.previousData ?? const {};
                     }
 
-                    final product = displayProducts[index];
-                    final isSelected = _selectedProductIds.contains(product.id);
-                    
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                      child: ProductTileWidget(
-                        product: product,
-                        isSelected: _isSelectionMode ? isSelected : null,
-                        onTap: (p) {
-                          if (_isSelectionMode) {
-                            setState(() {
-                              if (isSelected) {
-                                _selectedProductIds.remove(p.id);
+                    return ListView.builder(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.only(bottom: 80),
+                      itemCount: displayProducts.length + (bloc.isLoadingMore ? 1 : 0),
+                      itemBuilder: (context, index) {
+                        if (index >= displayProducts.length) {
+                          return const Center(
+                            child: Padding(
+                              padding: EdgeInsets.all(16.0),
+                              child: CircularProgressIndicator(),
+                            ),
+                          );
+                        }
+
+                        final product = displayProducts[index];
+                        final isSelected = _selectedProductIds.contains(product.id);
+                        final summary = product.hasVariants ? summaries[product.id] : null;
+                        
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                          child: ProductTileWidget(
+                            product: product,
+                            isSelected: _isSelectionMode ? isSelected : null,
+                            variantCount: summary?.count,
+                            totalVariantStock: summary?.totalStock,
+                            onTap: (p) {
+                              if (_isSelectionMode) {
+                                setState(() {
+                                  if (isSelected) {
+                                    _selectedProductIds.remove(p.id);
+                                  } else {
+                                    _selectedProductIds.add(p.id);
+                                  }
+                                });
                               } else {
-                                _selectedProductIds.add(p.id);
+                                context.push('/products/${p.id}/edit');
                               }
-                            });
-                          } else {
-                            context.push('/products/${p.id}/edit');
-                          }
-                        },
-                        onLongPress: (p) {
-                          if (!_isSelectionMode) {
-                            setState(() {
-                              _isSelectionMode = true;
-                              _selectedProductIds.add(p.id);
-                            });
-                          }
-                        },
-                      ),
+                            },
+                            onLongPress: (p) {
+                              if (!_isSelectionMode) {
+                                setState(() {
+                                  _isSelectionMode = true;
+                                  _selectedProductIds.add(p.id);
+                                });
+                              }
+                            },
+                          ),
+                        );
+                      },
                     );
                   },
                 );

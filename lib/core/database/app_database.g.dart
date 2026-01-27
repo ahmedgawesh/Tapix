@@ -21183,6 +21183,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final BarcodeTemplateDao barcodeTemplateDao = BarcodeTemplateDao(
     this as AppDatabase,
   );
+  late final PurchaseDao purchaseDao = PurchaseDao(this as AppDatabase);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
