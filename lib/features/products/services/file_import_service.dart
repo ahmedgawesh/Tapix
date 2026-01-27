@@ -1,5 +1,6 @@
 import 'package:csv/csv.dart';
 import 'package:excel/excel.dart';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import '../domain/entities/import_file_data.dart';
 import '../domain/usecases/parse_import_file.dart';
@@ -82,9 +83,41 @@ class FileImportService implements ParseImportFile {
     return printableRatio > 0.85 && commas > 0 && newLines > 0;
   }
 
+  String _decodeCsvBytes(List<int> bytes) {
+    if (bytes.isEmpty) return '';
+
+    // UTF-8 BOM: EF BB BF
+    if (bytes.length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF) {
+      return utf8.decode(bytes.sublist(3), allowMalformed: true);
+    }
+
+    // UTF-16 LE BOM: FF FE
+    if (bytes.length >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE) {
+      final data = bytes.sublist(2);
+      final codeUnits = <int>[];
+      for (var i = 0; i + 1 < data.length; i += 2) {
+        codeUnits.add(data[i] | (data[i + 1] << 8));
+      }
+      return String.fromCharCodes(codeUnits);
+    }
+
+    // UTF-16 BE BOM: FE FF
+    if (bytes.length >= 2 && bytes[0] == 0xFE && bytes[1] == 0xFF) {
+      final data = bytes.sublist(2);
+      final codeUnits = <int>[];
+      for (var i = 0; i + 1 < data.length; i += 2) {
+        codeUnits.add((data[i] << 8) | data[i + 1]);
+      }
+      return String.fromCharCodes(codeUnits);
+    }
+
+    // Default: assume UTF-8.
+    return utf8.decode(bytes, allowMalformed: true);
+  }
+
   Future<ImportFileData> _parseCsv(List<int> bytes, String fileName) async {
     try {
-      final csvString = String.fromCharCodes(bytes);
+      final csvString = _decodeCsvBytes(bytes);
       final csvConverter = const CsvToListConverter(eol: '\n');
       final rows = csvConverter.convert(csvString);
 
