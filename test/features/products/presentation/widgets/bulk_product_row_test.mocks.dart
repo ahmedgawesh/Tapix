@@ -257,6 +257,48 @@ class MockProductVariantRepository extends _i1.Mock
           as _i3.Future<int>);
 
   @override
+  _i3.Future<bool> isSkuTaken(String? sku, {int? excludeVariantId}) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #isSkuTaken,
+              [sku],
+              {#excludeVariantId: excludeVariantId},
+            ),
+            returnValue: _i3.Future<bool>.value(false),
+          )
+          as _i3.Future<bool>);
+
+  @override
+  _i3.Future<bool> isBarcodeTaken(String? barcode, {int? excludeVariantId}) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #isBarcodeTaken,
+              [barcode],
+              {#excludeVariantId: excludeVariantId},
+            ),
+            returnValue: _i3.Future<bool>.value(false),
+          )
+          as _i3.Future<bool>);
+
+  @override
+  _i3.Future<bool> variantExists({
+    required int? productId,
+    int? colorId,
+    int? sizeId,
+    int? excludeVariantId,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(#variantExists, [], {
+              #productId: productId,
+              #colorId: colorId,
+              #sizeId: sizeId,
+              #excludeVariantId: excludeVariantId,
+            }),
+            returnValue: _i3.Future<bool>.value(false),
+          )
+          as _i3.Future<bool>);
+
+  @override
   _i3.Stream<Map<int, ({int count, int totalStock})>> watchVariantSummaries() =>
       (super.noSuchMethod(
             Invocation.method(#watchVariantSummaries, []),

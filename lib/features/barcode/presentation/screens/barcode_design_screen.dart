@@ -11,6 +11,7 @@ import '../../domain/models/barcode_design_state.dart';
 import '../bloc/barcode_design_bloc.dart';
 import '../bloc/barcode_design_event.dart';
 import '../widgets/barcode_preview_widget.dart';
+import '../widgets/a4_preview_widget.dart';
 import '../widgets/template_selector_widget.dart';
 import '../widgets/design_settings_widget.dart';
 import '../widgets/product_selection_widget.dart';
@@ -212,12 +213,20 @@ class _MobileLayout extends StatelessWidget {
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: data.selectedProducts.isNotEmpty
-                    ? BarcodePreviewWidget(
-                        product: data.selectedProducts.first,
-                        settings: data.settings,
-                        companyProfile: data.companyProfile,
-                        variantInfo: data.variantInfoByProductId[data.selectedProducts.first.id],
-                      )
+                    ? (data.settings.isA4Mode
+                        ? A4PreviewWidget(
+                            product: data.selectedProducts.first,
+                            settings: data.settings,
+                            companyProfile: data.companyProfile,
+                            variantInfo: data.variantInfoByProductId[data.selectedProducts.first.id],
+                            scale: 0.35,
+                          )
+                        : BarcodePreviewWidget(
+                            product: data.selectedProducts.first,
+                            settings: data.settings,
+                            companyProfile: data.companyProfile,
+                            variantInfo: data.variantInfoByProductId[data.selectedProducts.first.id],
+                          ))
                     : _EmptyPreview(),
               ),
             ),
@@ -305,13 +314,21 @@ class _TabletLayout extends StatelessWidget {
                     child: Padding(
                       padding: const EdgeInsets.all(16),
                       child: data.selectedProducts.isNotEmpty
-                          ? BarcodePreviewWidget(
-                              product: data.selectedProducts.first,
-                              settings: data.settings,
-                              companyProfile: data.companyProfile,
-                              variantInfo: data.variantInfoByProductId[data.selectedProducts.first.id],
-                              scale: 1.5,
-                            )
+                          ? (data.settings.isA4Mode
+                              ? A4PreviewWidget(
+                                  product: data.selectedProducts.first,
+                                  settings: data.settings,
+                                  companyProfile: data.companyProfile,
+                                  variantInfo: data.variantInfoByProductId[data.selectedProducts.first.id],
+                                  scale: 0.45,
+                                )
+                              : BarcodePreviewWidget(
+                                  product: data.selectedProducts.first,
+                                  settings: data.settings,
+                                  companyProfile: data.companyProfile,
+                                  variantInfo: data.variantInfoByProductId[data.selectedProducts.first.id],
+                                  scale: 1.5,
+                                ))
                           : _EmptyPreview(),
                     ),
                   ),
@@ -405,13 +422,21 @@ class _DesktopLayout extends StatelessWidget {
                       child: Padding(
                         padding: const EdgeInsets.all(24),
                         child: data.selectedProducts.isNotEmpty
-                            ? BarcodePreviewWidget(
-                                product: data.selectedProducts.first,
-                                settings: data.settings,
-                                companyProfile: data.companyProfile,
-                                variantInfo: data.variantInfoByProductId[data.selectedProducts.first.id],
-                                scale: 2.0,
-                              )
+                            ? (data.settings.isA4Mode
+                                ? A4PreviewWidget(
+                                    product: data.selectedProducts.first,
+                                    settings: data.settings,
+                                    companyProfile: data.companyProfile,
+                                    variantInfo: data.variantInfoByProductId[data.selectedProducts.first.id],
+                                    scale: 0.6,
+                                  )
+                                : BarcodePreviewWidget(
+                                    product: data.selectedProducts.first,
+                                    settings: data.settings,
+                                    companyProfile: data.companyProfile,
+                                    variantInfo: data.variantInfoByProductId[data.selectedProducts.first.id],
+                                    scale: 2.0,
+                                  ))
                             : _EmptyPreview(),
                       ),
                     ),

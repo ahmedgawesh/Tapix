@@ -635,8 +635,8 @@ FROM product_variants__old
     );
 
     await upsertTemplate(
-      name: 'Large Label (A4)',
-      description: 'Large A4 sheet label',
+      name: 'Adjustable Label',
+      description: 'Adjustable A4 sheet label',
       paperSize: 'A4',
       widthMm: 100,
       heightMm: 70,

@@ -463,24 +463,33 @@ class _DimensionField extends StatefulWidget {
 
 class _DimensionFieldState extends State<_DimensionField> {
   late TextEditingController _controller;
+  late FocusNode _focusNode;
 
   @override
   void initState() {
     super.initState();
     _controller = TextEditingController(text: widget.value.toStringAsFixed(1));
+    _focusNode = FocusNode();
   }
 
   @override
   void didUpdateWidget(_DimensionField oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.value != widget.value) {
-      _controller.text = widget.value.toStringAsFixed(1);
+      // Only update text if not currently focused to avoid cursor jumping
+      if (!_controller.selection.isValid || !_controller.selection.isCollapsed) {
+        final newText = widget.value.toStringAsFixed(1);
+        if (_controller.text != newText) {
+          _controller.text = newText;
+        }
+      }
     }
   }
 
   @override
   void dispose() {
     _controller.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
@@ -488,6 +497,7 @@ class _DimensionFieldState extends State<_DimensionField> {
   Widget build(BuildContext context) {
     return TextField(
       controller: _controller,
+      focusNode: _focusNode,
       decoration: InputDecoration(
         labelText: widget.label,
         border: const OutlineInputBorder(),
@@ -501,10 +511,11 @@ class _DimensionFieldState extends State<_DimensionField> {
         }
       },
       onTap: () {
-        // Clear placeholder on focus per project-context.md
-        if (_controller.text == '0.0' || _controller.text == '0') {
-          _controller.clear();
-        }
+        // Select all text on tap for easy editing
+        _controller.selection = TextSelection(
+          baseOffset: 0,
+          extentOffset: _controller.text.length,
+        );
       },
     );
   }

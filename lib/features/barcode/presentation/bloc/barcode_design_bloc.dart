@@ -103,6 +103,10 @@ class BarcodeDesignBloc extends RealtimeBloc<BarcodeDesignData, BarcodeDesignEve
     on<ShareLabels>(_onShareLabels);
     on<SaveAsTemplate>(_onSaveAsTemplate);
     on<AcknowledgePrintResult>(_onAcknowledgePrintResult);
+    on<UpdatePrintMode>(_onUpdatePrintMode);
+    on<UpdateQuantityMode>(_onUpdateQuantityMode);
+    on<UpdateLabelsPerRow>(_onUpdateLabelsPerRow);
+    on<UpdateA4LayoutGaps>(_onUpdateA4LayoutGaps);
   }
 
   @override
@@ -338,6 +342,7 @@ class BarcodeDesignBloc extends RealtimeBloc<BarcodeDesignData, BarcodeDesignEve
         final companyName = _settings.includeCompanyName ? _companyProfile.name : null;
         final companyAddress = _companyProfile.address;
         final companyPhone = _companyProfile.phone;
+        final variantInfo = _variantInfoByProductId[product.id];
 
         await _printerService.printLabel(
           product: product,
@@ -352,6 +357,13 @@ class BarcodeDesignBloc extends RealtimeBloc<BarcodeDesignData, BarcodeDesignEve
           companyAddress: companyAddress,
           companyPhone: companyPhone,
           copies: copies,
+          isA4Mode: _settings.isA4Mode,
+          labelsPerRow: _settings.labelsPerRow,
+          horizontalGapMm: _settings.horizontalGapMm,
+          verticalGapMm: _settings.verticalGapMm,
+          pageMarginMm: _settings.pageMarginMm,
+          variantInfo: variantInfo,
+          includeVariantInfo: _settings.includeVariantInfo,
         );
 
         // Log print history
@@ -393,13 +405,12 @@ class BarcodeDesignBloc extends RealtimeBloc<BarcodeDesignData, BarcodeDesignEve
 
       final barcodeType = _printerService.getBarcodeTypeFromString(_settings.barcodeType);
 
-      // For now, share the first product's label
-      // TODO: Implement batch PDF generation for multiple products
       final product = _selectedProducts.first;
       
       final companyName = _settings.includeCompanyName ? _companyProfile.name : null;
       final companyAddress = _companyProfile.address;
       final companyPhone = _companyProfile.phone;
+      final variantInfo = _variantInfoByProductId[product.id];
 
       await _printerService.shareLabelPdf(
         product: product,
@@ -414,6 +425,13 @@ class BarcodeDesignBloc extends RealtimeBloc<BarcodeDesignData, BarcodeDesignEve
         companyAddress: companyAddress,
         companyPhone: companyPhone,
         copies: _settings.copies,
+        isA4Mode: _settings.isA4Mode,
+        labelsPerRow: _settings.labelsPerRow,
+        horizontalGapMm: _settings.horizontalGapMm,
+        verticalGapMm: _settings.verticalGapMm,
+        pageMarginMm: _settings.pageMarginMm,
+        variantInfo: variantInfo,
+        includeVariantInfo: _settings.includeVariantInfo,
       );
 
       _operationStatus = PrintOperationStatus.success;
@@ -466,13 +484,57 @@ class BarcodeDesignBloc extends RealtimeBloc<BarcodeDesignData, BarcodeDesignEve
     emit(RealtimeSuccess(data: _currentData));
   }
 
+  void _onUpdatePrintMode(
+    UpdatePrintMode event,
+    Emitter<RealtimeState<BarcodeDesignData>> emit,
+  ) {
+    _settings = _settings.copyWith(printMode: event.printMode);
+    emit(RealtimeSuccess(data: _currentData));
+  }
+
+  void _onUpdateQuantityMode(
+    UpdateQuantityMode event,
+    Emitter<RealtimeState<BarcodeDesignData>> emit,
+  ) {
+    _settings = _settings.copyWith(quantityMode: event.quantityMode);
+    emit(RealtimeSuccess(data: _currentData));
+  }
+
+  void _onUpdateLabelsPerRow(
+    UpdateLabelsPerRow event,
+    Emitter<RealtimeState<BarcodeDesignData>> emit,
+  ) {
+    _settings = _settings.copyWith(labelsPerRow: event.labelsPerRow.clamp(1, 10));
+    emit(RealtimeSuccess(data: _currentData));
+  }
+
+  void _onUpdateA4LayoutGaps(
+    UpdateA4LayoutGaps event,
+    Emitter<RealtimeState<BarcodeDesignData>> emit,
+  ) {
+    _settings = _settings.copyWith(
+      horizontalGapMm: event.horizontalGapMm,
+      verticalGapMm: event.verticalGapMm,
+      pageMarginMm: event.pageMarginMm,
+    );
+    emit(RealtimeSuccess(data: _currentData));
+  }
+
   int _calculateCopies(Product product) {
-    switch (_settings.printType) {
-      case 'all_quantity':
-        return product.stockQuantity > 0 ? product.stockQuantity : _settings.copies;
-      case 'batch':
-      case 'single':
-      default:
+    switch (_settings.quantityMode) {
+      case QuantityMode.single:
+        return 1;
+      case QuantityMode.stockQuantity:
+        return product.stockQuantity > 0 ? product.stockQuantity : 1;
+      case QuantityMode.invoiceQuantity:
+        // Get quantity from invoice data if available
+        if (_currentData.invoiceData != null && _currentData.invoiceData!.lines.isNotEmpty) {
+          // Use the first line's quantity as fallback
+          final firstLine = _currentData.invoiceData!.lines.first;
+          return _currentData.currentQuantities[firstLine.variantId] ?? firstLine.quantity;
+        }
+        return 1;
+      case QuantityMode.custom:
         return _settings.copies;
     }
   }

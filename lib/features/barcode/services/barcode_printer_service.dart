@@ -84,21 +84,53 @@ class BarcodePrinterService {
     String? companyAddress,
     String? companyPhone,
     int copies = 1,
+    bool isA4Mode = false,
+    int labelsPerRow = 3,
+    double horizontalGapMm = 2.0,
+    double verticalGapMm = 2.0,
+    double pageMarginMm = 10.0,
+    String? variantInfo,
+    bool includeVariantInfo = false,
   }) async {
-    await _printPdf(
-      product,
-      barcode,
-      widthMm,
-      heightMm,
-      includeName,
-      includePrice,
-      includeCompanyName,
-      companyName,
-      includeCompanyContact,
-      companyAddress,
-      companyPhone,
-      copies,
-    );
+    if (isA4Mode) {
+      await _printA4Grid(
+        product: product,
+        barcode: barcode,
+        widthMm: widthMm,
+        heightMm: heightMm,
+        includeName: includeName,
+        includePrice: includePrice,
+        includeCompanyName: includeCompanyName,
+        companyName: companyName,
+        includeCompanyContact: includeCompanyContact,
+        companyAddress: companyAddress,
+        companyPhone: companyPhone,
+        copies: copies,
+        labelsPerRow: labelsPerRow,
+        horizontalGapMm: horizontalGapMm,
+        verticalGapMm: verticalGapMm,
+        pageMarginMm: pageMarginMm,
+        variantInfo: variantInfo,
+        includeVariantInfo: includeVariantInfo,
+      );
+    } else {
+      await _printPdf(
+        product,
+        barcode,
+        widthMm,
+        heightMm,
+        includeName,
+        includePrice,
+        includeCompanyName,
+        companyName,
+        includeCompanyContact,
+        companyAddress,
+        companyPhone,
+        copies,
+        variantInfo,
+        includeVariantInfo,
+      );
+    }
   }
 
   Future<void> _printPdf(
@@ -114,6 +146,8 @@ class BarcodePrinterService {
     String? companyAddress,
     String? companyPhone,
     int copies,
+    String? variantInfo,
+    bool includeVariantInfo,
   ) async {
     final doc = pw.Document();
     
@@ -241,6 +275,233 @@ class BarcodePrinterService {
     return pw.TextDirection.ltr;
   }
 
+  /// Print labels in A4 grid layout
+  Future<void> _printA4Grid({
+    required Product product,
+    required Barcode barcode,
+    required double widthMm,
+    required double heightMm,
+    required bool includeName,
+    required bool includePrice,
+    required bool includeCompanyName,
+    required String? companyName,
+    required bool includeCompanyContact,
+    required String? companyAddress,
+    required String? companyPhone,
+    required int copies,
+    required int labelsPerRow,
+    required double horizontalGapMm,
+    required double verticalGapMm,
+    required double pageMarginMm,
+    required String? variantInfo,
+    required bool includeVariantInfo,
+  }) async {
+    final doc = pw.Document();
+    
+    // Load multilingual fonts
+    final fontData = await rootBundle.load('assets/fonts/IBMPlexSansArabic-Regular.ttf');
+    final fontBoldData = await rootBundle.load('assets/fonts/IBMPlexSansArabic-Bold.ttf');
+    final ttf = pw.Font.ttf(fontData);
+    final ttfBold = pw.Font.ttf(fontBoldData);
+
+    // Get currency service
+    final currencyService = sl<CurrencyService>();
+    final formattedPrice = currencyService.format(product.priceCents.toBigInt().toInt());
+    final textDirection = _detectTextDirection(product.name);
+
+    // A4 dimensions
+    const a4HeightMm = 297.0;
+    
+    // Convert to points
+    final labelWidth = widthMm * PdfPageFormat.mm;
+    final labelHeight = heightMm * PdfPageFormat.mm;
+    final hGap = horizontalGapMm * PdfPageFormat.mm;
+    final vGap = verticalGapMm * PdfPageFormat.mm;
+    final topMargin = pageMarginMm * PdfPageFormat.mm;
+    final bottomMargin = pageMarginMm * PdfPageFormat.mm;
+    final leftMargin = pageMarginMm * PdfPageFormat.mm;
+    final rightMargin = pageMarginMm * PdfPageFormat.mm;
+
+    // Calculate labels per column
+    final availableHeight = a4HeightMm * PdfPageFormat.mm - (topMargin + bottomMargin);
+    final labelWithVGap = labelHeight + vGap;
+    final labelsPerColumn = (availableHeight / labelWithVGap).floor().clamp(1, 20);
+    final labelsPerPage = labelsPerRow * labelsPerColumn;
+
+    // Generate pages
+    int remainingCopies = copies;
+    while (remainingCopies > 0) {
+      doc.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat.a4,
+          margin: pw.EdgeInsets.only(
+            top: topMargin,
+            bottom: bottomMargin,
+            left: leftMargin,
+            right: rightMargin,
+          ),
+          build: (pw.Context context) {
+            final labelsThisPage = remainingCopies < labelsPerPage ? remainingCopies : labelsPerPage;
+            final rows = (labelsThisPage / labelsPerRow).ceil();
+
+            return pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: List.generate(rows, (rowIndex) {
+                final startIndex = rowIndex * labelsPerRow;
+                final labelsInRow = (startIndex + labelsPerRow) <= labelsThisPage
+                    ? labelsPerRow
+                    : labelsThisPage - startIndex;
+
+                return pw.Padding(
+                  padding: pw.EdgeInsets.only(bottom: vGap),
+                  child: pw.Row(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: List.generate(labelsInRow, (colIndex) {
+                      return pw.Padding(
+                        padding: pw.EdgeInsets.only(right: colIndex < labelsInRow - 1 ? hGap : 0),
+                        child: _buildLabelContent(
+                          product: product,
+                          barcode: barcode,
+                          labelWidth: labelWidth,
+                          labelHeight: labelHeight,
+                          includeName: includeName,
+                          includePrice: includePrice,
+                          includeCompanyName: includeCompanyName,
+                          companyName: companyName,
+                          includeCompanyContact: includeCompanyContact,
+                          companyAddress: companyAddress,
+                          companyPhone: companyPhone,
+                          formattedPrice: formattedPrice,
+                          textDirection: textDirection,
+                          ttf: ttf,
+                          ttfBold: ttfBold,
+                          variantInfo: variantInfo,
+                          includeVariantInfo: includeVariantInfo,
+                        ),
+                      );
+                    }),
+                  ),
+                );
+              }),
+            );
+          },
+        ),
+      );
+      remainingCopies -= labelsPerPage;
+    }
+
+    await Printing.layoutPdf(
+      onLayout: (PdfPageFormat format) async => doc.save(),
+      name: 'Labels-${product.sku ?? product.id}',
+      format: PdfPageFormat.a4,
+    );
+  }
+
+  /// Build label content widget
+  pw.Widget _buildLabelContent({
+    required Product product,
+    required Barcode barcode,
+    required double labelWidth,
+    required double labelHeight,
+    required bool includeName,
+    required bool includePrice,
+    required bool includeCompanyName,
+    required String? companyName,
+    required bool includeCompanyContact,
+    required String? companyAddress,
+    required String? companyPhone,
+    required String formattedPrice,
+    required pw.TextDirection textDirection,
+    required pw.Font ttf,
+    required pw.Font ttfBold,
+    required String? variantInfo,
+    required bool includeVariantInfo,
+  }) {
+    return pw.Container(
+      width: labelWidth,
+      height: labelHeight,
+      decoration: pw.BoxDecoration(
+        border: pw.Border.all(color: PdfColors.grey300),
+        color: PdfColors.white,
+      ),
+      padding: const pw.EdgeInsets.all(2),
+      child: pw.Column(
+        mainAxisAlignment: pw.MainAxisAlignment.center,
+        crossAxisAlignment: pw.CrossAxisAlignment.center,
+        children: [
+          if (includeCompanyName && companyName != null && companyName.isNotEmpty) ...[
+            pw.Text(
+              companyName,
+              style: pw.TextStyle(fontSize: 5, fontWeight: pw.FontWeight.bold, font: ttfBold),
+              textDirection: _detectTextDirection(companyName),
+              maxLines: 1,
+              overflow: pw.TextOverflow.clip,
+            ),
+            pw.SizedBox(height: 0.5),
+          ],
+          if (includeCompanyContact &&
+              ((companyAddress != null && companyAddress.isNotEmpty) ||
+                  (companyPhone != null && companyPhone.isNotEmpty))) ...[
+            if (companyAddress != null && companyAddress.isNotEmpty)
+              pw.Text(
+                companyAddress,
+                style: pw.TextStyle(fontSize: 4, font: ttf, color: PdfColors.grey700),
+                textDirection: _detectTextDirection(companyAddress),
+                maxLines: 1,
+                overflow: pw.TextOverflow.clip,
+              ),
+            if (companyPhone != null && companyPhone.isNotEmpty)
+              pw.Text(
+                companyPhone,
+                style: pw.TextStyle(fontSize: 4, font: ttf, color: PdfColors.grey700),
+                maxLines: 1,
+                overflow: pw.TextOverflow.clip,
+              ),
+            pw.SizedBox(height: 0.5),
+          ],
+          if (includeName && product.name.isNotEmpty) ...[
+            pw.Text(
+              product.name,
+              style: pw.TextStyle(fontSize: 6, fontWeight: pw.FontWeight.bold, font: ttfBold),
+              maxLines: 1,
+              overflow: pw.TextOverflow.clip,
+              textDirection: textDirection,
+            ),
+            pw.SizedBox(height: 1),
+          ],
+          if (includeVariantInfo && variantInfo != null && variantInfo.isNotEmpty) ...[
+            pw.Text(
+              variantInfo,
+              style: pw.TextStyle(fontSize: 5, font: ttf, color: PdfColors.grey700),
+              textDirection: _detectTextDirection(variantInfo),
+              maxLines: 1,
+              overflow: pw.TextOverflow.clip,
+            ),
+            pw.SizedBox(height: 0.5),
+          ],
+          pw.Expanded(
+            child: product.barcode != null && product.barcode!.isNotEmpty
+                ? pw.BarcodeWidget(
+                    data: product.barcode!,
+                    barcode: barcode,
+                    width: labelWidth - 4,
+                    height: labelHeight * 0.5,
+                    drawText: true,
+                    textStyle: pw.TextStyle(fontSize: 5, font: ttf),
+                  )
+                : pw.Container(),
+          ),
+          if (includePrice) ...[
+            pw.SizedBox(height: 1),
+            pw.Text(
+              formattedPrice,
+              style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold, font: ttfBold),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 
   Future<Uint8List> generatePdfLabel({
     required Product product,
@@ -380,22 +641,168 @@ class BarcodePrinterService {
     String? companyAddress,
     String? companyPhone,
     int copies = 1,
+    bool isA4Mode = false,
+    int labelsPerRow = 3,
+    double horizontalGapMm = 2.0,
+    double verticalGapMm = 2.0,
+    double pageMarginMm = 10.0,
+    String? variantInfo,
+    bool includeVariantInfo = false,
   }) async {
-    final pdfData = await generatePdfLabel(
-      product: product,
-      barcode: barcode,
-      widthMm: widthMm,
-      heightMm: heightMm,
-      includeName: includeName,
-      includePrice: includePrice,
-      includeCompanyName: includeCompanyName,
-      companyName: companyName,
-      includeCompanyContact: includeCompanyContact,
-      companyAddress: companyAddress,
-      companyPhone: companyPhone,
-      copies: copies,
-    );
-    await Printing.sharePdf(bytes: pdfData, filename: 'Label-${product.sku ?? product.id}.pdf');
+    final pdfData = isA4Mode
+        ? await _generateA4GridPdf(
+            product: product,
+            barcode: barcode,
+            widthMm: widthMm,
+            heightMm: heightMm,
+            includeName: includeName,
+            includePrice: includePrice,
+            includeCompanyName: includeCompanyName,
+            companyName: companyName,
+            includeCompanyContact: includeCompanyContact,
+            companyAddress: companyAddress,
+            companyPhone: companyPhone,
+            copies: copies,
+            labelsPerRow: labelsPerRow,
+            horizontalGapMm: horizontalGapMm,
+            verticalGapMm: verticalGapMm,
+            pageMarginMm: pageMarginMm,
+            variantInfo: variantInfo,
+            includeVariantInfo: includeVariantInfo,
+          )
+        : await generatePdfLabel(
+            product: product,
+            barcode: barcode,
+            widthMm: widthMm,
+            heightMm: heightMm,
+            includeName: includeName,
+            includePrice: includePrice,
+            includeCompanyName: includeCompanyName,
+            companyName: companyName,
+            includeCompanyContact: includeCompanyContact,
+            companyAddress: companyAddress,
+            companyPhone: companyPhone,
+            copies: copies,
+          );
+    await Printing.sharePdf(bytes: pdfData, filename: 'Labels-${product.sku ?? product.id}.pdf');
+  }
+
+  /// Generate A4 grid PDF as bytes
+  Future<Uint8List> _generateA4GridPdf({
+    required Product product,
+    required Barcode barcode,
+    required double widthMm,
+    required double heightMm,
+    required bool includeName,
+    required bool includePrice,
+    required bool includeCompanyName,
+    required String? companyName,
+    required bool includeCompanyContact,
+    required String? companyAddress,
+    required String? companyPhone,
+    required int copies,
+    required int labelsPerRow,
+    required double horizontalGapMm,
+    required double verticalGapMm,
+    required double pageMarginMm,
+    required String? variantInfo,
+    required bool includeVariantInfo,
+  }) async {
+    final doc = pw.Document();
+    
+    // Load multilingual fonts
+    final fontData = await rootBundle.load('assets/fonts/IBMPlexSansArabic-Regular.ttf');
+    final fontBoldData = await rootBundle.load('assets/fonts/IBMPlexSansArabic-Bold.ttf');
+    final ttf = pw.Font.ttf(fontData);
+    final ttfBold = pw.Font.ttf(fontBoldData);
+
+    // Get currency service
+    final currencyService = sl<CurrencyService>();
+    final formattedPrice = currencyService.format(product.priceCents.toBigInt().toInt());
+    final textDirection = _detectTextDirection(product.name);
+
+    // A4 dimensions
+    const a4HeightMm = 297.0;
+    
+    // Convert to points
+    final labelWidth = widthMm * PdfPageFormat.mm;
+    final labelHeight = heightMm * PdfPageFormat.mm;
+    final hGap = horizontalGapMm * PdfPageFormat.mm;
+    final vGap = verticalGapMm * PdfPageFormat.mm;
+    final topMargin = pageMarginMm * PdfPageFormat.mm;
+    final bottomMargin = pageMarginMm * PdfPageFormat.mm;
+    final leftMargin = pageMarginMm * PdfPageFormat.mm;
+    final rightMargin = pageMarginMm * PdfPageFormat.mm;
+
+    // Calculate labels per column
+    final availableHeight = a4HeightMm * PdfPageFormat.mm - (topMargin + bottomMargin);
+    final labelWithVGap = labelHeight + vGap;
+    final labelsPerColumn = (availableHeight / labelWithVGap).floor().clamp(1, 20);
+    final labelsPerPage = labelsPerRow * labelsPerColumn;
+
+    // Generate pages
+    int remainingCopies = copies;
+    while (remainingCopies > 0) {
+      doc.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat.a4,
+          margin: pw.EdgeInsets.only(
+            top: topMargin,
+            bottom: bottomMargin,
+            left: leftMargin,
+            right: rightMargin,
+          ),
+          build: (pw.Context context) {
+            final labelsThisPage = remainingCopies < labelsPerPage ? remainingCopies : labelsPerPage;
+            final rows = (labelsThisPage / labelsPerRow).ceil();
+
+            return pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: List.generate(rows, (rowIndex) {
+                final startIndex = rowIndex * labelsPerRow;
+                final labelsInRow = (startIndex + labelsPerRow) <= labelsThisPage
+                    ? labelsPerRow
+                    : labelsThisPage - startIndex;
+
+                return pw.Padding(
+                  padding: pw.EdgeInsets.only(bottom: vGap),
+                  child: pw.Row(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: List.generate(labelsInRow, (colIndex) {
+                      return pw.Padding(
+                        padding: pw.EdgeInsets.only(right: colIndex < labelsInRow - 1 ? hGap : 0),
+                        child: _buildLabelContent(
+                          product: product,
+                          barcode: barcode,
+                          labelWidth: labelWidth,
+                          labelHeight: labelHeight,
+                          includeName: includeName,
+                          includePrice: includePrice,
+                          includeCompanyName: includeCompanyName,
+                          companyName: companyName,
+                          includeCompanyContact: includeCompanyContact,
+                          companyAddress: companyAddress,
+                          companyPhone: companyPhone,
+                          formattedPrice: formattedPrice,
+                          textDirection: textDirection,
+                          ttf: ttf,
+                          ttfBold: ttfBold,
+                          variantInfo: variantInfo,
+                          includeVariantInfo: includeVariantInfo,
+                        ),
+                      );
+                    }),
+                  ),
+                );
+              }),
+            );
+          },
+        ),
+      );
+      remainingCopies -= labelsPerPage;
+    }
+
+    return doc.save();
   }
 
   /// Get barcode type from string identifier
