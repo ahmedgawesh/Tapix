@@ -273,41 +273,79 @@ class _VariantsViewState extends State<_VariantsView> {
 
   Widget _buildBulkActionsBar(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final isSmall = MediaQuery.of(context).size.width < 420;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       color: colorScheme.primaryContainer,
-      child: Row(
-        children: [
-          Text(
-            'variants.selected_count'.tr(args: ['${_selectedVariantIds.length}']),
-            style: TextStyle(color: colorScheme.onPrimaryContainer, fontWeight: FontWeight.w600),
-          ),
-          const Spacer(),
-          TextButton.icon(
-            onPressed: () => _printSelectedLabels(context),
-            icon: const Icon(LucideIcons.printer, size: 18),
-            label: Text('variants.print'.tr()),
-          ),
-          const SizedBox(width: 8),
-          TextButton.icon(
-            onPressed: () => _bulkSetActive(context, true),
-            icon: const Icon(LucideIcons.toggleRight, size: 18),
-            label: Text('variants.activate'.tr()),
-          ),
-          const SizedBox(width: 8),
-          TextButton.icon(
-            onPressed: () => _bulkSetActive(context, false),
-            icon: const Icon(LucideIcons.toggleLeft, size: 18),
-            label: Text('variants.deactivate'.tr()),
-          ),
-          const SizedBox(width: 8),
-          TextButton.icon(
-            onPressed: () => setState(() => _selectedVariantIds.clear()),
-            icon: const Icon(LucideIcons.x, size: 18),
-            label: Text('common.cancel'.tr()),
-          ),
-        ],
-      ),
+      child: isSmall
+          ? SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'variants.selected_count'.tr(args: ['${_selectedVariantIds.length}']),
+                    style: TextStyle(color: colorScheme.onPrimaryContainer, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(width: 12),
+                  TextButton.icon(
+                    onPressed: () => _printSelectedLabels(context),
+                    icon: const Icon(LucideIcons.printer, size: 18),
+                    label: Text('variants.print'.tr()),
+                  ),
+                  const SizedBox(width: 8),
+                  TextButton.icon(
+                    onPressed: () => _bulkSetActive(context, true),
+                    icon: const Icon(LucideIcons.toggleRight, size: 18),
+                    label: Text('variants.activate'.tr()),
+                  ),
+                  const SizedBox(width: 8),
+                  TextButton.icon(
+                    onPressed: () => _bulkSetActive(context, false),
+                    icon: const Icon(LucideIcons.toggleLeft, size: 18),
+                    label: Text('variants.deactivate'.tr()),
+                  ),
+                  const SizedBox(width: 8),
+                  TextButton.icon(
+                    onPressed: () => setState(() => _selectedVariantIds.clear()),
+                    icon: const Icon(LucideIcons.x, size: 18),
+                    label: Text('common.cancel'.tr()),
+                  ),
+                ],
+              ),
+            )
+          : Row(
+              children: [
+                Text(
+                  'variants.selected_count'.tr(args: ['${_selectedVariantIds.length}']),
+                  style: TextStyle(color: colorScheme.onPrimaryContainer, fontWeight: FontWeight.w600),
+                ),
+                const Spacer(),
+                TextButton.icon(
+                  onPressed: () => _printSelectedLabels(context),
+                  icon: const Icon(LucideIcons.printer, size: 18),
+                  label: Text('variants.print'.tr()),
+                ),
+                const SizedBox(width: 8),
+                TextButton.icon(
+                  onPressed: () => _bulkSetActive(context, true),
+                  icon: const Icon(LucideIcons.toggleRight, size: 18),
+                  label: Text('variants.activate'.tr()),
+                ),
+                const SizedBox(width: 8),
+                TextButton.icon(
+                  onPressed: () => _bulkSetActive(context, false),
+                  icon: const Icon(LucideIcons.toggleLeft, size: 18),
+                  label: Text('variants.deactivate'.tr()),
+                ),
+                const SizedBox(width: 8),
+                TextButton.icon(
+                  onPressed: () => setState(() => _selectedVariantIds.clear()),
+                  icon: const Icon(LucideIcons.x, size: 18),
+                  label: Text('common.cancel'.tr()),
+                ),
+              ],
+            ),
     );
   }
 
@@ -427,6 +465,7 @@ class _VariantsViewState extends State<_VariantsView> {
   Widget _buildDenseList(List<ProductVariant> variants, {required Map<int, String> productNameById, required Map<int, ProductColor> colorById, required Map<int, String> sizeNameById, required CurrencyService currencyService}) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final isSmall = MediaQuery.of(context).size.width < 420;
 
     return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -459,71 +498,215 @@ class _VariantsViewState extends State<_VariantsView> {
             borderRadius: BorderRadius.circular(8),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-              child: Row(
-                children: [
-                  Checkbox(
-                    value: isSelected,
-                    onChanged: (val) => setState(() {
-                      if (val == true) { _selectedVariantIds.add(v.id); } else { _selectedVariantIds.remove(v.id); }
-                    }),
-                  ),
-                  Expanded(
-                    flex: 2,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(v.sku?.isNotEmpty == true ? v.sku! : '#${v.id}', style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
-                        if (v.barcode?.isNotEmpty == true)
-                          Text(v.barcode!, style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant), maxLines: 1, overflow: TextOverflow.ellipsis),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(flex: 2, child: Text(productName, style: theme.textTheme.bodySmall, maxLines: 1, overflow: TextOverflow.ellipsis)),
-                  const SizedBox(width: 8),
-                  if (color != null || sizeName != null)
-                    Expanded(
-                      flex: 2,
-                      child: Wrap(
-                        spacing: 4,
-                        children: [
-                          if (color != null)
-                            Chip(
-                              avatar: color.hexCode != null ? Container(width: 12, height: 12, decoration: BoxDecoration(color: _parseHexColor(color.hexCode!), shape: BoxShape.circle, border: Border.all(color: colorScheme.outline))) : null,
-                              label: Text(color.name, style: const TextStyle(fontSize: 11)),
-                              padding: EdgeInsets.zero,
-                              visualDensity: VisualDensity.compact,
+              child: isSmall
+                  ? SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: IntrinsicHeight(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Checkbox(
+                              value: isSelected,
+                              onChanged: (val) => setState(() {
+                                if (val == true) {
+                                  _selectedVariantIds.add(v.id);
+                                } else {
+                                  _selectedVariantIds.remove(v.id);
+                                }
+                              }),
                             ),
-                          if (sizeName != null)
-                            Chip(label: Text(sizeName, style: const TextStyle(fontSize: 11)), padding: EdgeInsets.zero, visualDensity: VisualDensity.compact),
-                        ],
+                            SizedBox(
+                              width: 140,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    v.sku?.isNotEmpty == true ? v.sku! : '#${v.id}',
+                                    style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  if (v.barcode?.isNotEmpty == true)
+                                    Text(
+                                      v.barcode!,
+                                      style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            SizedBox(
+                              width: 140,
+                              child: Text(
+                                productName,
+                                style: theme.textTheme.bodySmall,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            if (color != null || sizeName != null)
+                              SizedBox(
+                                width: 160,
+                                child: Wrap(
+                                  spacing: 4,
+                                  children: [
+                                    if (color != null)
+                                      Chip(
+                                        avatar: color.hexCode != null
+                                            ? Container(
+                                                width: 12,
+                                                height: 12,
+                                                decoration: BoxDecoration(
+                                                  color: _parseHexColor(color.hexCode!),
+                                                  shape: BoxShape.circle,
+                                                  border: Border.all(color: colorScheme.outline),
+                                                ),
+                                              )
+                                            : null,
+                                        label: Text(color.name, style: const TextStyle(fontSize: 11)),
+                                        padding: EdgeInsets.zero,
+                                        visualDensity: VisualDensity.compact,
+                                      ),
+                                    if (sizeName != null)
+                                      Chip(
+                                        label: Text(sizeName, style: const TextStyle(fontSize: 11)),
+                                        padding: EdgeInsets.zero,
+                                        visualDensity: VisualDensity.compact,
+                                      ),
+                                  ],
+                                ),
+                              )
+                            else
+                              const SizedBox(width: 160),
+                            const SizedBox(width: 8),
+                            SizedBox(
+                              width: 80,
+                              child: Text(
+                                currencyService.format(v.priceCents.toBigInt().toInt()),
+                                style: theme.textTheme.bodyMedium,
+                                textAlign: TextAlign.end,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              width: 50,
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: stockColor.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                '${v.stockQuantity}',
+                                style: theme.textTheme.bodyMedium?.copyWith(color: stockColor, fontWeight: FontWeight.w600),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            IconButton(
+                              icon: const Icon(LucideIcons.minus, size: 16),
+                              tooltip: 'variants.decrease_stock'.tr(),
+                              onPressed: v.stockQuantity > 0 ? () => _adjustStock(context, v, -1) : null,
+                              visualDensity: VisualDensity.compact,
+                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                            ),
+                            IconButton(
+                              icon: const Icon(LucideIcons.plus, size: 16),
+                              tooltip: 'variants.increase_stock'.tr(),
+                              onPressed: () => _adjustStock(context, v, 1),
+                              visualDensity: VisualDensity.compact,
+                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                            ),
+                            const SizedBox(width: 4),
+                            IconButton(
+                              icon: const Icon(LucideIcons.edit, size: 16),
+                              tooltip: 'common.edit'.tr(),
+                              onPressed: () => _showEditDialog(context, v),
+                              visualDensity: VisualDensity.compact,
+                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                            ),
+                            IconButton(
+                              icon: Icon(
+                                v.isActive ? LucideIcons.toggleRight : LucideIcons.toggleLeft,
+                                size: 16,
+                                color: v.isActive ? colorScheme.primary : colorScheme.outline,
+                              ),
+                              tooltip: v.isActive ? 'variants.deactivate'.tr() : 'variants.activate'.tr(),
+                              onPressed: () => _toggleActive(context, v),
+                              visualDensity: VisualDensity.compact,
+                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                            ),
+                          ],
+                        ),
                       ),
                     )
-                  else
-                    const Expanded(flex: 2, child: SizedBox()),
-                  const SizedBox(width: 8),
-                  SizedBox(width: 60, child: Text(currencyService.format(v.priceCents.toBigInt().toInt()), style: theme.textTheme.bodyMedium, textAlign: TextAlign.end)),
-                  const SizedBox(width: 8),
-                  Container(
-                    width: 50,
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(color: stockColor.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(4)),
-                    child: Text('${v.stockQuantity}', style: theme.textTheme.bodyMedium?.copyWith(color: stockColor, fontWeight: FontWeight.w600), textAlign: TextAlign.center),
-                  ),
-                  const SizedBox(width: 4),
-                  IconButton(icon: const Icon(LucideIcons.minus, size: 16), tooltip: 'variants.decrease_stock'.tr(), onPressed: v.stockQuantity > 0 ? () => _adjustStock(context, v, -1) : null, visualDensity: VisualDensity.compact, constraints: const BoxConstraints(minWidth: 32, minHeight: 32)),
-                  IconButton(icon: const Icon(LucideIcons.plus, size: 16), tooltip: 'variants.increase_stock'.tr(), onPressed: () => _adjustStock(context, v, 1), visualDensity: VisualDensity.compact, constraints: const BoxConstraints(minWidth: 32, minHeight: 32)),
-                  const SizedBox(width: 4),
-                  IconButton(icon: const Icon(LucideIcons.edit, size: 16), tooltip: 'common.edit'.tr(), onPressed: () => _showEditDialog(context, v), visualDensity: VisualDensity.compact, constraints: const BoxConstraints(minWidth: 32, minHeight: 32)),
-                  IconButton(
-                    icon: Icon(v.isActive ? LucideIcons.toggleRight : LucideIcons.toggleLeft, size: 16, color: v.isActive ? colorScheme.primary : colorScheme.outline),
-                    tooltip: v.isActive ? 'variants.deactivate'.tr() : 'variants.activate'.tr(),
-                    onPressed: () => _toggleActive(context, v),
-                    visualDensity: VisualDensity.compact,
-                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                  ),
-                ],
-              ),
+                  : Row(
+                      children: [
+                        Checkbox(
+                          value: isSelected,
+                          onChanged: (val) => setState(() {
+                            if (val == true) { _selectedVariantIds.add(v.id); } else { _selectedVariantIds.remove(v.id); }
+                          }),
+                        ),
+                        Expanded(
+                          flex: 2,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(v.sku?.isNotEmpty == true ? v.sku! : '#${v.id}', style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
+                              if (v.barcode?.isNotEmpty == true)
+                                Text(v.barcode!, style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant), maxLines: 1, overflow: TextOverflow.ellipsis),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(flex: 2, child: Text(productName, style: theme.textTheme.bodySmall, maxLines: 1, overflow: TextOverflow.ellipsis)),
+                        const SizedBox(width: 8),
+                        if (color != null || sizeName != null)
+                          Expanded(
+                            flex: 2,
+                            child: Wrap(
+                              spacing: 4,
+                              children: [
+                                if (color != null)
+                                  Chip(
+                                    avatar: color.hexCode != null ? Container(width: 12, height: 12, decoration: BoxDecoration(color: _parseHexColor(color.hexCode!), shape: BoxShape.circle, border: Border.all(color: colorScheme.outline))) : null,
+                                    label: Text(color.name, style: const TextStyle(fontSize: 11)),
+                                    padding: EdgeInsets.zero,
+                                    visualDensity: VisualDensity.compact,
+                                  ),
+                                if (sizeName != null)
+                                  Chip(label: Text(sizeName, style: const TextStyle(fontSize: 11)), padding: EdgeInsets.zero, visualDensity: VisualDensity.compact),
+                              ],
+                            ),
+                          )
+                        else
+                          const Expanded(flex: 2, child: SizedBox()),
+                        const SizedBox(width: 8),
+                        SizedBox(width: 60, child: Text(currencyService.format(v.priceCents.toBigInt().toInt()), style: theme.textTheme.bodyMedium, textAlign: TextAlign.end)),
+                        const SizedBox(width: 8),
+                        Container(
+                          width: 50,
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(color: stockColor.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(4)),
+                          child: Text('${v.stockQuantity}', style: theme.textTheme.bodyMedium?.copyWith(color: stockColor, fontWeight: FontWeight.w600), textAlign: TextAlign.center),
+                        ),
+                        const SizedBox(width: 4),
+                        IconButton(icon: const Icon(LucideIcons.minus, size: 16), tooltip: 'variants.decrease_stock'.tr(), onPressed: v.stockQuantity > 0 ? () => _adjustStock(context, v, -1) : null, visualDensity: VisualDensity.compact, constraints: const BoxConstraints(minWidth: 32, minHeight: 32)),
+                        IconButton(icon: const Icon(LucideIcons.plus, size: 16), tooltip: 'variants.increase_stock'.tr(), onPressed: () => _adjustStock(context, v, 1), visualDensity: VisualDensity.compact, constraints: const BoxConstraints(minWidth: 32, minHeight: 32)),
+                        const SizedBox(width: 4),
+                        IconButton(icon: const Icon(LucideIcons.edit, size: 16), tooltip: 'common.edit'.tr(), onPressed: () => _showEditDialog(context, v), visualDensity: VisualDensity.compact, constraints: const BoxConstraints(minWidth: 32, minHeight: 32)),
+                        IconButton(
+                          icon: Icon(v.isActive ? LucideIcons.toggleRight : LucideIcons.toggleLeft, size: 16, color: v.isActive ? colorScheme.primary : colorScheme.outline),
+                          tooltip: v.isActive ? 'variants.deactivate'.tr() : 'variants.activate'.tr(),
+                          onPressed: () => _toggleActive(context, v),
+                          visualDensity: VisualDensity.compact,
+                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                        ),
+                      ],
+                    ),
             ),
           ),
         );
