@@ -88,6 +88,30 @@ class MyApp extends StatelessWidget {
                     theme: AppTheme.lightTheme,
                     darkTheme: AppTheme.darkTheme,
                     themeMode: themeMode,
+                    builder: (context, child) {
+                      return PopScope(
+                        canPop: false,
+                        onPopInvokedWithResult: (didPop, result) {
+                          if (didPop) return;
+
+                          final router = AppRouter.router;
+
+                          if (router.canPop()) {
+                            router.pop();
+                            return;
+                          }
+
+                          final currentPath =
+                              router.routeInformationProvider.value.uri.path;
+                          if (currentPath != '/dashboard') {
+                            router.go('/dashboard');
+                            return;
+                          }
+                          // Already at dashboard: do nothing (prevent app exit)
+                        },
+                        child: child ?? const SizedBox.shrink(),
+                      );
+                    },
                     routerConfig: AppRouter.router,
                   );
                 },

@@ -7,6 +7,8 @@ import 'package:easy_localization/easy_localization.dart';
 import '../../domain/entities/product_entity.dart';
 import '../../../../core/services/currency_service.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../../core/bloc/currency_bloc.dart';
+import '../../../../core/bloc/realtime_bloc.dart';
 
 class ProductTileWidget extends StatelessWidget {
   final Product product;
@@ -88,12 +90,16 @@ class ProductTileWidget extends StatelessWidget {
                     const SizedBox(height: 8),
                     Row(
                       children: [
-                        Text(
-                          currencyService.format(product.priceCents.toBigInt().toInt()),
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            color: colorScheme.primary,
-                            fontWeight: FontWeight.bold,
-                          ),
+                        BlocBuilder<CurrencyBloc, RealtimeState<Currency>>(
+                          builder: (context, state) {
+                            return Text(
+                              currencyService.format(product.priceCents.toBigInt().toInt()),
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                color: colorScheme.primary,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            );
+                          },
                         ),
                         const Spacer(),
                         product.hasVariants

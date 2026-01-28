@@ -410,7 +410,12 @@ class _ProductListViewState extends State<_ProductListView> {
             : [
           IconButton(
             icon: const Icon(LucideIcons.layers),
-            onPressed: () => context.push('/products/variants'),
+            onPressed: () async {
+              await context.push('/products/variants');
+              if (!context.mounted) return;
+              context.read<ProductsBloc>().refresh();
+              context.read<VariantSummariesBloc>().refresh();
+            },
             tooltip: 'variants.title'.tr(),
           ),
           PopupMenuButton<String>(
@@ -536,8 +541,11 @@ class _ProductListViewState extends State<_ProductListView> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          context.push('/products/new');
+        onPressed: () async {
+          await context.push('/products/new');
+          if (!context.mounted) return;
+          context.read<ProductsBloc>().refresh();
+          context.read<VariantSummariesBloc>().refresh();
         },
         icon: const Icon(LucideIcons.plus),
         label: Text('common.add'.tr()),
@@ -683,7 +691,12 @@ class _ProductListViewState extends State<_ProductListView> {
                                   }
                                 });
                               } else {
-                                context.push('/products/${p.id}/edit');
+                                () async {
+                                  await context.push('/products/${p.id}/edit');
+                                  if (!context.mounted) return;
+                                  context.read<ProductsBloc>().refresh();
+                                  context.read<VariantSummariesBloc>().refresh();
+                                }();
                               }
                             },
                             onLongPress: (p) {
