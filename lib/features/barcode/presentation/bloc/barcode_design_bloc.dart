@@ -78,6 +78,27 @@ class BarcodeDesignBloc extends RealtimeBloc<BarcodeDesignData, BarcodeDesignEve
     _dataController.add(_currentData);
   }
 
+  Future<List<Product>> _normalizeProductsStockQuantities(List<Product> products) async {
+    final result = <Product>[];
+    for (final p in products) {
+      if (!p.hasVariants) {
+        result.add(p);
+        continue;
+      }
+      try {
+        final summary = await _productVariantDao.getVariantSummaryByProduct(p.id);
+        if (summary == null) {
+          result.add(p);
+          continue;
+        }
+        result.add(p.copyWith(stockQuantity: summary.totalStock));
+      } catch (_) {
+        result.add(p);
+      }
+    }
+    return result;
+  }
+
   @override
   Stream<BarcodeDesignData> get dataStream => _dataController.stream;
 
@@ -92,6 +113,7 @@ class BarcodeDesignBloc extends RealtimeBloc<BarcodeDesignData, BarcodeDesignEve
     on<UpdateLabelDimensions>(_onUpdateDimensions);
     on<ToggleIncludeName>(_onToggleIncludeName);
     on<ToggleIncludePrice>(_onToggleIncludePrice);
+    on<ToggleIncludeBarcode>(_onToggleIncludeBarcode);
     on<ToggleIncludeSku>(_onToggleIncludeSku);
     on<ToggleIncludeCompanyName>(_onToggleIncludeCompanyName);
     on<ToggleIncludeCompanyContact>(_onToggleIncludeCompanyContact);
@@ -148,7 +170,9 @@ class BarcodeDesignBloc extends RealtimeBloc<BarcodeDesignData, BarcodeDesignEve
 
       // Set initial products if provided
       if (event.initialProducts != null && event.initialProducts!.isNotEmpty) {
-        _selectedProducts = List.from(event.initialProducts!);
+        _selectedProducts = await _normalizeProductsStockQuantities(
+          List<Product>.from(event.initialProducts!),
+        );
       }
 
       if (event.variantInfoByProductId != null) {
@@ -177,7 +201,8 @@ class BarcodeDesignBloc extends RealtimeBloc<BarcodeDesignData, BarcodeDesignEve
   ) async {
     final existingIds = _selectedProducts.map((p) => p.id).toSet();
     final newProducts = event.products.where((p) => !existingIds.contains(p.id)).toList();
-    _selectedProducts = [..._selectedProducts, ...newProducts];
+    final normalizedNewProducts = await _normalizeProductsStockQuantities(newProducts);
+    _selectedProducts = [..._selectedProducts, ...normalizedNewProducts];
     emit(RealtimeSuccess(data: _currentData));
 
     if (newProducts.isEmpty) return;
@@ -255,6 +280,14 @@ class BarcodeDesignBloc extends RealtimeBloc<BarcodeDesignData, BarcodeDesignEve
     Emitter<RealtimeState<BarcodeDesignData>> emit,
   ) {
     _settings = _settings.copyWith(includePrice: event.value);
+    emit(RealtimeSuccess(data: _currentData));
+  }
+
+  void _onToggleIncludeBarcode(
+    ToggleIncludeBarcode event,
+    Emitter<RealtimeState<BarcodeDesignData>> emit,
+  ) {
+    _settings = _settings.copyWith(includeBarcode: event.value);
     emit(RealtimeSuccess(data: _currentData));
   }
 
@@ -351,6 +384,7 @@ class BarcodeDesignBloc extends RealtimeBloc<BarcodeDesignData, BarcodeDesignEve
           heightMm: _settings.labelHeightMm,
           includeName: _settings.includeName,
           includePrice: _settings.includePrice,
+          includeBarcode: _settings.includeBarcode,
           includeCompanyName: _settings.includeCompanyName,
           companyName: companyName,
           includeCompanyContact: _settings.includeCompanyContact,
@@ -380,9 +414,12 @@ class BarcodeDesignBloc extends RealtimeBloc<BarcodeDesignData, BarcodeDesignEve
       _operationStatus = PrintOperationStatus.success;
       _progress = null;
       emit(RealtimeSuccess(data: _currentData));
-    } catch (e) {
+    } catch (e, st) {
       _operationStatus = PrintOperationStatus.error;
       _errorMessage = e.toString();
+      // Ensure error is visible in console with stacktrace
+      // ignore: avoid_print
+      print('Barcode print failed: $e\n$st');
       _progress = null;
       emit(RealtimeSuccess(data: _currentData));
     }
@@ -406,6 +443,7 @@ class BarcodeDesignBloc extends RealtimeBloc<BarcodeDesignData, BarcodeDesignEve
       final barcodeType = _printerService.getBarcodeTypeFromString(_settings.barcodeType);
 
       final product = _selectedProducts.first;
+      final copies = _calculateCopies(product);
       
       final companyName = _settings.includeCompanyName ? _companyProfile.name : null;
       final companyAddress = _companyProfile.address;
@@ -419,12 +457,13 @@ class BarcodeDesignBloc extends RealtimeBloc<BarcodeDesignData, BarcodeDesignEve
         heightMm: _settings.labelHeightMm,
         includeName: _settings.includeName,
         includePrice: _settings.includePrice,
+        includeBarcode: _settings.includeBarcode,
         includeCompanyName: _settings.includeCompanyName,
         companyName: companyName,
         includeCompanyContact: _settings.includeCompanyContact,
         companyAddress: companyAddress,
         companyPhone: companyPhone,
-        copies: _settings.copies,
+        copies: copies,
         isA4Mode: _settings.isA4Mode,
         labelsPerRow: _settings.labelsPerRow,
         horizontalGapMm: _settings.horizontalGapMm,
@@ -436,9 +475,11 @@ class BarcodeDesignBloc extends RealtimeBloc<BarcodeDesignData, BarcodeDesignEve
 
       _operationStatus = PrintOperationStatus.success;
       emit(RealtimeSuccess(data: _currentData));
-    } catch (e) {
+    } catch (e, st) {
       _operationStatus = PrintOperationStatus.error;
       _errorMessage = e.toString();
+      // ignore: avoid_print
+      print('Barcode share failed: $e\n$st');
       emit(RealtimeSuccess(data: _currentData));
     }
   }

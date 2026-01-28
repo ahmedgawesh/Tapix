@@ -334,6 +334,7 @@
     "height_mm": "الارتفاع (مم)",
     "include_name": "تضمين الاسم",
     "include_price": "تضمين السعر",
+    "include_barcode": "تضمين الباركود",
     "error_no_barcode": "المنتج ليس له باركود للطباعة",
     "print_error": "فشلت الطباعة: {}",
     "copies": "النسخ",

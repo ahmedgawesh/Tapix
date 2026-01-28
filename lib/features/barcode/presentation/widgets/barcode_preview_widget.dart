@@ -131,47 +131,49 @@ class BarcodePreviewWidget extends StatelessWidget {
 
             // Barcode
             Expanded(
-              child: barcodeData.isNotEmpty
-                  ? BarcodeWidget(
-                      barcode: barcodeType,
-                      data: barcodeData,
-                      drawText: true,
-                      style: TextStyle(
-                        fontSize: 8 * scale,
-                        color: Colors.black,
-                      ),
-                      errorBuilder: (context, error) => Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.error_outline,
-                              color: Colors.red,
-                              size: 20 * scale,
+              child: settings.includeBarcode
+                  ? (barcodeData.isNotEmpty
+                      ? BarcodeWidget(
+                          barcode: barcodeType,
+                          data: barcodeData,
+                          drawText: true,
+                          style: TextStyle(
+                            fontSize: 8 * scale,
+                            color: Colors.black,
+                          ),
+                          errorBuilder: (context, error) => Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.error_outline,
+                                  color: Colors.red,
+                                  size: 20 * scale,
+                                ),
+                                SizedBox(height: 4 * scale),
+                                Text(
+                                  'barcode.invalid_format'.tr(),
+                                  style: TextStyle(
+                                    color: Colors.red,
+                                    fontSize: 8 * scale,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
                             ),
-                            SizedBox(height: 4 * scale),
-                            Text(
-                              'barcode.invalid_format'.tr(),
-                              style: TextStyle(
-                                color: Colors.red,
-                                fontSize: 8 * scale,
-                              ),
-                              textAlign: TextAlign.center,
+                          ),
+                        )
+                      : Center(
+                          child: Text(
+                            'barcode.no_barcode_data'.tr(),
+                            style: TextStyle(
+                              color: Colors.grey,
+                              fontSize: 10 * scale,
                             ),
-                          ],
-                        ),
-                      ),
-                    )
-                  : Center(
-                      child: Text(
-                        'barcode.no_barcode_data'.tr(),
-                        style: TextStyle(
-                          color: Colors.grey,
-                          fontSize: 10 * scale,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ))
+                  : const SizedBox.shrink(),
             ),
 
             // SKU (if enabled)

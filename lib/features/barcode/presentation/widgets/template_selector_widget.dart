@@ -20,7 +20,11 @@ class TemplateSelectorWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    if (templates.isEmpty) {
+    final visibleTemplates = templates
+        .where((t) => !t.name.toLowerCase().contains('large label'))
+        .toList();
+
+    if (visibleTemplates.isEmpty) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -43,9 +47,9 @@ class TemplateSelectorWidget extends StatelessWidget {
         return ListView.builder(
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-          itemCount: templates.length,
+          itemCount: visibleTemplates.length,
           itemBuilder: (context, index) {
-            final template = templates[index];
+            final template = visibleTemplates[index];
             final isSelected = selectedTemplate?.id == template.id;
 
             return Padding(

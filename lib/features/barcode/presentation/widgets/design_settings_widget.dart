@@ -307,6 +307,14 @@ class _FullSettings extends StatelessWidget {
           dense: true,
         ),
         SwitchListTile(
+          title: Text('barcode.include_barcode'.tr()),
+          value: settings.includeBarcode,
+          onChanged: (v) => context
+              .read<BarcodeDesignBloc>()
+              .add(ToggleIncludeBarcode(v)),
+          dense: true,
+        ),
+        SwitchListTile(
           title: Text('barcode.include_sku'.tr()),
           value: settings.includeSku,
           onChanged: (v) => context

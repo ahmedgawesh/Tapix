@@ -136,6 +136,7 @@ class BarcodeDesignSettings extends Equatable {
   final double labelHeightMm;
   final bool includeName;
   final bool includePrice;
+  final bool includeBarcode;
   final bool includeSku;
   final bool includeCompanyName;
   final bool includeCompanyContact;
@@ -159,6 +160,7 @@ class BarcodeDesignSettings extends Equatable {
     this.labelHeightMm = 40.0,
     this.includeName = true,
     this.includePrice = true,
+    this.includeBarcode = true,
     this.includeSku = false,
     this.includeCompanyName = false,
     this.includeCompanyContact = false,
@@ -179,6 +181,7 @@ class BarcodeDesignSettings extends Equatable {
     double? labelHeightMm,
     bool? includeName,
     bool? includePrice,
+    bool? includeBarcode,
     bool? includeSku,
     bool? includeCompanyName,
     bool? includeCompanyContact,
@@ -198,6 +201,7 @@ class BarcodeDesignSettings extends Equatable {
       labelHeightMm: labelHeightMm ?? this.labelHeightMm,
       includeName: includeName ?? this.includeName,
       includePrice: includePrice ?? this.includePrice,
+      includeBarcode: includeBarcode ?? this.includeBarcode,
       includeSku: includeSku ?? this.includeSku,
       includeCompanyName: includeCompanyName ?? this.includeCompanyName,
       includeCompanyContact: includeCompanyContact ?? this.includeCompanyContact,
@@ -224,6 +228,7 @@ class BarcodeDesignSettings extends Equatable {
       labelHeightMm: template.heightMm,
       includeName: template.includeName,
       includePrice: template.includePrice,
+      includeBarcode: true,
       includeSku: template.includeSku,
       includeCompanyName: template.includeCompanyName,
       includeVariantInfo: template.includeVariantInfo,
@@ -260,6 +265,7 @@ class BarcodeDesignSettings extends Equatable {
         labelHeightMm,
         includeName,
         includePrice,
+        includeBarcode,
         includeSku,
         includeCompanyName,
         includeCompanyContact,

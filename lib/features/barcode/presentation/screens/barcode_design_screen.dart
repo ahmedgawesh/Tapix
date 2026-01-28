@@ -44,6 +44,23 @@ class BarcodeDesignScreen extends StatelessWidget {
 class _BarcodeDesignScreenContent extends StatelessWidget {
   const _BarcodeDesignScreenContent();
 
+  int _calculatePreviewCopies(BarcodeDesignData data, Product product) {
+    switch (data.settings.quantityMode) {
+      case QuantityMode.single:
+        return 1;
+      case QuantityMode.stockQuantity:
+        return product.stockQuantity > 0 ? product.stockQuantity : 1;
+      case QuantityMode.invoiceQuantity:
+        if (data.invoiceData != null && data.invoiceData!.lines.isNotEmpty) {
+          final firstLine = data.invoiceData!.lines.first;
+          return data.currentQuantities[firstLine.variantId] ?? firstLine.quantity;
+        }
+        return 1;
+      case QuantityMode.custom:
+        return data.settings.copies;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
@@ -188,6 +205,12 @@ class _MobileLayout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final copies = data.selectedProducts.isNotEmpty
+        ? const _BarcodeDesignScreenContent()._calculatePreviewCopies(
+            data,
+            data.selectedProducts.first,
+          )
+        : 1;
     return Column(
       children: [
         // Product selection summary
@@ -208,7 +231,12 @@ class _MobileLayout extends StatelessWidget {
 
         // Preview area - Flexible to fill available space
         Expanded(
-          child: SingleChildScrollView(
+          child: InteractiveViewer(
+            panEnabled: true,
+            scaleEnabled: true,
+            constrained: false,
+            minScale: 0.5,
+            maxScale: 4.0,
             child: Center(
               child: Padding(
                 padding: const EdgeInsets.all(16),
@@ -219,6 +247,7 @@ class _MobileLayout extends StatelessWidget {
                             settings: data.settings,
                             companyProfile: data.companyProfile,
                             variantInfo: data.variantInfoByProductId[data.selectedProducts.first.id],
+                            copies: copies,
                             scale: 0.35,
                           )
                         : BarcodePreviewWidget(
@@ -266,6 +295,12 @@ class _TabletLayout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final copies = data.selectedProducts.isNotEmpty
+        ? const _BarcodeDesignScreenContent()._calculatePreviewCopies(
+            data,
+            data.selectedProducts.first,
+          )
+        : 1;
     return Row(
       children: [
         // Left sidebar - Products and templates
@@ -309,7 +344,12 @@ class _TabletLayout extends StatelessWidget {
           child: Column(
             children: [
               Expanded(
-                child: SingleChildScrollView(
+                child: InteractiveViewer(
+                  panEnabled: true,
+                  scaleEnabled: true,
+                  constrained: false,
+                  minScale: 0.5,
+                  maxScale: 4.0,
                   child: Center(
                     child: Padding(
                       padding: const EdgeInsets.all(16),
@@ -320,6 +360,7 @@ class _TabletLayout extends StatelessWidget {
                                   settings: data.settings,
                                   companyProfile: data.companyProfile,
                                   variantInfo: data.variantInfoByProductId[data.selectedProducts.first.id],
+                                  copies: copies,
                                   scale: 0.45,
                                 )
                               : BarcodePreviewWidget(
@@ -365,6 +406,12 @@ class _DesktopLayout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final copies = data.selectedProducts.isNotEmpty
+        ? const _BarcodeDesignScreenContent()._calculatePreviewCopies(
+            data,
+            data.selectedProducts.first,
+          )
+        : 1;
     return Row(
       children: [
         // Left sidebar - Product browser
@@ -417,7 +464,12 @@ class _DesktopLayout extends StatelessWidget {
               Expanded(
                 child: Container(
                   color: Theme.of(context).colorScheme.surfaceContainerLow,
-                  child: SingleChildScrollView(
+                  child: InteractiveViewer(
+                    panEnabled: true,
+                    scaleEnabled: true,
+                    constrained: false,
+                    minScale: 0.5,
+                    maxScale: 4.0,
                     child: Center(
                       child: Padding(
                         padding: const EdgeInsets.all(24),
@@ -428,6 +480,7 @@ class _DesktopLayout extends StatelessWidget {
                                     settings: data.settings,
                                     companyProfile: data.companyProfile,
                                     variantInfo: data.variantInfoByProductId[data.selectedProducts.first.id],
+                                    copies: copies,
                                     scale: 0.6,
                                   )
                                 : BarcodePreviewWidget(

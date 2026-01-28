@@ -74,6 +74,12 @@ class ToggleIncludePrice extends BarcodeDesignEvent {
   const ToggleIncludePrice(this.value);
 }
 
+/// Toggle include barcode
+class ToggleIncludeBarcode extends BarcodeDesignEvent {
+  final bool value;
+  const ToggleIncludeBarcode(this.value);
+}
+
 /// Toggle include SKU
 class ToggleIncludeSku extends BarcodeDesignEvent {
   final bool value;

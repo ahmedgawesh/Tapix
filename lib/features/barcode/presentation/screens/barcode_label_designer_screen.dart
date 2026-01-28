@@ -351,6 +351,7 @@ class _BarcodeLabelDesignerScreenState extends State<BarcodeLabelDesignerScreen>
         heightMm: _labelHeight,
         includeName: _includeName,
         includePrice: _includePrice,
+        includeBarcode: true,
         copies: _copies,
       );
     } catch (e) {
@@ -392,6 +393,7 @@ class _BarcodeLabelDesignerScreenState extends State<BarcodeLabelDesignerScreen>
         heightMm: _labelHeight,
         includeName: _includeName,
         includePrice: _includePrice,
+        includeBarcode: true,
       );
     } catch (e) {
       if (mounted) {

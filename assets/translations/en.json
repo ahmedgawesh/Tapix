@@ -255,6 +255,7 @@
     "height_mm": "Height (mm)",
     "include_name": "Include Name",
     "include_price": "Include Price",
+    "include_barcode": "Include Barcode",
     "error_no_barcode": "Product has no barcode to print",
     "print_error": "Printing failed: {}",
     "copies": "Copies",

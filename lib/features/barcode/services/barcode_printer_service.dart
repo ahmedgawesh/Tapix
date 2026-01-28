@@ -78,6 +78,7 @@ class BarcodePrinterService {
     double heightMm = 40,
     bool includeName = true,
     bool includePrice = true,
+    bool includeBarcode = true,
     bool includeCompanyName = false,
     String? companyName,
     bool includeCompanyContact = false,
@@ -100,6 +101,7 @@ class BarcodePrinterService {
         heightMm: heightMm,
         includeName: includeName,
         includePrice: includePrice,
+        includeBarcode: includeBarcode,
         includeCompanyName: includeCompanyName,
         companyName: companyName,
         includeCompanyContact: includeCompanyContact,
@@ -121,6 +123,7 @@ class BarcodePrinterService {
         heightMm,
         includeName,
         includePrice,
+        includeBarcode,
         includeCompanyName,
         companyName,
         includeCompanyContact,
@@ -140,6 +143,7 @@ class BarcodePrinterService {
     double heightMm,
     bool includeName,
     bool includePrice,
+    bool includeBarcode,
     bool includeCompanyName,
     String? companyName,
     bool includeCompanyContact,
@@ -150,7 +154,7 @@ class BarcodePrinterService {
     bool includeVariantInfo,
   ) async {
     final doc = pw.Document();
-    
+
     // Load multilingual font (supports Arabic, English, French)
     final fontData = await rootBundle.load('assets/fonts/IBMPlexSansArabic-Regular.ttf');
     final fontBoldData = await rootBundle.load('assets/fonts/IBMPlexSansArabic-Bold.ttf');
@@ -178,7 +182,7 @@ class BarcodePrinterService {
               mainAxisAlignment: pw.MainAxisAlignment.center,
               crossAxisAlignment: pw.CrossAxisAlignment.center,
               children: [
-                if (includeCompanyName && companyName != null && companyName.isNotEmpty)
+                if (includeCompanyName && companyName != null && companyName.isNotEmpty) ...[
                   pw.Text(
                     companyName,
                     style: pw.TextStyle(
@@ -188,9 +192,10 @@ class BarcodePrinterService {
                     ),
                     maxLines: 1,
                     overflow: pw.TextOverflow.clip,
+                    textDirection: _detectTextDirection(companyName),
                   ),
-                if (includeCompanyName && companyName != null && companyName.isNotEmpty) 
                   pw.SizedBox(height: 1),
+                ],
                 if (includeCompanyContact &&
                     ((companyAddress != null && companyAddress.isNotEmpty) ||
                         (companyPhone != null && companyPhone.isNotEmpty))) ...[
@@ -202,6 +207,7 @@ class BarcodePrinterService {
                         font: ttf,
                         color: PdfColors.grey700,
                       ),
+                      textDirection: _detectTextDirection(companyAddress),
                       maxLines: 1,
                       overflow: pw.TextOverflow.clip,
                     ),
@@ -231,16 +237,19 @@ class BarcodePrinterService {
                     textDirection: textDirection,
                   ),
                 if (includeName) pw.SizedBox(height: 2),
-                pw.Expanded(
-                  child: pw.BarcodeWidget(
-                    data: product.barcode ?? '',
-                    barcode: barcode,
-                    width: width - 4 * PdfPageFormat.mm,
-                    height: height * 0.5,
-                    drawText: true,
-                    textStyle: pw.TextStyle(fontSize: 6, font: ttf),
-                  ),
-                ),
+                if (includeBarcode)
+                  pw.Expanded(
+                    child: pw.BarcodeWidget(
+                      data: product.barcode ?? '',
+                      barcode: barcode,
+                      width: width - 4 * PdfPageFormat.mm,
+                      height: height * 0.5,
+                      drawText: true,
+                      textStyle: pw.TextStyle(fontSize: 6, font: ttf),
+                    ),
+                  )
+                else
+                  pw.Expanded(child: pw.Container()),
                 if (includePrice) pw.SizedBox(height: 2),
                 if (includePrice)
                   pw.Text(
@@ -260,7 +269,7 @@ class BarcodePrinterService {
 
     await Printing.layoutPdf(
       onLayout: (PdfPageFormat format) async => doc.save(),
-      name: 'Label-${product.sku ?? product.id}',
+      name: 'Labels-${product.sku ?? product.id}',
       format: PdfPageFormat(width, height),
     );
   }
@@ -283,6 +292,7 @@ class BarcodePrinterService {
     required double heightMm,
     required bool includeName,
     required bool includePrice,
+    required bool includeBarcode,
     required bool includeCompanyName,
     required String? companyName,
     required bool includeCompanyContact,
@@ -331,6 +341,8 @@ class BarcodePrinterService {
     // Generate pages
     int remainingCopies = copies;
     while (remainingCopies > 0) {
+      final labelsThisPage = remainingCopies < labelsPerPage ? remainingCopies : labelsPerPage;
+      final rows = (labelsThisPage / labelsPerRow).ceil();
       doc.addPage(
         pw.Page(
           pageFormat: PdfPageFormat.a4,
@@ -341,9 +353,6 @@ class BarcodePrinterService {
             right: rightMargin,
           ),
           build: (pw.Context context) {
-            final labelsThisPage = remainingCopies < labelsPerPage ? remainingCopies : labelsPerPage;
-            final rows = (labelsThisPage / labelsPerRow).ceil();
-
             return pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: List.generate(rows, (rowIndex) {
@@ -366,6 +375,7 @@ class BarcodePrinterService {
                           labelHeight: labelHeight,
                           includeName: includeName,
                           includePrice: includePrice,
+                          includeBarcode: includeBarcode,
                           includeCompanyName: includeCompanyName,
                           companyName: companyName,
                           includeCompanyContact: includeCompanyContact,
@@ -405,6 +415,7 @@ class BarcodePrinterService {
     required double labelHeight,
     required bool includeName,
     required bool includePrice,
+    required bool includeBarcode,
     required bool includeCompanyName,
     required String? companyName,
     required bool includeCompanyContact,
@@ -480,15 +491,17 @@ class BarcodePrinterService {
             pw.SizedBox(height: 0.5),
           ],
           pw.Expanded(
-            child: product.barcode != null && product.barcode!.isNotEmpty
-                ? pw.BarcodeWidget(
-                    data: product.barcode!,
-                    barcode: barcode,
-                    width: labelWidth - 4,
-                    height: labelHeight * 0.5,
-                    drawText: true,
-                    textStyle: pw.TextStyle(fontSize: 5, font: ttf),
-                  )
+            child: includeBarcode
+                ? (product.barcode != null && product.barcode!.isNotEmpty
+                    ? pw.BarcodeWidget(
+                        data: product.barcode!,
+                        barcode: barcode,
+                        width: labelWidth - 4,
+                        height: labelHeight * 0.5,
+                        drawText: true,
+                        textStyle: pw.TextStyle(fontSize: 6, font: ttf),
+                      )
+                    : pw.Container())
                 : pw.Container(),
           ),
           if (includePrice) ...[
@@ -504,12 +517,13 @@ class BarcodePrinterService {
   }
 
   Future<Uint8List> generatePdfLabel({
-    required Product product,
-    required Barcode barcode,
-    required double widthMm,
-    required double heightMm,
-    required bool includeName,
-    required bool includePrice,
+    required Product? product,
+    required Barcode? barcode,
+    required double? widthMm,
+    required double? heightMm,
+    required bool? includeName,
+    required bool? includePrice,
+    bool includeBarcode = true,
     bool includeCompanyName = false,
     String? companyName,
     bool includeCompanyContact = false,
@@ -517,6 +531,12 @@ class BarcodePrinterService {
     String? companyPhone,
     int copies = 1,
   }) async {
+    final safeProduct = product!;
+    final safeBarcode = barcode!;
+    final safeWidthMm = widthMm!;
+    final safeHeightMm = heightMm!;
+    final safeIncludeName = includeName ?? true;
+    final safeIncludePrice = includePrice ?? true;
     final doc = pw.Document();
     
     // Load multilingual font (supports Arabic, English, French)
@@ -527,14 +547,14 @@ class BarcodePrinterService {
 
     // Get currency service for proper formatting
     final currencyService = sl<CurrencyService>();
-    final formattedPrice = currencyService.format(product.priceCents.toBigInt().toInt());
+    final formattedPrice = currencyService.format(safeProduct.priceCents.toBigInt().toInt());
 
     // Detect text direction based on content
-    final textDirection = _detectTextDirection(product.name);
+    final textDirection = _detectTextDirection(safeProduct.name);
 
     // Convert mm to points (1 inch = 72 points = 25.4 mm)
-    final width = widthMm * PdfPageFormat.mm;
-    final height = heightMm * PdfPageFormat.mm;
+    final width = safeWidthMm * PdfPageFormat.mm;
+    final height = safeHeightMm * PdfPageFormat.mm;
 
     // Generate the requested number of copies
     for (int i = 0; i < copies; i++) {
@@ -586,9 +606,9 @@ class BarcodePrinterService {
                     ),
                   pw.SizedBox(height: 1),
                 ],
-                if (includeName && product.name.isNotEmpty)
+                if (safeIncludeName && safeProduct.name.isNotEmpty)
                   pw.Text(
-                    product.name,
+                    safeProduct.name,
                     style: pw.TextStyle(
                       fontSize: 8,
                       fontWeight: pw.FontWeight.bold,
@@ -598,19 +618,22 @@ class BarcodePrinterService {
                     overflow: pw.TextOverflow.clip,
                     textDirection: textDirection,
                   ),
-                if (includeName) pw.SizedBox(height: 2),
-                pw.Expanded(
-                  child: pw.BarcodeWidget(
-                    data: product.barcode ?? '',
-                    barcode: barcode,
-                    width: width - 4 * PdfPageFormat.mm,
-                    height: height * 0.5,
-                    drawText: true,
-                    textStyle: pw.TextStyle(fontSize: 6, font: ttf),
-                  ),
-                ),
-                if (includePrice) pw.SizedBox(height: 2),
-                if (includePrice)
+                if (safeIncludeName) pw.SizedBox(height: 2),
+                if (includeBarcode)
+                  pw.Expanded(
+                    child: pw.BarcodeWidget(
+                      data: safeProduct.barcode ?? '',
+                      barcode: safeBarcode,
+                      width: width - 4 * PdfPageFormat.mm,
+                      height: height * 0.5,
+                      drawText: true,
+                      textStyle: pw.TextStyle(fontSize: 6, font: ttf),
+                    ),
+                  )
+                else
+                  pw.Expanded(child: pw.Container()),
+                if (safeIncludePrice) pw.SizedBox(height: 2),
+                if (safeIncludePrice)
                   pw.Text(
                     formattedPrice,
                     style: pw.TextStyle(
@@ -629,12 +652,13 @@ class BarcodePrinterService {
   }
 
   Future<void> shareLabelPdf({
-    required Product product,
-    required Barcode barcode,
-    required double widthMm,
-    required double heightMm,
-    required bool includeName,
-    required bool includePrice,
+    required Product? product,
+    required Barcode? barcode,
+    required double? widthMm,
+    required double? heightMm,
+    required bool? includeName,
+    required bool? includePrice,
+    bool includeBarcode = true,
     bool includeCompanyName = false,
     String? companyName,
     bool includeCompanyContact = false,
@@ -649,14 +673,21 @@ class BarcodePrinterService {
     String? variantInfo,
     bool includeVariantInfo = false,
   }) async {
+    final safeProduct = product!;
+    final safeBarcode = barcode!;
+    final safeWidthMm = widthMm!;
+    final safeHeightMm = heightMm!;
+    final safeIncludeName = includeName ?? true;
+    final safeIncludePrice = includePrice ?? true;
     final pdfData = isA4Mode
         ? await _generateA4GridPdf(
-            product: product,
-            barcode: barcode,
-            widthMm: widthMm,
-            heightMm: heightMm,
-            includeName: includeName,
-            includePrice: includePrice,
+            product: safeProduct,
+            barcode: safeBarcode,
+            widthMm: safeWidthMm,
+            heightMm: safeHeightMm,
+            includeName: safeIncludeName,
+            includePrice: safeIncludePrice,
+            includeBarcode: includeBarcode,
             includeCompanyName: includeCompanyName,
             companyName: companyName,
             includeCompanyContact: includeCompanyContact,
@@ -671,12 +702,13 @@ class BarcodePrinterService {
             includeVariantInfo: includeVariantInfo,
           )
         : await generatePdfLabel(
-            product: product,
-            barcode: barcode,
-            widthMm: widthMm,
-            heightMm: heightMm,
-            includeName: includeName,
-            includePrice: includePrice,
+            product: safeProduct,
+            barcode: safeBarcode,
+            widthMm: safeWidthMm,
+            heightMm: safeHeightMm,
+            includeName: safeIncludeName,
+            includePrice: safeIncludePrice,
+            includeBarcode: includeBarcode,
             includeCompanyName: includeCompanyName,
             companyName: companyName,
             includeCompanyContact: includeCompanyContact,
@@ -684,7 +716,7 @@ class BarcodePrinterService {
             companyPhone: companyPhone,
             copies: copies,
           );
-    await Printing.sharePdf(bytes: pdfData, filename: 'Labels-${product.sku ?? product.id}.pdf');
+    await Printing.sharePdf(bytes: pdfData, filename: 'Labels-${safeProduct.sku ?? safeProduct.id}.pdf');
   }
 
   /// Generate A4 grid PDF as bytes
@@ -695,6 +727,7 @@ class BarcodePrinterService {
     required double heightMm,
     required bool includeName,
     required bool includePrice,
+    required bool includeBarcode,
     required bool includeCompanyName,
     required String? companyName,
     required bool includeCompanyContact,
@@ -743,6 +776,8 @@ class BarcodePrinterService {
     // Generate pages
     int remainingCopies = copies;
     while (remainingCopies > 0) {
+      final labelsThisPage = remainingCopies < labelsPerPage ? remainingCopies : labelsPerPage;
+      final rows = (labelsThisPage / labelsPerRow).ceil();
       doc.addPage(
         pw.Page(
           pageFormat: PdfPageFormat.a4,
@@ -753,9 +788,6 @@ class BarcodePrinterService {
             right: rightMargin,
           ),
           build: (pw.Context context) {
-            final labelsThisPage = remainingCopies < labelsPerPage ? remainingCopies : labelsPerPage;
-            final rows = (labelsThisPage / labelsPerRow).ceil();
-
             return pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: List.generate(rows, (rowIndex) {
@@ -778,6 +810,7 @@ class BarcodePrinterService {
                           labelHeight: labelHeight,
                           includeName: includeName,
                           includePrice: includePrice,
+                          includeBarcode: includeBarcode,
                           includeCompanyName: includeCompanyName,
                           companyName: companyName,
                           includeCompanyContact: includeCompanyContact,

@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/database/daos/product_variant_dao.dart';
+import '../../../../core/database/app_database.dart' show ProductVariant;
 import '../../../../core/services/currency_service.dart';
 import '../../../products/domain/entities/product_entity.dart';
 
@@ -110,6 +112,7 @@ class _ProductListItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final variantDao = sl<ProductVariantDao>();
 
     return ListTile(
       leading: Container(
@@ -148,6 +151,34 @@ class _ProductListItem extends StatelessWidget {
                   fontWeight: FontWeight.bold,
                   color: colorScheme.primary,
                 ),
+          ),
+          const SizedBox(height: 4),
+          StreamBuilder<List<ProductVariant>>(
+            stream: variantDao.watchVariantsByProduct(product.id),
+            builder: (context, snapshot) {
+              final variants = snapshot.data ?? const <ProductVariant>[];
+              if (variants.isEmpty) {
+                return const SizedBox.shrink();
+              }
+
+              final totalStock = variants.fold<int>(0, (sum, v) => sum + v.stockQuantity);
+              final lines = variants.take(3).map((v) {
+                final parts = <String>[];
+                if (v.sizeId != null) parts.add('S#${v.sizeId}');
+                if (v.colorId != null) parts.add('C#${v.colorId}');
+                final name = parts.isEmpty ? 'Variant #${v.id}' : parts.join(' ');
+                return '$name: ${v.stockQuantity}';
+              }).join(' | ');
+
+              return Text(
+                '${'variants.new_stock'.tr()}: $totalStock  •  $lines',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: colorScheme.outline,
+                    ),
+              );
+            },
           ),
         ],
       ),
