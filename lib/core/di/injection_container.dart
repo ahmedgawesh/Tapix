@@ -55,6 +55,8 @@ import '../../features/barcode/services/barcode_validation_service.dart';
 import '../../features/barcode/services/barcode_printer_service.dart';
 import '../../features/barcode/presentation/bloc/barcode_scanner_bloc.dart';
 import '../../features/barcode/presentation/bloc/barcode_design_bloc.dart';
+import '../../features/barcode/data/repositories/barcode_repository.dart';
+import '../../features/barcode/domain/usecases/get_invoice_print_data.dart';
 import '../../features/settings/data/services/company_profile_service.dart';
 import '../../features/settings/presentation/bloc/company_bloc.dart';
 
@@ -178,6 +180,10 @@ Future<void> init() async {
   // Barcode Services
   sl.registerLazySingleton(() => BarcodeValidationService());
   sl.registerLazySingleton(() => BarcodePrinterService(settingsDao: sl()));
+  
+  // Barcode Repository & Use Cases
+  sl.registerLazySingleton<BarcodeRepository>(() => BarcodeRepositoryImpl(sl<AppDatabase>()));
+  sl.registerLazySingleton(() => GetInvoicePrintData(sl<BarcodeRepository>()));
 
   // Settings Services
   sl.registerLazySingleton(() => CompanyProfileService(sl()));

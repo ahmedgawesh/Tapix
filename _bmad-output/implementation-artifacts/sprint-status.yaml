@@ -69,11 +69,11 @@ development_status:
   3-11-sizes-screen: done
   3-12-products-main-screen: done
   3-13-variants-default-variant-auto-barcode: done
-  3-14-variants-manager-ui: in-progress
-  3-15-purchases-use-variants: backlog
-  3-16-a4-label-printing-engine: backlog
-  3-17-print-labels-from-invoice: backlog
-  3-18-variant-aware-import-export: backlog
+  3-14-variants-manager-ui: done
+  3-15-purchases-use-variants: done
+  3-16-a4-label-printing-engine: done
+  3-17-print-labels-from-invoice-quantity-rule: ready-for-dev
+  3-18-variant-aware-import-export: in-progress
   epic-3-retrospective: optional
 
   # EPIC-04: Parties Management
@@ -213,16 +213,6 @@ development_status:
   11-1-employee-management: backlog
   11-2-user-account-management: backlog
   epic-11-retrospective: optional
-
-  # EPIC-08-XX: Comprehensive Reporting System
-  epic-8-xx: backlog
-  8-3-financial-statements-suite: backlog
-  8-4-inventory-analytics-reports: backlog
-  8-5-customer-relationship-reports: backlog
-  8-6-supplier-performance-reports: backlog
-  8-7-sales-team-performance: backlog
-  8-8-expense-audit-reports: backlog
-  epic-8-xx-retrospective: optional
 
   # EPIC-12: Advanced UI/UX Features
   epic-12: backlog

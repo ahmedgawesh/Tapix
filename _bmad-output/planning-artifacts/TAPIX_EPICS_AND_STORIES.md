@@ -105,138 +105,342 @@
 
 **Goal**: Comprehensive inventory management with support for variants and barcodes.
 
-### STORY-03-01: Product List with Search & Filter
+### STORY-03-01: Product List Search & Filter ✅
 **As a** User
 **I want** to view, search, and filter products
 **So that** I can quickly find items.
 
 **Acceptance Criteria:**
-- [ ] List displays name, price, stock, and image
-- [ ] Search by name, SKU, or barcode
-- [ ] Filter by category, supplier, or stock status (low/out)
-- [ ] Pagination/Infinite scroll for large datasets
+- [ ] Product list is fed from Drift queries and updates in real-time (no manual refresh)
+- [ ] Search by name, SKU, and barcode
+- [ ] Filters include category and stock status at minimum
+- [ ] No overflow on any screen size
 
-### STORY-03-02: Product CRUD & Variants
+### STORY-03-02: Product CRUD + Variants ✅
 **As a** Manager
-**I want** to add and edit products with size/color variants
-**So that** I can manage my inventory details.
+**I want** to create and edit products with variants
+**So that** I can manage inventory correctly.
 
 **Acceptance Criteria:**
-- [ ] Product form includes all fields from spec (cost, price, tax, etc.)
-- [ ] Support for multiple variants (Color/Size combinations)
-- [ ] Money inputs handle cents correctly
-- [ ] Validation for required fields
+- [ ] Product create/edit follows Clean Architecture + Bloc + DI
+- [ ] Variant creation supports Color/Size combinations and default variant fallback
+- [ ] All money fields use integer cents internally (no floating point)
+- [ ] Validation prevents duplicate SKU/barcode per business rules
 
-### STORY-03-03: Barcode Management
+### STORY-03-03: Barcode Management ✅
 **As a** User
-**I want** to scan barcodes to find products and print labels
-**So that** inventory management is efficient.
+**I want** to scan and manage barcodes
+**So that** inventory workflows are fast.
 
 **Acceptance Criteria:**
-- [x] `mobile_scanner` integrated for camera scanning
-- [x] `barcode_widget` used to generate labels
-- [x] Barcode printing layout designed
+- [ ] Barcode scan/search works on supported platforms
+- [ ] Barcode values are unique where required (variant-level uniqueness)
+- [ ] Barcode generation/validation does not break accounting integrity
+
+### STORY-03-04: Bulk Product Form ✅
+**As a** Manager
+**I want** to create/edit multiple products efficiently
+**So that** data entry is fast.
+
+**Acceptance Criteria:**
+- [ ] Bulk workflow persists through Drift (no in-memory-only state)
+- [ ] Realtime updates reflect immediately in product list
+
+### STORY-03-05: Edit Prices Screen ✅
+**As a** Manager
+**I want** to edit prices safely
+**So that** pricing stays correct.
+
+**Acceptance Criteria:**
+- [ ] All money math uses integer cents
+- [ ] UI uses locale-aware formatting; no hardcoded currency symbols
+
+### STORY-03-06: Import Products Screen ✅
+**As a** Manager
+**I want** to import products from file
+**So that** onboarding is fast.
+
+**Acceptance Criteria:**
+- [ ] Import is offline-first and stores results in Drift
+- [ ] Import can create Colors/Sizes and Variants when provided
+
+### STORY-03-07: Simple Export Screen ✅
+**As a** Manager
+**I want** to export inventory data
+**So that** I can share or back up my catalog.
+
+**Acceptance Criteria:**
+- [ ] Export runs entirely from local DB state (Drift)
+- [ ] Export output is consistent across languages (headers localized where needed)
+
+### STORY-03-08: Barcode Design Screen ✅
+**As a** User
+**I want** to design barcode labels and print them
+**So that** labels match my needs.
+
+**Acceptance Criteria:**
+- [ ] Barcode design supports templates and preview
+- [ ] Printing flow does not require manual refresh and persists settings
+
+### STORY-03-09: Categories Screen ✅
+**As a** Manager
+**I want** to manage product categories
+**So that** catalog organization is consistent.
+
+**Acceptance Criteria:**
+- [ ] Category CRUD is realtime via Drift streams
+- [ ] Prevent deletion when referenced where needed
+
+### STORY-03-10: Colors Screen ✅
+**As a** Manager
+**I want** to manage Colors
+**So that** variants can reference consistent attributes.
+
+**Acceptance Criteria:**
+- [ ] Colors are normalized entities in DB and reused across products
+- [ ] Realtime updates across screens
+
+### STORY-03-11: Sizes Screen ✅
+**As a** Manager
+**I want** to manage Sizes
+**So that** variants can reference consistent attributes.
+
+**Acceptance Criteria:**
+- [ ] Sizes are normalized entities in DB and reused across products
+- [ ] Realtime updates across screens
+
+### STORY-03-12: Products Main Screen ✅
+**As a** User
+**I want** a main products area that ties together product workflows
+**So that** navigation is consistent.
+
+**Acceptance Criteria:**
+- [ ] Navigation uses GoRouter
+- [ ] No overflow on any screen size
+
+### STORY-03-13: Default Variant + Auto Barcode ✅
+**As a** Manager
+**I want** products to have a safe default variant and optional auto-barcode
+**So that** variant-less products still work correctly.
+
+**Acceptance Criteria:**
+- [ ] Default variant exists per product where applicable
+- [ ] Auto barcode generation respects uniqueness constraints
+
+### STORY-03-14: Variants Manager UI (In Progress)
+**As a** Manager
+**I want** a dedicated variants management UI
+**So that** I can manage SKU/barcode/stock per variant.
+
+**Acceptance Criteria:**
+- [ ] Variant list is realtime and supports search/filter
+- [ ] CRUD respects unique constraints (barcode, product+color+size)
+- [ ] Stock edits and adjustments are persisted and reflected immediately
+
+### STORY-03-15: Purchases Use Variants
+**As a** Manager
+**I want** purchase line items to be variant-aware
+**So that** stock and cost track per variant.
+
+**Acceptance Criteria:**
+- [ ] Purchase item stores `variantId` for every line (fallback to default variant)
+- [ ] Posting purchase updates variant stock quantities correctly
+- [ ] UI selection supports choosing variant (color/size) not just product
+
+### STORY-03-16: A4 Label Printing Engine (Verify & Finalize)
+**As a** User
+**I want** reliable A4 labels printing
+**So that** output is correct on paper.
+
+**Acceptance Criteria:**
+- [ ] Printing supports A4 grid layout with correct spacing/margins
+- [ ] End-to-end verification of generated PDF and print output
+- [ ] Settings persist and are reactive
+
+### STORY-03-17: Print Labels From Invoice (Quantity + Variant-Aware)
+**As a** User
+**I want** to print labels from an invoice/purchase with correct quantities
+**So that** label count matches the document lines.
+
+**Acceptance Criteria:**
+- [ ] Navigation to barcode design includes invoice line quantities (default copies = line quantity)
+- [ ] Printing respects `variantId` on document lines (variant-aware)
+- [ ] No reliance on stock quantity for invoice line copies
+
+### STORY-03-18: Variant-Aware Import/Export (Roundtrip Safe)
+**As a** Manager
+**I want** export/import to preserve variants
+**So that** multi-variant products roundtrip correctly.
+
+**Acceptance Criteria:**
+- [ ] Export format is variant-row-based (each row = Variant)
+- [ ] Import consumes that format to recreate variants without data loss
+- [ ] Roundtrip export → import preserves variants, colors, sizes, and barcodes
 
 ---
 
-## 👥 EPIC-04: Parties Management
+## EPIC-04: Parties Management
 
 **Goal**: Manage relationships and financial balances with Customers and Suppliers.
 
 ### STORY-04-01: Customer Management
 **As a** User
-**I want** to manage customer profiles and view their balances
-**So that** I can track who owes money.
+**I want** to manage customers
+**So that** customer balances and statements are accurate.
 
 **Acceptance Criteria:**
-- [ ] Customer CRUD (Name, Phone, Limit, etc.)
-- [ ] Customer balance calculated in real-time
-- [ ] Ledger view showing sales, payments, and returns
+- [ ] Customer CRUD is persisted in Drift and exposed via realtime streams (no manual refresh)
+- [ ] Customer balance is derived from persisted ledger/transactions (no cached/in-memory balances)
+- [ ] Money stored as integer cents; no floating point; no hardcoded currency symbols
 
-### STORY-04-02: Supplier Management
+### STORY-04-02: Customer Form Screen
 **As a** User
-**I want** to manage suppliers and track my debt to them
-**So that** I can handle accounts payable.
+**I want** a customer create/edit form
+**So that** data entry is validated and consistent.
 
 **Acceptance Criteria:**
-- [ ] Supplier CRUD
-- [ ] Supplier balance tracking
-- [ ] Payment recording dialog
+- [ ] Form validation for required fields
+- [ ] Responsive layout: no overflow on any screen size
+- [ ] Navigation uses GoRouter
 
-### STORY-04-03: Employee Management
+### STORY-04-03: Customer Profile Screen
+**As a** User
+**I want** a customer profile screen
+**So that** I can view balance, transactions, and related documents.
+
+**Acceptance Criteria:**
+- [ ] Balance + statement update in realtime when transactions change
+- [ ] Transaction list supports filtering (at least date range)
+
+### STORY-04-04: Customer Payment Dialog
+**As a** User
+**I want** to record customer payments
+**So that** receivables and reports remain correct.
+
+**Acceptance Criteria:**
+- [ ] Payment inserts a persisted transaction/ledger entry in Drift
+- [ ] All dependent UI updates in realtime
+
+### STORY-04-05: Supplier Management
+**As a** User
+**I want** to manage suppliers
+**So that** supplier balances and statements are accurate.
+
+**Acceptance Criteria:**
+- [ ] Supplier CRUD is persisted in Drift and exposed via realtime streams
+- [ ] Supplier balance is derived from persisted ledger/transactions
+
+### STORY-04-06: Supplier Form Screen
+**As a** User
+**I want** a supplier create/edit form
+**So that** supplier data is validated and consistent.
+
+**Acceptance Criteria:**
+- [ ] Form validation for required fields
+- [ ] No overflow on any screen size
+
+### STORY-04-07: Supplier Profile Screen
+**As a** User
+**I want** a supplier profile screen
+**So that** I can view balance, transactions, and related documents.
+
+**Acceptance Criteria:**
+- [ ] Balance + statement update in realtime
+- [ ] Transaction list supports filtering (at least date range)
+
+### STORY-04-08: Supplier Seasonal Discount Screen
+**As a** User
+**I want** to manage seasonal supplier discounts
+**So that** costs and liabilities remain correct.
+
+**Acceptance Criteria:**
+- [ ] Discount rules are persisted in Drift
+- [ ] Money math uses integer cents only
+
+### STORY-04-09: Supplier Transaction Detail Screen
+**As a** User
+**I want** to view supplier transaction details
+**So that** auditing and reconciliation are possible.
+
+**Acceptance Criteria:**
+- [ ] Detail screen shows source linkage and computed totals
+- [ ] Works offline and updates in realtime
+
+### STORY-04-10: Supplier Payment Dialog
+**As a** User
+**I want** to record supplier payments
+**So that** payables and reports remain correct.
+
+**Acceptance Criteria:**
+- [ ] Payment inserts a persisted transaction/ledger entry
+- [ ] Supplier balance updates everywhere in realtime
+
+### STORY-04-11: Supplier Discount Dialog
+**As a** User
+**I want** to record supplier discounts/adjustments
+**So that** balances match negotiated terms.
+
+**Acceptance Criteria:**
+- [ ] Adjustment is recorded as explicit transaction in DB
+- [ ] Money math uses integer cents only
+
+### STORY-04-12: Supplier Return Dialog
+**As a** User
+**I want** to process supplier returns
+**So that** inventory and supplier balances are updated correctly.
+
+**Acceptance Criteria:**
+- [ ] Return affects inventory (variant-aware where applicable)
+- [ ] Return is recorded in supplier ledger and updates in realtime
+
+### STORY-04-13: Employee Management
 **As a** Manager
-**I want** to manage employee records and track their performance
-**So that** I can oversee my staff effectively.
+**I want** to manage employees
+**So that** staff records support sales attribution and operations.
 
 **Acceptance Criteria:**
-- [ ] Employee CRUD (Name, Position, Phone, Email, Hire date)
-- [ ] Salary and commission rate tracking for salespeople
-- [ ] Monthly target setting and performance monitoring
-- [ ] Active/Inactive status management
-- [ ] Employee list with search and filtering by position
-- [ ] Employee profile screen showing complete details and sales history
+- [ ] Employee CRUD persisted in Drift and updates in realtime
+- [ ] No overflow on any screen size
 
-### STORY-04-04: Employee Form Screen
-**As a** HR Manager
-**I want** to add and edit employee details with validation
-**So that** employee records are accurate and complete.
+### STORY-04-14: Employee Form Screen
+**As a** Manager
+**I want** an employee form
+**So that** employee data is validated and consistent.
 
 **Acceptance Criteria:**
-- [ ] Comprehensive employee form with all fields from specification
-- [ ] Position-based conditional fields (commission for salespeople)
-- [ ] Phone and email validation
-- [ ] Salary input in integer cents with proper formatting
-- [ ] Commission rate as percentage with validation
-- [ ] Hire date picker with calendar
-- [ ] Active/Inactive toggle with confirmation
+- [ ] Form validation
+- [ ] Any money fields use integer cents
 
-### STORY-04-05: User Account Management
+### STORY-04-15: User Account Management
 **As a** Owner
-**I want** to create user accounts with role-based permissions
-**So that** I can control system access securely.
+**I want** to manage user accounts
+**So that** system access is controlled.
 
 **Acceptance Criteria:**
-- [ ] User CRUD (Username, Password, Role)
-- [ ] Optional linkage to employee records
-- [ ] Role-based permission matrix (Owner, Manager, Cashier, Salesperson)
-- [ ] Password hashing and security measures
-- [ ] Session management with auto-logout
-- [ ] User list with role filtering
-- [ ] Permission validation on all protected actions
+- [ ] CRUD for users with roles
+- [ ] Sensitive actions enforce permission checks
 
-### STORY-04-06: User Role Permissions
-**As a** System Administrator
-**I want** to configure granular permissions for each user role
-**So that** access control matches business requirements.
+### STORY-04-16: User Role Permissions
+**As a** Owner
+**I want** role-based permissions
+**So that** users only see allowed modules/actions.
 
 **Acceptance Criteria:**
-- [ ] Permission matrix implementation as per specification:
-  - Owner: Full access to all features
-  - Manager: View Dashboard, Create/Edit Sales, View Reports, Export Reports, Manage Products, Manage Users
-  - Cashier: View Dashboard, Create Sales, View Reports
-  - Salesperson: View Dashboard, Create Sales
-- [ ] Dynamic UI hiding/disabling based on user permissions
-- [ ] Permission validation on backend operations
-- [ ] Role assignment interface for user management
-- [ ] Permission override capability for Owners
+- [ ] UI and business logic enforcement are consistent
+- [ ] GoRouter route guards follow current architecture
 
-### STORY-04-07: Employee Performance Tracking
+### STORY-04-17: Employee Performance Tracking
 **As a** Manager
-**I want** to track employee sales performance against targets
-**So that** I can evaluate staff effectiveness.
+**I want** to track employee performance
+**So that** I can evaluate sales outcomes.
 
 **Acceptance Criteria:**
-- [ ] Monthly sales target setting per employee
-- [ ] Real-time performance tracking dashboard
-- [ ] Commission calculation based on sales
-- [ ] Performance reports (monthly, quarterly)
-- [ ] Top performers ranking
-- [ ] Employee productivity metrics
-- [ ] Target vs actual achievement analysis
+- [ ] Metrics derive from persisted sales data (no in-memory summaries)
+- [ ] Updates in realtime
 
 ---
 
-## 🛒 EPIC-05: Sales & POS
+## EPIC-05: Sales & POS
 
 **Goal**: Fast, accurate, and offline-capable Point of Sale system.
 
@@ -274,9 +478,133 @@
 - [ ] Support for thermal printers (58mm/80mm) and A4
 - [ ] Arabic font support (RTL)
 
+### STORY-05-04: Sale Returns Processing
+**As a** Cashier
+**I want** to process customer returns
+**So that** inventory and accounting remain accurate.
+
+**Acceptance Criteria:**
+- [ ] Return references original sale where applicable
+- [ ] Return updates inventory (variant-aware)
+- [ ] Money math uses integer cents only
+
+### STORY-05-05: Sales Screen
+**As a** User
+**I want** a sales list screen
+**So that** I can view and search previous sales.
+
+**Acceptance Criteria:**
+- [ ] Sales list is driven from Drift queries and updates in realtime
+- [ ] Search/filter (at least date range)
+
+### STORY-05-06: Sale Form Screen
+**As a** Cashier
+**I want** a sale form
+**So that** I can create invoices reliably.
+
+**Acceptance Criteria:**
+- [ ] Variant-aware line items where applicable
+- [ ] No overflow on any screen size
+
+### STORY-05-07: Sale Product Selection Dialog
+**As a** Cashier
+**I want** a product selection dialog
+**So that** adding items is fast.
+
+**Acceptance Criteria:**
+- [ ] Supports search and barcode scan where supported
+- [ ] Realtime results from Drift
+
+### STORY-05-08: Sale Product Edit Dialog
+**As a** Cashier
+**I want** to edit a sale line item
+**So that** quantity/price/discount are correct.
+
+**Acceptance Criteria:**
+- [ ] Quantity validation
+- [ ] All money fields use integer cents
+
+### STORY-05-09: Customer Payment Dialog
+**As a** User
+**I want** to record customer payments from sales flow
+**So that** receivables and balances stay correct.
+
+**Acceptance Criteria:**
+- [ ] Writes persisted ledger/transactions and updates UI in realtime
+
+### STORY-05-10: Invoice Split Payment Dialog
+**As a** Cashier
+**I want** split payments
+**So that** customers can pay with multiple methods.
+
+**Acceptance Criteria:**
+- [ ] Persisted payment breakdown
+- [ ] Totals reconcile exactly (integer cents)
+
+### STORY-05-11: Customer Settlement Dialog
+**As a** User
+**I want** a customer settlement dialog
+**So that** I can settle outstanding balances accurately.
+
+**Acceptance Criteria:**
+- [ ] Settlement writes ledger entries and updates balances in realtime
+
+### STORY-05-12: Void Invoice Dialog
+**As a** Manager
+**I want** to void an invoice safely
+**So that** auditability and accounting integrity are preserved.
+
+**Acceptance Criteria:**
+- [ ] Void is recorded as explicit state/transaction (no hard delete)
+- [ ] Inventory reversal is variant-aware
+
+### STORY-05-13: Sale Invoice Print Dialog
+**As a** User
+**I want** a sale invoice print dialog
+**So that** I can choose print options before printing.
+
+**Acceptance Criteria:**
+- [ ] Supports paper size/thermal options where applicable
+- [ ] Arabic RTL supported
+
+### STORY-05-14: Sale Return Print Dialog
+**As a** User
+**I want** a return print dialog
+**So that** customers receive a proper return receipt.
+
+**Acceptance Criteria:**
+- [ ] Print includes return details and totals
+
+### STORY-05-15: Quick Sale Summary Dialog
+**As a** Cashier
+**I want** a quick summary after completing a sale
+**So that** I can confirm totals and next actions.
+
+**Acceptance Criteria:**
+- [ ] Shows totals and payment breakdown
+- [ ] No manual refresh required
+
+### STORY-05-16: Sale Returns Screen
+**As a** User
+**I want** a returns list screen
+**So that** I can view and manage returns.
+
+**Acceptance Criteria:**
+- [ ] List is realtime from Drift
+- [ ] Filters at least by date range
+
+### STORY-05-17: Sale Return Form Screen
+**As a** Cashier
+**I want** a return form screen
+**So that** I can process returns reliably.
+
+**Acceptance Criteria:**
+- [ ] Variant-aware return items
+- [ ] Money math uses integer cents
+
 ---
 
-## 🚚 EPIC-06: Purchase Management
+## EPIC-06: Purchase Management
 
 **Goal**: Handle stock intake and supplier interactions.
 
@@ -291,9 +619,116 @@
 - [ ] Update product cost prices (Weighted Average optional, or Last Cost)
 - [ ] Increase stock levels automatically
 
+### STORY-06-02: Purchase Returns Processing
+**As a** Manager
+**I want** to return goods to suppliers
+**So that** supplier balances and inventory remain accurate.
+
+**Acceptance Criteria:**
+- [ ] Return references original purchase where applicable
+- [ ] Return updates inventory (variant-aware)
+- [ ] Money math uses integer cents only
+
+### STORY-06-03: Purchases Screen
+**As a** User
+**I want** a purchases list screen
+**So that** I can view and search previous purchases.
+
+**Acceptance Criteria:**
+- [ ] Purchases list is driven from Drift queries and updates in realtime
+- [ ] Search/filter (at least date range)
+
+### STORY-06-04: Purchase Form Screen
+**As a** Manager
+**I want** a purchase form
+**So that** I can record stock intake reliably.
+
+**Acceptance Criteria:**
+- [ ] Variant-aware line items where applicable
+- [ ] No overflow on any screen size
+
+### STORY-06-05: Purchase Detail Screen
+**As a** User
+**I want** a purchase detail screen
+**So that** I can review a purchase and its items.
+
+**Acceptance Criteria:**
+- [ ] Displays items, totals, and status from persisted data
+- [ ] Updates in realtime
+
+### STORY-06-06: Product Selection Dialog
+**As a** User
+**I want** a product selection dialog for purchases
+**So that** adding items is fast.
+
+**Acceptance Criteria:**
+- [ ] Supports search and barcode scan where supported
+- [ ] Realtime results from Drift
+
+### STORY-06-07: Product Edit Dialog
+**As a** User
+**I want** to edit a purchase line item
+**So that** quantity/cost/discount are correct.
+
+**Acceptance Criteria:**
+- [ ] Quantity validation
+- [ ] All money fields use integer cents
+
+### STORY-06-08: Supplier Payment Dialog
+**As a** User
+**I want** to record supplier payments
+**So that** payables and balances stay correct.
+
+**Acceptance Criteria:**
+- [ ] Writes persisted ledger/transactions and updates UI in realtime
+
+### STORY-06-09: Supplier Refund Dialog
+**As a** User
+**I want** to record supplier refunds/credits
+**So that** supplier balances stay correct.
+
+**Acceptance Criteria:**
+- [ ] Writes persisted ledger/transactions and updates UI in realtime
+
+### STORY-06-10: Purchase Barcode Scanner
+**As a** User
+**I want** to scan barcodes in purchase flow
+**So that** item selection is faster.
+
+**Acceptance Criteria:**
+- [ ] Scan triggers product/variant lookup
+- [ ] Handles not-found gracefully
+
+### STORY-06-11: Purchase Returns Screen
+**As a** User
+**I want** a purchase returns list screen
+**So that** I can view and manage supplier returns.
+
+**Acceptance Criteria:**
+- [ ] List is realtime from Drift
+- [ ] Filters at least by date range
+
+### STORY-06-12: Purchase Return Form Screen
+**As a** Manager
+**I want** a purchase return form screen
+**So that** I can process supplier returns reliably.
+
+**Acceptance Criteria:**
+- [ ] Variant-aware return items
+- [ ] Money math uses integer cents
+
+### STORY-06-13: Purchase Return Detail Screen
+**As a** User
+**I want** a purchase return detail screen
+**So that** I can review a return and its items.
+
+**Acceptance Criteria:**
+- [ ] Displays return items, totals, and references
+- [ ] Updates in realtime
+
 ---
 
-## 💰 EPIC-07: Finance & Accounting
+## EPIC-07: Finance & Accounting
 
 **Goal**: Accurate financial tracking and accounting.
 
@@ -304,22 +739,74 @@
 
 **Acceptance Criteria:**
 - [ ] Expense CRUD with categories
-- [ ] Image attachment for receipts
-- [ ] Cash flow updates
+- [ ] Money math uses integer cents only
 
-### STORY-07-02: Journal Entries & General Ledger
+### STORY-07-02: Expenses Screen
+**As a** User
+**I want** an expenses list screen
+**So that** I can view and filter expenses.
+
+**Acceptance Criteria:**
+- [ ] List is realtime from Drift
+- [ ] Date range filter
+
+### STORY-07-03: Expense Form Screen
+**As a** User
+**I want** an expense form
+**So that** I can create and edit expenses reliably.
+
+**Acceptance Criteria:**
+- [ ] Validations shown using standard error dialogs
+- [ ] Money math uses integer cents only
+
+### STORY-07-04: Expense Categories Screen
+**As a** User
+**I want** to manage expense categories
+**So that** reporting is consistent.
+
+**Acceptance Criteria:**
+- [ ] CRUD categories
+- [ ] Updates in realtime
+
+### STORY-07-05: Journal Entries & General Ledger
 **As a** Accountant
-**I want** the system to automatically generate journal entries
+**I want** the system to generate journal entries
 **So that** the books are always balanced.
 
 **Acceptance Criteria:**
-- [ ] Auto-generate entries for Sales, Purchases, Payments
-- [ ] Double-entry bookkeeping structure
-- [ ] Manual journal entry form
+- [ ] Double-entry structure is enforced
+- [ ] Entries persist to Drift and update UI in realtime
+
+### STORY-07-06: Journal Entries List Screen
+**As a** User
+**I want** a journal entries list
+**So that** I can review posting history.
+
+**Acceptance Criteria:**
+- [ ] Realtime list from Drift
+- [ ] Date range filter
+
+### STORY-07-07: Journal Entry Form Screen
+**As a** Accountant
+**I want** a journal entry form
+**So that** I can add manual adjustments.
+
+**Acceptance Criteria:**
+- [ ] Balanced debits/credits validation
+- [ ] Money math uses integer cents only
+
+### STORY-07-08: Journal Entry Detail Screen
+**As a** User
+**I want** to view journal entry details
+**So that** I can audit the transaction.
+
+**Acceptance Criteria:**
+- [ ] Shows all lines and references
+- [ ] Updates in realtime
 
 ---
 
-## 📊 EPIC-08: Reporting
+## EPIC-08: Reporting
 
 **Goal**: Data-driven insights.
 
@@ -343,9 +830,324 @@
 - [ ] Low stock report
 - [ ] Product movement history
 
+### STORY-08-03: Customer Relationship Reports
+**As a** Manager
+**I want** customer analytics and statements
+**So that** I can manage receivables and retention.
+
+**Acceptance Criteria:**
+- [ ] Customer statements, aging, and payment history
+- [ ] Updates in realtime from Drift
+
+### STORY-08-04: Supplier Performance Reports
+**As a** Manager
+**I want** supplier balance and performance reports
+**So that** I can manage payables and suppliers effectively.
+
+**Acceptance Criteria:**
+- [ ] Supplier statements, aging, balance drilldowns
+- [ ] Updates in realtime from Drift
+
+### STORY-08-05: Salespeople Commission Reports
+**As a** Manager
+**I want** sales team performance and commission reports
+**So that** I can track targets and incentives.
+
+**Acceptance Criteria:**
+- [ ] Salespeople performance and commission calculations
+- [ ] Updates in realtime from Drift
+
+### STORY-08-06: Expense Reports
+**As a** Manager
+**I want** expense reports
+**So that** I can track operational costs over time.
+
+**Acceptance Criteria:**
+- [ ] Expense summaries by category and date range
+- [ ] Updates in realtime from Drift
+
+### STORY-08-07: Customer Sales Returns Reports
+**As a** Manager
+**I want** sales returns reports by customer
+**So that** I can monitor return patterns.
+
+**Acceptance Criteria:**
+- [ ] Returns by customer and date range
+- [ ] Export supported
+
+### STORY-08-08: Top Customers Reports
+**As a** Manager
+**I want** top customers reports
+**So that** I can identify key customers.
+
+**Acceptance Criteria:**
+- [ ] Top customers by revenue/volume
+- [ ] Date range filter
+
+### STORY-08-09: Customer Payment Reports
+**As a** Manager
+**I want** customer payment reports
+**So that** I can audit collections.
+
+**Acceptance Criteria:**
+- [ ] Payments by method and date range
+- [ ] Export supported
+
+### STORY-08-10: Customer Sales Reports
+**As a** Manager
+**I want** customer sales reports
+**So that** I can analyze customer purchasing.
+
+**Acceptance Criteria:**
+- [ ] Sales by customer and date range
+- [ ] Export supported
+
+### STORY-08-11: Customer Aging Reports
+**As a** Manager
+**I want** customer aging reports
+**So that** I can manage overdue receivables.
+
+**Acceptance Criteria:**
+- [ ] Aging buckets derived from persisted data
+- [ ] Updates in realtime
+
+### STORY-08-12: Customer Statement Reports
+**As a** Manager
+**I want** customer statement reports
+**So that** I can share account summaries.
+
+**Acceptance Criteria:**
+- [ ] Opening/closing balance and transaction list
+- [ ] PDF export supported
+
+### STORY-08-13: Customer Analysis Reports
+**As a** Manager
+**I want** customer analysis reports
+**So that** I can understand buying patterns.
+
+**Acceptance Criteria:**
+- [ ] Frequency/value analysis with date range
+- [ ] Updates in realtime
+
+### STORY-08-14: Supplier Balance Reports
+**As a** Manager
+**I want** supplier balance reports
+**So that** I know what we owe or are owed.
+
+**Acceptance Criteria:**
+- [ ] Supplier balances derived from persisted transactions
+- [ ] Updates in realtime
+
+### STORY-08-15: Supplier Debit Balance Reports
+**As a** Manager
+**I want** supplier debit balance reports
+**So that** I can track payables.
+
+**Acceptance Criteria:**
+- [ ] Debit balances by supplier
+- [ ] Date range filter
+
+### STORY-08-16: Supplier Credit Balance Reports
+**As a** Manager
+**I want** supplier credit balance reports
+**So that** I can track supplier credits.
+
+**Acceptance Criteria:**
+- [ ] Credit balances by supplier
+- [ ] Date range filter
+
+### STORY-08-17: Supplier Analysis Reports
+**As a** Manager
+**I want** supplier analysis reports
+**So that** I can evaluate supplier performance.
+
+**Acceptance Criteria:**
+- [ ] Purchases, returns, and settlement analytics
+- [ ] Export supported
+
+### STORY-08-18: Supplier Aging Reports
+**As a** Manager
+**I want** supplier aging reports
+**So that** I can plan payments.
+
+**Acceptance Criteria:**
+- [ ] Aging buckets derived from persisted data
+- [ ] Updates in realtime
+
+### STORY-08-19: Supplier Statement Reports
+**As a** Manager
+**I want** supplier statement reports
+**So that** I can audit supplier accounts.
+
+**Acceptance Criteria:**
+- [ ] Opening/closing balance and transaction list
+- [ ] PDF export supported
+
+### STORY-08-20: Supplier Stocktake Reports
+**As a** Manager
+**I want** supplier stocktake reports
+**So that** I can review inventory by supplier.
+
+**Acceptance Criteria:**
+- [ ] Inventory by supplier
+- [ ] Export supported
+
+### STORY-08-21: Supplier Balance Drilldown Reports
+**As a** Manager
+**I want** supplier balance drilldown reports
+**So that** I can investigate balances.
+
+**Acceptance Criteria:**
+- [ ] Drilldown by transaction/reference
+- [ ] Updates in realtime
+
+### STORY-08-22: Inventory Stock Reports
+**As a** Manager
+**I want** inventory stock reports
+**So that** I can monitor current quantities.
+
+**Acceptance Criteria:**
+- [ ] Stock by product/variant
+- [ ] Updates in realtime
+
+### STORY-08-23: Low Stock Reports
+**As a** Manager
+**I want** low stock reports
+**So that** I can reorder on time.
+
+**Acceptance Criteria:**
+- [ ] Threshold-based low stock list
+- [ ] Export supported
+
+### STORY-08-24: Out of Stock Reports
+**As a** Manager
+**I want** out of stock reports
+**So that** I can identify missing inventory.
+
+**Acceptance Criteria:**
+- [ ] Zero stock list
+- [ ] Export supported
+
+### STORY-08-25: Dead Stock Reports
+**As a** Manager
+**I want** dead stock reports
+**So that** I can identify non-moving items.
+
+**Acceptance Criteria:**
+- [ ] No-movement list by date range
+- [ ] Export supported
+
+### STORY-08-26: Category Stocktake Reports
+**As a** Manager
+**I want** category stocktake reports
+**So that** I can review inventory by category.
+
+**Acceptance Criteria:**
+- [ ] Inventory grouped by category
+- [ ] Export supported
+
+### STORY-08-27: Product Movement Reports
+**As a** Manager
+**I want** product movement reports
+**So that** I can audit stock in/out.
+
+**Acceptance Criteria:**
+- [ ] Movement derived from persisted events/transactions
+- [ ] Date range filter
+
+### STORY-08-28: Financial Statements Reports
+**As a** Manager
+**I want** a financial statements suite
+**So that** I can generate official statements.
+
+**Acceptance Criteria:**
+- [ ] P&L, Balance Sheet, Trial Balance, General Ledger, Cash Flow
+- [ ] Export supported
+
+### STORY-08-29: Profit & Loss Reports
+**As a** Manager
+**I want** dedicated Profit & Loss reports
+**So that** I can analyze profitability.
+
+**Acceptance Criteria:**
+- [ ] Revenue/COGS/Expense breakdown
+- [ ] Date range filter
+
+### STORY-08-30: Balance Sheet Reports
+**As a** Manager
+**I want** Balance Sheet reports
+**So that** I can see assets/liabilities/equity.
+
+**Acceptance Criteria:**
+- [ ] Derived from ledger and persisted balances
+- [ ] Export supported
+
+### STORY-08-31: Trial Balance Reports
+**As a** Manager
+**I want** Trial Balance reports
+**So that** I can verify debits/credits.
+
+**Acceptance Criteria:**
+- [ ] Debit/Credit totals match
+- [ ] Export supported
+
+### STORY-08-32: General Ledger Reports
+**As a** Manager
+**I want** General Ledger reports
+**So that** I can audit account transactions.
+
+**Acceptance Criteria:**
+- [ ] Ledger entries list by account and date range
+- [ ] Export supported
+
+### STORY-08-33: Cash Flow Reports
+**As a** Manager
+**I want** Cash Flow reports
+**So that** I can understand cash movement.
+
+**Acceptance Criteria:**
+- [ ] Operating/Investing/Financing sections
+- [ ] Export supported
+
+### STORY-08-34: Tax Reports
+**As a** Manager
+**I want** tax reports
+**So that** I can track tax collected and paid.
+
+**Acceptance Criteria:**
+- [ ] Tax summary by date range
+- [ ] Export supported
+
+### STORY-08-35: Sales Summary Reports
+**As a** Manager
+**I want** sales summary reports
+**So that** I can track sales performance.
+
+**Acceptance Criteria:**
+- [ ] Sales totals by day/week/month (aggregated)
+- [ ] Date range filter
+
+### STORY-08-36: Void Logs Reports
+**As a** Manager
+**I want** void logs reports
+**So that** I can audit voided transactions.
+
+**Acceptance Criteria:**
+- [ ] Voided invoices and reasons
+- [ ] Date range filter
+
+### STORY-08-37: Reconciliation Diagnostics Reports
+**As a** Manager
+**I want** reconciliation diagnostics
+**So that** I can detect accounting/inventory mismatches.
+
+**Acceptance Criteria:**
+- [ ] Reports highlight mismatches and provide drilldowns
+- [ ] Export supported
+
 ---
 
-## ⚙️ EPIC-09: Settings & Admin
+## EPIC-09: Settings & Admin
 
 **Goal**: System configuration and maintenance.
 
@@ -358,9 +1160,99 @@
 - [ ] Settings screens for Company Info, Logo, Tax, Currency
 - [ ] Backup and Restore database functionality
 
+### STORY-09-02: Currency Settings
+**As a** Owner
+**I want** to configure currency format and precision
+**So that** money is displayed consistently across the app.
+
+**Acceptance Criteria:**
+- [ ] Currency selection and symbol/position formatting
+- [ ] All UI uses integer-based money formatting
+- [ ] Changes propagate via app services/blocs
+
+### STORY-09-03: Security Settings
+**As a** Owner
+**I want** security settings for sessions and access
+**So that** I can control app usage and reduce risk.
+
+**Acceptance Criteria:**
+- [ ] Session timeout / auto-logout settings
+- [ ] Role-based access enforcement verified across routes/screens
+- [ ] Sensitive actions require proper authorization
+
+### STORY-09-04: Printing Settings
+**As a** User
+**I want** printing settings for invoices and labels
+**So that** printing works consistently per device.
+
+**Acceptance Criteria:**
+- [ ] Default printer / page size / margins / template options
+- [ ] Settings persisted locally and applied in print flows
+- [ ] Cross-platform behavior verified (desktop/mobile where applicable)
+
+### STORY-09-05: Database Management
+**As a** Owner
+**I want** database backup/restore and maintenance tools
+**So that** I can protect and manage business data.
+
+**Acceptance Criteria:**
+- [ ] Manual backup and restore flows
+- [ ] Clear confirmations and error handling
+- [ ] Data integrity preserved after restore
+
+### STORY-09-06: Database Health
+**As a** Owner
+**I want** database health diagnostics
+**So that** I can detect issues early.
+
+**Acceptance Criteria:**
+- [ ] Health checks (e.g., schema version, migrations state)
+- [ ] Index/FK constraints status surfaced if possible
+- [ ] User-friendly diagnostics report
+
+### STORY-09-07: Audit Log
+**As a** Owner
+**I want** an audit log of key actions
+**So that** I can track who did what and when.
+
+**Acceptance Criteria:**
+- [ ] Record key actions (create/update/delete/post/void)
+- [ ] Filter by date/user/action type
+- [ ] Updates in realtime from Drift
+
+### STORY-09-08: Notifications
+**As a** User
+**I want** notifications for important events
+**So that** I don't miss critical operational issues.
+
+**Acceptance Criteria:**
+- [ ] Low stock / mismatches / failed operations notifications
+- [ ] Works offline-first; queued events handled safely
+- [ ] User can enable/disable per type
+
+### STORY-09-09: Supplier Balance Fix
+**As a** Manager
+**I want** a supplier balance correction workflow
+**So that** legacy data issues can be resolved without breaking accounting integrity.
+
+**Acceptance Criteria:**
+- [ ] Safe correction mechanism (ledger-aware)
+- [ ] Full audit trail of adjustments
+- [ ] Validation prevents inconsistent states
+
+### STORY-09-10: Mismatch Detection
+**As a** Manager
+**I want** mismatch detection between inventory and accounting views
+**So that** I can investigate integrity issues.
+
+**Acceptance Criteria:**
+- [ ] Detect and list mismatches (with drilldown)
+- [ ] Realtime updates
+- [ ] Export supported
+
 ---
 
-## ✨ EPIC-10: Polish & QA
+## EPIC-10: Polish & QA
 
 **Goal**: Deliver a beautiful, bug-free experience.
 
@@ -372,7 +1264,9 @@
 **Acceptance Criteria:**
 - [ ] No overflow on any screen size
 - [ ] Loading skeletons/shimmers
-- [ ] Consistent padding and typography
+- [ ] Pull-to-refresh
+- [ ] Swipe actions
+- [ ] Hover states (desktop)
 
 ### STORY-10-02: Comprehensive Testing
 **As a** Developer
@@ -383,46 +1277,6 @@
 - [ ] Real-time sync verified
 - [ ] Money calculations verified (100% accuracy)
 - [ ] Cross-platform verification (Android, Windows, Web)
-
----
-
-## 🔄 EPIC-05-XX: Sale Returns Management
-
-**Goal**: Handle customer returns and refunds with proper inventory and accounting updates.
-
-### STORY-05-04: Sale Returns Processing
-**As a** Cashier
-**I want** to process customer returns and refunds
-**So that** I can handle product returns efficiently.
-
-**Acceptance Criteria:**
-- [ ] Link to original sale or standalone return
-- [ ] Return specific items or full invoice
-- [ ] Return quantity validation
-- [ ] Return reason selection
-- [ ] Refund method (cash, credit to account)
-- [ ] Inventory auto-update (increase stock)
-- [ ] Accounting entries auto-generated
-- [ ] Return receipt printing
-
----
-
-## 🚚 EPIC-06-XX: Purchase Returns Management
-
-**Goal**: Manage returns to suppliers with proper balance adjustments.
-
-### STORY-06-02: Purchase Returns Processing
-**As a** Manager
-**I want** to return goods to suppliers
-**So that** I can manage defective or excess stock.
-
-**Acceptance Criteria:**
-- [ ] Select supplier and original purchase
-- [ ] Return items with quantities
-- [ ] Supplier balance adjustment
-- [ ] Inventory auto-update (decrease stock)
-- [ ] Credit note generation
-- [ ] Return receipt printing
 
 ---
 
@@ -454,92 +1308,6 @@
 - [ ] Password hashing and security
 - [ ] Session management
 - [ ] Auto-logout on inactivity
-
----
-
-## 📊 EPIC-08-XX: Comprehensive Reporting System
-
-**Goal**: Complete reporting suite with all financial, inventory, and analytical reports.
-
-### STORY-08-03: Financial Statements Suite
-**As a** Manager
-**I want** to generate complete financial statements
-**So that** I can analyze business performance.
-
-**Acceptance Criteria:**
-- [ ] Profit & Loss Statement (Revenue - COGS - Expenses)
-- [ ] Balance Sheet (Assets, Liabilities, Equity)
-- [ ] Trial Balance (Debit/Credit verification)
-- [ ] General Ledger (All account transactions)
-- [ ] Cash Flow Statement (Operating, Investing, Financing)
-- [ ] Tax Report (Tax collected vs paid)
-- [ ] Date range filtering for all reports
-- [ ] PDF/Excel export with Arabic support
-
-### STORY-08-04: Inventory Analytics Reports
-**As a** Manager
-**I want** detailed inventory analysis
-**So that** I can optimize stock levels.
-
-**Acceptance Criteria:**
-- [ ] Stock Valuation Report (Current stock value)
-- [ ] Low Stock Alert (Products below minimum)
-- [ ] Out of Stock Report (Zero stock items)
-- [ ] Dead Stock Report (Non-moving items)
-- [ ] Category-wise Stocktake
-- [ ] Product Movement History (In/Out tracking)
-- [ ] ABC Analysis (High/Medium/Low value items)
-
-### STORY-08-05: Customer Relationship Reports
-**As a** Manager
-**I want** comprehensive customer analytics
-**So that** I can understand customer behavior.
-
-**Acceptance Criteria:**
-- [ ] Customer Aging Report (Overdue receivables)
-- [ ] Customer Statement (Account summary)
-- [ ] Customer Analysis (Buying patterns)
-- [ ] Payment History Report
-- [ ] Sales by Customer Report
-- [ ] Returns by Customer Report
-- [ ] Top Customers Report (Best performers)
-
-### STORY-08-06: Supplier Performance Reports
-**As a** Manager
-**I want** detailed supplier analytics
-**So that** I can manage supplier relationships.
-
-**Acceptance Criteria:**
-- [ ] Supplier Balance Report (All balances)
-- [ ] Supplier Debit Balance (What we owe)
-- [ ] Supplier Credit Balance (Supplier credits)
-- [ ] Supplier Analysis (Performance metrics)
-- [ ] Supplier Aging (Overdue payables)
-- [ ] Supplier Statement (Account summary)
-- [ ] Supplier Stocktake Report (Products by supplier)
-- [ ] Supplier Balance Drilldown (Detailed breakdown)
-
-### STORY-08-07: Sales Team Performance
-**As a** Manager
-**I want** to track sales team performance
-**So that** I can optimize team productivity.
-
-**Acceptance Criteria:**
-- [ ] Salespeople Performance Report
-- [ ] Commission Calculation Report
-- [ ] Target vs Actual Sales
-- [ ] Sales by Period (Daily/Weekly/Monthly)
-
-### STORY-08-08: Expense & Audit Reports
-**As a** Manager
-**I want** to track expenses and audit activities
-**So that** I maintain financial control.
-
-**Acceptance Criteria:**
-- [ ] Expense Report (By category/period)
-- [ ] Void Logs Report (Voided transactions)
-- [ ] Reconciliation Diagnostics (Data integrity)
-- [ ] Audit Log Report (User activities)
 
 ---
 
@@ -931,80 +1699,6 @@
 - [ ] Customer segmentation
 - [ ] Product performance analytics
 - [ ] Predictive inventory
-
----
-
-## 📊 Implementation Priority Matrix
-
-| Epic | Priority | Estimated Days | Dependencies |
-|------|----------|----------------|--------------|
-| EPIC-01 | CRITICAL | 10-12 | None |
-| EPIC-02 | HIGH | 5-6 | EPIC-01 |
-| EPIC-03 | CRITICAL | 12-15 | EPIC-01, EPIC-02 |
-| EPIC-04 | HIGH | 8-10 | EPIC-01, EPIC-02 |
-| EPIC-05 | CRITICAL | 15-18 | EPIC-01, EPIC-02, EPIC-03, EPIC-04 |
-| EPIC-05-XX | HIGH | 5-7 | EPIC-05 |
-| EPIC-06 | HIGH | 8-10 | EPIC-01, EPIC-02, EPIC-03 |
-| EPIC-06-XX | MEDIUM | 4-5 | EPIC-06 |
-| EPIC-07 | MEDIUM | 8-10 | EPIC-05, EPIC-06 |
-| EPIC-08 | HIGH | 20-25 | EPIC-05, EPIC-06, EPIC-07 |
-| EPIC-08-XX | HIGH | 15-20 | EPIC-08 |
-| EPIC-09 | MEDIUM | 6-8 | EPIC-01 |
-| EPIC-11 | MEDIUM | 6-8 | EPIC-02 |
-| EPIC-12 | HIGH | 8-10 | All feature epics |
-| EPIC-13 | CRITICAL | 12-15 | EPIC-01 |
-| EPIC-14 | HIGH | 10-12 | EPIC-05, EPIC-06 |
-| EPIC-15 | MEDIUM | 6-8 | EPIC-01 |
-| EPIC-16 | LOW | 4-5 | Core features |
-| EPIC-17 | LOW | 4-5 | Core features |
-| EPIC-18 | HIGH | 10-12 | All epics |
-| EPIC-19 | MEDIUM | 5-6 | All epics |
-| EPIC-20 | LOW | 15-20 | Phase 2 |
-
----
-
-## 🎯 Sprint Recommendations
-
-### Sprint 1 (2 weeks): Foundation
-- EPIC-01: Core Infrastructure (Stories 01-01 to 01-04)
-- EPIC-02: Authentication (Stories 02-01, 02-02)
-
-### Sprint 2 (2 weeks): Core Features
-- EPIC-03: Product Management (Stories 03-01 to 03-03)
-- EPIC-04: Parties Management (Stories 04-01, 04-02)
-
-### Sprint 3 (3 weeks): Sales Operations
-- EPIC-05: Sales & POS (Stories 05-01 to 05-03)
-- EPIC-05-XX: Sale Returns (Story 05-04)
-
-### Sprint 4 (2 weeks): Purchase Operations
-- EPIC-06: Purchase Management (Story 06-01)
-- EPIC-06-XX: Purchase Returns (Story 06-02)
-
-### Sprint 5 (2 weeks): Finance & Reporting
-- EPIC-07: Finance & Accounting (Stories 07-01, 07-02)
-- EPIC-08: Basic Reports (Stories 08-01, 08-02)
-
-### Sprint 6 (3 weeks): Advanced Features
-- EPIC-08-XX: Comprehensive Reports (Stories 08-03 to 08-08)
-- EPIC-13: Core Services (Stories 13-01 to 13-06)
-
-### Sprint 7 (2 weeks): Polish & Settings
-- EPIC-09: Settings & Admin (Story 09-01)
-- EPIC-11: Employee & User Management (Stories 11-01, 11-02)
-- EPIC-12: UI/UX Polish (Stories 12-01, 12-02)
-
-### Sprint 8 (2 weeks): Testing & Quality
-- EPIC-18: Testing & QA (Stories 18-01 to 18-04)
-- EPIC-14: Dialogs & Workflows (Stories 14-01 to 14-04)
-
----
-
-**Total Estimated Timeline**: 18-20 weeks for complete implementation
-**Critical Path**: EPIC-01 → EPIC-02 → EPIC-03 → EPIC-05 → EPIC-08
-**Team Size**: 2-3 developers for optimal velocity
-
----
 
 ---
 
@@ -1569,104 +2263,3 @@
 - [ ] Component library documentation
 - [ ] Deployment guide automation
 - [ ] Change log generation
-
----
-
-## 🎯 Updated Implementation Priority Matrix
-
-| Epic | Priority | Estimated Days | Dependencies |
-|------|----------|----------------|--------------|
-| EPIC-01 | CRITICAL | 10-12 | None |
-| EPIC-02 | HIGH | 5-6 | EPIC-01 |
-| EPIC-03 | CRITICAL | 12-15 | EPIC-01, EPIC-02 |
-| EPIC-04 | HIGH | 8-10 | EPIC-01, EPIC-02 |
-| EPIC-05 | CRITICAL | 15-18 | EPIC-01, EPIC-02, EPIC-03, EPIC-04 |
-| EPIC-05-XX | HIGH | 5-7 | EPIC-05 |
-| EPIC-06 | HIGH | 8-10 | EPIC-01, EPIC-02, EPIC-03 |
-| EPIC-06-XX | MEDIUM | 4-5 | EPIC-06 |
-| EPIC-07 | MEDIUM | 8-10 | EPIC-05, EPIC-06 |
-| EPIC-08 | HIGH | 20-25 | EPIC-05, EPIC-06, EPIC-07 |
-| EPIC-08-XX | HIGH | 15-20 | EPIC-08 |
-| EPIC-09 | MEDIUM | 6-8 | EPIC-01 |
-| EPIC-11 | MEDIUM | 6-8 | EPIC-02 |
-| EPIC-12 | HIGH | 8-10 | All feature epics |
-| EPIC-13 | CRITICAL | 12-15 | EPIC-01 |
-| EPIC-14 | HIGH | 10-12 | EPIC-05, EPIC-06 |
-| EPIC-15 | MEDIUM | 6-8 | EPIC-01 |
-| EPIC-16 | LOW | 4-5 | Core features |
-| EPIC-17 | LOW | 4-5 | Core features |
-| EPIC-18 | HIGH | 10-12 | All epics |
-| EPIC-19 | MEDIUM | 5-6 | All epics |
-| EPIC-21 | HIGH | 8-10 | Core modules |
-| EPIC-22 | MEDIUM | 6-8 | Search requirements |
-| EPIC-23 | CRITICAL | 10-12 | Performance needs |
-| EPIC-24 | HIGH | 8-10 | UX enhancement |
-| EPIC-25 | MEDIUM | 6-8 | Mobile features |
-| EPIC-26 | MEDIUM | 6-8 | Notification system |
-| EPIC-27 | MEDIUM | 8-10 | Sales enhancement |
-| EPIC-28 | LOW | 10-12 | Advanced inventory |
-| EPIC-29 | MEDIUM | 8-10 | Security compliance |
-| EPIC-30 | LOW | 12-15 | Advanced analytics |
-| EPIC-31 | LOW | 15-20 | Multi-store support |
-| EPIC-32 | MEDIUM | 8-10 | Developer tools |
-| EPIC-20 | LOW | 15-20 | Phase 2 |
-
----
-
-## 🚀 Updated Sprint Recommendations
-
-### Sprint 1 (2 weeks): Foundation
-- EPIC-01: Core Infrastructure (Stories 01-01 to 01-04)
-- EPIC-02: Authentication (Stories 02-01, 02-02)
-
-### Sprint 2 (2 weeks): Core Features
-- EPIC-03: Product Management (Stories 03-01 to 03-03)
-- EPIC-04: Parties Management (Stories 04-01, 04-02)
-
-### Sprint 3 (3 weeks): Sales Operations
-- EPIC-05: Sales & POS (Stories 05-01 to 05-03)
-- EPIC-05-XX: Sale Returns (Story 05-04)
-
-### Sprint 4 (2 weeks): Purchase Operations
-- EPIC-06: Purchase Management (Story 06-01)
-- EPIC-06-XX: Purchase Returns (Story 06-02)
-
-### Sprint 5 (2 weeks): Finance & Reporting
-- EPIC-07: Finance & Accounting (Stories 07-01, 07-02)
-- EPIC-08: Basic Reports (Stories 08-01, 08-02)
-
-### Sprint 6 (3 weeks): Advanced Features
-- EPIC-08-XX: Comprehensive Reports (Stories 08-03 to 08-08)
-- EPIC-13: Core Services (Stories 13-01 to 13-06)
-- EPIC-21: Dashboard & Analytics (Stories 21-01 to 21-03)
-
-### Sprint 7 (2 weeks): Polish & Settings
-- EPIC-09: Settings & Admin (Story 09-01)
-- EPIC-11: Employee & User Management (Stories 11-01, 11-02)
-- EPIC-12: UI/UX Polish (Stories 12-01, 12-02)
-- EPIC-23: Performance Optimization (Stories 23-01 to 23-03)
-
-### Sprint 8 (2 weeks): Testing & Quality
-- EPIC-18: Testing & QA (Stories 18-01 to 18-04)
-- EPIC-14: Dialogs & Workflows (Stories 14-01 to 14-04)
-- EPIC-32: Developer Experience (Stories 32-01 to 32-03)
-
-### Sprint 9 (2 weeks): Enhanced Features
-- EPIC-22: Advanced Search (Stories 22-01 to 22-03)
-- EPIC-24: Enhanced UX (Stories 24-01 to 24-03)
-- EPIC-26: Notifications (Stories 26-01 to 26-03)
-
-### Sprint 10 (2 weeks): Advanced Capabilities
-- EPIC-27: Advanced Sales (Stories 27-01 to 27-03)
-- EPIC-29: Security & Compliance (Stories 29-01 to 29-03)
-- EPIC-25: Mobile Features (Stories 25-01 to 25-03)
-
----
-
-**Total Estimated Timeline**: 20-24 weeks for complete implementation
-**Critical Path**: EPIC-01 → EPIC-02 → EPIC-03 → EPIC-05 → EPIC-08 → EPIC-23
-**Team Size**: 3-4 developers for optimal velocity with advanced features
-
----
-
-*This comprehensive enhancement ensures 100% coverage of all requirements while adding modern features that will make Tapix a market-leading ERP solution.*

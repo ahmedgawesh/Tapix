@@ -78,6 +78,37 @@ class ProductVariantDao extends DatabaseAccessor<AppDatabase> with _$ProductVari
     return result;
   }
 
+  Future<Map<int, String>> getVariantInfoByVariantIds(List<int> variantIds) async {
+    final result = <int, String>{};
+    for (final variantId in variantIds) {
+      final v = await getVariantById(variantId);
+      if (v == null) continue;
+
+      String? colorName;
+      if (v.colorId != null) {
+        final color = await (select(productColors)..where((c) => c.id.equals(v.colorId!)))
+            .getSingleOrNull();
+        colorName = color?.name;
+      }
+
+      String? sizeName;
+      if (v.sizeId != null) {
+        final size = await (select(sizes)..where((s) => s.id.equals(v.sizeId!)))
+            .getSingleOrNull();
+        sizeName = size?.name;
+      }
+
+      final info = [sizeName, colorName]
+          .whereType<String>()
+          .where((x) => x.trim().isNotEmpty)
+          .join(' / ');
+      if (info.isNotEmpty) {
+        result[variantId] = info;
+      }
+    }
+    return result;
+  }
+
   /// Returns variant summary for a single product
   Future<({int count, int totalStock})?> getVariantSummaryByProduct(int productId) async {
     final row = await customSelect(
@@ -137,9 +168,10 @@ class ProductVariantDao extends DatabaseAccessor<AppDatabase> with _$ProductVari
           variant.colorId.present && variant.colorId.value != null ||
               variant.sizeId.present && variant.sizeId.value != null;
       if (hasDimensions) {
-        await customStatement(
+        await customUpdate(
           'UPDATE products SET has_variants = 1 WHERE id = ?',
-          [productId],
+          variables: [Variable.withInt(productId)],
+          updates: {products},
         );
       }
       return id;
@@ -173,9 +205,10 @@ class ProductVariantDao extends DatabaseAccessor<AppDatabase> with _$ProductVari
         ).getSingle();
         final remaining = row.read<int>('cnt');
         if (remaining == 0) {
-          await customStatement(
+          await customUpdate(
             'UPDATE products SET has_variants = 0 WHERE id = ?',
-            [productId],
+            variables: [Variable.withInt(productId)],
+            updates: {products},
           );
         }
       }

@@ -1,5 +1,6 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'core/bloc/localization_bloc.dart';
@@ -33,13 +34,48 @@ void main() async {
       fallbackLocale: const Locale('en'),
       startLocale: startLocale,
       saveLocale: false,
-      child: const MyApp(),
+      child: const TapixApp(),
     ),
   );
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class TapixApp extends StatefulWidget {
+  const TapixApp({super.key});
+
+  @override
+  State<TapixApp> createState() => _TapixAppState();
+}
+
+class _TapixAppState extends State<TapixApp> {
+
+  @override
+  void initState() {
+    super.initState();
+    _setupBackButtonHandler();
+  }
+
+  void _setupBackButtonHandler() {
+    SystemChannels.platform.setMethodCallHandler((call) async {
+      if (call.method == 'SystemNavigator.pop') {
+        final router = AppRouter.router;
+        
+        if (router.canPop()) {
+          router.pop();
+          return null;
+        }
+        
+        final currentPath = router.routeInformationProvider.value.uri.path;
+        if (currentPath != '/dashboard') {
+          router.go('/dashboard');
+          return null;
+        }
+        
+        // At dashboard: consume the back event to prevent app exit
+        return null;
+      }
+      return null;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -88,30 +124,6 @@ class MyApp extends StatelessWidget {
                     theme: AppTheme.lightTheme,
                     darkTheme: AppTheme.darkTheme,
                     themeMode: themeMode,
-                    builder: (context, child) {
-                      return PopScope(
-                        canPop: false,
-                        onPopInvokedWithResult: (didPop, result) {
-                          if (didPop) return;
-
-                          final router = AppRouter.router;
-
-                          if (router.canPop()) {
-                            router.pop();
-                            return;
-                          }
-
-                          final currentPath =
-                              router.routeInformationProvider.value.uri.path;
-                          if (currentPath != '/dashboard') {
-                            router.go('/dashboard');
-                            return;
-                          }
-                          // Already at dashboard: do nothing (prevent app exit)
-                        },
-                        child: child ?? const SizedBox.shrink(),
-                      );
-                    },
                     routerConfig: AppRouter.router,
                   );
                 },

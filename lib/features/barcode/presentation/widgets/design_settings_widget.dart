@@ -7,6 +7,8 @@ import '../../domain/models/barcode_design_state.dart';
 import '../bloc/barcode_design_bloc.dart';
 import '../bloc/barcode_design_event.dart';
 
+export '../bloc/barcode_design_event.dart' show LabelPrintMode, QuantityMode;
+
 class DesignSettingsWidget extends StatelessWidget {
   final BarcodeDesignSettings settings;
   final bool isCompact;
@@ -228,31 +230,60 @@ class _FullSettings extends StatelessWidget {
         ),
         const SizedBox(height: 24),
 
-        // Print type
-        _SectionHeader(title: 'barcode.print_type'.tr()),
+        // Print mode (Thermal vs A4)
+        _SectionHeader(title: 'barcode.print_mode'.tr()),
         const SizedBox(height: 8),
-        SegmentedButton<String>(
+        SegmentedButton<LabelPrintMode>(
           segments: [
             ButtonSegment(
-              value: 'single',
-              label: Text('barcode.single'.tr()),
-              icon: const Icon(LucideIcons.file),
+              value: LabelPrintMode.thermal,
+              label: Text('barcode.thermal'.tr()),
+              icon: const Icon(LucideIcons.receipt),
             ),
             ButtonSegment(
-              value: 'batch',
-              label: Text('barcode.batch'.tr()),
-              icon: const Icon(LucideIcons.files),
-            ),
-            ButtonSegment(
-              value: 'all_quantity',
-              label: Text('barcode.all_qty'.tr()),
-              icon: const Icon(LucideIcons.layers),
+              value: LabelPrintMode.a4Sheet,
+              label: Text('barcode.a4_sheet'.tr()),
+              icon: const Icon(LucideIcons.layoutGrid),
             ),
           ],
-          selected: {settings.printType},
+          selected: {settings.printMode},
           onSelectionChanged: (selected) {
-            context.read<BarcodeDesignBloc>().add(UpdatePrintType(selected.first));
+            context.read<BarcodeDesignBloc>().add(UpdatePrintMode(selected.first));
           },
+        ),
+        const SizedBox(height: 16),
+        
+        // A4 specific settings
+        if (settings.isA4Mode) ..._buildA4Settings(context, settings),
+        
+        // Quantity mode
+        _SectionHeader(title: 'barcode.quantity_mode'.tr()),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            ChoiceChip(
+              label: Text('barcode.qty_single'.tr()),
+              selected: settings.quantityMode == QuantityMode.single,
+              onSelected: (v) => v ? context.read<BarcodeDesignBloc>().add(const UpdateQuantityMode(QuantityMode.single)) : null,
+            ),
+            ChoiceChip(
+              label: Text('barcode.qty_custom'.tr()),
+              selected: settings.quantityMode == QuantityMode.custom,
+              onSelected: (v) => v ? context.read<BarcodeDesignBloc>().add(const UpdateQuantityMode(QuantityMode.custom)) : null,
+            ),
+            ChoiceChip(
+              label: Text('barcode.qty_invoice'.tr()),
+              selected: settings.quantityMode == QuantityMode.invoiceQuantity,
+              onSelected: (v) => v ? context.read<BarcodeDesignBloc>().add(const UpdateQuantityMode(QuantityMode.invoiceQuantity)) : null,
+            ),
+            ChoiceChip(
+              label: Text('barcode.qty_stock'.tr()),
+              selected: settings.quantityMode == QuantityMode.stockQuantity,
+              onSelected: (v) => v ? context.read<BarcodeDesignBloc>().add(const UpdateQuantityMode(QuantityMode.stockQuantity)) : null,
+            ),
+          ],
         ),
         const SizedBox(height: 24),
 
@@ -310,6 +341,92 @@ class _FullSettings extends StatelessWidget {
         ),
       ],
     );
+  }
+  
+  List<Widget> _buildA4Settings(BuildContext context, BarcodeDesignSettings settings) {
+    return [
+      // Labels per row
+      Row(
+        children: [
+          Expanded(
+            child: Text('barcode.labels_per_row'.tr()),
+          ),
+          IconButton(
+            icon: const Icon(LucideIcons.minus, size: 18),
+            onPressed: settings.labelsPerRow > 1
+                ? () => context.read<BarcodeDesignBloc>().add(UpdateLabelsPerRow(settings.labelsPerRow - 1))
+                : null,
+            visualDensity: VisualDensity.compact,
+          ),
+          Text(
+            '${settings.labelsPerRow}',
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+          IconButton(
+            icon: const Icon(LucideIcons.plus, size: 18),
+            onPressed: settings.labelsPerRow < 10
+                ? () => context.read<BarcodeDesignBloc>().add(UpdateLabelsPerRow(settings.labelsPerRow + 1))
+                : null,
+            visualDensity: VisualDensity.compact,
+          ),
+        ],
+      ),
+      const SizedBox(height: 8),
+      
+      // Gap settings
+      Row(
+        children: [
+          Expanded(
+            child: _DimensionField(
+              label: 'barcode.h_gap'.tr(),
+              value: settings.horizontalGapMm,
+              onChanged: (v) => context.read<BarcodeDesignBloc>().add(UpdateA4LayoutGaps(horizontalGapMm: v)),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: _DimensionField(
+              label: 'barcode.v_gap'.tr(),
+              value: settings.verticalGapMm,
+              onChanged: (v) => context.read<BarcodeDesignBloc>().add(UpdateA4LayoutGaps(verticalGapMm: v)),
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(height: 8),
+      
+      // Page margin
+      _DimensionField(
+        label: 'barcode.page_margin'.tr(),
+        value: settings.pageMarginMm,
+        onChanged: (v) => context.read<BarcodeDesignBloc>().add(UpdateA4LayoutGaps(pageMarginMm: v)),
+      ),
+      const SizedBox(height: 8),
+      
+      // Info about calculated layout
+      Card(
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: Row(
+            children: [
+              const Icon(LucideIcons.info, size: 16),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'barcode.a4_layout_info'.tr(args: [
+                    settings.labelsPerRow.toString(),
+                    settings.calculatedLabelsPerColumn.toString(),
+                    settings.labelsPerPage.toString(),
+                  ]),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      const SizedBox(height: 16),
+    ];
   }
 }
 

@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:drift/drift.dart';
-import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/bloc/realtime_bloc.dart';
@@ -316,7 +315,7 @@ class BarcodeDesignBloc extends RealtimeBloc<BarcodeDesignData, BarcodeDesignEve
     Emitter<RealtimeState<BarcodeDesignData>> emit,
   ) async {
     if (_selectedProducts.isEmpty) {
-      _errorMessage = 'barcode.no_products_selected'.tr();
+      _errorMessage = 'No products selected for printing';
       emit(RealtimeSuccess(data: _currentData));
       return;
     }
@@ -371,7 +370,7 @@ class BarcodeDesignBloc extends RealtimeBloc<BarcodeDesignData, BarcodeDesignEve
       emit(RealtimeSuccess(data: _currentData));
     } catch (e) {
       _operationStatus = PrintOperationStatus.error;
-      _errorMessage = 'barcode.unexpected_error'.tr();
+      _errorMessage = e.toString();
       _progress = null;
       emit(RealtimeSuccess(data: _currentData));
     }
@@ -382,7 +381,7 @@ class BarcodeDesignBloc extends RealtimeBloc<BarcodeDesignData, BarcodeDesignEve
     Emitter<RealtimeState<BarcodeDesignData>> emit,
   ) async {
     if (_selectedProducts.isEmpty) {
-      _errorMessage = 'barcode.no_products_selected'.tr();
+      _errorMessage = 'No products selected for sharing';
       emit(RealtimeSuccess(data: _currentData));
       return;
     }
@@ -421,7 +420,7 @@ class BarcodeDesignBloc extends RealtimeBloc<BarcodeDesignData, BarcodeDesignEve
       emit(RealtimeSuccess(data: _currentData));
     } catch (e) {
       _operationStatus = PrintOperationStatus.error;
-      _errorMessage = 'barcode.unexpected_error'.tr();
+      _errorMessage = e.toString();
       emit(RealtimeSuccess(data: _currentData));
     }
   }
@@ -452,7 +451,7 @@ class BarcodeDesignBloc extends RealtimeBloc<BarcodeDesignData, BarcodeDesignEve
       _templates = await _templateDao.getTemplates();
       emit(RealtimeSuccess(data: _currentData));
     } catch (e) {
-      _errorMessage = 'barcode.save_template_error'.tr();
+      _errorMessage = 'Failed to save template: $e';
       emit(RealtimeSuccess(data: _currentData));
     }
   }

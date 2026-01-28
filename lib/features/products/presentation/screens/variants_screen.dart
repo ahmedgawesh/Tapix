@@ -1117,10 +1117,33 @@ class _VariantsViewState extends State<_VariantsView> {
   }
 
   void _bulkSetActive(BuildContext context, bool active) {
-    // Get current variants and update selected ones
-    // This is a simplified version - in production you'd batch these
+    final variants = _getVariantsFromBloc(context);
+
+    final selected = variants.where((v) => _selectedVariantIds.contains(v.id)).toList();
+    if (selected.isEmpty) return;
+
+    for (final v in selected) {
+      if (v.isActive == active) continue;
+      final updated = ProductVariant(
+        id: v.id,
+        productId: v.productId,
+        sku: v.sku,
+        barcode: v.barcode,
+        colorId: v.colorId,
+        sizeId: v.sizeId,
+        costCents: v.costCents,
+        priceCents: v.priceCents,
+        priceAdjustmentCents: v.priceAdjustmentCents,
+        stockQuantity: v.stockQuantity,
+        isActive: active,
+      );
+      context.read<ProductVariantsBloc>().add(VariantUpdateRequested(updated));
+    }
+
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(active ? 'variants.bulk_activated'.tr() : 'variants.bulk_deactivated'.tr())),
+      SnackBar(
+        content: Text(active ? 'variants.bulk_activated'.tr() : 'variants.bulk_deactivated'.tr()),
+      ),
     );
     setState(() => _selectedVariantIds.clear());
   }

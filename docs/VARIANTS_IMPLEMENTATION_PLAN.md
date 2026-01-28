@@ -303,13 +303,25 @@ Deliverable:
 ## Phase 4 — Printing (A4 Labels) Including “Print from Invoice”
 
 ### Phase 4 Status
-- ✅ **Implemented** (2026-01-27) - *Needs end-to-end verification*
+- 🟡 **Partially Implemented** (2026-01-27) - *Needs end-to-end verification*
 
 ### What was implemented
 - Print labels button added to `PurchaseFormScreen` app bar
 - When clicked, navigates to `/products/barcode-design` with purchase products
 - Existing barcode design screen handles the printing workflow
 - Translations added for EN/AR/FR
+
+### What is still missing / incorrect vs target end-state
+- **Print from invoice quantity rule is NOT implemented**:
+  - Current implementation passes only `products` to the barcode design screen.
+  - No data is passed for **invoice line quantities** (default label count should equal line quantity).
+  - `BarcodeDesignBloc` currently determines copies using:
+    - selected `printType` (e.g. `all_quantity` uses `product.stockQuantity`)
+    - or `settings.copies`
+  - This is **not equivalent** to `quantity = invoiceLine.quantity`.
+- **Variant-level printing from invoice is not wired**:
+  - Purchase items store `variantId`, but print-from-purchase currently ignores `variantId`.
+- **A4 grid “layout engine” is not verified here** (depends on barcode printer service/template implementation).
 
 ### 4.1 Label data model (in-memory)
 Create a simple structure (not necessarily DB):
@@ -341,13 +353,20 @@ Deliverable:
 ## Phase 5 — Export/Import Variant-Aware
 
 ### Phase 5 Status
-- ✅ **Implemented** - *Needs end-to-end verification*
+- 🟡 **Partially Implemented** - *Needs end-to-end verification*
 
 ### What was implemented
-- `ExportService` exports products with color/size from first variant
 - `ProductImportService` creates colors/sizes automatically during import
-- Import creates variants with proper color/size associations
+- Import creates **variants** with proper color/size associations when input contains color/size
 - Default variant created for products without color/size
+
+### What is still missing / incorrect vs target end-state
+- **Export is NOT variant-aware (per the plan)**:
+  - Current `ExportService` exports **Products** (one row per product).
+  - It only adds `color` / `size` columns by reading the **first variant** if any.
+  - This does **not** match the required format “each row = Variant”.
+- **Roundtrip export→import does not preserve variants**:
+  - Since export is product-level, a product with multiple variants cannot be roundtripped.
 
 ### 5.1 Export format
 CSV/Excel (each row = Variant):

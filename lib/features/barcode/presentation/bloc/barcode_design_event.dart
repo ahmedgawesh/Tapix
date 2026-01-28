@@ -2,6 +2,9 @@ import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../products/domain/entities/product_entity.dart';
 import '../../../../core/database/app_database.dart' hide Product;
 import '../../domain/models/barcode_design_state.dart';
+import '../../data/models/invoice_print_data.dart';
+
+export '../../domain/models/barcode_design_state.dart' show LabelPrintMode, QuantityMode;
 
 abstract class BarcodeDesignEvent extends RealtimeEvent {
   const BarcodeDesignEvent();
@@ -139,4 +142,61 @@ class SaveAsTemplate extends BarcodeDesignEvent {
 /// Acknowledge print result (reset status)
 class AcknowledgePrintResult extends BarcodeDesignEvent {
   const AcknowledgePrintResult();
+}
+
+/// Load invoice data for label printing
+class LoadInvoicePrintData extends BarcodeDesignEvent {
+  final InvoicePrintData invoiceData;
+
+  const LoadInvoicePrintData(this.invoiceData);
+}
+
+/// Update invoice line quantity (manual override)
+class UpdateInvoiceLineQuantity extends BarcodeDesignEvent {
+  final int variantId;
+  final int newQuantity;
+
+  const UpdateInvoiceLineQuantity({
+    required this.variantId,
+    required this.newQuantity,
+  });
+}
+
+/// Reset quantities to original invoice values
+class ResetToInvoiceQuantities extends BarcodeDesignEvent {
+  const ResetToInvoiceQuantities();
+}
+
+/// Update print mode (thermal vs A4 sheet)
+class UpdatePrintMode extends BarcodeDesignEvent {
+  final LabelPrintMode printMode;
+
+  const UpdatePrintMode(this.printMode);
+}
+
+/// Update quantity mode
+class UpdateQuantityMode extends BarcodeDesignEvent {
+  final QuantityMode quantityMode;
+
+  const UpdateQuantityMode(this.quantityMode);
+}
+
+/// Update labels per row for A4 mode
+class UpdateLabelsPerRow extends BarcodeDesignEvent {
+  final int labelsPerRow;
+
+  const UpdateLabelsPerRow(this.labelsPerRow);
+}
+
+/// Update A4 layout gaps
+class UpdateA4LayoutGaps extends BarcodeDesignEvent {
+  final double? horizontalGapMm;
+  final double? verticalGapMm;
+  final double? pageMarginMm;
+
+  const UpdateA4LayoutGaps({
+    this.horizontalGapMm,
+    this.verticalGapMm,
+    this.pageMarginMm,
+  });
 }
