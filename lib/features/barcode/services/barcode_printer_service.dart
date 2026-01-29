@@ -458,6 +458,7 @@ class BarcodePrinterService {
                           includeName: includeName,
                           includePrice: includePrice,
                           includeBarcode: includeBarcode,
+                          includeSku: false,
                           includeCompanyName: includeCompanyName,
                           companyName: companyName,
                           includeCompanyContact: includeCompanyContact,
@@ -498,6 +499,7 @@ class BarcodePrinterService {
     required bool includeName,
     required bool includePrice,
     required bool includeBarcode,
+    required bool includeSku,
     required bool includeCompanyName,
     required String? companyName,
     required bool includeCompanyContact,
@@ -587,6 +589,16 @@ class BarcodePrinterService {
                     : pw.Container())
                 : pw.Container(),
           ),
+          if (includeSku && product.sku != null && product.sku!.trim().isNotEmpty) ...[
+            pw.SizedBox(height: 0.5),
+            pw.Text(
+              'SKU: ${product.sku}',
+              style: pw.TextStyle(fontSize: 4.5, font: ttf, color: PdfColors.grey700),
+              maxLines: 1,
+              overflow: pw.TextOverflow.clip,
+              textDirection: _detectTextDirection(product.sku!),
+            ),
+          ],
           if (includePrice) ...[
             pw.SizedBox(height: 1),
             pw.Text(
@@ -607,12 +619,12 @@ class BarcodePrinterService {
     required bool? includeName,
     required bool? includePrice,
     bool includeBarcode = true,
-    bool includeCompanyName = false,
+    bool? includeCompanyName,
     String? companyName,
-    bool includeCompanyContact = false,
+    bool? includeCompanyContact,
     String? companyAddress,
     String? companyPhone,
-    int copies = 1,
+    int? copies,
   }) async {
     final safeProduct = product!;
     final safeBarcode = barcode!;
@@ -620,6 +632,9 @@ class BarcodePrinterService {
     final safeHeightMm = heightMm!;
     final safeIncludeName = includeName ?? true;
     final safeIncludePrice = includePrice ?? true;
+    final safeIncludeCompanyName = includeCompanyName ?? false;
+    final safeIncludeCompanyContact = includeCompanyContact ?? false;
+    final safeCopies = copies ?? 1;
     final doc = pw.Document();
     
     // Load multilingual font (supports Arabic, English, French)
@@ -640,7 +655,7 @@ class BarcodePrinterService {
     final height = safeHeightMm * PdfPageFormat.mm;
 
     // Generate the requested number of copies
-    for (int i = 0; i < copies; i++) {
+    for (int i = 0; i < safeCopies; i++) {
       doc.addPage(
         pw.Page(
           pageFormat: PdfPageFormat(width, height, marginAll: 2 * PdfPageFormat.mm),
@@ -649,7 +664,7 @@ class BarcodePrinterService {
               mainAxisAlignment: pw.MainAxisAlignment.center,
               crossAxisAlignment: pw.CrossAxisAlignment.center,
               children: [
-                if (includeCompanyName && companyName != null && companyName.isNotEmpty)
+                if (safeIncludeCompanyName && companyName != null && companyName.isNotEmpty)
                   pw.Text(
                     companyName,
                     style: pw.TextStyle(
@@ -661,9 +676,9 @@ class BarcodePrinterService {
                     overflow: pw.TextOverflow.clip,
                     textDirection: _detectTextDirection(companyName),
                   ),
-                if (includeCompanyName && companyName != null && companyName.isNotEmpty) 
+                if (safeIncludeCompanyName && companyName != null && companyName.isNotEmpty)
                   pw.SizedBox(height: 1),
-                if (includeCompanyContact &&
+                if (safeIncludeCompanyContact &&
                     ((companyAddress != null && companyAddress.isNotEmpty) ||
                         (companyPhone != null && companyPhone.isNotEmpty))) ...[
                   if (companyAddress != null && companyAddress.isNotEmpty)
@@ -745,19 +760,19 @@ class BarcodePrinterService {
     required bool? includeName,
     required bool? includePrice,
     bool includeBarcode = true,
-    bool includeCompanyName = false,
+    bool? includeCompanyName,
     String? companyName,
-    bool includeCompanyContact = false,
+    bool? includeCompanyContact,
     String? companyAddress,
     String? companyPhone,
-    int copies = 1,
-    bool isA4Mode = false,
-    int labelsPerRow = 3,
-    double horizontalGapMm = 2.0,
-    double verticalGapMm = 2.0,
-    double pageMarginMm = 10.0,
+    int? copies,
+    bool? isA4Mode,
+    int? labelsPerRow,
+    double? horizontalGapMm,
+    double? verticalGapMm,
+    double? pageMarginMm,
     String? variantInfo,
-    bool includeVariantInfo = false,
+    bool? includeVariantInfo,
   }) async {
     final safeProduct = product!;
     final safeBarcode = barcode!;
@@ -765,8 +780,17 @@ class BarcodePrinterService {
     final safeHeightMm = heightMm!;
     final safeIncludeName = includeName ?? true;
     final safeIncludePrice = includePrice ?? true;
+    final safeIncludeCompanyName = includeCompanyName ?? false;
+    final safeIncludeCompanyContact = includeCompanyContact ?? false;
+    final safeCopies = copies ?? 1;
+    final safeIsA4Mode = isA4Mode ?? false;
+    final safeLabelsPerRow = labelsPerRow ?? 3;
+    final safeHorizontalGapMm = horizontalGapMm ?? 2.0;
+    final safeVerticalGapMm = verticalGapMm ?? 2.0;
+    final safePageMarginMm = pageMarginMm ?? 10.0;
+    final safeIncludeVariantInfo = includeVariantInfo ?? false;
 
-    final pdfData = isA4Mode
+    final pdfData = safeIsA4Mode
         ? await _generateA4GridPdf(
             product: safeProduct,
             barcode: safeBarcode,
@@ -775,18 +799,19 @@ class BarcodePrinterService {
             includeName: safeIncludeName,
             includePrice: safeIncludePrice,
             includeBarcode: includeBarcode,
-            includeCompanyName: includeCompanyName,
+            includeSku: false,
+            includeCompanyName: safeIncludeCompanyName,
             companyName: companyName,
-            includeCompanyContact: includeCompanyContact,
+            includeCompanyContact: safeIncludeCompanyContact,
             companyAddress: companyAddress,
             companyPhone: companyPhone,
-            copies: copies,
-            labelsPerRow: labelsPerRow,
-            horizontalGapMm: horizontalGapMm,
-            verticalGapMm: verticalGapMm,
-            pageMarginMm: pageMarginMm,
+            copies: safeCopies,
+            labelsPerRow: safeLabelsPerRow,
+            horizontalGapMm: safeHorizontalGapMm,
+            verticalGapMm: safeVerticalGapMm,
+            pageMarginMm: safePageMarginMm,
             variantInfo: variantInfo,
-            includeVariantInfo: includeVariantInfo,
+            includeVariantInfo: safeIncludeVariantInfo,
           )
         : await generatePdfLabel(
             product: safeProduct,
@@ -796,12 +821,12 @@ class BarcodePrinterService {
             includeName: safeIncludeName,
             includePrice: safeIncludePrice,
             includeBarcode: includeBarcode,
-            includeCompanyName: includeCompanyName,
+            includeCompanyName: safeIncludeCompanyName,
             companyName: companyName,
-            includeCompanyContact: includeCompanyContact,
+            includeCompanyContact: safeIncludeCompanyContact,
             companyAddress: companyAddress,
             companyPhone: companyPhone,
-            copies: copies,
+            copies: safeCopies,
           );
     await Printing.sharePdf(bytes: pdfData, filename: 'Labels-${safeProduct.sku ?? safeProduct.id}.pdf');
   }
@@ -814,6 +839,7 @@ class BarcodePrinterService {
     required bool includeName,
     required bool includePrice,
     required bool includeBarcode,
+    required bool includeSku,
     required bool includeCompanyName,
     required String? companyName,
     required bool includeCompanyContact,
@@ -840,6 +866,7 @@ class BarcodePrinterService {
             includeName: includeName,
             includePrice: includePrice,
             includeBarcode: includeBarcode,
+            includeSku: includeSku,
             includeCompanyName: includeCompanyName,
             companyName: companyName,
             includeCompanyContact: includeCompanyContact,
@@ -859,6 +886,7 @@ class BarcodePrinterService {
             includeName: includeName,
             includePrice: includePrice,
             includeBarcode: includeBarcode,
+            includeSku: includeSku,
             includeCompanyName: includeCompanyName,
             companyName: companyName,
             includeCompanyContact: includeCompanyContact,
@@ -878,6 +906,7 @@ class BarcodePrinterService {
     required bool includeName,
     required bool includePrice,
     required bool includeBarcode,
+    required bool includeSku,
     required bool includeCompanyName,
     required String? companyName,
     required bool includeCompanyContact,
@@ -903,6 +932,7 @@ class BarcodePrinterService {
             includeName: includeName,
             includePrice: includePrice,
             includeBarcode: includeBarcode,
+            includeSku: includeSku,
             includeCompanyName: includeCompanyName,
             companyName: companyName,
             includeCompanyContact: includeCompanyContact,
@@ -922,6 +952,7 @@ class BarcodePrinterService {
             includeName: includeName,
             includePrice: includePrice,
             includeBarcode: includeBarcode,
+            includeSku: includeSku,
             includeCompanyName: includeCompanyName,
             companyName: companyName,
             includeCompanyContact: includeCompanyContact,
@@ -944,6 +975,7 @@ class BarcodePrinterService {
     required bool includeName,
     required bool includePrice,
     required bool includeBarcode,
+    required bool includeSku,
     required bool includeCompanyName,
     required String? companyName,
     required bool includeCompanyContact,
@@ -1085,6 +1117,7 @@ class BarcodePrinterService {
     required bool includeName,
     required bool includePrice,
     required bool includeBarcode,
+    required bool includeSku,
     required bool includeCompanyName,
     required String? companyName,
     required bool includeCompanyContact,
@@ -1188,6 +1221,7 @@ class BarcodePrinterService {
                           includeName: includeName,
                           includePrice: includePrice,
                           includeBarcode: includeBarcode,
+                          includeSku: includeSku,
                           includeCompanyName: includeCompanyName,
                           companyName: companyName,
                           includeCompanyContact: includeCompanyContact,
@@ -1225,6 +1259,7 @@ class BarcodePrinterService {
     required bool includeName,
     required bool includePrice,
     required bool includeBarcode,
+    bool includeSku = false,
     required bool includeCompanyName,
     required String? companyName,
     required bool includeCompanyContact,
@@ -1308,6 +1343,7 @@ class BarcodePrinterService {
                           includeName: includeName,
                           includePrice: includePrice,
                           includeBarcode: includeBarcode,
+                          includeSku: includeSku,
                           includeCompanyName: includeCompanyName,
                           companyName: companyName,
                           includeCompanyContact: includeCompanyContact,

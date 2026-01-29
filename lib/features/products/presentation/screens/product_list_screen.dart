@@ -158,7 +158,7 @@ class _ProductListViewState extends State<_ProductListView> {
                 );
               }
               
-              return Row(
+              final content = Row(
                 children: [
                   // Select all checkbox
                   Checkbox(
@@ -179,7 +179,8 @@ class _ProductListViewState extends State<_ProductListView> {
                       });
                     },
                   ),
-                  Expanded(
+                  ConstrainedBox(
+                    constraints: BoxConstraints(minWidth: isSmallScreen ? 180 : 0),
                     child: Text(
                       _selectedProductIds.isEmpty
                           ? 'products.select_for_print'.tr()
@@ -227,6 +228,15 @@ class _ProductListViewState extends State<_ProductListView> {
                       ),
                     ),
                 ],
+              );
+
+              if (!isSmallScreen) {
+                return content;
+              }
+
+              return SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: content,
               );
             },
           ),

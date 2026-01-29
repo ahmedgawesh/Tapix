@@ -278,6 +278,169 @@ Decimal total = subtotal - discount; // Exact precision
 
 ---
 
+## 📦 Product Variants System (CRITICAL)
+
+> **REFERENCE**: See `docs/VARIANTS_IMPLEMENTATION_PLAN.md` for full implementation details and status.
+
+### Core Variant Model
+
+**EVERY sellable/stockable unit is a `ProductVariant`** - NOT the Product itself.
+
+```dart
+// Variant is the authoritative source for:
+class ProductVariant {
+  int id;
+  int productId;                    // Links to Product (container)
+  String? sku;                      // Optional SKU
+  String? barcode;                  // Auto-generated deterministic barcode
+  int? colorId;                     // Optional color reference
+  int? sizeId;                      // Optional size reference
+  int costCents;                    // Cost in cents (integer)
+  int priceCents;                   // Price in cents (integer)
+  int priceAdjustmentCents;         // Price adjustment (for future pricing rules)
+  int stockQuantity;                // Stock quantity (authoritative)
+  bool isActive;                    // Active/inactive status
+}
+```
+
+### Product vs Variant Relationship
+
+| Concept | Product | Variant |
+|---------|---------|---------|
+| **Role** | Container (name, category, description, image) | Sellable/stockable unit |
+| **hasVariants=false** | Uses **single variant** as canonical unit | One variant (may have color/size) |
+| **hasVariants=true** | No direct stock/cost/price | Multiple variants (each with stock/cost/price) |
+| **Barcode Generation** | N/A | `29 + zeroPad(variantId, 11)` (deterministic) |
+
+### Default/Single Variant Pattern
+
+**Products without variants use ONE variant**:
+- **Preferred**: `colorId=null, sizeId=null` (strict default)
+- **Fallback**: First active variant for the product (DAO handles this)
+- **Product form maps**: cost/price/stock ↔ single variant
+
+### Unique Constraints (Database)
+
+```sql
+-- Prevent duplicate SKUs/barcodes across system
+UNIQUE(product_variants.sku)
+UNIQUE(product_variants.barcode)
+-- Prevent duplicate variant combinations per product
+UNIQUE(product_variants.product_id, product_variants.color_id, product_variants.size_id)
+```
+
+### Variant Management Architecture
+
+**Required Layers (Clean Architecture):**
+```
+lib/features/products/
+├── data/
+│   ├── datasources/variant_local_datasource.dart
+│   └── repositories/product_variant_repository_impl.dart
+├── domain/
+│   ├── entities/product_variant_entity.dart
+│   └── repositories/product_variant_repository.dart
+└── presentation/
+    ├── bloc/product_variants_bloc.dart
+    ├── bloc/variant_summaries_bloc.dart
+    ├── screens/variants_screen.dart
+    └── widgets/variant_edit_dialog.dart
+```
+
+### RealtimeBloc Pattern for Variants
+
+```dart
+class ProductVariantsBloc extends RealtimeBloc<List<ProductVariant>, ProductVariantsEvent> {
+  @override
+  Stream<List<ProductVariant>> get dataStream => _repository.watchAllVariants();
+  
+  // Events: AllVariantsInitialized, VariantsByProductInitialized, 
+  //         VariantCreateRequested, VariantUpdateRequested, VariantDeleteRequested
+}
+```
+
+### Variant Summaries (for Product List)
+
+**ProductVariantRepository provides:**
+```dart
+Stream<Map<int, ({int count, int totalStock})>> watchVariantSummaries();
+Future<({int count, int totalStock})?> getVariantSummaryByProduct(int productId);
+```
+
+**Used in ProductListScreen to show:**
+- Variant count badge
+- Total stock across variants
+- "N × Stock" format
+
+### SKU/Barcode Uniqueness Validation
+
+**ProductFormBloc validates before save:**
+```dart
+// Check both products and product_variants tables
+Future<Map<String, String>> _validateSkuUniqueness() async {
+  // Check product-level uniqueness
+  // Check variant-level uniqueness
+  // Allow current variant's own values during edit
+}
+```
+
+### Database Repair on Startup
+
+**AppDatabase runs idempotent dedupe beforeOpen:**
+```dart
+await _dedupeUniqueSkuBarcodeIfNeeded();
+// Keeps first occurrence, sets duplicates to NULL
+```
+
+### Variant UI Patterns
+
+#### VariantsScreen (Full Management)
+- **Filters**: Product, Color, Size, Stock levels, Active status
+- **Search**: Barcode, SKU, Color, Size
+- **Bulk Actions**: Print labels, Activate/Deactivate
+- **Quick Stock**: +/- buttons for instant adjustment
+- **Split View**: List + Detail panel (desktop)
+
+#### VariantEditDialog (Add/Edit)
+- **Sections**: Attributes, Identity (SKU/Barcode), Pricing, Stock, Status
+- **Auto-generate**: Barcode (deterministic) after save
+- **Validation**: Real-time uniqueness checks
+- **Responsive**: Dialog (desktop) / BottomSheet (mobile)
+
+### Variant State Management Rules
+
+1. **Stock Authority**: Variant.stockQuantity is the single source of truth
+2. **Product Stock Display**: Sum of variant stocks when hasVariants=true
+3. **Default Variant**: Single variant for hasVariants=false products
+4. **Barcode Stability**: Never regenerate - deterministic per variantId
+5. **Active/Inactive**: Use isActive flag instead of delete for data integrity
+
+### Integration Points
+
+**Purchases/Sales MUST reference variantId:**
+```dart
+class PurchaseItem {
+  int variantId;  // REQUIRED - not productId
+  int quantity;
+  int unitCostCents;
+}
+```
+
+**Printing uses variant data:**
+- Barcode from variant.barcode
+- Product name + variant color/size
+- Price from variant.priceCents
+
+### Key Variant Files
+
+- `lib/core/database/daos/product_variant_dao.dart` - Database operations
+- `lib/features/products/data/repositories/product_variant_repository_impl.dart` - Repository
+- `lib/features/products/presentation/bloc/product_variants_bloc.dart` - State management
+- `lib/features/products/presentation/screens/variants_screen.dart` - Management UI
+- `lib/features/products/presentation/widgets/variant_edit_dialog.dart` - Add/Edit UI
+
+---
+
 ## 🏦 Accounting Integrity (CRITICAL)
 
 > **REFERENCE**: See `_bmad-output/planning-artifacts/TAPIX_ACCOUNTING_INTEGRITY_ARCHITECTURE.md` for complete details.
@@ -807,6 +970,33 @@ When implementing ANY story, verify:
 - Price Changes
 - Stock Adjustments
 - Any balance modifications
+
+### 📦 Product Variants (For Product/Variant Stories)
+
+**If the story involves products or variants:**
+
+- [ ] Use `ProductVariant` as sellable/stockable unit (not Product)
+- [ ] For hasVariants=false: Use single variant pattern
+- [ ] For hasVariants=true: Product has no direct stock/cost/price
+- [ ] Barcode generation: `29 + zeroPad(variantId, 11)` (deterministic)
+- [ ] SKU/Barcode uniqueness validation across products and variants
+- [ ] Stock updates go to variant.stockQuantity (authoritative)
+- [ ] Purchase/Sales line items use variantId (not productId)
+- [ ] Use `ProductVariantsBloc` extending `RealtimeBloc`
+- [ ] Use `VariantSummariesBloc` for product list variant counts
+- [ ] Follow variant UI patterns (filters, bulk actions, quick stock)
+- [ ] Use `VariantEditDialog` for add/edit operations
+- [ ] Test with default variant fallback (null/null or first active)
+- [ ] Verify database repair runs on startup for legacy duplicates
+
+**Affected Story Types:**
+- Product management (create/edit/delete)
+- Variant management (add/edit/delete/bulk)
+- Purchase/Sales operations
+- Barcode scanning and printing
+- Stock adjustments
+- Import/Export operations
+- Reporting by variant
 
 ---
 

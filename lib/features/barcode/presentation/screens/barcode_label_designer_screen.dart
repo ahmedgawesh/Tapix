@@ -150,53 +150,70 @@ class _BarcodeLabelDesignerScreenState extends State<BarcodeLabelDesignerScreen>
                         ],
                       ),
                       padding: const EdgeInsets.all(8),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          if (_includeName)
-                            Text(
-                              widget.product.name,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.black,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              textAlign: TextAlign.center,
-                            ),
-                          const Spacer(),
-                          if (barcodeData.isNotEmpty)
-                            Expanded(
-                              flex: 2,
-                              child: BarcodeWidget(
-                                barcode: barcodeType,
-                                data: barcodeData,
-                                drawText: true,
-                                style: const TextStyle(
-                                  fontSize: 10,
-                                  color: Colors.black,
-                                ),
-                                errorBuilder: (context, error) => Center(
-                                  child: Text(
-                                    error,
-                                    style: const TextStyle(color: Colors.red, fontSize: 10),
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          final contentHeight = constraints.maxHeight.clamp(1.0, double.infinity);
+
+                          final nameLine = _includeName ? 16.0 : 0.0;
+                          final priceLine = _includePrice ? 18.0 : 0.0;
+                          final gaps = (_includeName ? 4.0 : 0.0) + (_includePrice ? 4.0 : 0.0);
+
+                          final barcodeHeight = (contentHeight - nameLine - priceLine - gaps)
+                              .clamp(8.0, contentHeight);
+
+                          return ClipRect(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                if (_includeName)
+                                  Text(
+                                    widget.product.name,
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.black,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                     textAlign: TextAlign.center,
                                   ),
-                                ),
-                              ),
+                                if (_includeName) const SizedBox(height: 4),
+                                if (barcodeData.isNotEmpty)
+                                  SizedBox(
+                                    height: barcodeHeight,
+                                    child: BarcodeWidget(
+                                      barcode: barcodeType,
+                                      data: barcodeData,
+                                      drawText: true,
+                                      style: const TextStyle(
+                                        fontSize: 10,
+                                        color: Colors.black,
+                                      ),
+                                      errorBuilder: (context, error) => Center(
+                                        child: Text(
+                                          error,
+                                          style: const TextStyle(color: Colors.red, fontSize: 10),
+                                          textAlign: TextAlign.center,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                if (_includePrice) const SizedBox(height: 4),
+                                if (_includePrice)
+                                  Text(
+                                    _currencyService.format(
+                                      widget.product.priceCents.toBigInt().toInt(),
+                                    ),
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.black,
+                                    ),
+                                  ),
+                              ],
                             ),
-                          const Spacer(),
-                          if (_includePrice)
-                            Text(
-                              _currencyService.format(widget.product.priceCents.toBigInt().toInt()),
-                              style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.black,
-                              ),
-                            ),
-                        ],
+                          );
+                        },
                       ),
                     ),
                   ],
