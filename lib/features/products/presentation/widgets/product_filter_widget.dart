@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:easy_localization/easy_localization.dart';
 
@@ -10,6 +11,7 @@ class ProductFilterWidget extends StatelessWidget {
   final int activeFiltersCount;
   final int? selectedCategoryId;
   final String? selectedStockStatus;
+  final bool? selectedIsActive;
 
   const ProductFilterWidget({
     super.key,
@@ -17,6 +19,7 @@ class ProductFilterWidget extends StatelessWidget {
     required this.activeFiltersCount,
     this.selectedCategoryId,
     this.selectedStockStatus,
+    this.selectedIsActive,
   });
 
   @override
@@ -54,21 +57,27 @@ class ProductFilterWidget extends StatelessWidget {
               _showStockStatusFilter(context);
             },
           ),
+          const SizedBox(width: 8),
+          FilterChip(
+            label: Text('products_filter_status'.tr()),
+            selected: selectedIsActive != true,
+            onSelected: (bool selected) {
+              _showStatusFilter(context);
+            },
+          ),
         ],
       ),
     );
   }
 
   void _showCategoryFilter(BuildContext context) {
-    showModalBottomSheet<void>(
-      context: context,
-      builder: (sheetContext) => BlocProvider.value(
-        value: context.read<ProductsBloc>(),
-        child: _CategoryFilterSheet(
-          selectedCategoryId: selectedCategoryId,
-        ),
-      ),
-    );
+    () async {
+      final selectedId = await context.push<int?>('/products/categories/pick');
+      if (!context.mounted) return;
+      context.read<ProductsBloc>().add(
+            ProductFilterRequested(categoryId: selectedId),
+          );
+    }();
   }
 
   void _showStockStatusFilter(BuildContext context) {
@@ -78,6 +87,18 @@ class ProductFilterWidget extends StatelessWidget {
         value: context.read<ProductsBloc>(),
         child: _StockStatusFilterSheet(
           selectedStockStatus: selectedStockStatus,
+        ),
+      ),
+    );
+  }
+
+  void _showStatusFilter(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (sheetContext) => BlocProvider.value(
+        value: context.read<ProductsBloc>(),
+        child: _StatusFilterSheet(
+          selectedIsActive: selectedIsActive,
         ),
       ),
     );
@@ -164,10 +185,10 @@ class _CustomRadio<T> extends StatelessWidget {
   }
 }
 
-class _CategoryFilterSheet extends StatelessWidget {
-  final int? selectedCategoryId;
+class _StatusFilterSheet extends StatelessWidget {
+  final bool? selectedIsActive;
 
-  const _CategoryFilterSheet({this.selectedCategoryId});
+  const _StatusFilterSheet({this.selectedIsActive});
 
   @override
   Widget build(BuildContext context) {
@@ -178,23 +199,43 @@ class _CategoryFilterSheet extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'products_filter_category'.tr(),
+            'products_filter_status'.tr(),
             style: Theme.of(context).textTheme.titleLarge,
           ),
           const SizedBox(height: 16),
-          _CustomRadioTile<int?>(
-            title: Text('products_all_categories'.tr()),
+          _CustomRadioTile<bool?>(
+            title: Text('products_status_all'.tr()),
             value: null,
-            groupValue: selectedCategoryId,
+            groupValue: selectedIsActive,
             onChanged: (value) {
               context.read<ProductsBloc>().add(
-                    const ProductFilterRequested(categoryId: null),
+                    const ProductFilterRequested(isActive: null),
                   );
               Navigator.pop(context);
             },
           ),
-          const Divider(),
-          Text('products_category_coming_soon'.tr()),
+          _CustomRadioTile<bool?>(
+            title: Text('products_status_active'.tr()),
+            value: true,
+            groupValue: selectedIsActive,
+            onChanged: (value) {
+              context.read<ProductsBloc>().add(
+                    const ProductFilterRequested(isActive: true),
+                  );
+              Navigator.pop(context);
+            },
+          ),
+          _CustomRadioTile<bool?>(
+            title: Text('products_status_inactive'.tr()),
+            value: false,
+            groupValue: selectedIsActive,
+            onChanged: (value) {
+              context.read<ProductsBloc>().add(
+                    const ProductFilterRequested(isActive: false),
+                  );
+              Navigator.pop(context);
+            },
+          ),
         ],
       ),
     );

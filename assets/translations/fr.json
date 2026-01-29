@@ -305,6 +305,7 @@
     "row": "Ligne"
   },
   "barcode": {
+    "preview_too_wide": "Les étiquettes dépassent la largeur de la page. Réduisez la taille de l’étiquette ou diminuez le nombre d’étiquettes par ligne.",
     "scanner_title": "Scanner de Code-barres",
     "toggle_flash": "Activer/Désactiver le Flash",
     "switch_camera": "Changer de Caméra",
@@ -409,10 +410,14 @@
   "products_search_hint": "Rechercher des produits...",
   "products_filter_category": "Catégorie",
   "products_filter_stockStatus": "État du Stock",
+  "products_filter_status": "Statut",
   "products_all_categories": "Toutes les Catégories",
   "products_all_stock": "Tout le Stock",
   "products_out_of_stock": "Rupture de Stock",
   "products_low_stock": "Stock Faible",
+  "products_status_all": "Tous",
+  "products_status_active": "Actif",
+  "products_status_inactive": "Inactif",
   "products_category_coming_soon": "La sélection de catégorie sera implémentée avec les données de catégorie",
   "products_clear_all_filters": "Tout Effacer",
   "product_form_image": "Image du produit",

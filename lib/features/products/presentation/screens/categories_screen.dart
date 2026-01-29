@@ -11,19 +11,26 @@ import '../bloc/categories_bloc.dart';
 import '../bloc/categories_event.dart';
 
 class CategoriesScreen extends StatelessWidget {
-  const CategoriesScreen({super.key});
+  final bool isPicker;
+
+  const CategoriesScreen({
+    super.key,
+    this.isPicker = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
       create: (context) => sl<CategoriesBloc>()..add(const LoadCategories()),
-      child: const _CategoriesView(),
+      child: _CategoriesView(isPicker: isPicker),
     );
   }
 }
 
 class _CategoriesView extends StatefulWidget {
-  const _CategoriesView();
+  final bool isPicker;
+
+  const _CategoriesView({required this.isPicker});
 
   @override
   State<_CategoriesView> createState() => _CategoriesViewState();
@@ -95,11 +102,12 @@ class _CategoriesViewState extends State<_CategoriesView> {
         title: Text('categories.title'.tr()),
         centerTitle: !isDesktop,
         actions: [
-          IconButton(
-            icon: const Icon(LucideIcons.plus),
-            onPressed: () => context.push('/products/categories/new'),
-            tooltip: 'categories.add_category'.tr(),
-          ),
+          if (!widget.isPicker)
+            IconButton(
+              icon: const Icon(LucideIcons.plus),
+              onPressed: () => context.push('/products/categories/new'),
+              tooltip: 'categories.add_category'.tr(),
+            ),
         ],
       ),
       body: SafeArea(
@@ -292,7 +300,13 @@ class _CategoriesViewState extends State<_CategoriesView> {
         ),
       ),
       child: InkWell(
-        onTap: () => context.push('/products/categories/${category.id}/edit'),
+        onTap: () {
+          if (widget.isPicker) {
+            context.pop(category.id);
+            return;
+          }
+          context.push('/products/categories/${category.id}/edit');
+        },
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -373,6 +387,7 @@ class _CategoriesViewState extends State<_CategoriesView> {
                   ),
                 ],
                 onSelected: (value) {
+                  if (widget.isPicker) return;
                   if (value == 'edit') {
                     context.push('/products/categories/${category.id}/edit');
                   } else if (value == 'delete') {

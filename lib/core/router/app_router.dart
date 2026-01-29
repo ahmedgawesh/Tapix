@@ -213,6 +213,10 @@ class AppRouter {
             builder: (context, state) => const CategoriesScreen(),
             routes: [
               GoRoute(
+                path: 'pick',
+                builder: (context, state) => const CategoriesScreen(isPicker: true),
+              ),
+              GoRoute(
                 path: 'new',
                 builder: (context, state) => BlocProvider(
                   create: (_) => sl<CategoriesBloc>(),

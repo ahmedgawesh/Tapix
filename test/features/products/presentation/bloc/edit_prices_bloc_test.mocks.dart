@@ -38,9 +38,9 @@ class MockProductRepository extends _i1.Mock implements _i2.ProductRepository {
   }
 
   @override
-  _i3.Stream<List<_i4.Product>> watchAllProducts() =>
+  _i3.Stream<List<_i4.Product>> watchAllProducts({bool? isActive = true}) =>
       (super.noSuchMethod(
-            Invocation.method(#watchAllProducts, []),
+            Invocation.method(#watchAllProducts, [], {#isActive: isActive}),
             returnValue: _i3.Stream<List<_i4.Product>>.empty(),
           )
           as _i3.Stream<List<_i4.Product>>);
@@ -54,9 +54,10 @@ class MockProductRepository extends _i1.Mock implements _i2.ProductRepository {
           as _i3.Stream<_i4.Product?>);
 
   @override
-  _i3.Future<List<_i4.Product>> searchProducts(String? query) =>
+  _i3.Future<List<_i4.Product>> searchProducts(String query,
+          {bool? isActive = true}) =>
       (super.noSuchMethod(
-            Invocation.method(#searchProducts, [query]),
+            Invocation.method(#searchProducts, [query], {#isActive: isActive}),
             returnValue: _i3.Future<List<_i4.Product>>.value(<_i4.Product>[]),
           )
           as _i3.Future<List<_i4.Product>>);
@@ -80,6 +81,7 @@ class MockProductRepository extends _i1.Mock implements _i2.ProductRepository {
   @override
   _i3.Future<List<_i4.Product>> filterProducts({
     int? categoryId,
+    bool? isActive = true,
     String? stockStatus,
     int? limit = 50,
     int? offset = 0,
@@ -87,6 +89,7 @@ class MockProductRepository extends _i1.Mock implements _i2.ProductRepository {
       (super.noSuchMethod(
             Invocation.method(#filterProducts, [], {
               #categoryId: categoryId,
+              #isActive: isActive,
               #stockStatus: stockStatus,
               #limit: limit,
               #offset: offset,
@@ -98,11 +101,13 @@ class MockProductRepository extends _i1.Mock implements _i2.ProductRepository {
   @override
   _i3.Stream<List<_i4.Product>> watchFilteredProducts({
     int? categoryId,
+    bool? isActive = true,
     String? stockStatus,
   }) =>
       (super.noSuchMethod(
             Invocation.method(#watchFilteredProducts, [], {
               #categoryId: categoryId,
+              #isActive: isActive,
               #stockStatus: stockStatus,
             }),
             returnValue: _i3.Stream<List<_i4.Product>>.empty(),

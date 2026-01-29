@@ -3,9 +3,9 @@ import '../entities/product_entity.dart';
 import '../entities/price_history_entity.dart';
 
 abstract class ProductRepository {
-  Stream<List<Product>> watchAllProducts();
+  Stream<List<Product>> watchAllProducts({bool? isActive = true});
   Stream<Product?> watchProduct(int id);
-  Future<List<Product>> searchProducts(String query);
+  Future<List<Product>> searchProducts(String query, {bool? isActive = true});
   Future<Product?> findBySku(String sku);
   Future<Product?> findByBarcode(String barcode);
   
@@ -14,11 +14,13 @@ abstract class ProductRepository {
     String? stockStatus,
     int limit = 50,
     int offset = 0,
+    bool? isActive = true,
   });
 
   Stream<List<Product>> watchFilteredProducts({
     int? categoryId,
     String? stockStatus,
+    bool? isActive = true,
   });
 
   Stream<List<Product>> watchProductsForExport({

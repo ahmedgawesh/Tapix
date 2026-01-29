@@ -9,21 +9,15 @@ class ProductVariantDao extends DatabaseAccessor<AppDatabase> with _$ProductVari
   ProductVariantDao(super.db);
 
   Stream<List<ProductVariant>> watchAllVariants() {
-    return (select(productVariants)..where((v) => v.isActive.equals(true))).watch();
+    return select(productVariants).watch();
   }
 
   Stream<List<ProductVariant>> watchVariantsByProduct(int productId) {
-    return (select(productVariants)
-          ..where((v) => v.productId.equals(productId))
-          ..where((v) => v.isActive.equals(true)))
-        .watch();
+    return (select(productVariants)..where((v) => v.productId.equals(productId))).watch();
   }
 
   Future<List<ProductVariant>> getVariantsByProduct(int productId) {
-    return (select(productVariants)
-          ..where((v) => v.productId.equals(productId))
-          ..where((v) => v.isActive.equals(true)))
-        .get();
+    return (select(productVariants)..where((v) => v.productId.equals(productId))).get();
   }
 
   Future<ProductVariant?> getVariantById(int id) {
@@ -143,14 +137,12 @@ class ProductVariantDao extends DatabaseAccessor<AppDatabase> with _$ProductVari
             ..where((v) => v.productId.equals(productId))
             ..where((v) => v.colorId.isNull())
             ..where((v) => v.sizeId.isNull())
-            ..where((v) => v.isActive.equals(true))
             ..limit(1))
           .get();
       if (strictDefaults.isNotEmpty) return strictDefaults.first;
 
       final anyVariants = await (select(productVariants)
             ..where((v) => v.productId.equals(productId))
-            ..where((v) => v.isActive.equals(true))
             ..orderBy([(v) => OrderingTerm(expression: v.id)])
             ..limit(1))
           .get();
@@ -188,7 +180,26 @@ class ProductVariantDao extends DatabaseAccessor<AppDatabase> with _$ProductVari
   }
 
   Future<bool> updateVariant(ProductVariant variant) {
-    return update(productVariants).replace(variant);
+    return transaction(() async {
+      final ok = await update(productVariants).replace(variant);
+
+      final row = await customSelect(
+        'SELECT COUNT(*) as cnt FROM product_variants WHERE product_id = ? AND is_active = 1',
+        variables: [Variable.withInt(variant.productId)],
+      ).getSingle();
+      final activeCount = row.read<int>('cnt');
+
+      await customUpdate(
+        'UPDATE products SET is_active = ? WHERE id = ?',
+        variables: [
+          Variable.withInt(activeCount > 0 ? 1 : 0),
+          Variable.withInt(variant.productId),
+        ],
+        updates: {products},
+      );
+
+      return ok;
+    });
   }
 
   Future<int> deleteVariant(int id) {

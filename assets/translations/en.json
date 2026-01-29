@@ -226,6 +226,7 @@
     "bulk_deactivated": "Selected variants deactivated"
   },
   "barcode": {
+    "preview_too_wide": "Labels exceed the page width. Reduce label size or decrease labels per row.",
     "scanner_title": "Barcode Scanner",
     "toggle_flash": "Toggle Flash",
     "switch_camera": "Switch Camera",
@@ -330,10 +331,14 @@
   "products_search_hint": "Search products...",
   "products_filter_category": "Category",
   "products_filter_stockStatus": "Stock Status",
+  "products_filter_status": "Status",
   "products_all_categories": "All Categories",
   "products_all_stock": "All Stock",
   "products_out_of_stock": "Out of Stock",
   "products_low_stock": "Low Stock",
+  "products_status_all": "All",
+  "products_status_active": "Active",
+  "products_status_inactive": "Inactive",
   "products_category_coming_soon": "Category selection will be implemented with category data",
   "products_clear_all_filters": "Clear All",
   "product_form_image": "Product Image",

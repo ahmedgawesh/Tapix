@@ -73,10 +73,12 @@ class ProductSearchRequested extends ProductsEvent {
 class ProductFilterRequested extends ProductsEvent {
   final int? categoryId;
   final String? stockStatus;
+  final bool? isActive;
 
   const ProductFilterRequested({
     this.categoryId,
     this.stockStatus,
+    this.isActive,
   });
 }
 
@@ -103,6 +105,7 @@ class ProductsBloc extends RealtimeBloc<List<Product>, ProductsEvent> {
   String? _currentSearchQuery;
   int? _currentCategoryFilter;
   String? _currentStockStatusFilter;
+  bool? _currentIsActiveFilter = true;
   int _currentPage = 0;
   static const int _pageSize = 50;
   bool _hasMoreData = false;
@@ -111,7 +114,9 @@ class ProductsBloc extends RealtimeBloc<List<Product>, ProductsEvent> {
   ProductsBloc(this._repository) : super();
 
   @override
-  Stream<List<Product>> get dataStream => _repository.watchAllProducts();
+  Stream<List<Product>> get dataStream => _repository.watchAllProducts(
+        isActive: _currentIsActiveFilter,
+      );
 
   @override
   void registerEventHandlers() {
@@ -218,7 +223,10 @@ class ProductsBloc extends RealtimeBloc<List<Product>, ProductsEvent> {
     emit(RealtimeLoading<List<Product>>(previousData: currentData));
 
     try {
-      final results = await _repository.searchProducts(event.query);
+      final results = await _repository.searchProducts(
+        event.query,
+        isActive: _currentIsActiveFilter,
+      );
       debugPrint(
         'ProductsBloc.search results=${results.length} -> emit success (hasMoreData=$_hasMoreData)',
       );
@@ -235,8 +243,15 @@ class ProductsBloc extends RealtimeBloc<List<Product>, ProductsEvent> {
     debugPrint(
       'ProductsBloc.filter categoryId=${event.categoryId} stockStatus=${event.stockStatus} currentData=${currentData?.length ?? 0}',
     );
-    _currentCategoryFilter = event.categoryId;
-    _currentStockStatusFilter = event.stockStatus;
+    if (event.categoryId != null || (event.categoryId == null && _currentCategoryFilter != null)) {
+      _currentCategoryFilter = event.categoryId;
+    }
+    if (event.stockStatus != null || (event.stockStatus == null && _currentStockStatusFilter != null)) {
+      _currentStockStatusFilter = event.stockStatus;
+    }
+    if (event.isActive != null || (event.isActive == null && _currentIsActiveFilter != null)) {
+      _currentIsActiveFilter = event.isActive;
+    }
     _currentPage = 0;
     _hasMoreData = true;
     _isLoadingMore = false;
@@ -251,6 +266,7 @@ class ProductsBloc extends RealtimeBloc<List<Product>, ProductsEvent> {
         stockStatus: event.stockStatus,
         limit: _pageSize,
         offset: 0,
+        isActive: _currentIsActiveFilter,
       );
       _hasMoreData = results.length >= _pageSize;
       debugPrint('ProductsBloc.filter results=${results.length} hasMoreData=$_hasMoreData');
@@ -268,6 +284,7 @@ class ProductsBloc extends RealtimeBloc<List<Product>, ProductsEvent> {
     _currentCategoryFilter = null;
     _currentStockStatusFilter = null;
     _currentSearchQuery = null;
+    _currentIsActiveFilter = true;
     _currentPage = 0;
     _hasMoreData = true;
     _isLoadingMore = false;
@@ -321,6 +338,7 @@ class ProductsBloc extends RealtimeBloc<List<Product>, ProductsEvent> {
         stockStatus: _currentStockStatusFilter,
         limit: _pageSize,
         offset: _currentPage * _pageSize,
+        isActive: _currentIsActiveFilter,
       );
 
       _hasMoreData = newProducts.length >= _pageSize;
@@ -352,6 +370,9 @@ class ProductsBloc extends RealtimeBloc<List<Product>, ProductsEvent> {
 
   /// Get current stock status filter
   String? get currentStockStatusFilter => _currentStockStatusFilter;
+
+  /// Get current active status filter
+  bool? get currentIsActiveFilter => _currentIsActiveFilter;
 
   /// Check if has more data for pagination
   bool get hasMoreData => _hasMoreData;

@@ -96,7 +96,7 @@ class _ProductListViewState extends State<_ProductListView> {
           ),
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final isSmallScreen = constraints.maxWidth < 360;
+              final isSmallScreen = constraints.maxWidth <= 380;
               final isVerySmallScreen = constraints.maxWidth < 320;
               
               if (isVerySmallScreen) {
@@ -159,6 +159,7 @@ class _ProductListViewState extends State<_ProductListView> {
               }
               
               final content = Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   // Select all checkbox
                   Checkbox(
@@ -190,8 +191,7 @@ class _ProductListViewState extends State<_ProductListView> {
                       maxLines: isSmallScreen ? 1 : 2,
                     ),
                   ),
-                  if (!isSmallScreen) const Spacer(),
-                  // Print labels button
+                  const SizedBox(width: 8),
                   if (isSmallScreen)
                     IconButton(
                       onPressed: _selectedProductIds.isEmpty
@@ -213,7 +213,7 @@ class _ProductListViewState extends State<_ProductListView> {
                       onPressed: _selectedProductIds.isEmpty
                           ? null
                           : () => _deleteSelectedProducts(context),
-                      icon: const Icon(LucideIcons.trash),
+                      icon: const Icon(LucideIcons.trash2),
                       tooltip: 'common.delete'.tr(),
                     )
                   else
@@ -230,13 +230,11 @@ class _ProductListViewState extends State<_ProductListView> {
                 ],
               );
 
-              if (!isSmallScreen) {
-                return content;
-              }
-
-              return SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: content,
+              return ClipRect(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: content,
+                ),
               );
             },
           ),
@@ -592,6 +590,7 @@ class _ProductListViewState extends State<_ProductListView> {
                 activeFiltersCount: bloc.activeFiltersCount,
                 selectedCategoryId: bloc.currentCategoryFilter,
                 selectedStockStatus: bloc.currentStockStatusFilter,
+                selectedIsActive: bloc.currentIsActiveFilter,
               );
             },
           ),

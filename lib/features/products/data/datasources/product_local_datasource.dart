@@ -5,9 +5,9 @@ import '../../domain/entities/price_history_entity.dart';
 import '../models/product_model.dart';
 
 abstract class ProductLocalDatasource {
-  Stream<List<ProductModel>> watchAllProducts();
+  Stream<List<ProductModel>> watchAllProducts({bool? isActive = true});
   Stream<ProductModel?> watchProduct(int id);
-  Future<List<ProductModel>> searchProducts(String query);
+  Future<List<ProductModel>> searchProducts(String query, {bool? isActive = true});
   Future<ProductModel?> findBySku(String sku);
   Future<ProductModel?> findByBarcode(String barcode);
   
@@ -16,11 +16,13 @@ abstract class ProductLocalDatasource {
     String? stockStatus,
     int limit = 50,
     int offset = 0,
+    bool? isActive = true,
   });
 
   Stream<List<ProductModel>> watchFilteredProducts({
     int? categoryId,
     String? stockStatus,
+    bool? isActive = true,
   });
 
   Stream<List<ProductModel>> watchProductsForExport({
@@ -73,8 +75,8 @@ class ProductLocalDatasourceImpl implements ProductLocalDatasource {
   ProductLocalDatasourceImpl(this._productDao);
 
   @override
-  Stream<List<ProductModel>> watchAllProducts() {
-    return _productDao.watchAllProducts().map(
+  Stream<List<ProductModel>> watchAllProducts({bool? isActive = true}) {
+    return _productDao.watchAllProducts(isActive: isActive).map(
           (products) => products.map((p) => ProductModel.fromDrift(p)).toList(),
         );
   }
@@ -87,8 +89,8 @@ class ProductLocalDatasourceImpl implements ProductLocalDatasource {
   }
 
   @override
-  Future<List<ProductModel>> searchProducts(String query) async {
-    final products = await _productDao.searchProducts(query);
+  Future<List<ProductModel>> searchProducts(String query, {bool? isActive = true}) async {
+    final products = await _productDao.searchProducts(query, isActive: isActive);
     return products.map((p) => ProductModel.fromDrift(p)).toList();
   }
 
@@ -110,12 +112,14 @@ class ProductLocalDatasourceImpl implements ProductLocalDatasource {
     String? stockStatus,
     int limit = 50,
     int offset = 0,
+    bool? isActive = true,
   }) async {
     final products = await _productDao.filterProducts(
       categoryId: categoryId,
       stockStatus: stockStatus,
       limit: limit,
       offset: offset,
+      isActive: isActive,
     );
     return products.map((p) => ProductModel.fromDrift(p)).toList();
   }
@@ -124,11 +128,13 @@ class ProductLocalDatasourceImpl implements ProductLocalDatasource {
   Stream<List<ProductModel>> watchFilteredProducts({
     int? categoryId,
     String? stockStatus,
+    bool? isActive = true,
   }) {
     return _productDao
         .watchFilteredProducts(
           categoryId: categoryId,
           stockStatus: stockStatus,
+          isActive: isActive,
         )
         .map((products) => products.map((p) => ProductModel.fromDrift(p)).toList());
   }

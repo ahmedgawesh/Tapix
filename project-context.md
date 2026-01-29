@@ -934,11 +934,13 @@ When implementing ANY story, verify:
 - [ ] **Numeric input fields clear placeholders on focus**
 - [ ] **Money input fields use CurrencyService.formatInput()**
 - [ ] Works on mobile, tablet, desktop, and web
+- [ ] Must support ALL screen sizes: mobile / tablet / desktop / laptop
+- [ ] Must support ALL platforms: iOS / Android / Windows / Linux / Web
 - [ ] Tested in Light AND Dark themes
 - [ ] Tested in English, Arabic (RTL), and French
 - [ ] **Tested with different currencies (USD, EUR, GBP, etc.)**
 - [ ] Back button works correctly on mobile/tablet
-- [ ] No overflow on any screen size
+- [ ] No overflow on any screen size (no RenderFlex overflow, no clipped content)
 - [ ] Money values use integer cents
 - [ ] Services registered in DI container
 - [ ] Routes added to GoRouter
@@ -958,6 +960,8 @@ When implementing ANY story, verify:
 - [ ] Journal entries created for balance changes (double-entry)
 - [ ] Atomic transactions wrap all related changes
 - [ ] Void/reversal pattern used (no direct updates to posted entries)
+- [ ] Single Source of Truth: accounting calculations must be implemented once and reused
+- [ ] Reports must be derived from the authoritative accounting sources (journals/ledger) without duplicating business logic
 - [ ] Unit tests cover all calculations
 - [ ] Integration tests verify journal entries created correctly
 - [ ] Reconciliation tests pass after operation
@@ -1015,6 +1019,12 @@ State Update → UI Rebuild (Automatic)
 ---
 
 ## 🌐 Platform-Specific Notes
+
+Tapix is designed as a true multi-platform, multi-form-factor application:
+- **Form factors**: mobile / tablet / desktop / laptop
+- **Platforms**: iOS / Android / Windows / Linux / Web
+
+All UI must be responsive and MUST NOT overflow on any screen.
 
 ### Web (WASM)
 - Drift uses OPFS/IndexedDB backend

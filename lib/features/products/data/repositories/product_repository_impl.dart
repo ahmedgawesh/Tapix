@@ -15,8 +15,8 @@ class ProductRepositoryImpl implements ProductRepository {
   ProductRepositoryImpl(this._datasource);
 
   @override
-  Stream<List<Product>> watchAllProducts() {
-    return _datasource.watchAllProducts();
+  Stream<List<Product>> watchAllProducts({bool? isActive = true}) {
+    return _datasource.watchAllProducts(isActive: isActive);
   }
 
   @override
@@ -25,8 +25,8 @@ class ProductRepositoryImpl implements ProductRepository {
   }
 
   @override
-  Future<List<Product>> searchProducts(String query) {
-    return _datasource.searchProducts(query);
+  Future<List<Product>> searchProducts(String query, {bool? isActive = true}) {
+    return _datasource.searchProducts(query, isActive: isActive);
   }
 
   @override
@@ -45,12 +45,14 @@ class ProductRepositoryImpl implements ProductRepository {
     String? stockStatus,
     int limit = 50,
     int offset = 0,
+    bool? isActive = true,
   }) {
     return _datasource.filterProducts(
       categoryId: categoryId,
       stockStatus: stockStatus,
       limit: limit,
       offset: offset,
+      isActive: isActive,
     );
   }
 
@@ -58,10 +60,12 @@ class ProductRepositoryImpl implements ProductRepository {
   Stream<List<Product>> watchFilteredProducts({
     int? categoryId,
     String? stockStatus,
+    bool? isActive = true,
   }) {
     return _datasource.watchFilteredProducts(
       categoryId: categoryId,
       stockStatus: stockStatus,
+      isActive: isActive,
     );
   }
 

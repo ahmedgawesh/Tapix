@@ -305,6 +305,7 @@
     "row": "صف"
   },
   "barcode": {
+    "preview_too_wide": "عرض الملصقات أكبر من عرض الصفحة. قلّل حجم الملصق أو قلّل عدد الملصقات في الصف.",
     "scanner_title": "ماسح الباركود",
     "toggle_flash": "تبديل الفلاش",
     "switch_camera": "تبديل الكاميرا",
@@ -407,12 +408,16 @@
     "a4_layout_info": "{} أعمدة × {} صفوف = {} بطاقة في الصفحة"
   },
   "products_search_hint": "البحث عن منتجات...",
-  "products_filter_category": "الفئة",
+  "products_filter_category": "التصنيف",
   "products_filter_stockStatus": "حالة المخزون",
+  "products_filter_status": "الحالة",
   "products_all_categories": "جميع الفئات",
   "products_all_stock": "جميع المخزون",
   "products_out_of_stock": "نفذ المخزون",
   "products_low_stock": "مخزون منخفض",
+  "products_status_all": "الكل",
+  "products_status_active": "نشط",
+  "products_status_inactive": "غير نشط",
   "products_category_coming_soon": "سيتم تنفيذ اختيار الفئة مع بيانات الفئات",
   "products_clear_all_filters": "مسح الكل",
   "product_form_image": "صورة المنتج",
