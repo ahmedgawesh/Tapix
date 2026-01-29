@@ -56,7 +56,7 @@ lib/
 
 **EVERY feature Bloc MUST extend `RealtimeBloc`** from `lib/core/bloc/realtime_bloc.dart`.
 
-```dart
+```text
 // CORRECT: All blocs follow this pattern
 class MyFeatureBloc extends RealtimeBloc<MyData, MyEvent> {
   final MyRepository _repository;
@@ -97,7 +97,7 @@ class MyFeatureBloc extends RealtimeBloc<MyData, MyEvent> {
 
 **ALWAYS use semantic colors** from `lib/core/theme/colors.dart`:
 
-```dart
+```text
 // Access via Theme.of(context).colorScheme.extensions
 final colors = Theme.of(context).colorScheme;
 
@@ -133,7 +133,7 @@ colors.info       // Blue - Informational messages
 
 ### Usage Pattern
 
-```dart
+```text
 import 'package:easy_localization/easy_localization.dart';
 
 // In widgets
@@ -166,7 +166,7 @@ assets/translations/
 
 ### Adding New Screens
 
-```dart
+```text
 // 1. Add route to app_router.dart
 GoRoute(
   path: '/my-feature',
@@ -214,7 +214,7 @@ context.push('/my-feature/detail/123');
 
 ### Responsive Layout Pattern
 
-```dart
+```text
 // Use LayoutBuilder or MediaQuery
 LayoutBuilder(
   builder: (context, constraints) {
@@ -248,7 +248,7 @@ LayoutBuilder(
 
 **ALL money values MUST be stored as INTEGER cents** - NEVER use `double` or `float`!
 
-```dart
+```text
 // CORRECT: Store in cents
 int priceInCents = 1999; // $19.99
 int totalCents = quantity * priceInCents;
@@ -264,7 +264,7 @@ double price = 19.99; // ❌ FLOATING POINT ERRORS!
 
 For complex calculations, use `decimal` package:
 
-```dart
+```text
 import 'package:decimal/decimal.dart';
 
 Decimal subtotal = Decimal.parse('100.00');
@@ -286,7 +286,7 @@ Decimal total = subtotal - discount; // Exact precision
 
 **EVERY sellable/stockable unit is a `ProductVariant`** - NOT the Product itself.
 
-```dart
+```text
 // Variant is the authoritative source for:
 class ProductVariant {
   int id;
@@ -349,7 +349,7 @@ lib/features/products/
 
 ### RealtimeBloc Pattern for Variants
 
-```dart
+```text
 class ProductVariantsBloc extends RealtimeBloc<List<ProductVariant>, ProductVariantsEvent> {
   @override
   Stream<List<ProductVariant>> get dataStream => _repository.watchAllVariants();
@@ -362,7 +362,7 @@ class ProductVariantsBloc extends RealtimeBloc<List<ProductVariant>, ProductVari
 ### Variant Summaries (for Product List)
 
 **ProductVariantRepository provides:**
-```dart
+```text
 Stream<Map<int, ({int count, int totalStock})>> watchVariantSummaries();
 Future<({int count, int totalStock})?> getVariantSummaryByProduct(int productId);
 ```
@@ -375,7 +375,7 @@ Future<({int count, int totalStock})?> getVariantSummaryByProduct(int productId)
 ### SKU/Barcode Uniqueness Validation
 
 **ProductFormBloc validates before save:**
-```dart
+```text
 // Check both products and product_variants tables
 Future<Map<String, String>> _validateSkuUniqueness() async {
   // Check product-level uniqueness
@@ -387,7 +387,7 @@ Future<Map<String, String>> _validateSkuUniqueness() async {
 ### Database Repair on Startup
 
 **AppDatabase runs idempotent dedupe beforeOpen:**
-```dart
+```text
 await _dedupeUniqueSkuBarcodeIfNeeded();
 // Keeps first occurrence, sets duplicates to NULL
 ```
@@ -418,7 +418,7 @@ await _dedupeUniqueSkuBarcodeIfNeeded();
 ### Integration Points
 
 **Purchases/Sales MUST reference variantId:**
-```dart
+```text
 class PurchaseItem {
   int variantId;  // REQUIRED - not productId
   int quantity;
@@ -449,7 +449,7 @@ class PurchaseItem {
 
 **ALL accounting operations MUST go through `AccountingRepository`**
 
-```dart
+```text
 // ❌ WRONG: Direct database access
 await db.into(accounts).insert(account);
 await db.update(accounts).replace(account);
@@ -475,7 +475,7 @@ await accountingRepository.createJournalEntry(entryData, userId);
 
 **ALL financial operations MUST use `TransactionOrchestrator`:**
 
-```dart
+```text
 // Sale transaction
 final result = await transactionOrchestrator.executeSale(
   sale: saleData,
@@ -494,7 +494,7 @@ final result = await transactionOrchestrator.recordCustomerPayment(
 
 ### Balance Changes - ALWAYS Through Journal Entries
 
-```dart
+```text
 // ❌ WRONG: Direct balance update
 account.balanceCents += 1000;
 await db.update(accounts).replace(account);
@@ -515,7 +515,7 @@ await accountingRepository.createJournalEntry(
 
 ### Voiding Transactions (Immutability Pattern)
 
-```dart
+```text
 // ❌ WRONG: Delete or modify posted transaction
 await db.delete(journalEntries).delete(entry);
 
@@ -538,7 +538,7 @@ await accountingRepository.voidJournalEntry(
 
 ---
 
-## � Database Integration (MANDATORY)
+## 🗄️ Database Integration (MANDATORY)
 
 ### Universal Database Wiring
 
@@ -551,7 +551,7 @@ await accountingRepository.voidJournalEntry(
 - **NO in-memory state** - Everything persists to database
 
 **Pattern:**
-```dart
+```text
 // Service layer
 class MyService {
   final MyRepository _repository;
@@ -581,7 +581,7 @@ class MyRepository {
 
 **ALL numeric input fields MUST clear placeholder values on focus:**
 
-```dart
+```text
 // CORRECT: Clear placeholder on focus
 TextFormField(
   controller: _controller,
@@ -617,7 +617,7 @@ TextFormField(
 
 ---
 
-## � Currency Settings (CRITICAL)
+## 💱 Currency Settings (CRITICAL)
 
 ### Dynamic Currency Display
 
@@ -628,7 +628,7 @@ TextFormField(
 
 ### Pattern for Displaying Money
 
-```dart
+```text
 // CORRECT: Always use CurrencyService to format money
 final currencyService = sl<CurrencyService>();
 final formattedPrice = currencyService.format(priceInCents);
@@ -662,7 +662,7 @@ Text('\$${(priceInCents / 100).toStringAsFixed(2)}') // ❌ NEVER DO THIS
 ### Implementation Requirements
 
 **CurrencyService MUST provide:**
-```dart
+```text
 class CurrencyService {
   // Format money with current currency
   String format(int cents, {bool showSymbol = true});
@@ -746,7 +746,7 @@ When user changes currency in settings:
 
 ### Key Patterns
 
-```dart
+```text
 // Watch for real-time updates (ALWAYS USE)
 Stream<List<Product>> watchProducts() {
   return (select(products)..where((p) => p.isActive.equals(true)))
@@ -779,7 +779,7 @@ Future<int> insertProduct(ProductsCompanion product) {
 
 **ALL services and blocs MUST be registered** in `lib/core/di/injection_container.dart`.
 
-```dart
+```text
 // Register services
 sl.registerLazySingleton<MyService>(() => MyServiceImpl());
 
@@ -804,7 +804,7 @@ BlocProvider<MyBloc>(
 
 **EVERY screen MUST use Scaffold:**
 
-```dart
+```text
 Scaffold(
   appBar: AppBar(
     title: Text('screen_title'.tr()),
@@ -819,7 +819,7 @@ Scaffold(
 
 ### Loading States
 
-```dart
+```text
 // Use BlocBuilder with RealtimeBloc states
 BlocBuilder<MyBloc, RealtimeState<MyData>>(
   builder: (context, state) {
@@ -839,7 +839,7 @@ BlocBuilder<MyBloc, RealtimeState<MyData>>(
 
 ### Error Handling
 
-```dart
+```text
 // Show errors with SnackBar using semantic colors
 ScaffoldMessenger.of(context).showSnackBar(
   SnackBar(
@@ -862,7 +862,7 @@ ScaffoldMessenger.of(context).showSnackBar(
 
 ### Test Pattern
 
-```dart
+```text
 // Bloc tests
 blocTest<MyBloc, RealtimeState<MyData>>(
   'emits success when data loads',
