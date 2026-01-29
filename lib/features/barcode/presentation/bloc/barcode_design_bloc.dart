@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:drift/drift.dart';
+import 'package:decimal/decimal.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/bloc/realtime_bloc.dart';
@@ -10,6 +11,7 @@ import '../../../../core/database/daos/barcode_template_dao.dart';
 import '../../../products/domain/entities/product_entity.dart';
 import '../../../settings/data/services/company_profile_service.dart';
 import '../../../settings/domain/entities/company_profile.dart';
+import '../../data/models/invoice_print_data.dart';
 import '../../domain/models/barcode_design_state.dart';
 import '../../services/barcode_printer_service.dart';
 import 'barcode_design_event.dart';
@@ -35,6 +37,9 @@ class BarcodeDesignBloc extends RealtimeBloc<BarcodeDesignData, BarcodeDesignEve
   double? _progress;
   String? _errorMessage;
   final List<PrintHistory> _recentPrintHistory = [];
+
+  InvoicePrintData? _invoiceData;
+  Map<int, int> _currentQuantities = {};
 
   BarcodeDesignBloc({
     required BarcodeTemplateDao templateDao,
@@ -129,6 +134,10 @@ class BarcodeDesignBloc extends RealtimeBloc<BarcodeDesignData, BarcodeDesignEve
     on<UpdateQuantityMode>(_onUpdateQuantityMode);
     on<UpdateLabelsPerRow>(_onUpdateLabelsPerRow);
     on<UpdateA4LayoutGaps>(_onUpdateA4LayoutGaps);
+
+    on<LoadInvoicePrintData>(_onLoadInvoicePrintData);
+    on<UpdateInvoiceLineQuantity>(_onUpdateInvoiceLineQuantity);
+    on<ResetToInvoiceQuantities>(_onResetToInvoiceQuantities);
   }
 
   @override
@@ -150,7 +159,143 @@ class BarcodeDesignBloc extends RealtimeBloc<BarcodeDesignData, BarcodeDesignEve
         progress: _progress,
         errorMessage: _errorMessage,
         recentPrintHistory: _recentPrintHistory,
+        invoiceData: _invoiceData,
+        currentQuantities: _currentQuantities,
       );
+
+  void _onLoadInvoicePrintData(
+    LoadInvoicePrintData event,
+    Emitter<RealtimeState<BarcodeDesignData>> emit,
+  ) {
+    _invoiceData = event.invoiceData;
+    _currentQuantities = {
+      for (final line in event.invoiceData.lines) line.variantId: line.quantity,
+    };
+    emit(RealtimeSuccess(data: _currentData));
+  }
+
+  void _onUpdateInvoiceLineQuantity(
+    UpdateInvoiceLineQuantity event,
+    Emitter<RealtimeState<BarcodeDesignData>> emit,
+  ) {
+    _currentQuantities = {
+      ..._currentQuantities,
+      event.variantId: event.newQuantity,
+    };
+    emit(RealtimeSuccess(data: _currentData));
+  }
+
+  void _onResetToInvoiceQuantities(
+    ResetToInvoiceQuantities event,
+    Emitter<RealtimeState<BarcodeDesignData>> emit,
+  ) {
+    final invoiceData = _invoiceData;
+    if (invoiceData == null) {
+      emit(RealtimeSuccess(data: _currentData));
+      return;
+    }
+    _currentQuantities = {
+      for (final line in invoiceData.lines) line.variantId: line.quantity,
+    };
+    emit(RealtimeSuccess(data: _currentData));
+  }
+
+  Product _productFromInvoiceLine(InvoiceLinePrintData line) {
+    return Product(
+      id: line.variantId,
+      name: line.productName,
+      sku: line.sku,
+      barcode: line.barcode,
+      costCents: Decimal.zero,
+      priceCents: Decimal.fromInt(line.unitPriceCents),
+      wholesalePriceCents: null,
+      stockQuantity: 0,
+      minQuantity: 0,
+      categoryId: null,
+      supplierId: null,
+      currencyId: null,
+      imagePath: null,
+      hasVariants: false,
+      isTaxable: false,
+      taxRateBps: 0,
+      isActive: true,
+      trackInventory: false,
+    );
+  }
+
+  Future<List<({
+    Product product,
+    int copies,
+    String? variantInfo,
+  })>> _buildPrintJobs() async {
+    if (_settings.quantityMode == QuantityMode.invoiceQuantity &&
+        _invoiceData != null &&
+        _invoiceData!.lines.isNotEmpty) {
+      final jobs = <({Product product, int copies, String? variantInfo})>[];
+      for (final line in _invoiceData!.lines) {
+        final qty = _currentQuantities[line.variantId] ?? line.quantity;
+        if (qty <= 0) continue;
+        final variantInfo = [line.sizeName, line.colorName]
+            .whereType<String>()
+            .where((x) => x.trim().isNotEmpty)
+            .join(' / ');
+        jobs.add((
+          product: _productFromInvoiceLine(line),
+          copies: qty,
+          variantInfo: variantInfo.isEmpty ? null : variantInfo,
+        ));
+      }
+      return jobs;
+    }
+
+    final jobs = <({Product product, int copies, String? variantInfo})>[];
+    for (final product in _selectedProducts) {
+      if (!product.hasVariants) {
+        final copies = _calculateCopies(product);
+        if (copies <= 0) continue;
+        jobs.add((product: product, copies: copies, variantInfo: null));
+        continue;
+      }
+
+      final variants = await _productVariantDao.getVariantsByProduct(product.id);
+      if (variants.isEmpty) {
+        final copies = _calculateCopies(product);
+        if (copies <= 0) continue;
+        jobs.add((product: product, copies: copies, variantInfo: null));
+        continue;
+      }
+
+      final infoByVariantId = await _productVariantDao
+          .getVariantInfoByVariantIds(variants.map((v) => v.id).toList());
+
+      for (final v in variants) {
+        final variantProduct = product.copyWith(
+          sku: v.sku,
+          barcode: v.barcode,
+        );
+
+        int copies;
+        switch (_settings.quantityMode) {
+          case QuantityMode.single:
+            copies = 1;
+          case QuantityMode.custom:
+            copies = _settings.copies;
+          case QuantityMode.stockQuantity:
+            copies = v.stockQuantity > 0 ? v.stockQuantity : 1;
+          case QuantityMode.invoiceQuantity:
+            copies = 1;
+        }
+
+        if (copies <= 0) continue;
+        jobs.add((
+          product: variantProduct,
+          copies: copies,
+          variantInfo: infoByVariantId[v.id],
+        ));
+      }
+    }
+    return jobs;
+  }
 
   Future<void> _onLoadData(
     LoadBarcodeDesignData event,
@@ -351,7 +496,10 @@ class BarcodeDesignBloc extends RealtimeBloc<BarcodeDesignData, BarcodeDesignEve
     PrintLabels event,
     Emitter<RealtimeState<BarcodeDesignData>> emit,
   ) async {
-    if (_selectedProducts.isEmpty) {
+    if (_selectedProducts.isEmpty &&
+        !(_settings.quantityMode == QuantityMode.invoiceQuantity &&
+            _invoiceData != null &&
+            _invoiceData!.lines.isNotEmpty)) {
       _errorMessage = 'No products selected for printing';
       emit(RealtimeSuccess(data: _currentData));
       return;
@@ -364,22 +512,27 @@ class BarcodeDesignBloc extends RealtimeBloc<BarcodeDesignData, BarcodeDesignEve
 
       final barcodeType = _printerService.getBarcodeTypeFromString(_settings.barcodeType);
 
-      for (int i = 0; i < _selectedProducts.length; i++) {
-        final product = _selectedProducts[i];
-        _progress = (i + 1) / _selectedProducts.length;
+      final jobs = await _buildPrintJobs();
+      if (jobs.isEmpty) {
+        _operationStatus = PrintOperationStatus.error;
+        _errorMessage = 'No labels to print';
+        emit(RealtimeSuccess(data: _currentData));
+        return;
+      }
+
+      for (int i = 0; i < jobs.length; i++) {
+        final job = jobs[i];
+        _progress = (i + 1) / jobs.length;
         _operationStatus = PrintOperationStatus.printing;
         emit(RealtimeSuccess(data: _currentData));
 
-        final copies = _calculateCopies(product);
-        
         final companyName = _settings.includeCompanyName ? _companyProfile.name : null;
         final companyAddress = _companyProfile.address;
         final companyPhone = _companyProfile.phone;
-        final variantInfo = _variantInfoByProductId[product.id];
 
         if (_settings.isA4Mode) {
           await _printerService.printA4Grid(
-            product: product,
+            product: job.product,
             barcode: barcodeType,
             widthMm: _settings.labelWidthMm,
             heightMm: _settings.labelHeightMm,
@@ -391,17 +544,17 @@ class BarcodeDesignBloc extends RealtimeBloc<BarcodeDesignData, BarcodeDesignEve
             includeCompanyContact: _settings.includeCompanyContact,
             companyAddress: companyAddress,
             companyPhone: companyPhone,
-            copies: copies,
+            copies: job.copies,
             labelsPerRow: _settings.labelsPerRow,
             horizontalGapMm: _settings.horizontalGapMm,
             verticalGapMm: _settings.verticalGapMm,
             pageMarginMm: _settings.pageMarginMm,
-            variantInfo: variantInfo,
+            variantInfo: job.variantInfo,
             includeVariantInfo: _settings.includeVariantInfo,
           );
         } else {
           await _printerService.printThermalLabel(
-            product: product,
+            product: job.product,
             barcode: barcodeType,
             widthMm: _settings.labelWidthMm,
             heightMm: _settings.labelHeightMm,
@@ -413,17 +566,16 @@ class BarcodeDesignBloc extends RealtimeBloc<BarcodeDesignData, BarcodeDesignEve
             includeCompanyContact: _settings.includeCompanyContact,
             companyAddress: companyAddress,
             companyPhone: companyPhone,
-            copies: copies,
-            variantInfo: variantInfo,
+            copies: job.copies,
+            variantInfo: job.variantInfo,
             includeVariantInfo: _settings.includeVariantInfo,
           );
         }
 
-        // Log print history
         await _templateDao.logPrint(
-          productId: product.id,
+          productId: job.product.id,
           templateId: _selectedTemplate?.id,
-          quantityPrinted: copies,
+          quantityPrinted: job.copies,
           printerName: event.printerName,
           printType: _settings.printType,
           status: 'success',
