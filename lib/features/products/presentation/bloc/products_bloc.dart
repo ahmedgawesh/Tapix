@@ -114,9 +114,22 @@ class ProductsBloc extends RealtimeBloc<List<Product>, ProductsEvent> {
   ProductsBloc(this._repository) : super();
 
   @override
-  Stream<List<Product>> get dataStream => _repository.watchAllProducts(
+  Stream<List<Product>> get dataStream {
+    // For filter-based views, use DB streams so UI updates instantly
+    // (especially for stock status which depends on variants).
+    final hasDbFilters = _currentCategoryFilter != null || _currentStockStatusFilter != null;
+    if (hasDbFilters) {
+      return _repository.watchFilteredProducts(
+        categoryId: _currentCategoryFilter,
+        stockStatus: _currentStockStatusFilter,
         isActive: _currentIsActiveFilter,
       );
+    }
+
+    return _repository.watchAllProducts(
+      isActive: _currentIsActiveFilter,
+    );
+  }
 
   @override
   void registerEventHandlers() {
@@ -257,23 +270,10 @@ class ProductsBloc extends RealtimeBloc<List<Product>, ProductsEvent> {
     _isLoadingMore = false;
 
     debugPrint('ProductsBloc.filter -> emit loading (hasMoreData=$_hasMoreData page=$_currentPage)');
-
+    // With DB streams, refresh will re-subscribe and emit latest data.
+    // Pagination is handled only in the unfiltered list.
     emit(RealtimeLoading<List<Product>>(previousData: currentData));
-
-    try {
-      final results = await _repository.filterProducts(
-        categoryId: event.categoryId,
-        stockStatus: event.stockStatus,
-        limit: _pageSize,
-        offset: 0,
-        isActive: _currentIsActiveFilter,
-      );
-      _hasMoreData = results.length >= _pageSize;
-      debugPrint('ProductsBloc.filter results=${results.length} hasMoreData=$_hasMoreData');
-      emit(RealtimeSuccess<List<Product>>(data: results));
-    } catch (e, st) {
-      add(RealtimeErrorOccurred(e, st));
-    }
+    refresh();
   }
 
   Future<void> _onFilterCleared(

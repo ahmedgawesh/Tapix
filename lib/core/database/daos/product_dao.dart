@@ -54,29 +54,55 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
     int offset = 0,
     bool? isActive = true,
   }) {
-    final query = select(products);
+    if (stockStatus == null) {
+      final query = select(products);
+
+      if (isActive != null) {
+        query.where((p) => p.isActive.equals(isActive));
+      }
+
+      if (categoryId != null) {
+        query.where((p) => p.categoryId.equals(categoryId));
+      }
+
+      query
+        ..orderBy([(p) => OrderingTerm(expression: p.name)])
+        ..limit(limit, offset: offset);
+
+      return query.get();
+    }
+
+    final where = StringBuffer('WHERE 1=1');
+    final vars = <Variable<Object>>[];
 
     if (isActive != null) {
-      query.where((p) => p.isActive.equals(isActive));
+      where.write(' AND p.is_active = ?');
+      vars.add(Variable.withInt(isActive ? 1 : 0));
     }
-
     if (categoryId != null) {
-      query.where((p) => p.categoryId.equals(categoryId));
+      where.write(' AND p.category_id = ?');
+      vars.add(Variable.withInt(categoryId));
     }
 
-    if (stockStatus != null) {
-      if (stockStatus == 'out_of_stock') {
-        query.where((p) => p.stockQuantity.equals(0));
-      } else if (stockStatus == 'low_stock') {
-        query.where((p) => p.stockQuantity.isBiggerThanValue(0) & p.stockQuantity.isSmallerOrEqual(p.minQuantity));
-      }
+    if (stockStatus == 'out_of_stock') {
+      where.write(
+        ' AND ((p.has_variants = 0 AND p.stock_quantity = 0) OR (p.has_variants = 1 AND NOT EXISTS (SELECT 1 FROM product_variants v WHERE v.product_id = p.id AND v.is_active = 1 AND v.stock_quantity > 0)))',
+      );
+    } else if (stockStatus == 'low_stock') {
+      where.write(
+        ' AND ((p.has_variants = 0 AND p.stock_quantity > 0 AND p.stock_quantity <= p.min_quantity) OR (p.has_variants = 1 AND EXISTS (SELECT 1 FROM product_variants v WHERE v.product_id = p.id AND v.is_active = 1 AND v.stock_quantity > 0 AND v.stock_quantity <= p.min_quantity)))',
+      );
     }
 
-    query
-      ..orderBy([(p) => OrderingTerm(expression: p.name)])
-      ..limit(limit, offset: offset);
+    where.write(' ORDER BY p.name LIMIT ? OFFSET ?');
+    vars.add(Variable.withInt(limit));
+    vars.add(Variable.withInt(offset));
 
-    return query.get();
+    return customSelect(
+      'SELECT p.* FROM products p ${where.toString()}',
+      variables: vars,
+      readsFrom: {products, productVariants},
+    ).map((row) => products.map(row.data)).get();
   }
 
   Stream<List<Product>> watchFilteredProducts({
@@ -84,27 +110,51 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
     String? stockStatus,
     bool? isActive = true,
   }) {
-    final query = select(products);
+    if (stockStatus == null) {
+      final query = select(products);
+
+      if (isActive != null) {
+        query.where((p) => p.isActive.equals(isActive));
+      }
+
+      if (categoryId != null) {
+        query.where((p) => p.categoryId.equals(categoryId));
+      }
+
+      query.orderBy([(p) => OrderingTerm(expression: p.name)]);
+
+      return query.watch();
+    }
+
+    final where = StringBuffer('WHERE 1=1');
+    final vars = <Variable<Object>>[];
 
     if (isActive != null) {
-      query.where((p) => p.isActive.equals(isActive));
+      where.write(' AND p.is_active = ?');
+      vars.add(Variable.withInt(isActive ? 1 : 0));
     }
-
     if (categoryId != null) {
-      query.where((p) => p.categoryId.equals(categoryId));
+      where.write(' AND p.category_id = ?');
+      vars.add(Variable.withInt(categoryId));
     }
 
-    if (stockStatus != null) {
-      if (stockStatus == 'out_of_stock') {
-        query.where((p) => p.stockQuantity.equals(0));
-      } else if (stockStatus == 'low_stock') {
-        query.where((p) => p.stockQuantity.isBiggerThanValue(0) & p.stockQuantity.isSmallerOrEqual(p.minQuantity));
-      }
+    if (stockStatus == 'out_of_stock') {
+      where.write(
+        ' AND ((p.has_variants = 0 AND p.stock_quantity = 0) OR (p.has_variants = 1 AND NOT EXISTS (SELECT 1 FROM product_variants v WHERE v.product_id = p.id AND v.is_active = 1 AND v.stock_quantity > 0)))',
+      );
+    } else if (stockStatus == 'low_stock') {
+      where.write(
+        ' AND ((p.has_variants = 0 AND p.stock_quantity > 0 AND p.stock_quantity <= p.min_quantity) OR (p.has_variants = 1 AND EXISTS (SELECT 1 FROM product_variants v WHERE v.product_id = p.id AND v.is_active = 1 AND v.stock_quantity > 0 AND v.stock_quantity <= p.min_quantity)))',
+      );
     }
 
-    query.orderBy([(p) => OrderingTerm(expression: p.name)]);
+    where.write(' ORDER BY p.name');
 
-    return query.watch();
+    return customSelect(
+      'SELECT p.* FROM products p ${where.toString()}',
+      variables: vars,
+      readsFrom: {products, productVariants},
+    ).map((row) => products.map(row.data)).watch();
   }
 
   Stream<List<Product>> watchProductsForExport({
