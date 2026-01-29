@@ -300,6 +300,7 @@ class BarcodePrinterService {
                         font: ttf,
                         color: PdfColors.grey700,
                       ),
+                      textDirection: _detectTextDirection(companyPhone),
                       maxLines: 1,
                       overflow: pw.TextOverflow.clip,
                     ),
@@ -546,6 +547,7 @@ class BarcodePrinterService {
               pw.Text(
                 companyPhone,
                 style: pw.TextStyle(fontSize: 4, font: ttf, color: PdfColors.grey700),
+                textDirection: _detectTextDirection(companyPhone),
                 maxLines: 1,
                 overflow: pw.TextOverflow.clip,
               ),

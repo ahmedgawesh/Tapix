@@ -38,6 +38,14 @@ class BarcodePreviewWidget extends StatelessWidget {
     final width = (settings.labelWidthMm * 3.78 * scale).clamp(1.0, double.infinity);
     final height = (settings.labelHeightMm * 3.78 * scale).clamp(1.0, double.infinity);
 
+    final padding = (8 * scale).clamp(1.0, height * 0.12);
+    final contentHeight = (height - (padding * 2)).clamp(1.0, double.infinity);
+    final densityFactor = contentHeight < 30
+        ? 0.55
+        : (contentHeight < 45 ? 0.7 : (contentHeight < 60 ? 0.85 : 1.0));
+
+    final gapSmall = (2 * scale * densityFactor).clamp(0.0, double.infinity);
+
     return Card(
       elevation: 4,
       child: Container(
@@ -48,7 +56,7 @@ class BarcodePreviewWidget extends StatelessWidget {
           borderRadius: BorderRadius.circular(4),
           border: Border.all(color: Colors.grey.shade300),
         ),
-        padding: EdgeInsets.all(8 * scale),
+        padding: EdgeInsets.all(padding),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.center,
@@ -58,7 +66,7 @@ class BarcodePreviewWidget extends StatelessWidget {
               Text(
                 companyProfile.name,
                 style: TextStyle(
-                  fontSize: 8 * scale,
+                  fontSize: 8 * scale * densityFactor,
                   fontWeight: FontWeight.bold,
                   color: Colors.black,
                 ),
@@ -66,7 +74,7 @@ class BarcodePreviewWidget extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
               ),
-              SizedBox(height: 2 * scale),
+              SizedBox(height: gapSmall),
             ],
 
             // Company contact (address + phone)
@@ -77,7 +85,7 @@ class BarcodePreviewWidget extends StatelessWidget {
                 Text(
                   companyProfile.address!,
                   style: TextStyle(
-                    fontSize: 6 * scale,
+                    fontSize: 6 * scale * densityFactor,
                     color: Colors.black54,
                   ),
                   maxLines: 1,
@@ -88,14 +96,14 @@ class BarcodePreviewWidget extends StatelessWidget {
                 Text(
                   companyProfile.phone!,
                   style: TextStyle(
-                    fontSize: 6 * scale,
+                    fontSize: 6 * scale * densityFactor,
                     color: Colors.black54,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.center,
                 ),
-              SizedBox(height: 2 * scale),
+              SizedBox(height: gapSmall),
             ],
 
             // Product name (if enabled)
@@ -103,7 +111,7 @@ class BarcodePreviewWidget extends StatelessWidget {
               Text(
                 product.name,
                 style: TextStyle(
-                  fontSize: 10 * scale,
+                  fontSize: 10 * scale * densityFactor,
                   fontWeight: FontWeight.bold,
                   color: Colors.black,
                 ),
@@ -111,7 +119,7 @@ class BarcodePreviewWidget extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
               ),
-              SizedBox(height: 2 * scale),
+              SizedBox(height: gapSmall),
             ],
 
             // Variant info (if enabled)
@@ -121,19 +129,20 @@ class BarcodePreviewWidget extends StatelessWidget {
                     ? variantInfo!
                     : 'barcode.variant_placeholder'.tr(),
                 style: TextStyle(
-                  fontSize: 7 * scale,
+                  fontSize: 7 * scale * densityFactor,
                   color: Colors.black54,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
               ),
-              SizedBox(height: 2 * scale),
+              SizedBox(height: gapSmall),
             ],
 
             // Barcode
             if (settings.includeBarcode)
-              Expanded(
+              SizedBox(
+                height: (contentHeight * 0.42).clamp(6.0, contentHeight),
                 child: LayoutBuilder(
                   builder: (context, constraints) {
                     final barcodeWidth = constraints.maxWidth.clamp(1.0, double.infinity);
@@ -173,7 +182,7 @@ class BarcodePreviewWidget extends StatelessWidget {
                       width: barcodeWidth,
                       height: barcodeHeight,
                       drawText: true,
-                      style: TextStyle(fontSize: 8 * scale),
+                      style: TextStyle(fontSize: 8 * scale * densityFactor),
                       errorBuilder: (context, error) {
                         return BarcodeWidget(
                           barcode: fallbackBarcodeType,
@@ -181,7 +190,7 @@ class BarcodePreviewWidget extends StatelessWidget {
                           width: barcodeWidth,
                           height: barcodeHeight,
                           drawText: true,
-                          style: TextStyle(fontSize: 8 * scale),
+                          style: TextStyle(fontSize: 8 * scale * densityFactor),
                           errorBuilder: (context, error) {
                             return Container(
                               alignment: Alignment.center,
@@ -192,7 +201,7 @@ class BarcodePreviewWidget extends StatelessWidget {
                               child: Text(
                                 'barcode.invalid_format'.tr(),
                                 style: TextStyle(
-                                  fontSize: 8 * scale,
+                                  fontSize: 8 * scale * densityFactor,
                                   color: Colors.grey.shade600,
                                 ),
                                 textAlign: TextAlign.center,
@@ -210,11 +219,11 @@ class BarcodePreviewWidget extends StatelessWidget {
 
             // SKU (if enabled)
             if (settings.includeSku && product.sku != null) ...[
-              SizedBox(height: 2 * scale),
+              SizedBox(height: gapSmall),
               Text(
                 'SKU: ${product.sku}',
                 style: TextStyle(
-                  fontSize: 7 * scale,
+                  fontSize: 7 * scale * densityFactor,
                   color: Colors.black54,
                 ),
                 maxLines: 1,
@@ -225,11 +234,11 @@ class BarcodePreviewWidget extends StatelessWidget {
 
             // Price (if enabled)
             if (settings.includePrice) ...[
-              SizedBox(height: 2 * scale),
+              SizedBox(height: gapSmall),
               Text(
                 currencyService.format(product.priceCents.toBigInt().toInt()),
                 style: TextStyle(
-                  fontSize: 12 * scale,
+                  fontSize: 12 * scale * densityFactor,
                   fontWeight: FontWeight.bold,
                   color: Colors.black,
                 ),
