@@ -657,6 +657,7 @@ class BarcodePrinterService {
                     ),
                     maxLines: 1,
                     overflow: pw.TextOverflow.clip,
+                    textDirection: _detectTextDirection(companyName),
                   ),
                 if (includeCompanyName && companyName != null && companyName.isNotEmpty) 
                   pw.SizedBox(height: 1),
@@ -673,6 +674,7 @@ class BarcodePrinterService {
                       ),
                       maxLines: 1,
                       overflow: pw.TextOverflow.clip,
+                      textDirection: _detectTextDirection(companyAddress),
                     ),
                   if (companyPhone != null && companyPhone.isNotEmpty)
                     pw.Text(
@@ -684,6 +686,7 @@ class BarcodePrinterService {
                       ),
                       maxLines: 1,
                       overflow: pw.TextOverflow.clip,
+                      textDirection: _detectTextDirection(companyPhone),
                     ),
                   pw.SizedBox(height: 1),
                 ],
@@ -799,6 +802,416 @@ class BarcodePrinterService {
             copies: copies,
           );
     await Printing.sharePdf(bytes: pdfData, filename: 'Labels-${safeProduct.sku ?? safeProduct.id}.pdf');
+  }
+
+  Future<void> shareLabelsPdfBatch({
+    required List<({Product product, int copies, String? variantInfo})> jobs,
+    required Barcode barcode,
+    required double widthMm,
+    required double heightMm,
+    required bool includeName,
+    required bool includePrice,
+    required bool includeBarcode,
+    required bool includeCompanyName,
+    required String? companyName,
+    required bool includeCompanyContact,
+    required String? companyAddress,
+    required String? companyPhone,
+    required bool isA4Mode,
+    required int labelsPerRow,
+    required double horizontalGapMm,
+    required double verticalGapMm,
+    required double pageMarginMm,
+    required bool includeVariantInfo,
+    String filename = 'Labels.pdf',
+  }) async {
+    if (jobs.isEmpty) {
+      throw ArgumentError('No labels to share');
+    }
+
+    final pdfData = isA4Mode
+        ? await _generateA4GridPdfBatch(
+            jobs: jobs,
+            barcode: barcode,
+            widthMm: widthMm,
+            heightMm: heightMm,
+            includeName: includeName,
+            includePrice: includePrice,
+            includeBarcode: includeBarcode,
+            includeCompanyName: includeCompanyName,
+            companyName: companyName,
+            includeCompanyContact: includeCompanyContact,
+            companyAddress: companyAddress,
+            companyPhone: companyPhone,
+            labelsPerRow: labelsPerRow,
+            horizontalGapMm: horizontalGapMm,
+            verticalGapMm: verticalGapMm,
+            pageMarginMm: pageMarginMm,
+            includeVariantInfo: includeVariantInfo,
+          )
+        : await _generateThermalPdfBatch(
+            jobs: jobs,
+            barcode: barcode,
+            widthMm: widthMm,
+            heightMm: heightMm,
+            includeName: includeName,
+            includePrice: includePrice,
+            includeBarcode: includeBarcode,
+            includeCompanyName: includeCompanyName,
+            companyName: companyName,
+            includeCompanyContact: includeCompanyContact,
+            companyAddress: companyAddress,
+            companyPhone: companyPhone,
+            includeVariantInfo: includeVariantInfo,
+          );
+
+    await Printing.sharePdf(bytes: pdfData, filename: filename);
+  }
+
+  Future<void> printLabelsPdfBatch({
+    required List<({Product product, int copies, String? variantInfo})> jobs,
+    required Barcode barcode,
+    required double widthMm,
+    required double heightMm,
+    required bool includeName,
+    required bool includePrice,
+    required bool includeBarcode,
+    required bool includeCompanyName,
+    required String? companyName,
+    required bool includeCompanyContact,
+    required String? companyAddress,
+    required String? companyPhone,
+    required bool isA4Mode,
+    required int labelsPerRow,
+    required double horizontalGapMm,
+    required double verticalGapMm,
+    required double pageMarginMm,
+    required bool includeVariantInfo,
+  }) async {
+    if (jobs.isEmpty) {
+      throw ArgumentError('No labels to print');
+    }
+
+    final pdfData = isA4Mode
+        ? await _generateA4GridPdfBatch(
+            jobs: jobs,
+            barcode: barcode,
+            widthMm: widthMm,
+            heightMm: heightMm,
+            includeName: includeName,
+            includePrice: includePrice,
+            includeBarcode: includeBarcode,
+            includeCompanyName: includeCompanyName,
+            companyName: companyName,
+            includeCompanyContact: includeCompanyContact,
+            companyAddress: companyAddress,
+            companyPhone: companyPhone,
+            labelsPerRow: labelsPerRow,
+            horizontalGapMm: horizontalGapMm,
+            verticalGapMm: verticalGapMm,
+            pageMarginMm: pageMarginMm,
+            includeVariantInfo: includeVariantInfo,
+          )
+        : await _generateThermalPdfBatch(
+            jobs: jobs,
+            barcode: barcode,
+            widthMm: widthMm,
+            heightMm: heightMm,
+            includeName: includeName,
+            includePrice: includePrice,
+            includeBarcode: includeBarcode,
+            includeCompanyName: includeCompanyName,
+            companyName: companyName,
+            includeCompanyContact: includeCompanyContact,
+            companyAddress: companyAddress,
+            companyPhone: companyPhone,
+            includeVariantInfo: includeVariantInfo,
+          );
+
+    await Printing.layoutPdf(
+      onLayout: (_) async => pdfData,
+      name: 'Labels.pdf',
+    );
+  }
+
+  Future<Uint8List> _generateThermalPdfBatch({
+    required List<({Product product, int copies, String? variantInfo})> jobs,
+    required Barcode barcode,
+    required double widthMm,
+    required double heightMm,
+    required bool includeName,
+    required bool includePrice,
+    required bool includeBarcode,
+    required bool includeCompanyName,
+    required String? companyName,
+    required bool includeCompanyContact,
+    required String? companyAddress,
+    required String? companyPhone,
+    required bool includeVariantInfo,
+  }) async {
+    final doc = pw.Document();
+
+    final fontData = await rootBundle.load('assets/fonts/IBMPlexSansArabic-Regular.ttf');
+    final fontBoldData = await rootBundle.load('assets/fonts/IBMPlexSansArabic-Bold.ttf');
+    final ttf = pw.Font.ttf(fontData);
+    final ttfBold = pw.Font.ttf(fontBoldData);
+
+    final currencyService = sl<CurrencyService>();
+
+    final width = widthMm * PdfPageFormat.mm;
+    final height = heightMm * PdfPageFormat.mm;
+
+    for (final job in jobs) {
+      final formattedPrice = currencyService.format(job.product.priceCents.toBigInt().toInt());
+      final textDirection = _detectTextDirection(job.product.name);
+
+      for (int i = 0; i < job.copies; i++) {
+        doc.addPage(
+          pw.Page(
+            pageFormat: PdfPageFormat(width, height, marginAll: 2 * PdfPageFormat.mm),
+            build: (pw.Context context) {
+              return pw.Column(
+                mainAxisAlignment: pw.MainAxisAlignment.center,
+                crossAxisAlignment: pw.CrossAxisAlignment.center,
+                children: [
+                  if (includeCompanyName && companyName != null && companyName.isNotEmpty) ...[
+                    pw.Text(
+                      companyName,
+                      style: pw.TextStyle(
+                        fontSize: 7,
+                        fontWeight: pw.FontWeight.bold,
+                        font: ttfBold,
+                      ),
+                      maxLines: 1,
+                      overflow: pw.TextOverflow.clip,
+                      textDirection: _detectTextDirection(companyName),
+                    ),
+                    pw.SizedBox(height: 1),
+                  ],
+                  if (includeCompanyContact &&
+                      ((companyAddress != null && companyAddress.isNotEmpty) ||
+                          (companyPhone != null && companyPhone.isNotEmpty))) ...[
+                    if (companyAddress != null && companyAddress.isNotEmpty)
+                      pw.Text(
+                        companyAddress,
+                        style: pw.TextStyle(
+                          fontSize: 5,
+                          font: ttf,
+                          color: PdfColors.grey700,
+                        ),
+                        maxLines: 1,
+                        overflow: pw.TextOverflow.clip,
+                        textDirection: _detectTextDirection(companyAddress),
+                      ),
+                    if (companyPhone != null && companyPhone.isNotEmpty)
+                      pw.Text(
+                        companyPhone,
+                        style: pw.TextStyle(
+                          fontSize: 5,
+                          font: ttf,
+                          color: PdfColors.grey700,
+                        ),
+                        maxLines: 1,
+                        overflow: pw.TextOverflow.clip,
+                        textDirection: _detectTextDirection(companyPhone),
+                      ),
+                    pw.SizedBox(height: 1),
+                  ],
+                  if (includeName && job.product.name.isNotEmpty) ...[
+                    pw.Text(
+                      job.product.name,
+                      style: pw.TextStyle(
+                        fontSize: 8,
+                        fontWeight: pw.FontWeight.bold,
+                        font: ttfBold,
+                      ),
+                      maxLines: 1,
+                      overflow: pw.TextOverflow.clip,
+                      textDirection: textDirection,
+                    ),
+                    pw.SizedBox(height: 1),
+                  ],
+                  if (includeVariantInfo && job.variantInfo != null && job.variantInfo!.isNotEmpty) ...[
+                    pw.Text(
+                      job.variantInfo!,
+                      style: pw.TextStyle(fontSize: 6, font: ttf, color: PdfColors.grey700),
+                      maxLines: 1,
+                      overflow: pw.TextOverflow.clip,
+                      textDirection: _detectTextDirection(job.variantInfo!),
+                    ),
+                    pw.SizedBox(height: 1),
+                  ],
+                  if (includeBarcode)
+                    pw.Expanded(
+                      child: pw.BarcodeWidget(
+                        data: job.product.barcode ?? '',
+                        barcode: barcode,
+                        width: width - 4 * PdfPageFormat.mm,
+                        height: height * 0.5,
+                        drawText: true,
+                        textStyle: pw.TextStyle(fontSize: 6, font: ttf),
+                      ),
+                    )
+                  else
+                    pw.Expanded(child: pw.Container()),
+                  if (includePrice) pw.SizedBox(height: 2),
+                  if (includePrice)
+                    pw.Text(
+                      formattedPrice,
+                      style: pw.TextStyle(
+                        fontSize: 10,
+                        fontWeight: pw.FontWeight.bold,
+                        font: ttfBold,
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+        );
+      }
+    }
+
+    return doc.save();
+  }
+
+  Future<Uint8List> _generateA4GridPdfBatch({
+    required List<({Product product, int copies, String? variantInfo})> jobs,
+    required Barcode barcode,
+    required double widthMm,
+    required double heightMm,
+    required bool includeName,
+    required bool includePrice,
+    required bool includeBarcode,
+    required bool includeCompanyName,
+    required String? companyName,
+    required bool includeCompanyContact,
+    required String? companyAddress,
+    required String? companyPhone,
+    required int labelsPerRow,
+    required double horizontalGapMm,
+    required double verticalGapMm,
+    required double pageMarginMm,
+    required bool includeVariantInfo,
+  }) async {
+    final doc = pw.Document();
+
+    final fontData = await rootBundle.load('assets/fonts/IBMPlexSansArabic-Regular.ttf');
+    final fontBoldData = await rootBundle.load('assets/fonts/IBMPlexSansArabic-Bold.ttf');
+    final ttf = pw.Font.ttf(fontData);
+    final ttfBold = pw.Font.ttf(fontBoldData);
+
+    final currencyService = sl<CurrencyService>();
+
+    const a4HeightMm = 297.0;
+
+    final labelWidth = widthMm * PdfPageFormat.mm;
+    final labelHeight = heightMm * PdfPageFormat.mm;
+    final hGap = horizontalGapMm * PdfPageFormat.mm;
+    final vGap = verticalGapMm * PdfPageFormat.mm;
+    final topMargin = pageMarginMm * PdfPageFormat.mm;
+    final bottomMargin = pageMarginMm * PdfPageFormat.mm;
+    final leftMargin = pageMarginMm * PdfPageFormat.mm;
+    final rightMargin = pageMarginMm * PdfPageFormat.mm;
+
+    final availableHeight = a4HeightMm * PdfPageFormat.mm - (topMargin + bottomMargin);
+    final labelWithVGap = labelHeight + vGap;
+    final labelsPerColumn = (availableHeight / labelWithVGap).floor().clamp(1, 20);
+    final labelsPerPage = labelsPerRow * labelsPerColumn;
+
+    final ranges = <({int start, int end, Product product, String? variantInfo})>[];
+    int cursor = 0;
+    for (final job in jobs) {
+      if (job.copies <= 0) continue;
+      final start = cursor;
+      cursor += job.copies;
+      ranges.add((start: start, end: cursor, product: job.product, variantInfo: job.variantInfo));
+    }
+    final totalLabels = cursor;
+    if (totalLabels <= 0) {
+      throw ArgumentError('No labels to generate');
+    }
+
+    ({Product product, String? variantInfo}) labelAt(int globalIndex) {
+      for (final r in ranges) {
+        if (globalIndex >= r.start && globalIndex < r.end) {
+          return (product: r.product, variantInfo: r.variantInfo);
+        }
+      }
+      throw RangeError.range(globalIndex, 0, totalLabels - 1, 'globalIndex');
+    }
+
+    int index = 0;
+    while (index < totalLabels) {
+      final pageStartIndex = index;
+      final labelsThisPage = (totalLabels - index) < labelsPerPage ? (totalLabels - index) : labelsPerPage;
+      final rows = (labelsThisPage / labelsPerRow).ceil();
+
+      doc.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat.a4,
+          margin: pw.EdgeInsets.only(
+            top: topMargin,
+            bottom: bottomMargin,
+            left: leftMargin,
+            right: rightMargin,
+          ),
+          build: (pw.Context context) {
+            return pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: List.generate(rows, (rowIndex) {
+                final startIndex = rowIndex * labelsPerRow;
+                final labelsInRow = (startIndex + labelsPerRow) <= labelsThisPage
+                    ? labelsPerRow
+                    : labelsThisPage - startIndex;
+
+                return pw.Padding(
+                  padding: pw.EdgeInsets.only(bottom: vGap),
+                  child: pw.Row(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: List.generate(labelsInRow, (colIndex) {
+                      final globalIndex = pageStartIndex + startIndex + colIndex;
+                      final label = labelAt(globalIndex);
+                      final formattedPrice = currencyService
+                          .format(label.product.priceCents.toBigInt().toInt());
+                      final textDirection = _detectTextDirection(label.product.name);
+
+                      return pw.Padding(
+                        padding: pw.EdgeInsets.only(right: colIndex < labelsInRow - 1 ? hGap : 0),
+                        child: _buildLabelContent(
+                          product: label.product,
+                          barcode: barcode,
+                          labelWidth: labelWidth,
+                          labelHeight: labelHeight,
+                          includeName: includeName,
+                          includePrice: includePrice,
+                          includeBarcode: includeBarcode,
+                          includeCompanyName: includeCompanyName,
+                          companyName: companyName,
+                          includeCompanyContact: includeCompanyContact,
+                          companyAddress: companyAddress,
+                          companyPhone: companyPhone,
+                          formattedPrice: formattedPrice,
+                          textDirection: textDirection,
+                          ttf: ttf,
+                          ttfBold: ttfBold,
+                          variantInfo: label.variantInfo,
+                          includeVariantInfo: includeVariantInfo,
+                        ),
+                      );
+                    }),
+                  ),
+                );
+              }),
+            );
+          },
+        ),
+      );
+
+      index += labelsPerPage;
+    }
+
+    return doc.save();
   }
 
   /// Generate A4 grid PDF as bytes

@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 
+import 'dart:async';
+
 import '../../domain/models/barcode_design_state.dart';
 import '../bloc/barcode_design_bloc.dart';
 import '../bloc/barcode_design_event.dart';
@@ -230,29 +232,6 @@ class _FullSettings extends StatelessWidget {
         ),
         const SizedBox(height: 24),
 
-        // Print mode (Thermal vs A4)
-        _SectionHeader(title: 'barcode.print_mode'.tr()),
-        const SizedBox(height: 8),
-        SegmentedButton<LabelPrintMode>(
-          segments: [
-            ButtonSegment(
-              value: LabelPrintMode.thermal,
-              label: Text('barcode.thermal'.tr()),
-              icon: const Icon(LucideIcons.receipt),
-            ),
-            ButtonSegment(
-              value: LabelPrintMode.a4Sheet,
-              label: Text('barcode.a4_sheet'.tr()),
-              icon: const Icon(LucideIcons.layoutGrid),
-            ),
-          ],
-          selected: {settings.printMode},
-          onSelectionChanged: (selected) {
-            context.read<BarcodeDesignBloc>().add(UpdatePrintMode(selected.first));
-          },
-        ),
-        const SizedBox(height: 16),
-        
         // A4 specific settings
         if (settings.isA4Mode) ..._buildA4Settings(context, settings),
         
@@ -472,12 +451,27 @@ class _DimensionField extends StatefulWidget {
 class _DimensionFieldState extends State<_DimensionField> {
   late TextEditingController _controller;
   late FocusNode _focusNode;
+  Timer? _debounce;
 
   @override
   void initState() {
     super.initState();
     _controller = TextEditingController(text: widget.value.toStringAsFixed(1));
     _focusNode = FocusNode();
+    _focusNode.addListener(_handleFocusChange);
+  }
+
+  void _handleFocusChange() {
+    if (!_focusNode.hasFocus) {
+      _applyValue(_controller.text);
+    }
+  }
+
+  void _applyValue(String v) {
+    final parsed = double.tryParse(v);
+    if (parsed != null && parsed > 0) {
+      widget.onChanged(parsed);
+    }
   }
 
   @override
@@ -485,7 +479,7 @@ class _DimensionFieldState extends State<_DimensionField> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.value != widget.value) {
       // Only update text if not currently focused to avoid cursor jumping
-      if (!_controller.selection.isValid || !_controller.selection.isCollapsed) {
+      if (!_focusNode.hasFocus) {
         final newText = widget.value.toStringAsFixed(1);
         if (_controller.text != newText) {
           _controller.text = newText;
@@ -496,6 +490,8 @@ class _DimensionFieldState extends State<_DimensionField> {
 
   @override
   void dispose() {
+    _debounce?.cancel();
+    _focusNode.removeListener(_handleFocusChange);
     _controller.dispose();
     _focusNode.dispose();
     super.dispose();
@@ -513,11 +509,13 @@ class _DimensionFieldState extends State<_DimensionField> {
       ),
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
       onChanged: (v) {
-        final parsed = double.tryParse(v);
-        if (parsed != null && parsed > 0) {
-          widget.onChanged(parsed);
-        }
+        _debounce?.cancel();
+        _debounce = Timer(const Duration(milliseconds: 350), () {
+          if (!mounted) return;
+          _applyValue(v);
+        });
       },
+      onSubmitted: (v) => _applyValue(v),
       onTap: () {
         // Select all text on tap for easy editing
         _controller.selection = TextSelection(

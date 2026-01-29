@@ -1,3 +1,4 @@
+import 'package:decimal/decimal.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -5,14 +6,14 @@ import 'package:go_router/go_router.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 
 import '../../../../core/bloc/realtime_bloc.dart';
+import '../../../../core/database/daos/product_variant_dao.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../products/domain/entities/product_entity.dart';
 import '../../domain/models/barcode_design_state.dart';
 import '../bloc/barcode_design_bloc.dart';
 import '../bloc/barcode_design_event.dart';
-import '../widgets/barcode_preview_widget.dart';
 import '../widgets/a4_preview_widget.dart';
-import '../widgets/template_selector_widget.dart';
+import '../widgets/barcode_preview_widget.dart';
 import '../widgets/design_settings_widget.dart';
 import '../widgets/product_selection_widget.dart';
 
@@ -44,21 +45,106 @@ class BarcodeDesignScreen extends StatelessWidget {
 class _BarcodeDesignScreenContent extends StatelessWidget {
   const _BarcodeDesignScreenContent();
 
-  int _calculatePreviewCopies(BarcodeDesignData data, Product product) {
-    switch (data.settings.quantityMode) {
-      case QuantityMode.single:
-        return 1;
-      case QuantityMode.stockQuantity:
-        return product.stockQuantity > 0 ? product.stockQuantity : 1;
-      case QuantityMode.invoiceQuantity:
-        if (data.invoiceData != null && data.invoiceData!.lines.isNotEmpty) {
-          final firstLine = data.invoiceData!.lines.first;
-          return data.currentQuantities[firstLine.variantId] ?? firstLine.quantity;
+  void _showSnackBarSafe(BuildContext context, SnackBar snackBar) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!context.mounted) return;
+      final messenger = ScaffoldMessenger.maybeOf(context);
+      if (messenger == null) return;
+      messenger.clearSnackBars();
+      messenger.showSnackBar(snackBar);
+    });
+  }
+
+  Future<List<({Product product, String? variantInfo})>> _buildPreviewLabels(
+    BarcodeDesignData data,
+  ) async {
+    final dao = sl<ProductVariantDao>();
+    final settings = data.settings;
+
+    if (settings.quantityMode == QuantityMode.invoiceQuantity &&
+        data.invoiceData != null &&
+        data.invoiceData!.lines.isNotEmpty) {
+      final labels = <({Product product, String? variantInfo})>[];
+      for (final line in data.invoiceData!.lines) {
+        final qty = data.currentQuantities[line.variantId] ?? line.quantity;
+        if (qty <= 0) continue;
+        final info = [line.sizeName, line.colorName]
+            .whereType<String>()
+            .where((x) => x.trim().isNotEmpty)
+            .join(' / ');
+        final p = Product(
+          id: line.variantId,
+          name: line.productName,
+          sku: line.sku,
+          barcode: line.barcode,
+          costCents: Decimal.zero,
+          priceCents: Decimal.fromInt(line.unitPriceCents),
+          wholesalePriceCents: null,
+          stockQuantity: 0,
+          minQuantity: 0,
+          categoryId: null,
+          supplierId: null,
+          currencyId: null,
+          imagePath: null,
+          hasVariants: false,
+          isTaxable: false,
+          taxRateBps: 0,
+          isActive: true,
+          trackInventory: false,
+        );
+        for (int i = 0; i < qty; i++) {
+          labels.add((product: p, variantInfo: info.isEmpty ? null : info));
         }
-        return 1;
-      case QuantityMode.custom:
-        return data.settings.copies;
+      }
+      return labels;
     }
+
+    final labels = <({Product product, String? variantInfo})>[];
+    for (final product in data.selectedProducts) {
+      final variants = await dao.getVariantsByProduct(product.id);
+      if (variants.isEmpty) {
+        int qty;
+        switch (settings.quantityMode) {
+          case QuantityMode.single:
+            qty = 1;
+          case QuantityMode.custom:
+            qty = settings.copies;
+          case QuantityMode.stockQuantity:
+            qty = product.stockQuantity;
+          case QuantityMode.invoiceQuantity:
+            qty = 1;
+        }
+        if (qty <= 0) continue;
+        final fallbackInfo = data.variantInfoByProductId[product.id];
+        for (int i = 0; i < qty; i++) {
+          labels.add((product: product, variantInfo: fallbackInfo));
+        }
+        continue;
+      }
+
+      final infoByVariantId =
+          await dao.getVariantInfoByVariantIds(variants.map((v) => v.id).toList());
+      for (final v in variants) {
+        int qty;
+        switch (settings.quantityMode) {
+          case QuantityMode.single:
+            qty = 1;
+          case QuantityMode.custom:
+            qty = settings.copies;
+          case QuantityMode.stockQuantity:
+            qty = v.stockQuantity;
+          case QuantityMode.invoiceQuantity:
+            qty = 1;
+        }
+        if (qty <= 0) continue;
+        final vp = product.copyWith(sku: v.sku, barcode: v.barcode);
+        final info = infoByVariantId[v.id];
+        for (int i = 0; i < qty; i++) {
+          labels.add((product: vp, variantInfo: info));
+        }
+      }
+    }
+    return labels;
   }
 
   @override
@@ -113,20 +199,38 @@ class _BarcodeDesignScreenContent extends StatelessWidget {
       ),
       body: SafeArea(
         child: BlocConsumer<BarcodeDesignBloc, RealtimeState<BarcodeDesignData>>(
+          listenWhen: (previous, current) {
+            final prevData = _extractData(previous);
+            final currData = _extractData(current);
+
+            final prevError = prevData?.errorMessage;
+            final currError = currData?.errorMessage;
+            final errorChanged = currError != null && currError.isNotEmpty && currError != prevError;
+
+            final prevStatus = prevData?.operationStatus;
+            final currStatus = currData?.operationStatus;
+            final statusChanged = currStatus == PrintOperationStatus.success && prevStatus != currStatus;
+
+            return errorChanged || statusChanged;
+          },
           listener: (context, state) {
             if (state is RealtimeSuccess<BarcodeDesignData>) {
               final data = state.data;
+
               if (data.operationStatus == PrintOperationStatus.success) {
-                ScaffoldMessenger.of(context).showSnackBar(
+                _showSnackBarSafe(
+                  context,
                   SnackBar(
                     content: Text('barcode.print_success'.tr()),
                     backgroundColor: colorScheme.primary,
                   ),
                 );
                 context.read<BarcodeDesignBloc>().add(const AcknowledgePrintResult());
-              } else if (data.operationStatus == PrintOperationStatus.error &&
-                  data.errorMessage != null) {
-                ScaffoldMessenger.of(context).showSnackBar(
+              }
+
+              if (data.errorMessage != null && data.errorMessage!.isNotEmpty) {
+                _showSnackBarSafe(
+                  context,
                   SnackBar(
                     content: Text(data.errorMessage!),
                     backgroundColor: colorScheme.error,
@@ -168,6 +272,15 @@ class _BarcodeDesignScreenContent extends StatelessWidget {
 
             final data = _extractData(state) ?? BarcodeDesignData.empty();
 
+            if (!data.settings.isA4Mode) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!context.mounted) return;
+                context.read<BarcodeDesignBloc>().add(
+                      const UpdatePrintMode(LabelPrintMode.a4Sheet),
+                    );
+              });
+            }
+
             return LayoutBuilder(
               builder: (context, constraints) {
                 if (constraints.maxWidth < 600) {
@@ -205,29 +318,10 @@ class _MobileLayout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final copies = data.selectedProducts.isNotEmpty
-        ? const _BarcodeDesignScreenContent()._calculatePreviewCopies(
-            data,
-            data.selectedProducts.first,
-          )
-        : 1;
     return Column(
       children: [
         // Product selection summary
         _ProductSelectionSummary(data: data),
-        
-        // Template selector (horizontal scroll) - Fixed height
-        if (data.templates.isNotEmpty)
-          SizedBox(
-            height: 100,
-            child: TemplateSelectorWidget(
-              templates: data.templates,
-              selectedTemplate: data.selectedTemplate,
-              onSelect: (template) => context
-                  .read<BarcodeDesignBloc>()
-                  .add(SelectTemplate(template)),
-            ),
-          ),
 
         // Preview area - Flexible to fill available space
         Expanded(
@@ -242,13 +336,18 @@ class _MobileLayout extends StatelessWidget {
                 padding: const EdgeInsets.all(16),
                 child: data.selectedProducts.isNotEmpty
                     ? (data.settings.isA4Mode
-                        ? A4PreviewWidget(
-                            product: data.selectedProducts.first,
-                            settings: data.settings,
-                            companyProfile: data.companyProfile,
-                            variantInfo: data.variantInfoByProductId[data.selectedProducts.first.id],
-                            copies: copies,
-                            scale: 0.35,
+                        ? FutureBuilder<List<({Product product, String? variantInfo})>>(
+                            future: const _BarcodeDesignScreenContent()._buildPreviewLabels(data),
+                            builder: (context, snapshot) {
+                              final labels = snapshot.data ?? const [];
+                              if (labels.isEmpty) return const _EmptyPreview();
+                              return A4BatchPreviewWidget(
+                                labels: labels,
+                                settings: data.settings,
+                                companyProfile: data.companyProfile,
+                                scale: 0.35,
+                              );
+                            },
                           )
                         : BarcodePreviewWidget(
                             product: data.selectedProducts.first,
@@ -256,7 +355,7 @@ class _MobileLayout extends StatelessWidget {
                             companyProfile: data.companyProfile,
                             variantInfo: data.variantInfoByProductId[data.selectedProducts.first.id],
                           ))
-                    : _EmptyPreview(),
+                    : const _EmptyPreview(),
               ),
             ),
           ),
@@ -295,12 +394,6 @@ class _TabletLayout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final copies = data.selectedProducts.isNotEmpty
-        ? const _BarcodeDesignScreenContent()._calculatePreviewCopies(
-            data,
-            data.selectedProducts.first,
-          )
-        : 1;
     return Row(
       children: [
         // Left sidebar - Products and templates
@@ -321,19 +414,6 @@ class _TabletLayout extends StatelessWidget {
                       .add(const ClearProductSelection()),
                 ),
               ),
-              const Divider(height: 1),
-              // Templates - compact cards (same as mobile/desktop)
-              if (data.templates.isNotEmpty)
-                SizedBox(
-                  height: 100,
-                  child: TemplateSelectorWidget(
-                    templates: data.templates,
-                    selectedTemplate: data.selectedTemplate,
-                    onSelect: (template) => context
-                        .read<BarcodeDesignBloc>()
-                        .add(SelectTemplate(template)),
-                  ),
-                ),
             ],
           ),
         ),
@@ -355,13 +435,18 @@ class _TabletLayout extends StatelessWidget {
                       padding: const EdgeInsets.all(16),
                       child: data.selectedProducts.isNotEmpty
                           ? (data.settings.isA4Mode
-                              ? A4PreviewWidget(
-                                  product: data.selectedProducts.first,
-                                  settings: data.settings,
-                                  companyProfile: data.companyProfile,
-                                  variantInfo: data.variantInfoByProductId[data.selectedProducts.first.id],
-                                  copies: copies,
-                                  scale: 0.45,
+                              ? FutureBuilder<List<({Product product, String? variantInfo})>>(
+                                  future: const _BarcodeDesignScreenContent()._buildPreviewLabels(data),
+                                  builder: (context, snapshot) {
+                                    final labels = snapshot.data ?? const [];
+                                    if (labels.isEmpty) return const _EmptyPreview();
+                                    return A4BatchPreviewWidget(
+                                      labels: labels,
+                                      settings: data.settings,
+                                      companyProfile: data.companyProfile,
+                                      scale: 0.45,
+                                    );
+                                  },
                                 )
                               : BarcodePreviewWidget(
                                   product: data.selectedProducts.first,
@@ -370,7 +455,7 @@ class _TabletLayout extends StatelessWidget {
                                   variantInfo: data.variantInfoByProductId[data.selectedProducts.first.id],
                                   scale: 1.5,
                                 ))
-                          : _EmptyPreview(),
+                          : const _EmptyPreview(),
                     ),
                   ),
                 ),
@@ -406,12 +491,6 @@ class _DesktopLayout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final copies = data.selectedProducts.isNotEmpty
-        ? const _BarcodeDesignScreenContent()._calculatePreviewCopies(
-            data,
-            data.selectedProducts.first,
-          )
-        : 1;
     return Row(
       children: [
         // Left sidebar - Product browser
@@ -447,19 +526,6 @@ class _DesktopLayout extends StatelessWidget {
           flex: 3,
           child: Column(
             children: [
-              // Template selector bar - Fixed height with horizontal scroll
-              Container(
-                height: 90,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: TemplateSelectorWidget(
-                  templates: data.templates,
-                  selectedTemplate: data.selectedTemplate,
-                  onSelect: (template) => context
-                      .read<BarcodeDesignBloc>()
-                      .add(SelectTemplate(template)),
-                ),
-              ),
-              const Divider(height: 1),
               // Preview canvas - Scrollable
               Expanded(
                 child: Container(
@@ -475,13 +541,18 @@ class _DesktopLayout extends StatelessWidget {
                         padding: const EdgeInsets.all(24),
                         child: data.selectedProducts.isNotEmpty
                             ? (data.settings.isA4Mode
-                                ? A4PreviewWidget(
-                                    product: data.selectedProducts.first,
-                                    settings: data.settings,
-                                    companyProfile: data.companyProfile,
-                                    variantInfo: data.variantInfoByProductId[data.selectedProducts.first.id],
-                                    copies: copies,
-                                    scale: 0.6,
+                                ? FutureBuilder<List<({Product product, String? variantInfo})>>(
+                                    future: const _BarcodeDesignScreenContent()._buildPreviewLabels(data),
+                                    builder: (context, snapshot) {
+                                      final labels = snapshot.data ?? const [];
+                                      if (labels.isEmpty) return const _EmptyPreview();
+                                      return A4BatchPreviewWidget(
+                                        labels: labels,
+                                        settings: data.settings,
+                                        companyProfile: data.companyProfile,
+                                        scale: 0.6,
+                                      );
+                                    },
                                   )
                                 : BarcodePreviewWidget(
                                     product: data.selectedProducts.first,
@@ -490,7 +561,7 @@ class _DesktopLayout extends StatelessWidget {
                                     variantInfo: data.variantInfoByProductId[data.selectedProducts.first.id],
                                     scale: 2.0,
                                   ))
-                            : _EmptyPreview(),
+                            : const _EmptyPreview(),
                       ),
                     ),
                   ),
@@ -533,6 +604,8 @@ class _DesktopLayout extends StatelessWidget {
 
 /// Empty preview placeholder
 class _EmptyPreview extends StatelessWidget {
+  const _EmptyPreview();
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
@@ -640,76 +713,13 @@ class _PrintActionsWidget extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         OutlinedButton.icon(
-          onPressed: hasProducts && !isProcessing
+          onPressed: hasProducts
               ? () => context.read<BarcodeDesignBloc>().add(const ShareLabels())
               : null,
           icon: const Icon(LucideIcons.share2),
           label: Text('barcode.share_pdf'.tr()),
         ),
-        const SizedBox(height: 8),
-        OutlinedButton.icon(
-          onPressed: hasProducts
-              ? () => _showSaveTemplateDialog(context)
-              : null,
-          icon: const Icon(LucideIcons.save),
-          label: Text('barcode.save_template'.tr()),
-        ),
       ],
-    );
-  }
-
-  void _showSaveTemplateDialog(BuildContext context) {
-    final nameController = TextEditingController();
-    final descController = TextEditingController();
-
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text('barcode.save_template'.tr()),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameController,
-              decoration: InputDecoration(
-                labelText: 'barcode.template_name'.tr(),
-                border: const OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: descController,
-              decoration: InputDecoration(
-                labelText: 'barcode.template_description'.tr(),
-                border: const OutlineInputBorder(),
-              ),
-              maxLines: 2,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: Text('common.cancel'.tr()),
-          ),
-          FilledButton(
-            onPressed: () {
-              if (nameController.text.trim().isNotEmpty) {
-                context.read<BarcodeDesignBloc>().add(
-                      SaveAsTemplate(
-                        name: nameController.text.trim(),
-                        description: descController.text.trim().isEmpty
-                            ? null
-                            : descController.text.trim(),
-                      ),
-                    );
-                Navigator.of(dialogContext).pop();
-              }
-            },
-            child: Text('common.save'.tr()),
-          ),
-        ],
-      ),
     );
   }
 }

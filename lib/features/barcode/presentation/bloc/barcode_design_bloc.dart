@@ -250,13 +250,6 @@ class BarcodeDesignBloc extends RealtimeBloc<BarcodeDesignData, BarcodeDesignEve
 
     final jobs = <({Product product, int copies, String? variantInfo})>[];
     for (final product in _selectedProducts) {
-      if (!product.hasVariants) {
-        final copies = _calculateCopies(product);
-        if (copies <= 0) continue;
-        jobs.add((product: product, copies: copies, variantInfo: null));
-        continue;
-      }
-
       final variants = await _productVariantDao.getVariantsByProduct(product.id);
       if (variants.isEmpty) {
         final copies = _calculateCopies(product);
@@ -281,7 +274,7 @@ class BarcodeDesignBloc extends RealtimeBloc<BarcodeDesignData, BarcodeDesignEve
           case QuantityMode.custom:
             copies = _settings.copies;
           case QuantityMode.stockQuantity:
-            copies = v.stockQuantity > 0 ? v.stockQuantity : 1;
+            copies = v.stockQuantity;
           case QuantityMode.invoiceQuantity:
             copies = 1;
         }
@@ -520,58 +513,36 @@ class BarcodeDesignBloc extends RealtimeBloc<BarcodeDesignData, BarcodeDesignEve
         return;
       }
 
-      for (int i = 0; i < jobs.length; i++) {
-        final job = jobs[i];
-        _progress = (i + 1) / jobs.length;
-        _operationStatus = PrintOperationStatus.printing;
-        emit(RealtimeSuccess(data: _currentData));
+      _progress = null;
+      _operationStatus = PrintOperationStatus.printing;
+      emit(RealtimeSuccess(data: _currentData));
 
-        final companyName = _settings.includeCompanyName ? _companyProfile.name : null;
-        final companyAddress = _companyProfile.address;
-        final companyPhone = _companyProfile.phone;
+      final companyName = _settings.includeCompanyName ? _companyProfile.name : null;
+      final companyAddress = _companyProfile.address;
+      final companyPhone = _companyProfile.phone;
 
-        if (_settings.isA4Mode) {
-          await _printerService.printA4Grid(
-            product: job.product,
-            barcode: barcodeType,
-            widthMm: _settings.labelWidthMm,
-            heightMm: _settings.labelHeightMm,
-            includeName: _settings.includeName,
-            includePrice: _settings.includePrice,
-            includeBarcode: _settings.includeBarcode,
-            includeCompanyName: _settings.includeCompanyName,
-            companyName: companyName,
-            includeCompanyContact: _settings.includeCompanyContact,
-            companyAddress: companyAddress,
-            companyPhone: companyPhone,
-            copies: job.copies,
-            labelsPerRow: _settings.labelsPerRow,
-            horizontalGapMm: _settings.horizontalGapMm,
-            verticalGapMm: _settings.verticalGapMm,
-            pageMarginMm: _settings.pageMarginMm,
-            variantInfo: job.variantInfo,
-            includeVariantInfo: _settings.includeVariantInfo,
-          );
-        } else {
-          await _printerService.printThermalLabel(
-            product: job.product,
-            barcode: barcodeType,
-            widthMm: _settings.labelWidthMm,
-            heightMm: _settings.labelHeightMm,
-            includeName: _settings.includeName,
-            includePrice: _settings.includePrice,
-            includeBarcode: _settings.includeBarcode,
-            includeCompanyName: _settings.includeCompanyName,
-            companyName: companyName,
-            includeCompanyContact: _settings.includeCompanyContact,
-            companyAddress: companyAddress,
-            companyPhone: companyPhone,
-            copies: job.copies,
-            variantInfo: job.variantInfo,
-            includeVariantInfo: _settings.includeVariantInfo,
-          );
-        }
+      await _printerService.printLabelsPdfBatch(
+        jobs: jobs,
+        barcode: barcodeType,
+        widthMm: _settings.labelWidthMm,
+        heightMm: _settings.labelHeightMm,
+        includeName: _settings.includeName,
+        includePrice: _settings.includePrice,
+        includeBarcode: _settings.includeBarcode,
+        includeCompanyName: _settings.includeCompanyName,
+        companyName: companyName,
+        includeCompanyContact: _settings.includeCompanyContact,
+        companyAddress: companyAddress,
+        companyPhone: companyPhone,
+        isA4Mode: _settings.isA4Mode,
+        labelsPerRow: _settings.labelsPerRow,
+        horizontalGapMm: _settings.horizontalGapMm,
+        verticalGapMm: _settings.verticalGapMm,
+        pageMarginMm: _settings.pageMarginMm,
+        includeVariantInfo: _settings.includeVariantInfo,
+      );
 
+      for (final job in jobs) {
         await _templateDao.logPrint(
           productId: job.product.id,
           templateId: _selectedTemplate?.id,
@@ -600,7 +571,10 @@ class BarcodeDesignBloc extends RealtimeBloc<BarcodeDesignData, BarcodeDesignEve
     ShareLabels event,
     Emitter<RealtimeState<BarcodeDesignData>> emit,
   ) async {
-    if (_selectedProducts.isEmpty) {
+    if (_selectedProducts.isEmpty &&
+        !(_settings.quantityMode == QuantityMode.invoiceQuantity &&
+            _invoiceData != null &&
+            _invoiceData!.lines.isNotEmpty)) {
       _errorMessage = 'No products selected for sharing';
       emit(RealtimeSuccess(data: _currentData));
       return;
@@ -612,17 +586,20 @@ class BarcodeDesignBloc extends RealtimeBloc<BarcodeDesignData, BarcodeDesignEve
       emit(RealtimeSuccess(data: _currentData));
 
       final barcodeType = _printerService.getBarcodeTypeFromString(_settings.barcodeType);
+      final jobs = await _buildPrintJobs();
+      if (jobs.isEmpty) {
+        _operationStatus = PrintOperationStatus.error;
+        _errorMessage = 'No labels to share';
+        emit(RealtimeSuccess(data: _currentData));
+        return;
+      }
 
-      final product = _selectedProducts.first;
-      final copies = _calculateCopies(product);
-      
       final companyName = _settings.includeCompanyName ? _companyProfile.name : null;
       final companyAddress = _companyProfile.address;
       final companyPhone = _companyProfile.phone;
-      final variantInfo = _variantInfoByProductId[product.id];
 
-      await _printerService.shareLabelPdf(
-        product: product,
+      await _printerService.shareLabelsPdfBatch(
+        jobs: jobs,
         barcode: barcodeType,
         widthMm: _settings.labelWidthMm,
         heightMm: _settings.labelHeightMm,
@@ -634,14 +611,13 @@ class BarcodeDesignBloc extends RealtimeBloc<BarcodeDesignData, BarcodeDesignEve
         includeCompanyContact: _settings.includeCompanyContact,
         companyAddress: companyAddress,
         companyPhone: companyPhone,
-        copies: copies,
         isA4Mode: _settings.isA4Mode,
         labelsPerRow: _settings.labelsPerRow,
         horizontalGapMm: _settings.horizontalGapMm,
         verticalGapMm: _settings.verticalGapMm,
         pageMarginMm: _settings.pageMarginMm,
-        variantInfo: variantInfo,
         includeVariantInfo: _settings.includeVariantInfo,
+        filename: 'Labels.pdf',
       );
 
       _operationStatus = PrintOperationStatus.success;
@@ -737,7 +713,7 @@ class BarcodeDesignBloc extends RealtimeBloc<BarcodeDesignData, BarcodeDesignEve
       case QuantityMode.single:
         return 1;
       case QuantityMode.stockQuantity:
-        return product.stockQuantity > 0 ? product.stockQuantity : 1;
+        return product.stockQuantity;
       case QuantityMode.invoiceQuantity:
         // Get quantity from invoice data if available
         if (_currentData.invoiceData != null && _currentData.invoiceData!.lines.isNotEmpty) {

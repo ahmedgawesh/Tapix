@@ -31,10 +31,12 @@ class BarcodePreviewWidget extends StatelessWidget {
     final currencyService = sl<CurrencyService>();
     final barcodeData = product.barcode ?? '';
     final barcodeType = printerService.getBarcodeTypeAuto(barcodeData, settings.barcodeType);
+    final fallbackBarcodeType = printerService.getBarcodeTypeFromString('code128');
+    final canRenderBarcode = barcodeData.trim().isNotEmpty;
 
     // Convert mm to approximate pixels (1mm ~= 3.78px at 96dpi)
-    final width = settings.labelWidthMm * 3.78 * scale;
-    final height = settings.labelHeightMm * 3.78 * scale;
+    final width = (settings.labelWidthMm * 3.78 * scale).clamp(1.0, double.infinity);
+    final height = (settings.labelHeightMm * 3.78 * scale).clamp(1.0, double.infinity);
 
     return Card(
       elevation: 4,
@@ -130,51 +132,81 @@ class BarcodePreviewWidget extends StatelessWidget {
             ],
 
             // Barcode
-            Expanded(
-              child: settings.includeBarcode
-                  ? (barcodeData.isNotEmpty
-                      ? BarcodeWidget(
-                          barcode: barcodeType,
-                          data: barcodeData,
-                          drawText: true,
+            if (settings.includeBarcode)
+              Expanded(
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final barcodeWidth = constraints.maxWidth.clamp(1.0, double.infinity);
+                    final barcodeHeight = constraints.maxHeight.clamp(1.0, double.infinity);
+
+                    if (barcodeWidth < 4 || barcodeHeight < 4) {
+                      return Container(
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey.shade300),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      );
+                    }
+
+                    if (!canRenderBarcode) {
+                      return Container(
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey.shade300),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          'barcode.no_barcode'.tr(),
                           style: TextStyle(
                             fontSize: 8 * scale,
-                            color: Colors.black,
+                            color: Colors.grey.shade600,
                           ),
-                          errorBuilder: (context, error) => Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.error_outline,
-                                  color: Colors.red,
-                                  size: 20 * scale,
+                          textAlign: TextAlign.center,
+                        ),
+                      );
+                    }
+
+                    return BarcodeWidget(
+                      barcode: barcodeType,
+                      data: barcodeData,
+                      width: barcodeWidth,
+                      height: barcodeHeight,
+                      drawText: true,
+                      style: TextStyle(fontSize: 8 * scale),
+                      errorBuilder: (context, error) {
+                        return BarcodeWidget(
+                          barcode: fallbackBarcodeType,
+                          data: barcodeData,
+                          width: barcodeWidth,
+                          height: barcodeHeight,
+                          drawText: true,
+                          style: TextStyle(fontSize: 8 * scale),
+                          errorBuilder: (context, error) {
+                            return Container(
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                border: Border.all(color: Colors.grey.shade300),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                'barcode.invalid_format'.tr(),
+                                style: TextStyle(
+                                  fontSize: 8 * scale,
+                                  color: Colors.grey.shade600,
                                 ),
-                                SizedBox(height: 4 * scale),
-                                Text(
-                                  'barcode.invalid_format'.tr(),
-                                  style: TextStyle(
-                                    color: Colors.red,
-                                    fontSize: 8 * scale,
-                                  ),
-                                  textAlign: TextAlign.center,
-                                ),
-                              ],
-                            ),
-                          ),
-                        )
-                      : Center(
-                          child: Text(
-                            'barcode.no_barcode_data'.tr(),
-                            style: TextStyle(
-                              color: Colors.grey,
-                              fontSize: 10 * scale,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ))
-                  : const SizedBox.shrink(),
-            ),
+                                textAlign: TextAlign.center,
+                              ),
+                            );
+                          },
+                        );
+                      },
+                    );
+                  },
+                ),
+              )
+            else
+              const Spacer(),
 
             // SKU (if enabled)
             if (settings.includeSku && product.sku != null) ...[
