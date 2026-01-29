@@ -70,6 +70,86 @@ class BarcodePrinterService {
     );
   }
 
+  Future<void> printThermalLabel({
+    required Product product,
+    required Barcode barcode,
+    double widthMm = 58,
+    double heightMm = 40,
+    bool includeName = true,
+    bool includePrice = true,
+    bool includeBarcode = true,
+    bool includeCompanyName = false,
+    String? companyName,
+    bool includeCompanyContact = false,
+    String? companyAddress,
+    String? companyPhone,
+    int copies = 1,
+    String? variantInfo,
+    bool includeVariantInfo = false,
+  }) async {
+    await _printPdf(
+      product,
+      barcode,
+      widthMm,
+      heightMm,
+      includeName,
+      includePrice,
+      includeBarcode,
+      includeCompanyName,
+      companyName,
+      includeCompanyContact,
+      companyAddress,
+      companyPhone,
+      copies,
+      variantInfo,
+      includeVariantInfo,
+    );
+  }
+
+  Future<void> printA4Grid({
+    required Product product,
+    required Barcode barcode,
+    required double widthMm,
+    required double heightMm,
+    required bool includeName,
+    required bool includePrice,
+    required bool includeBarcode,
+    required bool includeCompanyName,
+    required String? companyName,
+    required bool includeCompanyContact,
+    required String? companyAddress,
+    required String? companyPhone,
+    required int copies,
+    required int labelsPerRow,
+    required double horizontalGapMm,
+    required double verticalGapMm,
+    required double pageMarginMm,
+    required String? variantInfo,
+    required bool includeVariantInfo,
+  }) async {
+    await _printA4Grid(
+      product: product,
+      barcode: barcode,
+      widthMm: widthMm,
+      heightMm: heightMm,
+      includeName: includeName,
+      includePrice: includePrice,
+      includeBarcode: includeBarcode,
+      includeCompanyName: includeCompanyName,
+      companyName: companyName,
+      includeCompanyContact: includeCompanyContact,
+      companyAddress: companyAddress,
+      companyPhone: companyPhone,
+      copies: copies,
+      labelsPerRow: labelsPerRow,
+      horizontalGapMm: horizontalGapMm,
+      verticalGapMm: verticalGapMm,
+      pageMarginMm: pageMarginMm,
+      variantInfo: variantInfo,
+      includeVariantInfo: includeVariantInfo,
+    );
+  }
+
   /// Print label using PDF with system print dialog
   Future<void> printLabel({
     required Product product,
@@ -94,7 +174,7 @@ class BarcodePrinterService {
     bool includeVariantInfo = false,
   }) async {
     if (isA4Mode) {
-      await _printA4Grid(
+      await printA4Grid(
         product: product,
         barcode: barcode,
         widthMm: widthMm,
@@ -115,25 +195,26 @@ class BarcodePrinterService {
         variantInfo: variantInfo,
         includeVariantInfo: includeVariantInfo,
       );
-    } else {
-      await _printPdf(
-        product,
-        barcode,
-        widthMm,
-        heightMm,
-        includeName,
-        includePrice,
-        includeBarcode,
-        includeCompanyName,
-        companyName,
-        includeCompanyContact,
-        companyAddress,
-        companyPhone,
-        copies,
-        variantInfo,
-        includeVariantInfo,
-      );
+      return;
     }
+
+    await printThermalLabel(
+      product: product,
+      barcode: barcode,
+      widthMm: widthMm,
+      heightMm: heightMm,
+      includeName: includeName,
+      includePrice: includePrice,
+      includeBarcode: includeBarcode,
+      includeCompanyName: includeCompanyName,
+      companyName: companyName,
+      includeCompanyContact: includeCompanyContact,
+      companyAddress: companyAddress,
+      companyPhone: companyPhone,
+      copies: copies,
+      variantInfo: variantInfo,
+      includeVariantInfo: includeVariantInfo,
+    );
   }
 
   Future<void> _printPdf(
@@ -679,6 +760,7 @@ class BarcodePrinterService {
     final safeHeightMm = heightMm!;
     final safeIncludeName = includeName ?? true;
     final safeIncludePrice = includePrice ?? true;
+
     final pdfData = isA4Mode
         ? await _generateA4GridPdf(
             product: safeProduct,

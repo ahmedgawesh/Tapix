@@ -377,28 +377,47 @@ class BarcodeDesignBloc extends RealtimeBloc<BarcodeDesignData, BarcodeDesignEve
         final companyPhone = _companyProfile.phone;
         final variantInfo = _variantInfoByProductId[product.id];
 
-        await _printerService.printLabel(
-          product: product,
-          barcode: barcodeType,
-          widthMm: _settings.labelWidthMm,
-          heightMm: _settings.labelHeightMm,
-          includeName: _settings.includeName,
-          includePrice: _settings.includePrice,
-          includeBarcode: _settings.includeBarcode,
-          includeCompanyName: _settings.includeCompanyName,
-          companyName: companyName,
-          includeCompanyContact: _settings.includeCompanyContact,
-          companyAddress: companyAddress,
-          companyPhone: companyPhone,
-          copies: copies,
-          isA4Mode: _settings.isA4Mode,
-          labelsPerRow: _settings.labelsPerRow,
-          horizontalGapMm: _settings.horizontalGapMm,
-          verticalGapMm: _settings.verticalGapMm,
-          pageMarginMm: _settings.pageMarginMm,
-          variantInfo: variantInfo,
-          includeVariantInfo: _settings.includeVariantInfo,
-        );
+        if (_settings.isA4Mode) {
+          await _printerService.printA4Grid(
+            product: product,
+            barcode: barcodeType,
+            widthMm: _settings.labelWidthMm,
+            heightMm: _settings.labelHeightMm,
+            includeName: _settings.includeName,
+            includePrice: _settings.includePrice,
+            includeBarcode: _settings.includeBarcode,
+            includeCompanyName: _settings.includeCompanyName,
+            companyName: companyName,
+            includeCompanyContact: _settings.includeCompanyContact,
+            companyAddress: companyAddress,
+            companyPhone: companyPhone,
+            copies: copies,
+            labelsPerRow: _settings.labelsPerRow,
+            horizontalGapMm: _settings.horizontalGapMm,
+            verticalGapMm: _settings.verticalGapMm,
+            pageMarginMm: _settings.pageMarginMm,
+            variantInfo: variantInfo,
+            includeVariantInfo: _settings.includeVariantInfo,
+          );
+        } else {
+          await _printerService.printThermalLabel(
+            product: product,
+            barcode: barcodeType,
+            widthMm: _settings.labelWidthMm,
+            heightMm: _settings.labelHeightMm,
+            includeName: _settings.includeName,
+            includePrice: _settings.includePrice,
+            includeBarcode: _settings.includeBarcode,
+            includeCompanyName: _settings.includeCompanyName,
+            companyName: companyName,
+            includeCompanyContact: _settings.includeCompanyContact,
+            companyAddress: companyAddress,
+            companyPhone: companyPhone,
+            copies: copies,
+            variantInfo: variantInfo,
+            includeVariantInfo: _settings.includeVariantInfo,
+          );
+        }
 
         // Log print history
         await _templateDao.logPrint(
