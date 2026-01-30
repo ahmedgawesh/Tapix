@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 import '../converters/money_converter.dart';
 import 'settings.dart';
+import 'loyalty.dart';
 
 @DataClassName('Customer')
 class Customers extends Table {
@@ -11,6 +12,12 @@ class Customers extends Table {
   TextColumn get address => text().nullable()();
   IntColumn get balanceCents => integer().map(const MoneyConverter()).withDefault(const Constant(0))();
   IntColumn get currencyId => integer().references(Currencies, #id, onDelete: KeyAction.restrict)();
+  TextColumn get segment => text().withDefault(const Constant('retail'))(); // retail, wholesale, premium
+  IntColumn get loyaltyTierId => integer().nullable().references(LoyaltyTiers, #id, onDelete: KeyAction.setNull)();
+  IntColumn get loyaltyPointsBalance => integer().withDefault(const Constant(0))();
+  IntColumn get totalSpentCents => integer().map(const MoneyConverter()).withDefault(const Constant(0))();
+  IntColumn get totalTransactions => integer().withDefault(const Constant(0))();
+  DateTimeColumn get lastTransactionAt => dateTime().nullable()();
   BoolColumn get isActive => boolean().withDefault(const Constant(true))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();

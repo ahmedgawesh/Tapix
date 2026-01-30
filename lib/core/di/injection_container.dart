@@ -72,6 +72,11 @@ import '../../features/customers/data/repositories/customer_repository_impl.dart
 import '../../features/customers/presentation/bloc/customers_bloc.dart';
 import '../../features/customers/presentation/bloc/customer_metrics_bloc.dart';
 import '../../features/customers/presentation/bloc/customer_form_bloc.dart';
+import '../../features/customers/presentation/bloc/customer_analytics_bloc.dart';
+import '../../features/customers/presentation/bloc/loyalty_bloc.dart';
+import '../../features/customers/domain/repositories/loyalty_repository.dart';
+import '../../features/customers/data/repositories/loyalty_repository_impl.dart';
+import '../database/daos/loyalty_dao.dart';
 
 final sl = GetIt.instance;
 
@@ -94,6 +99,7 @@ Future<void> init() async {
   sl.registerLazySingleton(() => PurchaseDao(sl()));
   sl.registerLazySingleton(() => SupplierDao(sl()));
   sl.registerLazySingleton(() => CustomerDao(sl()));
+  sl.registerLazySingleton(() => LoyaltyDao(sl()));
 
   // Auth Services
   sl.registerLazySingleton(() => PasswordService());
@@ -147,6 +153,9 @@ Future<void> init() async {
   );
   sl.registerLazySingleton<CustomerRepository>(
     () => CustomerRepositoryImpl(sl<CustomerDao>()),
+  );
+  sl.registerLazySingleton<LoyaltyRepository>(
+    () => LoyaltyRepositoryImpl(sl<LoyaltyDao>()),
   );
 
   // Blocs
@@ -208,6 +217,14 @@ Future<void> init() async {
   sl.registerFactory(() => CustomersBloc(sl<CustomerRepository>()));
   sl.registerFactory(() => CustomerMetricsBloc(sl<CustomerRepository>()));
   sl.registerFactory(() => CustomerFormBloc(sl<CustomerRepository>()));
+  sl.registerFactory(() => CustomerAnalyticsBloc(sl<CustomerRepository>()));
+  sl.registerFactory(() => CustomerHealthBloc(sl<CustomerRepository>()));
+  sl.registerFactory(() => CustomerDashboardBloc(sl<CustomerRepository>()));
+  
+  // Loyalty Blocs
+  sl.registerFactory(() => LoyaltyTiersBloc(sl<LoyaltyRepository>()));
+  sl.registerFactory(() => LoyaltyRewardsBloc(sl<LoyaltyRepository>()));
+  sl.registerFactory(() => LoyaltyMetricsBloc(sl<LoyaltyRepository>()));
 
   // Barcode Services
   sl.registerLazySingleton(() => BarcodeValidationService());

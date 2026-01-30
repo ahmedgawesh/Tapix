@@ -6647,6 +6647,785 @@ class ProductBatchesCompanion extends UpdateCompanion<ProductBatch> {
   }
 }
 
+class $LoyaltyTiersTable extends LoyaltyTiers
+    with TableInfo<$LoyaltyTiersTable, LoyaltyTier> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $LoyaltyTiersTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameArMeta = const VerificationMeta('nameAr');
+  @override
+  late final GeneratedColumn<String> nameAr = GeneratedColumn<String>(
+    'name_ar',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _nameFrMeta = const VerificationMeta('nameFr');
+  @override
+  late final GeneratedColumn<String> nameFr = GeneratedColumn<String>(
+    'name_fr',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _minPointsMeta = const VerificationMeta(
+    'minPoints',
+  );
+  @override
+  late final GeneratedColumn<int> minPoints = GeneratedColumn<int>(
+    'min_points',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _maxPointsMeta = const VerificationMeta(
+    'maxPoints',
+  );
+  @override
+  late final GeneratedColumn<int> maxPoints = GeneratedColumn<int>(
+    'max_points',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _pointsMultiplierMeta = const VerificationMeta(
+    'pointsMultiplier',
+  );
+  @override
+  late final GeneratedColumn<double> pointsMultiplier = GeneratedColumn<double>(
+    'points_multiplier',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1.0),
+  );
+  static const VerificationMeta _discountPercentMeta = const VerificationMeta(
+    'discountPercent',
+  );
+  @override
+  late final GeneratedColumn<double> discountPercent = GeneratedColumn<double>(
+    'discount_percent',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0.0),
+  );
+  static const VerificationMeta _colorMeta = const VerificationMeta('color');
+  @override
+  late final GeneratedColumn<String> color = GeneratedColumn<String>(
+    'color',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('#CD7F32'),
+  );
+  static const VerificationMeta _iconMeta = const VerificationMeta('icon');
+  @override
+  late final GeneratedColumn<String> icon = GeneratedColumn<String>(
+    'icon',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _sortOrderMeta = const VerificationMeta(
+    'sortOrder',
+  );
+  @override
+  late final GeneratedColumn<int> sortOrder = GeneratedColumn<int>(
+    'sort_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _isActiveMeta = const VerificationMeta(
+    'isActive',
+  );
+  @override
+  late final GeneratedColumn<bool> isActive = GeneratedColumn<bool>(
+    'is_active',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_active" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    name,
+    nameAr,
+    nameFr,
+    minPoints,
+    maxPoints,
+    pointsMultiplier,
+    discountPercent,
+    color,
+    icon,
+    sortOrder,
+    isActive,
+    createdAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'loyalty_tiers';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<LoyaltyTier> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('name_ar')) {
+      context.handle(
+        _nameArMeta,
+        nameAr.isAcceptableOrUnknown(data['name_ar']!, _nameArMeta),
+      );
+    }
+    if (data.containsKey('name_fr')) {
+      context.handle(
+        _nameFrMeta,
+        nameFr.isAcceptableOrUnknown(data['name_fr']!, _nameFrMeta),
+      );
+    }
+    if (data.containsKey('min_points')) {
+      context.handle(
+        _minPointsMeta,
+        minPoints.isAcceptableOrUnknown(data['min_points']!, _minPointsMeta),
+      );
+    }
+    if (data.containsKey('max_points')) {
+      context.handle(
+        _maxPointsMeta,
+        maxPoints.isAcceptableOrUnknown(data['max_points']!, _maxPointsMeta),
+      );
+    }
+    if (data.containsKey('points_multiplier')) {
+      context.handle(
+        _pointsMultiplierMeta,
+        pointsMultiplier.isAcceptableOrUnknown(
+          data['points_multiplier']!,
+          _pointsMultiplierMeta,
+        ),
+      );
+    }
+    if (data.containsKey('discount_percent')) {
+      context.handle(
+        _discountPercentMeta,
+        discountPercent.isAcceptableOrUnknown(
+          data['discount_percent']!,
+          _discountPercentMeta,
+        ),
+      );
+    }
+    if (data.containsKey('color')) {
+      context.handle(
+        _colorMeta,
+        color.isAcceptableOrUnknown(data['color']!, _colorMeta),
+      );
+    }
+    if (data.containsKey('icon')) {
+      context.handle(
+        _iconMeta,
+        icon.isAcceptableOrUnknown(data['icon']!, _iconMeta),
+      );
+    }
+    if (data.containsKey('sort_order')) {
+      context.handle(
+        _sortOrderMeta,
+        sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
+      );
+    }
+    if (data.containsKey('is_active')) {
+      context.handle(
+        _isActiveMeta,
+        isActive.isAcceptableOrUnknown(data['is_active']!, _isActiveMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  LoyaltyTier map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return LoyaltyTier(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      nameAr: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name_ar'],
+      ),
+      nameFr: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name_fr'],
+      ),
+      minPoints: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}min_points'],
+      )!,
+      maxPoints: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}max_points'],
+      ),
+      pointsMultiplier: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}points_multiplier'],
+      )!,
+      discountPercent: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}discount_percent'],
+      )!,
+      color: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}color'],
+      )!,
+      icon: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}icon'],
+      ),
+      sortOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sort_order'],
+      )!,
+      isActive: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_active'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $LoyaltyTiersTable createAlias(String alias) {
+    return $LoyaltyTiersTable(attachedDatabase, alias);
+  }
+}
+
+class LoyaltyTier extends DataClass implements Insertable<LoyaltyTier> {
+  final int id;
+  final String name;
+  final String? nameAr;
+  final String? nameFr;
+  final int minPoints;
+  final int? maxPoints;
+  final double pointsMultiplier;
+  final double discountPercent;
+  final String color;
+  final String? icon;
+  final int sortOrder;
+  final bool isActive;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  const LoyaltyTier({
+    required this.id,
+    required this.name,
+    this.nameAr,
+    this.nameFr,
+    required this.minPoints,
+    this.maxPoints,
+    required this.pointsMultiplier,
+    required this.discountPercent,
+    required this.color,
+    this.icon,
+    required this.sortOrder,
+    required this.isActive,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['name'] = Variable<String>(name);
+    if (!nullToAbsent || nameAr != null) {
+      map['name_ar'] = Variable<String>(nameAr);
+    }
+    if (!nullToAbsent || nameFr != null) {
+      map['name_fr'] = Variable<String>(nameFr);
+    }
+    map['min_points'] = Variable<int>(minPoints);
+    if (!nullToAbsent || maxPoints != null) {
+      map['max_points'] = Variable<int>(maxPoints);
+    }
+    map['points_multiplier'] = Variable<double>(pointsMultiplier);
+    map['discount_percent'] = Variable<double>(discountPercent);
+    map['color'] = Variable<String>(color);
+    if (!nullToAbsent || icon != null) {
+      map['icon'] = Variable<String>(icon);
+    }
+    map['sort_order'] = Variable<int>(sortOrder);
+    map['is_active'] = Variable<bool>(isActive);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  LoyaltyTiersCompanion toCompanion(bool nullToAbsent) {
+    return LoyaltyTiersCompanion(
+      id: Value(id),
+      name: Value(name),
+      nameAr: nameAr == null && nullToAbsent
+          ? const Value.absent()
+          : Value(nameAr),
+      nameFr: nameFr == null && nullToAbsent
+          ? const Value.absent()
+          : Value(nameFr),
+      minPoints: Value(minPoints),
+      maxPoints: maxPoints == null && nullToAbsent
+          ? const Value.absent()
+          : Value(maxPoints),
+      pointsMultiplier: Value(pointsMultiplier),
+      discountPercent: Value(discountPercent),
+      color: Value(color),
+      icon: icon == null && nullToAbsent ? const Value.absent() : Value(icon),
+      sortOrder: Value(sortOrder),
+      isActive: Value(isActive),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory LoyaltyTier.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return LoyaltyTier(
+      id: serializer.fromJson<int>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      nameAr: serializer.fromJson<String?>(json['nameAr']),
+      nameFr: serializer.fromJson<String?>(json['nameFr']),
+      minPoints: serializer.fromJson<int>(json['minPoints']),
+      maxPoints: serializer.fromJson<int?>(json['maxPoints']),
+      pointsMultiplier: serializer.fromJson<double>(json['pointsMultiplier']),
+      discountPercent: serializer.fromJson<double>(json['discountPercent']),
+      color: serializer.fromJson<String>(json['color']),
+      icon: serializer.fromJson<String?>(json['icon']),
+      sortOrder: serializer.fromJson<int>(json['sortOrder']),
+      isActive: serializer.fromJson<bool>(json['isActive']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'name': serializer.toJson<String>(name),
+      'nameAr': serializer.toJson<String?>(nameAr),
+      'nameFr': serializer.toJson<String?>(nameFr),
+      'minPoints': serializer.toJson<int>(minPoints),
+      'maxPoints': serializer.toJson<int?>(maxPoints),
+      'pointsMultiplier': serializer.toJson<double>(pointsMultiplier),
+      'discountPercent': serializer.toJson<double>(discountPercent),
+      'color': serializer.toJson<String>(color),
+      'icon': serializer.toJson<String?>(icon),
+      'sortOrder': serializer.toJson<int>(sortOrder),
+      'isActive': serializer.toJson<bool>(isActive),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  LoyaltyTier copyWith({
+    int? id,
+    String? name,
+    Value<String?> nameAr = const Value.absent(),
+    Value<String?> nameFr = const Value.absent(),
+    int? minPoints,
+    Value<int?> maxPoints = const Value.absent(),
+    double? pointsMultiplier,
+    double? discountPercent,
+    String? color,
+    Value<String?> icon = const Value.absent(),
+    int? sortOrder,
+    bool? isActive,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) => LoyaltyTier(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    nameAr: nameAr.present ? nameAr.value : this.nameAr,
+    nameFr: nameFr.present ? nameFr.value : this.nameFr,
+    minPoints: minPoints ?? this.minPoints,
+    maxPoints: maxPoints.present ? maxPoints.value : this.maxPoints,
+    pointsMultiplier: pointsMultiplier ?? this.pointsMultiplier,
+    discountPercent: discountPercent ?? this.discountPercent,
+    color: color ?? this.color,
+    icon: icon.present ? icon.value : this.icon,
+    sortOrder: sortOrder ?? this.sortOrder,
+    isActive: isActive ?? this.isActive,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  LoyaltyTier copyWithCompanion(LoyaltyTiersCompanion data) {
+    return LoyaltyTier(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      nameAr: data.nameAr.present ? data.nameAr.value : this.nameAr,
+      nameFr: data.nameFr.present ? data.nameFr.value : this.nameFr,
+      minPoints: data.minPoints.present ? data.minPoints.value : this.minPoints,
+      maxPoints: data.maxPoints.present ? data.maxPoints.value : this.maxPoints,
+      pointsMultiplier: data.pointsMultiplier.present
+          ? data.pointsMultiplier.value
+          : this.pointsMultiplier,
+      discountPercent: data.discountPercent.present
+          ? data.discountPercent.value
+          : this.discountPercent,
+      color: data.color.present ? data.color.value : this.color,
+      icon: data.icon.present ? data.icon.value : this.icon,
+      sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+      isActive: data.isActive.present ? data.isActive.value : this.isActive,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LoyaltyTier(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('nameAr: $nameAr, ')
+          ..write('nameFr: $nameFr, ')
+          ..write('minPoints: $minPoints, ')
+          ..write('maxPoints: $maxPoints, ')
+          ..write('pointsMultiplier: $pointsMultiplier, ')
+          ..write('discountPercent: $discountPercent, ')
+          ..write('color: $color, ')
+          ..write('icon: $icon, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('isActive: $isActive, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    name,
+    nameAr,
+    nameFr,
+    minPoints,
+    maxPoints,
+    pointsMultiplier,
+    discountPercent,
+    color,
+    icon,
+    sortOrder,
+    isActive,
+    createdAt,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is LoyaltyTier &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.nameAr == this.nameAr &&
+          other.nameFr == this.nameFr &&
+          other.minPoints == this.minPoints &&
+          other.maxPoints == this.maxPoints &&
+          other.pointsMultiplier == this.pointsMultiplier &&
+          other.discountPercent == this.discountPercent &&
+          other.color == this.color &&
+          other.icon == this.icon &&
+          other.sortOrder == this.sortOrder &&
+          other.isActive == this.isActive &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class LoyaltyTiersCompanion extends UpdateCompanion<LoyaltyTier> {
+  final Value<int> id;
+  final Value<String> name;
+  final Value<String?> nameAr;
+  final Value<String?> nameFr;
+  final Value<int> minPoints;
+  final Value<int?> maxPoints;
+  final Value<double> pointsMultiplier;
+  final Value<double> discountPercent;
+  final Value<String> color;
+  final Value<String?> icon;
+  final Value<int> sortOrder;
+  final Value<bool> isActive;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  const LoyaltyTiersCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.nameAr = const Value.absent(),
+    this.nameFr = const Value.absent(),
+    this.minPoints = const Value.absent(),
+    this.maxPoints = const Value.absent(),
+    this.pointsMultiplier = const Value.absent(),
+    this.discountPercent = const Value.absent(),
+    this.color = const Value.absent(),
+    this.icon = const Value.absent(),
+    this.sortOrder = const Value.absent(),
+    this.isActive = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  });
+  LoyaltyTiersCompanion.insert({
+    this.id = const Value.absent(),
+    required String name,
+    this.nameAr = const Value.absent(),
+    this.nameFr = const Value.absent(),
+    this.minPoints = const Value.absent(),
+    this.maxPoints = const Value.absent(),
+    this.pointsMultiplier = const Value.absent(),
+    this.discountPercent = const Value.absent(),
+    this.color = const Value.absent(),
+    this.icon = const Value.absent(),
+    this.sortOrder = const Value.absent(),
+    this.isActive = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  }) : name = Value(name);
+  static Insertable<LoyaltyTier> custom({
+    Expression<int>? id,
+    Expression<String>? name,
+    Expression<String>? nameAr,
+    Expression<String>? nameFr,
+    Expression<int>? minPoints,
+    Expression<int>? maxPoints,
+    Expression<double>? pointsMultiplier,
+    Expression<double>? discountPercent,
+    Expression<String>? color,
+    Expression<String>? icon,
+    Expression<int>? sortOrder,
+    Expression<bool>? isActive,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (nameAr != null) 'name_ar': nameAr,
+      if (nameFr != null) 'name_fr': nameFr,
+      if (minPoints != null) 'min_points': minPoints,
+      if (maxPoints != null) 'max_points': maxPoints,
+      if (pointsMultiplier != null) 'points_multiplier': pointsMultiplier,
+      if (discountPercent != null) 'discount_percent': discountPercent,
+      if (color != null) 'color': color,
+      if (icon != null) 'icon': icon,
+      if (sortOrder != null) 'sort_order': sortOrder,
+      if (isActive != null) 'is_active': isActive,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+    });
+  }
+
+  LoyaltyTiersCompanion copyWith({
+    Value<int>? id,
+    Value<String>? name,
+    Value<String?>? nameAr,
+    Value<String?>? nameFr,
+    Value<int>? minPoints,
+    Value<int?>? maxPoints,
+    Value<double>? pointsMultiplier,
+    Value<double>? discountPercent,
+    Value<String>? color,
+    Value<String?>? icon,
+    Value<int>? sortOrder,
+    Value<bool>? isActive,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+  }) {
+    return LoyaltyTiersCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      nameAr: nameAr ?? this.nameAr,
+      nameFr: nameFr ?? this.nameFr,
+      minPoints: minPoints ?? this.minPoints,
+      maxPoints: maxPoints ?? this.maxPoints,
+      pointsMultiplier: pointsMultiplier ?? this.pointsMultiplier,
+      discountPercent: discountPercent ?? this.discountPercent,
+      color: color ?? this.color,
+      icon: icon ?? this.icon,
+      sortOrder: sortOrder ?? this.sortOrder,
+      isActive: isActive ?? this.isActive,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (nameAr.present) {
+      map['name_ar'] = Variable<String>(nameAr.value);
+    }
+    if (nameFr.present) {
+      map['name_fr'] = Variable<String>(nameFr.value);
+    }
+    if (minPoints.present) {
+      map['min_points'] = Variable<int>(minPoints.value);
+    }
+    if (maxPoints.present) {
+      map['max_points'] = Variable<int>(maxPoints.value);
+    }
+    if (pointsMultiplier.present) {
+      map['points_multiplier'] = Variable<double>(pointsMultiplier.value);
+    }
+    if (discountPercent.present) {
+      map['discount_percent'] = Variable<double>(discountPercent.value);
+    }
+    if (color.present) {
+      map['color'] = Variable<String>(color.value);
+    }
+    if (icon.present) {
+      map['icon'] = Variable<String>(icon.value);
+    }
+    if (sortOrder.present) {
+      map['sort_order'] = Variable<int>(sortOrder.value);
+    }
+    if (isActive.present) {
+      map['is_active'] = Variable<bool>(isActive.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LoyaltyTiersCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('nameAr: $nameAr, ')
+          ..write('nameFr: $nameFr, ')
+          ..write('minPoints: $minPoints, ')
+          ..write('maxPoints: $maxPoints, ')
+          ..write('pointsMultiplier: $pointsMultiplier, ')
+          ..write('discountPercent: $discountPercent, ')
+          ..write('color: $color, ')
+          ..write('icon: $icon, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('isActive: $isActive, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $CustomersTable extends Customers
     with TableInfo<$CustomersTable, Customer> {
   @override
@@ -6728,6 +7507,77 @@ class $CustomersTable extends Customers
       'REFERENCES currencies (id) ON DELETE RESTRICT',
     ),
   );
+  static const VerificationMeta _segmentMeta = const VerificationMeta(
+    'segment',
+  );
+  @override
+  late final GeneratedColumn<String> segment = GeneratedColumn<String>(
+    'segment',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('retail'),
+  );
+  static const VerificationMeta _loyaltyTierIdMeta = const VerificationMeta(
+    'loyaltyTierId',
+  );
+  @override
+  late final GeneratedColumn<int> loyaltyTierId = GeneratedColumn<int>(
+    'loyalty_tier_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES loyalty_tiers (id) ON DELETE SET NULL',
+    ),
+  );
+  static const VerificationMeta _loyaltyPointsBalanceMeta =
+      const VerificationMeta('loyaltyPointsBalance');
+  @override
+  late final GeneratedColumn<int> loyaltyPointsBalance = GeneratedColumn<int>(
+    'loyalty_points_balance',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  @override
+  late final GeneratedColumnWithTypeConverter<Decimal, int> totalSpentCents =
+      GeneratedColumn<int>(
+        'total_spent_cents',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(0),
+      ).withConverter<Decimal>($CustomersTable.$convertertotalSpentCents);
+  static const VerificationMeta _totalTransactionsMeta = const VerificationMeta(
+    'totalTransactions',
+  );
+  @override
+  late final GeneratedColumn<int> totalTransactions = GeneratedColumn<int>(
+    'total_transactions',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _lastTransactionAtMeta = const VerificationMeta(
+    'lastTransactionAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastTransactionAt =
+      GeneratedColumn<DateTime>(
+        'last_transaction_at',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _isActiveMeta = const VerificationMeta(
     'isActive',
   );
@@ -6776,6 +7626,12 @@ class $CustomersTable extends Customers
     address,
     balanceCents,
     currencyId,
+    segment,
+    loyaltyTierId,
+    loyaltyPointsBalance,
+    totalSpentCents,
+    totalTransactions,
+    lastTransactionAt,
     isActive,
     createdAt,
     updatedAt,
@@ -6828,6 +7684,48 @@ class $CustomersTable extends Customers
       );
     } else if (isInserting) {
       context.missing(_currencyIdMeta);
+    }
+    if (data.containsKey('segment')) {
+      context.handle(
+        _segmentMeta,
+        segment.isAcceptableOrUnknown(data['segment']!, _segmentMeta),
+      );
+    }
+    if (data.containsKey('loyalty_tier_id')) {
+      context.handle(
+        _loyaltyTierIdMeta,
+        loyaltyTierId.isAcceptableOrUnknown(
+          data['loyalty_tier_id']!,
+          _loyaltyTierIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('loyalty_points_balance')) {
+      context.handle(
+        _loyaltyPointsBalanceMeta,
+        loyaltyPointsBalance.isAcceptableOrUnknown(
+          data['loyalty_points_balance']!,
+          _loyaltyPointsBalanceMeta,
+        ),
+      );
+    }
+    if (data.containsKey('total_transactions')) {
+      context.handle(
+        _totalTransactionsMeta,
+        totalTransactions.isAcceptableOrUnknown(
+          data['total_transactions']!,
+          _totalTransactionsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('last_transaction_at')) {
+      context.handle(
+        _lastTransactionAtMeta,
+        lastTransactionAt.isAcceptableOrUnknown(
+          data['last_transaction_at']!,
+          _lastTransactionAtMeta,
+        ),
+      );
     }
     if (data.containsKey('is_active')) {
       context.handle(
@@ -6886,6 +7784,32 @@ class $CustomersTable extends Customers
         DriftSqlType.int,
         data['${effectivePrefix}currency_id'],
       )!,
+      segment: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}segment'],
+      )!,
+      loyaltyTierId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}loyalty_tier_id'],
+      ),
+      loyaltyPointsBalance: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}loyalty_points_balance'],
+      )!,
+      totalSpentCents: $CustomersTable.$convertertotalSpentCents.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}total_spent_cents'],
+        )!,
+      ),
+      totalTransactions: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}total_transactions'],
+      )!,
+      lastTransactionAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_transaction_at'],
+      ),
       isActive: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}is_active'],
@@ -6908,6 +7832,8 @@ class $CustomersTable extends Customers
 
   static TypeConverter<Decimal, int> $converterbalanceCents =
       const MoneyConverter();
+  static TypeConverter<Decimal, int> $convertertotalSpentCents =
+      const MoneyConverter();
 }
 
 class Customer extends DataClass implements Insertable<Customer> {
@@ -6918,6 +7844,12 @@ class Customer extends DataClass implements Insertable<Customer> {
   final String? address;
   final Decimal balanceCents;
   final int currencyId;
+  final String segment;
+  final int? loyaltyTierId;
+  final int loyaltyPointsBalance;
+  final Decimal totalSpentCents;
+  final int totalTransactions;
+  final DateTime? lastTransactionAt;
   final bool isActive;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -6929,6 +7861,12 @@ class Customer extends DataClass implements Insertable<Customer> {
     this.address,
     required this.balanceCents,
     required this.currencyId,
+    required this.segment,
+    this.loyaltyTierId,
+    required this.loyaltyPointsBalance,
+    required this.totalSpentCents,
+    required this.totalTransactions,
+    this.lastTransactionAt,
     required this.isActive,
     required this.createdAt,
     required this.updatedAt,
@@ -6953,6 +7891,20 @@ class Customer extends DataClass implements Insertable<Customer> {
       );
     }
     map['currency_id'] = Variable<int>(currencyId);
+    map['segment'] = Variable<String>(segment);
+    if (!nullToAbsent || loyaltyTierId != null) {
+      map['loyalty_tier_id'] = Variable<int>(loyaltyTierId);
+    }
+    map['loyalty_points_balance'] = Variable<int>(loyaltyPointsBalance);
+    {
+      map['total_spent_cents'] = Variable<int>(
+        $CustomersTable.$convertertotalSpentCents.toSql(totalSpentCents),
+      );
+    }
+    map['total_transactions'] = Variable<int>(totalTransactions);
+    if (!nullToAbsent || lastTransactionAt != null) {
+      map['last_transaction_at'] = Variable<DateTime>(lastTransactionAt);
+    }
     map['is_active'] = Variable<bool>(isActive);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
@@ -6974,6 +7926,16 @@ class Customer extends DataClass implements Insertable<Customer> {
           : Value(address),
       balanceCents: Value(balanceCents),
       currencyId: Value(currencyId),
+      segment: Value(segment),
+      loyaltyTierId: loyaltyTierId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(loyaltyTierId),
+      loyaltyPointsBalance: Value(loyaltyPointsBalance),
+      totalSpentCents: Value(totalSpentCents),
+      totalTransactions: Value(totalTransactions),
+      lastTransactionAt: lastTransactionAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastTransactionAt),
       isActive: Value(isActive),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
@@ -6993,6 +7955,16 @@ class Customer extends DataClass implements Insertable<Customer> {
       address: serializer.fromJson<String?>(json['address']),
       balanceCents: serializer.fromJson<Decimal>(json['balanceCents']),
       currencyId: serializer.fromJson<int>(json['currencyId']),
+      segment: serializer.fromJson<String>(json['segment']),
+      loyaltyTierId: serializer.fromJson<int?>(json['loyaltyTierId']),
+      loyaltyPointsBalance: serializer.fromJson<int>(
+        json['loyaltyPointsBalance'],
+      ),
+      totalSpentCents: serializer.fromJson<Decimal>(json['totalSpentCents']),
+      totalTransactions: serializer.fromJson<int>(json['totalTransactions']),
+      lastTransactionAt: serializer.fromJson<DateTime?>(
+        json['lastTransactionAt'],
+      ),
       isActive: serializer.fromJson<bool>(json['isActive']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
@@ -7009,6 +7981,12 @@ class Customer extends DataClass implements Insertable<Customer> {
       'address': serializer.toJson<String?>(address),
       'balanceCents': serializer.toJson<Decimal>(balanceCents),
       'currencyId': serializer.toJson<int>(currencyId),
+      'segment': serializer.toJson<String>(segment),
+      'loyaltyTierId': serializer.toJson<int?>(loyaltyTierId),
+      'loyaltyPointsBalance': serializer.toJson<int>(loyaltyPointsBalance),
+      'totalSpentCents': serializer.toJson<Decimal>(totalSpentCents),
+      'totalTransactions': serializer.toJson<int>(totalTransactions),
+      'lastTransactionAt': serializer.toJson<DateTime?>(lastTransactionAt),
       'isActive': serializer.toJson<bool>(isActive),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
@@ -7023,6 +8001,12 @@ class Customer extends DataClass implements Insertable<Customer> {
     Value<String?> address = const Value.absent(),
     Decimal? balanceCents,
     int? currencyId,
+    String? segment,
+    Value<int?> loyaltyTierId = const Value.absent(),
+    int? loyaltyPointsBalance,
+    Decimal? totalSpentCents,
+    int? totalTransactions,
+    Value<DateTime?> lastTransactionAt = const Value.absent(),
     bool? isActive,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -7034,6 +8018,16 @@ class Customer extends DataClass implements Insertable<Customer> {
     address: address.present ? address.value : this.address,
     balanceCents: balanceCents ?? this.balanceCents,
     currencyId: currencyId ?? this.currencyId,
+    segment: segment ?? this.segment,
+    loyaltyTierId: loyaltyTierId.present
+        ? loyaltyTierId.value
+        : this.loyaltyTierId,
+    loyaltyPointsBalance: loyaltyPointsBalance ?? this.loyaltyPointsBalance,
+    totalSpentCents: totalSpentCents ?? this.totalSpentCents,
+    totalTransactions: totalTransactions ?? this.totalTransactions,
+    lastTransactionAt: lastTransactionAt.present
+        ? lastTransactionAt.value
+        : this.lastTransactionAt,
     isActive: isActive ?? this.isActive,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
@@ -7051,6 +8045,22 @@ class Customer extends DataClass implements Insertable<Customer> {
       currencyId: data.currencyId.present
           ? data.currencyId.value
           : this.currencyId,
+      segment: data.segment.present ? data.segment.value : this.segment,
+      loyaltyTierId: data.loyaltyTierId.present
+          ? data.loyaltyTierId.value
+          : this.loyaltyTierId,
+      loyaltyPointsBalance: data.loyaltyPointsBalance.present
+          ? data.loyaltyPointsBalance.value
+          : this.loyaltyPointsBalance,
+      totalSpentCents: data.totalSpentCents.present
+          ? data.totalSpentCents.value
+          : this.totalSpentCents,
+      totalTransactions: data.totalTransactions.present
+          ? data.totalTransactions.value
+          : this.totalTransactions,
+      lastTransactionAt: data.lastTransactionAt.present
+          ? data.lastTransactionAt.value
+          : this.lastTransactionAt,
       isActive: data.isActive.present ? data.isActive.value : this.isActive,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
@@ -7067,6 +8077,12 @@ class Customer extends DataClass implements Insertable<Customer> {
           ..write('address: $address, ')
           ..write('balanceCents: $balanceCents, ')
           ..write('currencyId: $currencyId, ')
+          ..write('segment: $segment, ')
+          ..write('loyaltyTierId: $loyaltyTierId, ')
+          ..write('loyaltyPointsBalance: $loyaltyPointsBalance, ')
+          ..write('totalSpentCents: $totalSpentCents, ')
+          ..write('totalTransactions: $totalTransactions, ')
+          ..write('lastTransactionAt: $lastTransactionAt, ')
           ..write('isActive: $isActive, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
@@ -7083,6 +8099,12 @@ class Customer extends DataClass implements Insertable<Customer> {
     address,
     balanceCents,
     currencyId,
+    segment,
+    loyaltyTierId,
+    loyaltyPointsBalance,
+    totalSpentCents,
+    totalTransactions,
+    lastTransactionAt,
     isActive,
     createdAt,
     updatedAt,
@@ -7098,6 +8120,12 @@ class Customer extends DataClass implements Insertable<Customer> {
           other.address == this.address &&
           other.balanceCents == this.balanceCents &&
           other.currencyId == this.currencyId &&
+          other.segment == this.segment &&
+          other.loyaltyTierId == this.loyaltyTierId &&
+          other.loyaltyPointsBalance == this.loyaltyPointsBalance &&
+          other.totalSpentCents == this.totalSpentCents &&
+          other.totalTransactions == this.totalTransactions &&
+          other.lastTransactionAt == this.lastTransactionAt &&
           other.isActive == this.isActive &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
@@ -7111,6 +8139,12 @@ class CustomersCompanion extends UpdateCompanion<Customer> {
   final Value<String?> address;
   final Value<Decimal> balanceCents;
   final Value<int> currencyId;
+  final Value<String> segment;
+  final Value<int?> loyaltyTierId;
+  final Value<int> loyaltyPointsBalance;
+  final Value<Decimal> totalSpentCents;
+  final Value<int> totalTransactions;
+  final Value<DateTime?> lastTransactionAt;
   final Value<bool> isActive;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
@@ -7122,6 +8156,12 @@ class CustomersCompanion extends UpdateCompanion<Customer> {
     this.address = const Value.absent(),
     this.balanceCents = const Value.absent(),
     this.currencyId = const Value.absent(),
+    this.segment = const Value.absent(),
+    this.loyaltyTierId = const Value.absent(),
+    this.loyaltyPointsBalance = const Value.absent(),
+    this.totalSpentCents = const Value.absent(),
+    this.totalTransactions = const Value.absent(),
+    this.lastTransactionAt = const Value.absent(),
     this.isActive = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -7134,6 +8174,12 @@ class CustomersCompanion extends UpdateCompanion<Customer> {
     this.address = const Value.absent(),
     this.balanceCents = const Value.absent(),
     required int currencyId,
+    this.segment = const Value.absent(),
+    this.loyaltyTierId = const Value.absent(),
+    this.loyaltyPointsBalance = const Value.absent(),
+    this.totalSpentCents = const Value.absent(),
+    this.totalTransactions = const Value.absent(),
+    this.lastTransactionAt = const Value.absent(),
     this.isActive = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -7147,6 +8193,12 @@ class CustomersCompanion extends UpdateCompanion<Customer> {
     Expression<String>? address,
     Expression<int>? balanceCents,
     Expression<int>? currencyId,
+    Expression<String>? segment,
+    Expression<int>? loyaltyTierId,
+    Expression<int>? loyaltyPointsBalance,
+    Expression<int>? totalSpentCents,
+    Expression<int>? totalTransactions,
+    Expression<DateTime>? lastTransactionAt,
     Expression<bool>? isActive,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
@@ -7159,6 +8211,13 @@ class CustomersCompanion extends UpdateCompanion<Customer> {
       if (address != null) 'address': address,
       if (balanceCents != null) 'balance_cents': balanceCents,
       if (currencyId != null) 'currency_id': currencyId,
+      if (segment != null) 'segment': segment,
+      if (loyaltyTierId != null) 'loyalty_tier_id': loyaltyTierId,
+      if (loyaltyPointsBalance != null)
+        'loyalty_points_balance': loyaltyPointsBalance,
+      if (totalSpentCents != null) 'total_spent_cents': totalSpentCents,
+      if (totalTransactions != null) 'total_transactions': totalTransactions,
+      if (lastTransactionAt != null) 'last_transaction_at': lastTransactionAt,
       if (isActive != null) 'is_active': isActive,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
@@ -7173,6 +8232,12 @@ class CustomersCompanion extends UpdateCompanion<Customer> {
     Value<String?>? address,
     Value<Decimal>? balanceCents,
     Value<int>? currencyId,
+    Value<String>? segment,
+    Value<int?>? loyaltyTierId,
+    Value<int>? loyaltyPointsBalance,
+    Value<Decimal>? totalSpentCents,
+    Value<int>? totalTransactions,
+    Value<DateTime?>? lastTransactionAt,
     Value<bool>? isActive,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
@@ -7185,6 +8250,12 @@ class CustomersCompanion extends UpdateCompanion<Customer> {
       address: address ?? this.address,
       balanceCents: balanceCents ?? this.balanceCents,
       currencyId: currencyId ?? this.currencyId,
+      segment: segment ?? this.segment,
+      loyaltyTierId: loyaltyTierId ?? this.loyaltyTierId,
+      loyaltyPointsBalance: loyaltyPointsBalance ?? this.loyaltyPointsBalance,
+      totalSpentCents: totalSpentCents ?? this.totalSpentCents,
+      totalTransactions: totalTransactions ?? this.totalTransactions,
+      lastTransactionAt: lastTransactionAt ?? this.lastTransactionAt,
       isActive: isActive ?? this.isActive,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -7217,6 +8288,26 @@ class CustomersCompanion extends UpdateCompanion<Customer> {
     if (currencyId.present) {
       map['currency_id'] = Variable<int>(currencyId.value);
     }
+    if (segment.present) {
+      map['segment'] = Variable<String>(segment.value);
+    }
+    if (loyaltyTierId.present) {
+      map['loyalty_tier_id'] = Variable<int>(loyaltyTierId.value);
+    }
+    if (loyaltyPointsBalance.present) {
+      map['loyalty_points_balance'] = Variable<int>(loyaltyPointsBalance.value);
+    }
+    if (totalSpentCents.present) {
+      map['total_spent_cents'] = Variable<int>(
+        $CustomersTable.$convertertotalSpentCents.toSql(totalSpentCents.value),
+      );
+    }
+    if (totalTransactions.present) {
+      map['total_transactions'] = Variable<int>(totalTransactions.value);
+    }
+    if (lastTransactionAt.present) {
+      map['last_transaction_at'] = Variable<DateTime>(lastTransactionAt.value);
+    }
     if (isActive.present) {
       map['is_active'] = Variable<bool>(isActive.value);
     }
@@ -7239,6 +8330,12 @@ class CustomersCompanion extends UpdateCompanion<Customer> {
           ..write('address: $address, ')
           ..write('balanceCents: $balanceCents, ')
           ..write('currencyId: $currencyId, ')
+          ..write('segment: $segment, ')
+          ..write('loyaltyTierId: $loyaltyTierId, ')
+          ..write('loyaltyPointsBalance: $loyaltyPointsBalance, ')
+          ..write('totalSpentCents: $totalSpentCents, ')
+          ..write('totalTransactions: $totalTransactions, ')
+          ..write('lastTransactionAt: $lastTransactionAt, ')
           ..write('isActive: $isActive, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
@@ -7886,6 +8983,3186 @@ class CustomerTransactionsCompanion
           ..write('referenceType: $referenceType, ')
           ..write('transactionDate: $transactionDate, ')
           ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $LoyaltyPointTransactionsTable extends LoyaltyPointTransactions
+    with TableInfo<$LoyaltyPointTransactionsTable, LoyaltyPointTransaction> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $LoyaltyPointTransactionsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _customerIdMeta = const VerificationMeta(
+    'customerId',
+  );
+  @override
+  late final GeneratedColumn<int> customerId = GeneratedColumn<int>(
+    'customer_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES customers (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _transactionTypeMeta = const VerificationMeta(
+    'transactionType',
+  );
+  @override
+  late final GeneratedColumn<String> transactionType = GeneratedColumn<String>(
+    'transaction_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _pointsMeta = const VerificationMeta('points');
+  @override
+  late final GeneratedColumn<int> points = GeneratedColumn<int>(
+    'points',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _balanceAfterMeta = const VerificationMeta(
+    'balanceAfter',
+  );
+  @override
+  late final GeneratedColumn<int> balanceAfter = GeneratedColumn<int>(
+    'balance_after',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sourceMeta = const VerificationMeta('source');
+  @override
+  late final GeneratedColumn<String> source = GeneratedColumn<String>(
+    'source',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _referenceIdMeta = const VerificationMeta(
+    'referenceId',
+  );
+  @override
+  late final GeneratedColumn<int> referenceId = GeneratedColumn<int>(
+    'reference_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _referenceTypeMeta = const VerificationMeta(
+    'referenceType',
+  );
+  @override
+  late final GeneratedColumn<String> referenceType = GeneratedColumn<String>(
+    'reference_type',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _descriptionMeta = const VerificationMeta(
+    'description',
+  );
+  @override
+  late final GeneratedColumn<String> description = GeneratedColumn<String>(
+    'description',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _expiresAtMeta = const VerificationMeta(
+    'expiresAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> expiresAt = GeneratedColumn<DateTime>(
+    'expires_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _transactionDateMeta = const VerificationMeta(
+    'transactionDate',
+  );
+  @override
+  late final GeneratedColumn<DateTime> transactionDate =
+      GeneratedColumn<DateTime>(
+        'transaction_date',
+        aliasedName,
+        false,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+        defaultValue: currentDateAndTime,
+      );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    customerId,
+    transactionType,
+    points,
+    balanceAfter,
+    source,
+    referenceId,
+    referenceType,
+    description,
+    expiresAt,
+    transactionDate,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'loyalty_point_transactions';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<LoyaltyPointTransaction> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('customer_id')) {
+      context.handle(
+        _customerIdMeta,
+        customerId.isAcceptableOrUnknown(data['customer_id']!, _customerIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_customerIdMeta);
+    }
+    if (data.containsKey('transaction_type')) {
+      context.handle(
+        _transactionTypeMeta,
+        transactionType.isAcceptableOrUnknown(
+          data['transaction_type']!,
+          _transactionTypeMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_transactionTypeMeta);
+    }
+    if (data.containsKey('points')) {
+      context.handle(
+        _pointsMeta,
+        points.isAcceptableOrUnknown(data['points']!, _pointsMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_pointsMeta);
+    }
+    if (data.containsKey('balance_after')) {
+      context.handle(
+        _balanceAfterMeta,
+        balanceAfter.isAcceptableOrUnknown(
+          data['balance_after']!,
+          _balanceAfterMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_balanceAfterMeta);
+    }
+    if (data.containsKey('source')) {
+      context.handle(
+        _sourceMeta,
+        source.isAcceptableOrUnknown(data['source']!, _sourceMeta),
+      );
+    }
+    if (data.containsKey('reference_id')) {
+      context.handle(
+        _referenceIdMeta,
+        referenceId.isAcceptableOrUnknown(
+          data['reference_id']!,
+          _referenceIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('reference_type')) {
+      context.handle(
+        _referenceTypeMeta,
+        referenceType.isAcceptableOrUnknown(
+          data['reference_type']!,
+          _referenceTypeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('description')) {
+      context.handle(
+        _descriptionMeta,
+        description.isAcceptableOrUnknown(
+          data['description']!,
+          _descriptionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('expires_at')) {
+      context.handle(
+        _expiresAtMeta,
+        expiresAt.isAcceptableOrUnknown(data['expires_at']!, _expiresAtMeta),
+      );
+    }
+    if (data.containsKey('transaction_date')) {
+      context.handle(
+        _transactionDateMeta,
+        transactionDate.isAcceptableOrUnknown(
+          data['transaction_date']!,
+          _transactionDateMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  LoyaltyPointTransaction map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return LoyaltyPointTransaction(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      customerId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}customer_id'],
+      )!,
+      transactionType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}transaction_type'],
+      )!,
+      points: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}points'],
+      )!,
+      balanceAfter: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}balance_after'],
+      )!,
+      source: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source'],
+      ),
+      referenceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}reference_id'],
+      ),
+      referenceType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}reference_type'],
+      ),
+      description: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}description'],
+      ),
+      expiresAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}expires_at'],
+      ),
+      transactionDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}transaction_date'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $LoyaltyPointTransactionsTable createAlias(String alias) {
+    return $LoyaltyPointTransactionsTable(attachedDatabase, alias);
+  }
+}
+
+class LoyaltyPointTransaction extends DataClass
+    implements Insertable<LoyaltyPointTransaction> {
+  final int id;
+  final int customerId;
+  final String transactionType;
+  final int points;
+  final int balanceAfter;
+  final String? source;
+  final int? referenceId;
+  final String? referenceType;
+  final String? description;
+  final DateTime? expiresAt;
+  final DateTime transactionDate;
+  final DateTime createdAt;
+  const LoyaltyPointTransaction({
+    required this.id,
+    required this.customerId,
+    required this.transactionType,
+    required this.points,
+    required this.balanceAfter,
+    this.source,
+    this.referenceId,
+    this.referenceType,
+    this.description,
+    this.expiresAt,
+    required this.transactionDate,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['customer_id'] = Variable<int>(customerId);
+    map['transaction_type'] = Variable<String>(transactionType);
+    map['points'] = Variable<int>(points);
+    map['balance_after'] = Variable<int>(balanceAfter);
+    if (!nullToAbsent || source != null) {
+      map['source'] = Variable<String>(source);
+    }
+    if (!nullToAbsent || referenceId != null) {
+      map['reference_id'] = Variable<int>(referenceId);
+    }
+    if (!nullToAbsent || referenceType != null) {
+      map['reference_type'] = Variable<String>(referenceType);
+    }
+    if (!nullToAbsent || description != null) {
+      map['description'] = Variable<String>(description);
+    }
+    if (!nullToAbsent || expiresAt != null) {
+      map['expires_at'] = Variable<DateTime>(expiresAt);
+    }
+    map['transaction_date'] = Variable<DateTime>(transactionDate);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  LoyaltyPointTransactionsCompanion toCompanion(bool nullToAbsent) {
+    return LoyaltyPointTransactionsCompanion(
+      id: Value(id),
+      customerId: Value(customerId),
+      transactionType: Value(transactionType),
+      points: Value(points),
+      balanceAfter: Value(balanceAfter),
+      source: source == null && nullToAbsent
+          ? const Value.absent()
+          : Value(source),
+      referenceId: referenceId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(referenceId),
+      referenceType: referenceType == null && nullToAbsent
+          ? const Value.absent()
+          : Value(referenceType),
+      description: description == null && nullToAbsent
+          ? const Value.absent()
+          : Value(description),
+      expiresAt: expiresAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(expiresAt),
+      transactionDate: Value(transactionDate),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory LoyaltyPointTransaction.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return LoyaltyPointTransaction(
+      id: serializer.fromJson<int>(json['id']),
+      customerId: serializer.fromJson<int>(json['customerId']),
+      transactionType: serializer.fromJson<String>(json['transactionType']),
+      points: serializer.fromJson<int>(json['points']),
+      balanceAfter: serializer.fromJson<int>(json['balanceAfter']),
+      source: serializer.fromJson<String?>(json['source']),
+      referenceId: serializer.fromJson<int?>(json['referenceId']),
+      referenceType: serializer.fromJson<String?>(json['referenceType']),
+      description: serializer.fromJson<String?>(json['description']),
+      expiresAt: serializer.fromJson<DateTime?>(json['expiresAt']),
+      transactionDate: serializer.fromJson<DateTime>(json['transactionDate']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'customerId': serializer.toJson<int>(customerId),
+      'transactionType': serializer.toJson<String>(transactionType),
+      'points': serializer.toJson<int>(points),
+      'balanceAfter': serializer.toJson<int>(balanceAfter),
+      'source': serializer.toJson<String?>(source),
+      'referenceId': serializer.toJson<int?>(referenceId),
+      'referenceType': serializer.toJson<String?>(referenceType),
+      'description': serializer.toJson<String?>(description),
+      'expiresAt': serializer.toJson<DateTime?>(expiresAt),
+      'transactionDate': serializer.toJson<DateTime>(transactionDate),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  LoyaltyPointTransaction copyWith({
+    int? id,
+    int? customerId,
+    String? transactionType,
+    int? points,
+    int? balanceAfter,
+    Value<String?> source = const Value.absent(),
+    Value<int?> referenceId = const Value.absent(),
+    Value<String?> referenceType = const Value.absent(),
+    Value<String?> description = const Value.absent(),
+    Value<DateTime?> expiresAt = const Value.absent(),
+    DateTime? transactionDate,
+    DateTime? createdAt,
+  }) => LoyaltyPointTransaction(
+    id: id ?? this.id,
+    customerId: customerId ?? this.customerId,
+    transactionType: transactionType ?? this.transactionType,
+    points: points ?? this.points,
+    balanceAfter: balanceAfter ?? this.balanceAfter,
+    source: source.present ? source.value : this.source,
+    referenceId: referenceId.present ? referenceId.value : this.referenceId,
+    referenceType: referenceType.present
+        ? referenceType.value
+        : this.referenceType,
+    description: description.present ? description.value : this.description,
+    expiresAt: expiresAt.present ? expiresAt.value : this.expiresAt,
+    transactionDate: transactionDate ?? this.transactionDate,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  LoyaltyPointTransaction copyWithCompanion(
+    LoyaltyPointTransactionsCompanion data,
+  ) {
+    return LoyaltyPointTransaction(
+      id: data.id.present ? data.id.value : this.id,
+      customerId: data.customerId.present
+          ? data.customerId.value
+          : this.customerId,
+      transactionType: data.transactionType.present
+          ? data.transactionType.value
+          : this.transactionType,
+      points: data.points.present ? data.points.value : this.points,
+      balanceAfter: data.balanceAfter.present
+          ? data.balanceAfter.value
+          : this.balanceAfter,
+      source: data.source.present ? data.source.value : this.source,
+      referenceId: data.referenceId.present
+          ? data.referenceId.value
+          : this.referenceId,
+      referenceType: data.referenceType.present
+          ? data.referenceType.value
+          : this.referenceType,
+      description: data.description.present
+          ? data.description.value
+          : this.description,
+      expiresAt: data.expiresAt.present ? data.expiresAt.value : this.expiresAt,
+      transactionDate: data.transactionDate.present
+          ? data.transactionDate.value
+          : this.transactionDate,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LoyaltyPointTransaction(')
+          ..write('id: $id, ')
+          ..write('customerId: $customerId, ')
+          ..write('transactionType: $transactionType, ')
+          ..write('points: $points, ')
+          ..write('balanceAfter: $balanceAfter, ')
+          ..write('source: $source, ')
+          ..write('referenceId: $referenceId, ')
+          ..write('referenceType: $referenceType, ')
+          ..write('description: $description, ')
+          ..write('expiresAt: $expiresAt, ')
+          ..write('transactionDate: $transactionDate, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    customerId,
+    transactionType,
+    points,
+    balanceAfter,
+    source,
+    referenceId,
+    referenceType,
+    description,
+    expiresAt,
+    transactionDate,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is LoyaltyPointTransaction &&
+          other.id == this.id &&
+          other.customerId == this.customerId &&
+          other.transactionType == this.transactionType &&
+          other.points == this.points &&
+          other.balanceAfter == this.balanceAfter &&
+          other.source == this.source &&
+          other.referenceId == this.referenceId &&
+          other.referenceType == this.referenceType &&
+          other.description == this.description &&
+          other.expiresAt == this.expiresAt &&
+          other.transactionDate == this.transactionDate &&
+          other.createdAt == this.createdAt);
+}
+
+class LoyaltyPointTransactionsCompanion
+    extends UpdateCompanion<LoyaltyPointTransaction> {
+  final Value<int> id;
+  final Value<int> customerId;
+  final Value<String> transactionType;
+  final Value<int> points;
+  final Value<int> balanceAfter;
+  final Value<String?> source;
+  final Value<int?> referenceId;
+  final Value<String?> referenceType;
+  final Value<String?> description;
+  final Value<DateTime?> expiresAt;
+  final Value<DateTime> transactionDate;
+  final Value<DateTime> createdAt;
+  const LoyaltyPointTransactionsCompanion({
+    this.id = const Value.absent(),
+    this.customerId = const Value.absent(),
+    this.transactionType = const Value.absent(),
+    this.points = const Value.absent(),
+    this.balanceAfter = const Value.absent(),
+    this.source = const Value.absent(),
+    this.referenceId = const Value.absent(),
+    this.referenceType = const Value.absent(),
+    this.description = const Value.absent(),
+    this.expiresAt = const Value.absent(),
+    this.transactionDate = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  });
+  LoyaltyPointTransactionsCompanion.insert({
+    this.id = const Value.absent(),
+    required int customerId,
+    required String transactionType,
+    required int points,
+    required int balanceAfter,
+    this.source = const Value.absent(),
+    this.referenceId = const Value.absent(),
+    this.referenceType = const Value.absent(),
+    this.description = const Value.absent(),
+    this.expiresAt = const Value.absent(),
+    this.transactionDate = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  }) : customerId = Value(customerId),
+       transactionType = Value(transactionType),
+       points = Value(points),
+       balanceAfter = Value(balanceAfter);
+  static Insertable<LoyaltyPointTransaction> custom({
+    Expression<int>? id,
+    Expression<int>? customerId,
+    Expression<String>? transactionType,
+    Expression<int>? points,
+    Expression<int>? balanceAfter,
+    Expression<String>? source,
+    Expression<int>? referenceId,
+    Expression<String>? referenceType,
+    Expression<String>? description,
+    Expression<DateTime>? expiresAt,
+    Expression<DateTime>? transactionDate,
+    Expression<DateTime>? createdAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (customerId != null) 'customer_id': customerId,
+      if (transactionType != null) 'transaction_type': transactionType,
+      if (points != null) 'points': points,
+      if (balanceAfter != null) 'balance_after': balanceAfter,
+      if (source != null) 'source': source,
+      if (referenceId != null) 'reference_id': referenceId,
+      if (referenceType != null) 'reference_type': referenceType,
+      if (description != null) 'description': description,
+      if (expiresAt != null) 'expires_at': expiresAt,
+      if (transactionDate != null) 'transaction_date': transactionDate,
+      if (createdAt != null) 'created_at': createdAt,
+    });
+  }
+
+  LoyaltyPointTransactionsCompanion copyWith({
+    Value<int>? id,
+    Value<int>? customerId,
+    Value<String>? transactionType,
+    Value<int>? points,
+    Value<int>? balanceAfter,
+    Value<String?>? source,
+    Value<int?>? referenceId,
+    Value<String?>? referenceType,
+    Value<String?>? description,
+    Value<DateTime?>? expiresAt,
+    Value<DateTime>? transactionDate,
+    Value<DateTime>? createdAt,
+  }) {
+    return LoyaltyPointTransactionsCompanion(
+      id: id ?? this.id,
+      customerId: customerId ?? this.customerId,
+      transactionType: transactionType ?? this.transactionType,
+      points: points ?? this.points,
+      balanceAfter: balanceAfter ?? this.balanceAfter,
+      source: source ?? this.source,
+      referenceId: referenceId ?? this.referenceId,
+      referenceType: referenceType ?? this.referenceType,
+      description: description ?? this.description,
+      expiresAt: expiresAt ?? this.expiresAt,
+      transactionDate: transactionDate ?? this.transactionDate,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (customerId.present) {
+      map['customer_id'] = Variable<int>(customerId.value);
+    }
+    if (transactionType.present) {
+      map['transaction_type'] = Variable<String>(transactionType.value);
+    }
+    if (points.present) {
+      map['points'] = Variable<int>(points.value);
+    }
+    if (balanceAfter.present) {
+      map['balance_after'] = Variable<int>(balanceAfter.value);
+    }
+    if (source.present) {
+      map['source'] = Variable<String>(source.value);
+    }
+    if (referenceId.present) {
+      map['reference_id'] = Variable<int>(referenceId.value);
+    }
+    if (referenceType.present) {
+      map['reference_type'] = Variable<String>(referenceType.value);
+    }
+    if (description.present) {
+      map['description'] = Variable<String>(description.value);
+    }
+    if (expiresAt.present) {
+      map['expires_at'] = Variable<DateTime>(expiresAt.value);
+    }
+    if (transactionDate.present) {
+      map['transaction_date'] = Variable<DateTime>(transactionDate.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LoyaltyPointTransactionsCompanion(')
+          ..write('id: $id, ')
+          ..write('customerId: $customerId, ')
+          ..write('transactionType: $transactionType, ')
+          ..write('points: $points, ')
+          ..write('balanceAfter: $balanceAfter, ')
+          ..write('source: $source, ')
+          ..write('referenceId: $referenceId, ')
+          ..write('referenceType: $referenceType, ')
+          ..write('description: $description, ')
+          ..write('expiresAt: $expiresAt, ')
+          ..write('transactionDate: $transactionDate, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $LoyaltyRewardsTable extends LoyaltyRewards
+    with TableInfo<$LoyaltyRewardsTable, LoyaltyReward> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $LoyaltyRewardsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameArMeta = const VerificationMeta('nameAr');
+  @override
+  late final GeneratedColumn<String> nameAr = GeneratedColumn<String>(
+    'name_ar',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _nameFrMeta = const VerificationMeta('nameFr');
+  @override
+  late final GeneratedColumn<String> nameFr = GeneratedColumn<String>(
+    'name_fr',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _descriptionMeta = const VerificationMeta(
+    'description',
+  );
+  @override
+  late final GeneratedColumn<String> description = GeneratedColumn<String>(
+    'description',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _descriptionArMeta = const VerificationMeta(
+    'descriptionAr',
+  );
+  @override
+  late final GeneratedColumn<String> descriptionAr = GeneratedColumn<String>(
+    'description_ar',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _descriptionFrMeta = const VerificationMeta(
+    'descriptionFr',
+  );
+  @override
+  late final GeneratedColumn<String> descriptionFr = GeneratedColumn<String>(
+    'description_fr',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _rewardTypeMeta = const VerificationMeta(
+    'rewardType',
+  );
+  @override
+  late final GeneratedColumn<String> rewardType = GeneratedColumn<String>(
+    'reward_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _pointsCostMeta = const VerificationMeta(
+    'pointsCost',
+  );
+  @override
+  late final GeneratedColumn<int> pointsCost = GeneratedColumn<int>(
+    'points_cost',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  @override
+  late final GeneratedColumnWithTypeConverter<Decimal?, int> valueCents =
+      GeneratedColumn<int>(
+        'value_cents',
+        aliasedName,
+        true,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+      ).withConverter<Decimal?>($LoyaltyRewardsTable.$convertervalueCentsn);
+  static const VerificationMeta _valuePercentMeta = const VerificationMeta(
+    'valuePercent',
+  );
+  @override
+  late final GeneratedColumn<double> valuePercent = GeneratedColumn<double>(
+    'value_percent',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _productIdMeta = const VerificationMeta(
+    'productId',
+  );
+  @override
+  late final GeneratedColumn<int> productId = GeneratedColumn<int>(
+    'product_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _minTierIdMeta = const VerificationMeta(
+    'minTierId',
+  );
+  @override
+  late final GeneratedColumn<int> minTierId = GeneratedColumn<int>(
+    'min_tier_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES loyalty_tiers (id) ON DELETE SET NULL',
+    ),
+  );
+  static const VerificationMeta _maxRedemptionsPerCustomerMeta =
+      const VerificationMeta('maxRedemptionsPerCustomer');
+  @override
+  late final GeneratedColumn<int> maxRedemptionsPerCustomer =
+      GeneratedColumn<int>(
+        'max_redemptions_per_customer',
+        aliasedName,
+        true,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _totalRedemptionsMeta = const VerificationMeta(
+    'totalRedemptions',
+  );
+  @override
+  late final GeneratedColumn<int> totalRedemptions = GeneratedColumn<int>(
+    'total_redemptions',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _maxTotalRedemptionsMeta =
+      const VerificationMeta('maxTotalRedemptions');
+  @override
+  late final GeneratedColumn<int> maxTotalRedemptions = GeneratedColumn<int>(
+    'max_total_redemptions',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _validFromMeta = const VerificationMeta(
+    'validFrom',
+  );
+  @override
+  late final GeneratedColumn<DateTime> validFrom = GeneratedColumn<DateTime>(
+    'valid_from',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _validUntilMeta = const VerificationMeta(
+    'validUntil',
+  );
+  @override
+  late final GeneratedColumn<DateTime> validUntil = GeneratedColumn<DateTime>(
+    'valid_until',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _isActiveMeta = const VerificationMeta(
+    'isActive',
+  );
+  @override
+  late final GeneratedColumn<bool> isActive = GeneratedColumn<bool>(
+    'is_active',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_active" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    name,
+    nameAr,
+    nameFr,
+    description,
+    descriptionAr,
+    descriptionFr,
+    rewardType,
+    pointsCost,
+    valueCents,
+    valuePercent,
+    productId,
+    minTierId,
+    maxRedemptionsPerCustomer,
+    totalRedemptions,
+    maxTotalRedemptions,
+    validFrom,
+    validUntil,
+    isActive,
+    createdAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'loyalty_rewards';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<LoyaltyReward> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('name_ar')) {
+      context.handle(
+        _nameArMeta,
+        nameAr.isAcceptableOrUnknown(data['name_ar']!, _nameArMeta),
+      );
+    }
+    if (data.containsKey('name_fr')) {
+      context.handle(
+        _nameFrMeta,
+        nameFr.isAcceptableOrUnknown(data['name_fr']!, _nameFrMeta),
+      );
+    }
+    if (data.containsKey('description')) {
+      context.handle(
+        _descriptionMeta,
+        description.isAcceptableOrUnknown(
+          data['description']!,
+          _descriptionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('description_ar')) {
+      context.handle(
+        _descriptionArMeta,
+        descriptionAr.isAcceptableOrUnknown(
+          data['description_ar']!,
+          _descriptionArMeta,
+        ),
+      );
+    }
+    if (data.containsKey('description_fr')) {
+      context.handle(
+        _descriptionFrMeta,
+        descriptionFr.isAcceptableOrUnknown(
+          data['description_fr']!,
+          _descriptionFrMeta,
+        ),
+      );
+    }
+    if (data.containsKey('reward_type')) {
+      context.handle(
+        _rewardTypeMeta,
+        rewardType.isAcceptableOrUnknown(data['reward_type']!, _rewardTypeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_rewardTypeMeta);
+    }
+    if (data.containsKey('points_cost')) {
+      context.handle(
+        _pointsCostMeta,
+        pointsCost.isAcceptableOrUnknown(data['points_cost']!, _pointsCostMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_pointsCostMeta);
+    }
+    if (data.containsKey('value_percent')) {
+      context.handle(
+        _valuePercentMeta,
+        valuePercent.isAcceptableOrUnknown(
+          data['value_percent']!,
+          _valuePercentMeta,
+        ),
+      );
+    }
+    if (data.containsKey('product_id')) {
+      context.handle(
+        _productIdMeta,
+        productId.isAcceptableOrUnknown(data['product_id']!, _productIdMeta),
+      );
+    }
+    if (data.containsKey('min_tier_id')) {
+      context.handle(
+        _minTierIdMeta,
+        minTierId.isAcceptableOrUnknown(data['min_tier_id']!, _minTierIdMeta),
+      );
+    }
+    if (data.containsKey('max_redemptions_per_customer')) {
+      context.handle(
+        _maxRedemptionsPerCustomerMeta,
+        maxRedemptionsPerCustomer.isAcceptableOrUnknown(
+          data['max_redemptions_per_customer']!,
+          _maxRedemptionsPerCustomerMeta,
+        ),
+      );
+    }
+    if (data.containsKey('total_redemptions')) {
+      context.handle(
+        _totalRedemptionsMeta,
+        totalRedemptions.isAcceptableOrUnknown(
+          data['total_redemptions']!,
+          _totalRedemptionsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('max_total_redemptions')) {
+      context.handle(
+        _maxTotalRedemptionsMeta,
+        maxTotalRedemptions.isAcceptableOrUnknown(
+          data['max_total_redemptions']!,
+          _maxTotalRedemptionsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('valid_from')) {
+      context.handle(
+        _validFromMeta,
+        validFrom.isAcceptableOrUnknown(data['valid_from']!, _validFromMeta),
+      );
+    }
+    if (data.containsKey('valid_until')) {
+      context.handle(
+        _validUntilMeta,
+        validUntil.isAcceptableOrUnknown(data['valid_until']!, _validUntilMeta),
+      );
+    }
+    if (data.containsKey('is_active')) {
+      context.handle(
+        _isActiveMeta,
+        isActive.isAcceptableOrUnknown(data['is_active']!, _isActiveMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  LoyaltyReward map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return LoyaltyReward(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      nameAr: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name_ar'],
+      ),
+      nameFr: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name_fr'],
+      ),
+      description: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}description'],
+      ),
+      descriptionAr: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}description_ar'],
+      ),
+      descriptionFr: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}description_fr'],
+      ),
+      rewardType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}reward_type'],
+      )!,
+      pointsCost: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}points_cost'],
+      )!,
+      valueCents: $LoyaltyRewardsTable.$convertervalueCentsn.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}value_cents'],
+        ),
+      ),
+      valuePercent: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}value_percent'],
+      ),
+      productId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}product_id'],
+      ),
+      minTierId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}min_tier_id'],
+      ),
+      maxRedemptionsPerCustomer: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}max_redemptions_per_customer'],
+      ),
+      totalRedemptions: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}total_redemptions'],
+      )!,
+      maxTotalRedemptions: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}max_total_redemptions'],
+      ),
+      validFrom: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}valid_from'],
+      ),
+      validUntil: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}valid_until'],
+      ),
+      isActive: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_active'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $LoyaltyRewardsTable createAlias(String alias) {
+    return $LoyaltyRewardsTable(attachedDatabase, alias);
+  }
+
+  static TypeConverter<Decimal, int> $convertervalueCents =
+      const MoneyConverter();
+  static TypeConverter<Decimal?, int?> $convertervalueCentsn =
+      NullAwareTypeConverter.wrap($convertervalueCents);
+}
+
+class LoyaltyReward extends DataClass implements Insertable<LoyaltyReward> {
+  final int id;
+  final String name;
+  final String? nameAr;
+  final String? nameFr;
+  final String? description;
+  final String? descriptionAr;
+  final String? descriptionFr;
+  final String rewardType;
+  final int pointsCost;
+  final Decimal? valueCents;
+  final double? valuePercent;
+  final int? productId;
+  final int? minTierId;
+  final int? maxRedemptionsPerCustomer;
+  final int totalRedemptions;
+  final int? maxTotalRedemptions;
+  final DateTime? validFrom;
+  final DateTime? validUntil;
+  final bool isActive;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  const LoyaltyReward({
+    required this.id,
+    required this.name,
+    this.nameAr,
+    this.nameFr,
+    this.description,
+    this.descriptionAr,
+    this.descriptionFr,
+    required this.rewardType,
+    required this.pointsCost,
+    this.valueCents,
+    this.valuePercent,
+    this.productId,
+    this.minTierId,
+    this.maxRedemptionsPerCustomer,
+    required this.totalRedemptions,
+    this.maxTotalRedemptions,
+    this.validFrom,
+    this.validUntil,
+    required this.isActive,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['name'] = Variable<String>(name);
+    if (!nullToAbsent || nameAr != null) {
+      map['name_ar'] = Variable<String>(nameAr);
+    }
+    if (!nullToAbsent || nameFr != null) {
+      map['name_fr'] = Variable<String>(nameFr);
+    }
+    if (!nullToAbsent || description != null) {
+      map['description'] = Variable<String>(description);
+    }
+    if (!nullToAbsent || descriptionAr != null) {
+      map['description_ar'] = Variable<String>(descriptionAr);
+    }
+    if (!nullToAbsent || descriptionFr != null) {
+      map['description_fr'] = Variable<String>(descriptionFr);
+    }
+    map['reward_type'] = Variable<String>(rewardType);
+    map['points_cost'] = Variable<int>(pointsCost);
+    if (!nullToAbsent || valueCents != null) {
+      map['value_cents'] = Variable<int>(
+        $LoyaltyRewardsTable.$convertervalueCentsn.toSql(valueCents),
+      );
+    }
+    if (!nullToAbsent || valuePercent != null) {
+      map['value_percent'] = Variable<double>(valuePercent);
+    }
+    if (!nullToAbsent || productId != null) {
+      map['product_id'] = Variable<int>(productId);
+    }
+    if (!nullToAbsent || minTierId != null) {
+      map['min_tier_id'] = Variable<int>(minTierId);
+    }
+    if (!nullToAbsent || maxRedemptionsPerCustomer != null) {
+      map['max_redemptions_per_customer'] = Variable<int>(
+        maxRedemptionsPerCustomer,
+      );
+    }
+    map['total_redemptions'] = Variable<int>(totalRedemptions);
+    if (!nullToAbsent || maxTotalRedemptions != null) {
+      map['max_total_redemptions'] = Variable<int>(maxTotalRedemptions);
+    }
+    if (!nullToAbsent || validFrom != null) {
+      map['valid_from'] = Variable<DateTime>(validFrom);
+    }
+    if (!nullToAbsent || validUntil != null) {
+      map['valid_until'] = Variable<DateTime>(validUntil);
+    }
+    map['is_active'] = Variable<bool>(isActive);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  LoyaltyRewardsCompanion toCompanion(bool nullToAbsent) {
+    return LoyaltyRewardsCompanion(
+      id: Value(id),
+      name: Value(name),
+      nameAr: nameAr == null && nullToAbsent
+          ? const Value.absent()
+          : Value(nameAr),
+      nameFr: nameFr == null && nullToAbsent
+          ? const Value.absent()
+          : Value(nameFr),
+      description: description == null && nullToAbsent
+          ? const Value.absent()
+          : Value(description),
+      descriptionAr: descriptionAr == null && nullToAbsent
+          ? const Value.absent()
+          : Value(descriptionAr),
+      descriptionFr: descriptionFr == null && nullToAbsent
+          ? const Value.absent()
+          : Value(descriptionFr),
+      rewardType: Value(rewardType),
+      pointsCost: Value(pointsCost),
+      valueCents: valueCents == null && nullToAbsent
+          ? const Value.absent()
+          : Value(valueCents),
+      valuePercent: valuePercent == null && nullToAbsent
+          ? const Value.absent()
+          : Value(valuePercent),
+      productId: productId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(productId),
+      minTierId: minTierId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(minTierId),
+      maxRedemptionsPerCustomer:
+          maxRedemptionsPerCustomer == null && nullToAbsent
+          ? const Value.absent()
+          : Value(maxRedemptionsPerCustomer),
+      totalRedemptions: Value(totalRedemptions),
+      maxTotalRedemptions: maxTotalRedemptions == null && nullToAbsent
+          ? const Value.absent()
+          : Value(maxTotalRedemptions),
+      validFrom: validFrom == null && nullToAbsent
+          ? const Value.absent()
+          : Value(validFrom),
+      validUntil: validUntil == null && nullToAbsent
+          ? const Value.absent()
+          : Value(validUntil),
+      isActive: Value(isActive),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory LoyaltyReward.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return LoyaltyReward(
+      id: serializer.fromJson<int>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      nameAr: serializer.fromJson<String?>(json['nameAr']),
+      nameFr: serializer.fromJson<String?>(json['nameFr']),
+      description: serializer.fromJson<String?>(json['description']),
+      descriptionAr: serializer.fromJson<String?>(json['descriptionAr']),
+      descriptionFr: serializer.fromJson<String?>(json['descriptionFr']),
+      rewardType: serializer.fromJson<String>(json['rewardType']),
+      pointsCost: serializer.fromJson<int>(json['pointsCost']),
+      valueCents: serializer.fromJson<Decimal?>(json['valueCents']),
+      valuePercent: serializer.fromJson<double?>(json['valuePercent']),
+      productId: serializer.fromJson<int?>(json['productId']),
+      minTierId: serializer.fromJson<int?>(json['minTierId']),
+      maxRedemptionsPerCustomer: serializer.fromJson<int?>(
+        json['maxRedemptionsPerCustomer'],
+      ),
+      totalRedemptions: serializer.fromJson<int>(json['totalRedemptions']),
+      maxTotalRedemptions: serializer.fromJson<int?>(
+        json['maxTotalRedemptions'],
+      ),
+      validFrom: serializer.fromJson<DateTime?>(json['validFrom']),
+      validUntil: serializer.fromJson<DateTime?>(json['validUntil']),
+      isActive: serializer.fromJson<bool>(json['isActive']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'name': serializer.toJson<String>(name),
+      'nameAr': serializer.toJson<String?>(nameAr),
+      'nameFr': serializer.toJson<String?>(nameFr),
+      'description': serializer.toJson<String?>(description),
+      'descriptionAr': serializer.toJson<String?>(descriptionAr),
+      'descriptionFr': serializer.toJson<String?>(descriptionFr),
+      'rewardType': serializer.toJson<String>(rewardType),
+      'pointsCost': serializer.toJson<int>(pointsCost),
+      'valueCents': serializer.toJson<Decimal?>(valueCents),
+      'valuePercent': serializer.toJson<double?>(valuePercent),
+      'productId': serializer.toJson<int?>(productId),
+      'minTierId': serializer.toJson<int?>(minTierId),
+      'maxRedemptionsPerCustomer': serializer.toJson<int?>(
+        maxRedemptionsPerCustomer,
+      ),
+      'totalRedemptions': serializer.toJson<int>(totalRedemptions),
+      'maxTotalRedemptions': serializer.toJson<int?>(maxTotalRedemptions),
+      'validFrom': serializer.toJson<DateTime?>(validFrom),
+      'validUntil': serializer.toJson<DateTime?>(validUntil),
+      'isActive': serializer.toJson<bool>(isActive),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  LoyaltyReward copyWith({
+    int? id,
+    String? name,
+    Value<String?> nameAr = const Value.absent(),
+    Value<String?> nameFr = const Value.absent(),
+    Value<String?> description = const Value.absent(),
+    Value<String?> descriptionAr = const Value.absent(),
+    Value<String?> descriptionFr = const Value.absent(),
+    String? rewardType,
+    int? pointsCost,
+    Value<Decimal?> valueCents = const Value.absent(),
+    Value<double?> valuePercent = const Value.absent(),
+    Value<int?> productId = const Value.absent(),
+    Value<int?> minTierId = const Value.absent(),
+    Value<int?> maxRedemptionsPerCustomer = const Value.absent(),
+    int? totalRedemptions,
+    Value<int?> maxTotalRedemptions = const Value.absent(),
+    Value<DateTime?> validFrom = const Value.absent(),
+    Value<DateTime?> validUntil = const Value.absent(),
+    bool? isActive,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) => LoyaltyReward(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    nameAr: nameAr.present ? nameAr.value : this.nameAr,
+    nameFr: nameFr.present ? nameFr.value : this.nameFr,
+    description: description.present ? description.value : this.description,
+    descriptionAr: descriptionAr.present
+        ? descriptionAr.value
+        : this.descriptionAr,
+    descriptionFr: descriptionFr.present
+        ? descriptionFr.value
+        : this.descriptionFr,
+    rewardType: rewardType ?? this.rewardType,
+    pointsCost: pointsCost ?? this.pointsCost,
+    valueCents: valueCents.present ? valueCents.value : this.valueCents,
+    valuePercent: valuePercent.present ? valuePercent.value : this.valuePercent,
+    productId: productId.present ? productId.value : this.productId,
+    minTierId: minTierId.present ? minTierId.value : this.minTierId,
+    maxRedemptionsPerCustomer: maxRedemptionsPerCustomer.present
+        ? maxRedemptionsPerCustomer.value
+        : this.maxRedemptionsPerCustomer,
+    totalRedemptions: totalRedemptions ?? this.totalRedemptions,
+    maxTotalRedemptions: maxTotalRedemptions.present
+        ? maxTotalRedemptions.value
+        : this.maxTotalRedemptions,
+    validFrom: validFrom.present ? validFrom.value : this.validFrom,
+    validUntil: validUntil.present ? validUntil.value : this.validUntil,
+    isActive: isActive ?? this.isActive,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  LoyaltyReward copyWithCompanion(LoyaltyRewardsCompanion data) {
+    return LoyaltyReward(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      nameAr: data.nameAr.present ? data.nameAr.value : this.nameAr,
+      nameFr: data.nameFr.present ? data.nameFr.value : this.nameFr,
+      description: data.description.present
+          ? data.description.value
+          : this.description,
+      descriptionAr: data.descriptionAr.present
+          ? data.descriptionAr.value
+          : this.descriptionAr,
+      descriptionFr: data.descriptionFr.present
+          ? data.descriptionFr.value
+          : this.descriptionFr,
+      rewardType: data.rewardType.present
+          ? data.rewardType.value
+          : this.rewardType,
+      pointsCost: data.pointsCost.present
+          ? data.pointsCost.value
+          : this.pointsCost,
+      valueCents: data.valueCents.present
+          ? data.valueCents.value
+          : this.valueCents,
+      valuePercent: data.valuePercent.present
+          ? data.valuePercent.value
+          : this.valuePercent,
+      productId: data.productId.present ? data.productId.value : this.productId,
+      minTierId: data.minTierId.present ? data.minTierId.value : this.minTierId,
+      maxRedemptionsPerCustomer: data.maxRedemptionsPerCustomer.present
+          ? data.maxRedemptionsPerCustomer.value
+          : this.maxRedemptionsPerCustomer,
+      totalRedemptions: data.totalRedemptions.present
+          ? data.totalRedemptions.value
+          : this.totalRedemptions,
+      maxTotalRedemptions: data.maxTotalRedemptions.present
+          ? data.maxTotalRedemptions.value
+          : this.maxTotalRedemptions,
+      validFrom: data.validFrom.present ? data.validFrom.value : this.validFrom,
+      validUntil: data.validUntil.present
+          ? data.validUntil.value
+          : this.validUntil,
+      isActive: data.isActive.present ? data.isActive.value : this.isActive,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LoyaltyReward(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('nameAr: $nameAr, ')
+          ..write('nameFr: $nameFr, ')
+          ..write('description: $description, ')
+          ..write('descriptionAr: $descriptionAr, ')
+          ..write('descriptionFr: $descriptionFr, ')
+          ..write('rewardType: $rewardType, ')
+          ..write('pointsCost: $pointsCost, ')
+          ..write('valueCents: $valueCents, ')
+          ..write('valuePercent: $valuePercent, ')
+          ..write('productId: $productId, ')
+          ..write('minTierId: $minTierId, ')
+          ..write('maxRedemptionsPerCustomer: $maxRedemptionsPerCustomer, ')
+          ..write('totalRedemptions: $totalRedemptions, ')
+          ..write('maxTotalRedemptions: $maxTotalRedemptions, ')
+          ..write('validFrom: $validFrom, ')
+          ..write('validUntil: $validUntil, ')
+          ..write('isActive: $isActive, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hashAll([
+    id,
+    name,
+    nameAr,
+    nameFr,
+    description,
+    descriptionAr,
+    descriptionFr,
+    rewardType,
+    pointsCost,
+    valueCents,
+    valuePercent,
+    productId,
+    minTierId,
+    maxRedemptionsPerCustomer,
+    totalRedemptions,
+    maxTotalRedemptions,
+    validFrom,
+    validUntil,
+    isActive,
+    createdAt,
+    updatedAt,
+  ]);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is LoyaltyReward &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.nameAr == this.nameAr &&
+          other.nameFr == this.nameFr &&
+          other.description == this.description &&
+          other.descriptionAr == this.descriptionAr &&
+          other.descriptionFr == this.descriptionFr &&
+          other.rewardType == this.rewardType &&
+          other.pointsCost == this.pointsCost &&
+          other.valueCents == this.valueCents &&
+          other.valuePercent == this.valuePercent &&
+          other.productId == this.productId &&
+          other.minTierId == this.minTierId &&
+          other.maxRedemptionsPerCustomer == this.maxRedemptionsPerCustomer &&
+          other.totalRedemptions == this.totalRedemptions &&
+          other.maxTotalRedemptions == this.maxTotalRedemptions &&
+          other.validFrom == this.validFrom &&
+          other.validUntil == this.validUntil &&
+          other.isActive == this.isActive &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class LoyaltyRewardsCompanion extends UpdateCompanion<LoyaltyReward> {
+  final Value<int> id;
+  final Value<String> name;
+  final Value<String?> nameAr;
+  final Value<String?> nameFr;
+  final Value<String?> description;
+  final Value<String?> descriptionAr;
+  final Value<String?> descriptionFr;
+  final Value<String> rewardType;
+  final Value<int> pointsCost;
+  final Value<Decimal?> valueCents;
+  final Value<double?> valuePercent;
+  final Value<int?> productId;
+  final Value<int?> minTierId;
+  final Value<int?> maxRedemptionsPerCustomer;
+  final Value<int> totalRedemptions;
+  final Value<int?> maxTotalRedemptions;
+  final Value<DateTime?> validFrom;
+  final Value<DateTime?> validUntil;
+  final Value<bool> isActive;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  const LoyaltyRewardsCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.nameAr = const Value.absent(),
+    this.nameFr = const Value.absent(),
+    this.description = const Value.absent(),
+    this.descriptionAr = const Value.absent(),
+    this.descriptionFr = const Value.absent(),
+    this.rewardType = const Value.absent(),
+    this.pointsCost = const Value.absent(),
+    this.valueCents = const Value.absent(),
+    this.valuePercent = const Value.absent(),
+    this.productId = const Value.absent(),
+    this.minTierId = const Value.absent(),
+    this.maxRedemptionsPerCustomer = const Value.absent(),
+    this.totalRedemptions = const Value.absent(),
+    this.maxTotalRedemptions = const Value.absent(),
+    this.validFrom = const Value.absent(),
+    this.validUntil = const Value.absent(),
+    this.isActive = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  });
+  LoyaltyRewardsCompanion.insert({
+    this.id = const Value.absent(),
+    required String name,
+    this.nameAr = const Value.absent(),
+    this.nameFr = const Value.absent(),
+    this.description = const Value.absent(),
+    this.descriptionAr = const Value.absent(),
+    this.descriptionFr = const Value.absent(),
+    required String rewardType,
+    required int pointsCost,
+    this.valueCents = const Value.absent(),
+    this.valuePercent = const Value.absent(),
+    this.productId = const Value.absent(),
+    this.minTierId = const Value.absent(),
+    this.maxRedemptionsPerCustomer = const Value.absent(),
+    this.totalRedemptions = const Value.absent(),
+    this.maxTotalRedemptions = const Value.absent(),
+    this.validFrom = const Value.absent(),
+    this.validUntil = const Value.absent(),
+    this.isActive = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  }) : name = Value(name),
+       rewardType = Value(rewardType),
+       pointsCost = Value(pointsCost);
+  static Insertable<LoyaltyReward> custom({
+    Expression<int>? id,
+    Expression<String>? name,
+    Expression<String>? nameAr,
+    Expression<String>? nameFr,
+    Expression<String>? description,
+    Expression<String>? descriptionAr,
+    Expression<String>? descriptionFr,
+    Expression<String>? rewardType,
+    Expression<int>? pointsCost,
+    Expression<int>? valueCents,
+    Expression<double>? valuePercent,
+    Expression<int>? productId,
+    Expression<int>? minTierId,
+    Expression<int>? maxRedemptionsPerCustomer,
+    Expression<int>? totalRedemptions,
+    Expression<int>? maxTotalRedemptions,
+    Expression<DateTime>? validFrom,
+    Expression<DateTime>? validUntil,
+    Expression<bool>? isActive,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (nameAr != null) 'name_ar': nameAr,
+      if (nameFr != null) 'name_fr': nameFr,
+      if (description != null) 'description': description,
+      if (descriptionAr != null) 'description_ar': descriptionAr,
+      if (descriptionFr != null) 'description_fr': descriptionFr,
+      if (rewardType != null) 'reward_type': rewardType,
+      if (pointsCost != null) 'points_cost': pointsCost,
+      if (valueCents != null) 'value_cents': valueCents,
+      if (valuePercent != null) 'value_percent': valuePercent,
+      if (productId != null) 'product_id': productId,
+      if (minTierId != null) 'min_tier_id': minTierId,
+      if (maxRedemptionsPerCustomer != null)
+        'max_redemptions_per_customer': maxRedemptionsPerCustomer,
+      if (totalRedemptions != null) 'total_redemptions': totalRedemptions,
+      if (maxTotalRedemptions != null)
+        'max_total_redemptions': maxTotalRedemptions,
+      if (validFrom != null) 'valid_from': validFrom,
+      if (validUntil != null) 'valid_until': validUntil,
+      if (isActive != null) 'is_active': isActive,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+    });
+  }
+
+  LoyaltyRewardsCompanion copyWith({
+    Value<int>? id,
+    Value<String>? name,
+    Value<String?>? nameAr,
+    Value<String?>? nameFr,
+    Value<String?>? description,
+    Value<String?>? descriptionAr,
+    Value<String?>? descriptionFr,
+    Value<String>? rewardType,
+    Value<int>? pointsCost,
+    Value<Decimal?>? valueCents,
+    Value<double?>? valuePercent,
+    Value<int?>? productId,
+    Value<int?>? minTierId,
+    Value<int?>? maxRedemptionsPerCustomer,
+    Value<int>? totalRedemptions,
+    Value<int?>? maxTotalRedemptions,
+    Value<DateTime?>? validFrom,
+    Value<DateTime?>? validUntil,
+    Value<bool>? isActive,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+  }) {
+    return LoyaltyRewardsCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      nameAr: nameAr ?? this.nameAr,
+      nameFr: nameFr ?? this.nameFr,
+      description: description ?? this.description,
+      descriptionAr: descriptionAr ?? this.descriptionAr,
+      descriptionFr: descriptionFr ?? this.descriptionFr,
+      rewardType: rewardType ?? this.rewardType,
+      pointsCost: pointsCost ?? this.pointsCost,
+      valueCents: valueCents ?? this.valueCents,
+      valuePercent: valuePercent ?? this.valuePercent,
+      productId: productId ?? this.productId,
+      minTierId: minTierId ?? this.minTierId,
+      maxRedemptionsPerCustomer:
+          maxRedemptionsPerCustomer ?? this.maxRedemptionsPerCustomer,
+      totalRedemptions: totalRedemptions ?? this.totalRedemptions,
+      maxTotalRedemptions: maxTotalRedemptions ?? this.maxTotalRedemptions,
+      validFrom: validFrom ?? this.validFrom,
+      validUntil: validUntil ?? this.validUntil,
+      isActive: isActive ?? this.isActive,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (nameAr.present) {
+      map['name_ar'] = Variable<String>(nameAr.value);
+    }
+    if (nameFr.present) {
+      map['name_fr'] = Variable<String>(nameFr.value);
+    }
+    if (description.present) {
+      map['description'] = Variable<String>(description.value);
+    }
+    if (descriptionAr.present) {
+      map['description_ar'] = Variable<String>(descriptionAr.value);
+    }
+    if (descriptionFr.present) {
+      map['description_fr'] = Variable<String>(descriptionFr.value);
+    }
+    if (rewardType.present) {
+      map['reward_type'] = Variable<String>(rewardType.value);
+    }
+    if (pointsCost.present) {
+      map['points_cost'] = Variable<int>(pointsCost.value);
+    }
+    if (valueCents.present) {
+      map['value_cents'] = Variable<int>(
+        $LoyaltyRewardsTable.$convertervalueCentsn.toSql(valueCents.value),
+      );
+    }
+    if (valuePercent.present) {
+      map['value_percent'] = Variable<double>(valuePercent.value);
+    }
+    if (productId.present) {
+      map['product_id'] = Variable<int>(productId.value);
+    }
+    if (minTierId.present) {
+      map['min_tier_id'] = Variable<int>(minTierId.value);
+    }
+    if (maxRedemptionsPerCustomer.present) {
+      map['max_redemptions_per_customer'] = Variable<int>(
+        maxRedemptionsPerCustomer.value,
+      );
+    }
+    if (totalRedemptions.present) {
+      map['total_redemptions'] = Variable<int>(totalRedemptions.value);
+    }
+    if (maxTotalRedemptions.present) {
+      map['max_total_redemptions'] = Variable<int>(maxTotalRedemptions.value);
+    }
+    if (validFrom.present) {
+      map['valid_from'] = Variable<DateTime>(validFrom.value);
+    }
+    if (validUntil.present) {
+      map['valid_until'] = Variable<DateTime>(validUntil.value);
+    }
+    if (isActive.present) {
+      map['is_active'] = Variable<bool>(isActive.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LoyaltyRewardsCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('nameAr: $nameAr, ')
+          ..write('nameFr: $nameFr, ')
+          ..write('description: $description, ')
+          ..write('descriptionAr: $descriptionAr, ')
+          ..write('descriptionFr: $descriptionFr, ')
+          ..write('rewardType: $rewardType, ')
+          ..write('pointsCost: $pointsCost, ')
+          ..write('valueCents: $valueCents, ')
+          ..write('valuePercent: $valuePercent, ')
+          ..write('productId: $productId, ')
+          ..write('minTierId: $minTierId, ')
+          ..write('maxRedemptionsPerCustomer: $maxRedemptionsPerCustomer, ')
+          ..write('totalRedemptions: $totalRedemptions, ')
+          ..write('maxTotalRedemptions: $maxTotalRedemptions, ')
+          ..write('validFrom: $validFrom, ')
+          ..write('validUntil: $validUntil, ')
+          ..write('isActive: $isActive, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $CustomerRewardRedemptionsTable extends CustomerRewardRedemptions
+    with TableInfo<$CustomerRewardRedemptionsTable, CustomerRewardRedemption> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CustomerRewardRedemptionsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _customerIdMeta = const VerificationMeta(
+    'customerId',
+  );
+  @override
+  late final GeneratedColumn<int> customerId = GeneratedColumn<int>(
+    'customer_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES customers (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _rewardIdMeta = const VerificationMeta(
+    'rewardId',
+  );
+  @override
+  late final GeneratedColumn<int> rewardId = GeneratedColumn<int>(
+    'reward_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES loyalty_rewards (id) ON DELETE RESTRICT',
+    ),
+  );
+  static const VerificationMeta _pointsSpentMeta = const VerificationMeta(
+    'pointsSpent',
+  );
+  @override
+  late final GeneratedColumn<int> pointsSpent = GeneratedColumn<int>(
+    'points_spent',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('pending'),
+  );
+  static const VerificationMeta _saleIdMeta = const VerificationMeta('saleId');
+  @override
+  late final GeneratedColumn<int> saleId = GeneratedColumn<int>(
+    'sale_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _usedAtMeta = const VerificationMeta('usedAt');
+  @override
+  late final GeneratedColumn<DateTime> usedAt = GeneratedColumn<DateTime>(
+    'used_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _expiresAtMeta = const VerificationMeta(
+    'expiresAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> expiresAt = GeneratedColumn<DateTime>(
+    'expires_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _redeemedAtMeta = const VerificationMeta(
+    'redeemedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> redeemedAt = GeneratedColumn<DateTime>(
+    'redeemed_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    customerId,
+    rewardId,
+    pointsSpent,
+    status,
+    saleId,
+    usedAt,
+    expiresAt,
+    redeemedAt,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'customer_reward_redemptions';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<CustomerRewardRedemption> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('customer_id')) {
+      context.handle(
+        _customerIdMeta,
+        customerId.isAcceptableOrUnknown(data['customer_id']!, _customerIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_customerIdMeta);
+    }
+    if (data.containsKey('reward_id')) {
+      context.handle(
+        _rewardIdMeta,
+        rewardId.isAcceptableOrUnknown(data['reward_id']!, _rewardIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_rewardIdMeta);
+    }
+    if (data.containsKey('points_spent')) {
+      context.handle(
+        _pointsSpentMeta,
+        pointsSpent.isAcceptableOrUnknown(
+          data['points_spent']!,
+          _pointsSpentMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_pointsSpentMeta);
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    }
+    if (data.containsKey('sale_id')) {
+      context.handle(
+        _saleIdMeta,
+        saleId.isAcceptableOrUnknown(data['sale_id']!, _saleIdMeta),
+      );
+    }
+    if (data.containsKey('used_at')) {
+      context.handle(
+        _usedAtMeta,
+        usedAt.isAcceptableOrUnknown(data['used_at']!, _usedAtMeta),
+      );
+    }
+    if (data.containsKey('expires_at')) {
+      context.handle(
+        _expiresAtMeta,
+        expiresAt.isAcceptableOrUnknown(data['expires_at']!, _expiresAtMeta),
+      );
+    }
+    if (data.containsKey('redeemed_at')) {
+      context.handle(
+        _redeemedAtMeta,
+        redeemedAt.isAcceptableOrUnknown(data['redeemed_at']!, _redeemedAtMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  CustomerRewardRedemption map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CustomerRewardRedemption(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      customerId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}customer_id'],
+      )!,
+      rewardId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}reward_id'],
+      )!,
+      pointsSpent: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}points_spent'],
+      )!,
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      saleId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sale_id'],
+      ),
+      usedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}used_at'],
+      ),
+      expiresAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}expires_at'],
+      ),
+      redeemedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}redeemed_at'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $CustomerRewardRedemptionsTable createAlias(String alias) {
+    return $CustomerRewardRedemptionsTable(attachedDatabase, alias);
+  }
+}
+
+class CustomerRewardRedemption extends DataClass
+    implements Insertable<CustomerRewardRedemption> {
+  final int id;
+  final int customerId;
+  final int rewardId;
+  final int pointsSpent;
+  final String status;
+  final int? saleId;
+  final DateTime? usedAt;
+  final DateTime? expiresAt;
+  final DateTime redeemedAt;
+  final DateTime createdAt;
+  const CustomerRewardRedemption({
+    required this.id,
+    required this.customerId,
+    required this.rewardId,
+    required this.pointsSpent,
+    required this.status,
+    this.saleId,
+    this.usedAt,
+    this.expiresAt,
+    required this.redeemedAt,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['customer_id'] = Variable<int>(customerId);
+    map['reward_id'] = Variable<int>(rewardId);
+    map['points_spent'] = Variable<int>(pointsSpent);
+    map['status'] = Variable<String>(status);
+    if (!nullToAbsent || saleId != null) {
+      map['sale_id'] = Variable<int>(saleId);
+    }
+    if (!nullToAbsent || usedAt != null) {
+      map['used_at'] = Variable<DateTime>(usedAt);
+    }
+    if (!nullToAbsent || expiresAt != null) {
+      map['expires_at'] = Variable<DateTime>(expiresAt);
+    }
+    map['redeemed_at'] = Variable<DateTime>(redeemedAt);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  CustomerRewardRedemptionsCompanion toCompanion(bool nullToAbsent) {
+    return CustomerRewardRedemptionsCompanion(
+      id: Value(id),
+      customerId: Value(customerId),
+      rewardId: Value(rewardId),
+      pointsSpent: Value(pointsSpent),
+      status: Value(status),
+      saleId: saleId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(saleId),
+      usedAt: usedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(usedAt),
+      expiresAt: expiresAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(expiresAt),
+      redeemedAt: Value(redeemedAt),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory CustomerRewardRedemption.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CustomerRewardRedemption(
+      id: serializer.fromJson<int>(json['id']),
+      customerId: serializer.fromJson<int>(json['customerId']),
+      rewardId: serializer.fromJson<int>(json['rewardId']),
+      pointsSpent: serializer.fromJson<int>(json['pointsSpent']),
+      status: serializer.fromJson<String>(json['status']),
+      saleId: serializer.fromJson<int?>(json['saleId']),
+      usedAt: serializer.fromJson<DateTime?>(json['usedAt']),
+      expiresAt: serializer.fromJson<DateTime?>(json['expiresAt']),
+      redeemedAt: serializer.fromJson<DateTime>(json['redeemedAt']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'customerId': serializer.toJson<int>(customerId),
+      'rewardId': serializer.toJson<int>(rewardId),
+      'pointsSpent': serializer.toJson<int>(pointsSpent),
+      'status': serializer.toJson<String>(status),
+      'saleId': serializer.toJson<int?>(saleId),
+      'usedAt': serializer.toJson<DateTime?>(usedAt),
+      'expiresAt': serializer.toJson<DateTime?>(expiresAt),
+      'redeemedAt': serializer.toJson<DateTime>(redeemedAt),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  CustomerRewardRedemption copyWith({
+    int? id,
+    int? customerId,
+    int? rewardId,
+    int? pointsSpent,
+    String? status,
+    Value<int?> saleId = const Value.absent(),
+    Value<DateTime?> usedAt = const Value.absent(),
+    Value<DateTime?> expiresAt = const Value.absent(),
+    DateTime? redeemedAt,
+    DateTime? createdAt,
+  }) => CustomerRewardRedemption(
+    id: id ?? this.id,
+    customerId: customerId ?? this.customerId,
+    rewardId: rewardId ?? this.rewardId,
+    pointsSpent: pointsSpent ?? this.pointsSpent,
+    status: status ?? this.status,
+    saleId: saleId.present ? saleId.value : this.saleId,
+    usedAt: usedAt.present ? usedAt.value : this.usedAt,
+    expiresAt: expiresAt.present ? expiresAt.value : this.expiresAt,
+    redeemedAt: redeemedAt ?? this.redeemedAt,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  CustomerRewardRedemption copyWithCompanion(
+    CustomerRewardRedemptionsCompanion data,
+  ) {
+    return CustomerRewardRedemption(
+      id: data.id.present ? data.id.value : this.id,
+      customerId: data.customerId.present
+          ? data.customerId.value
+          : this.customerId,
+      rewardId: data.rewardId.present ? data.rewardId.value : this.rewardId,
+      pointsSpent: data.pointsSpent.present
+          ? data.pointsSpent.value
+          : this.pointsSpent,
+      status: data.status.present ? data.status.value : this.status,
+      saleId: data.saleId.present ? data.saleId.value : this.saleId,
+      usedAt: data.usedAt.present ? data.usedAt.value : this.usedAt,
+      expiresAt: data.expiresAt.present ? data.expiresAt.value : this.expiresAt,
+      redeemedAt: data.redeemedAt.present
+          ? data.redeemedAt.value
+          : this.redeemedAt,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CustomerRewardRedemption(')
+          ..write('id: $id, ')
+          ..write('customerId: $customerId, ')
+          ..write('rewardId: $rewardId, ')
+          ..write('pointsSpent: $pointsSpent, ')
+          ..write('status: $status, ')
+          ..write('saleId: $saleId, ')
+          ..write('usedAt: $usedAt, ')
+          ..write('expiresAt: $expiresAt, ')
+          ..write('redeemedAt: $redeemedAt, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    customerId,
+    rewardId,
+    pointsSpent,
+    status,
+    saleId,
+    usedAt,
+    expiresAt,
+    redeemedAt,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CustomerRewardRedemption &&
+          other.id == this.id &&
+          other.customerId == this.customerId &&
+          other.rewardId == this.rewardId &&
+          other.pointsSpent == this.pointsSpent &&
+          other.status == this.status &&
+          other.saleId == this.saleId &&
+          other.usedAt == this.usedAt &&
+          other.expiresAt == this.expiresAt &&
+          other.redeemedAt == this.redeemedAt &&
+          other.createdAt == this.createdAt);
+}
+
+class CustomerRewardRedemptionsCompanion
+    extends UpdateCompanion<CustomerRewardRedemption> {
+  final Value<int> id;
+  final Value<int> customerId;
+  final Value<int> rewardId;
+  final Value<int> pointsSpent;
+  final Value<String> status;
+  final Value<int?> saleId;
+  final Value<DateTime?> usedAt;
+  final Value<DateTime?> expiresAt;
+  final Value<DateTime> redeemedAt;
+  final Value<DateTime> createdAt;
+  const CustomerRewardRedemptionsCompanion({
+    this.id = const Value.absent(),
+    this.customerId = const Value.absent(),
+    this.rewardId = const Value.absent(),
+    this.pointsSpent = const Value.absent(),
+    this.status = const Value.absent(),
+    this.saleId = const Value.absent(),
+    this.usedAt = const Value.absent(),
+    this.expiresAt = const Value.absent(),
+    this.redeemedAt = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  });
+  CustomerRewardRedemptionsCompanion.insert({
+    this.id = const Value.absent(),
+    required int customerId,
+    required int rewardId,
+    required int pointsSpent,
+    this.status = const Value.absent(),
+    this.saleId = const Value.absent(),
+    this.usedAt = const Value.absent(),
+    this.expiresAt = const Value.absent(),
+    this.redeemedAt = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  }) : customerId = Value(customerId),
+       rewardId = Value(rewardId),
+       pointsSpent = Value(pointsSpent);
+  static Insertable<CustomerRewardRedemption> custom({
+    Expression<int>? id,
+    Expression<int>? customerId,
+    Expression<int>? rewardId,
+    Expression<int>? pointsSpent,
+    Expression<String>? status,
+    Expression<int>? saleId,
+    Expression<DateTime>? usedAt,
+    Expression<DateTime>? expiresAt,
+    Expression<DateTime>? redeemedAt,
+    Expression<DateTime>? createdAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (customerId != null) 'customer_id': customerId,
+      if (rewardId != null) 'reward_id': rewardId,
+      if (pointsSpent != null) 'points_spent': pointsSpent,
+      if (status != null) 'status': status,
+      if (saleId != null) 'sale_id': saleId,
+      if (usedAt != null) 'used_at': usedAt,
+      if (expiresAt != null) 'expires_at': expiresAt,
+      if (redeemedAt != null) 'redeemed_at': redeemedAt,
+      if (createdAt != null) 'created_at': createdAt,
+    });
+  }
+
+  CustomerRewardRedemptionsCompanion copyWith({
+    Value<int>? id,
+    Value<int>? customerId,
+    Value<int>? rewardId,
+    Value<int>? pointsSpent,
+    Value<String>? status,
+    Value<int?>? saleId,
+    Value<DateTime?>? usedAt,
+    Value<DateTime?>? expiresAt,
+    Value<DateTime>? redeemedAt,
+    Value<DateTime>? createdAt,
+  }) {
+    return CustomerRewardRedemptionsCompanion(
+      id: id ?? this.id,
+      customerId: customerId ?? this.customerId,
+      rewardId: rewardId ?? this.rewardId,
+      pointsSpent: pointsSpent ?? this.pointsSpent,
+      status: status ?? this.status,
+      saleId: saleId ?? this.saleId,
+      usedAt: usedAt ?? this.usedAt,
+      expiresAt: expiresAt ?? this.expiresAt,
+      redeemedAt: redeemedAt ?? this.redeemedAt,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (customerId.present) {
+      map['customer_id'] = Variable<int>(customerId.value);
+    }
+    if (rewardId.present) {
+      map['reward_id'] = Variable<int>(rewardId.value);
+    }
+    if (pointsSpent.present) {
+      map['points_spent'] = Variable<int>(pointsSpent.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (saleId.present) {
+      map['sale_id'] = Variable<int>(saleId.value);
+    }
+    if (usedAt.present) {
+      map['used_at'] = Variable<DateTime>(usedAt.value);
+    }
+    if (expiresAt.present) {
+      map['expires_at'] = Variable<DateTime>(expiresAt.value);
+    }
+    if (redeemedAt.present) {
+      map['redeemed_at'] = Variable<DateTime>(redeemedAt.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CustomerRewardRedemptionsCompanion(')
+          ..write('id: $id, ')
+          ..write('customerId: $customerId, ')
+          ..write('rewardId: $rewardId, ')
+          ..write('pointsSpent: $pointsSpent, ')
+          ..write('status: $status, ')
+          ..write('saleId: $saleId, ')
+          ..write('usedAt: $usedAt, ')
+          ..write('expiresAt: $expiresAt, ')
+          ..write('redeemedAt: $redeemedAt, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $LoyaltySettingsTableTable extends LoyaltySettingsTable
+    with TableInfo<$LoyaltySettingsTableTable, LoyaltySettings> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $LoyaltySettingsTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _pointsPerCurrencyUnitMeta =
+      const VerificationMeta('pointsPerCurrencyUnit');
+  @override
+  late final GeneratedColumn<int> pointsPerCurrencyUnit = GeneratedColumn<int>(
+    'points_per_currency_unit',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
+  @override
+  late final GeneratedColumnWithTypeConverter<Decimal, int> minSpendForPoints =
+      GeneratedColumn<int>(
+        'min_spend_for_points',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(0),
+      ).withConverter<Decimal>(
+        $LoyaltySettingsTableTable.$converterminSpendForPoints,
+      );
+  static const VerificationMeta _pointsExpiryDaysMeta = const VerificationMeta(
+    'pointsExpiryDays',
+  );
+  @override
+  late final GeneratedColumn<int> pointsExpiryDays = GeneratedColumn<int>(
+    'points_expiry_days',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _referralBonusPointsMeta =
+      const VerificationMeta('referralBonusPoints');
+  @override
+  late final GeneratedColumn<int> referralBonusPoints = GeneratedColumn<int>(
+    'referral_bonus_points',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(100),
+  );
+  static const VerificationMeta _signupBonusPointsMeta = const VerificationMeta(
+    'signupBonusPoints',
+  );
+  @override
+  late final GeneratedColumn<int> signupBonusPoints = GeneratedColumn<int>(
+    'signup_bonus_points',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(50),
+  );
+  static const VerificationMeta _reviewBonusPointsMeta = const VerificationMeta(
+    'reviewBonusPoints',
+  );
+  @override
+  late final GeneratedColumn<int> reviewBonusPoints = GeneratedColumn<int>(
+    'review_bonus_points',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(10),
+  );
+  static const VerificationMeta _isEnabledMeta = const VerificationMeta(
+    'isEnabled',
+  );
+  @override
+  late final GeneratedColumn<bool> isEnabled = GeneratedColumn<bool>(
+    'is_enabled',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_enabled" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    pointsPerCurrencyUnit,
+    minSpendForPoints,
+    pointsExpiryDays,
+    referralBonusPoints,
+    signupBonusPoints,
+    reviewBonusPoints,
+    isEnabled,
+    createdAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'loyalty_settings';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<LoyaltySettings> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('points_per_currency_unit')) {
+      context.handle(
+        _pointsPerCurrencyUnitMeta,
+        pointsPerCurrencyUnit.isAcceptableOrUnknown(
+          data['points_per_currency_unit']!,
+          _pointsPerCurrencyUnitMeta,
+        ),
+      );
+    }
+    if (data.containsKey('points_expiry_days')) {
+      context.handle(
+        _pointsExpiryDaysMeta,
+        pointsExpiryDays.isAcceptableOrUnknown(
+          data['points_expiry_days']!,
+          _pointsExpiryDaysMeta,
+        ),
+      );
+    }
+    if (data.containsKey('referral_bonus_points')) {
+      context.handle(
+        _referralBonusPointsMeta,
+        referralBonusPoints.isAcceptableOrUnknown(
+          data['referral_bonus_points']!,
+          _referralBonusPointsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('signup_bonus_points')) {
+      context.handle(
+        _signupBonusPointsMeta,
+        signupBonusPoints.isAcceptableOrUnknown(
+          data['signup_bonus_points']!,
+          _signupBonusPointsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('review_bonus_points')) {
+      context.handle(
+        _reviewBonusPointsMeta,
+        reviewBonusPoints.isAcceptableOrUnknown(
+          data['review_bonus_points']!,
+          _reviewBonusPointsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('is_enabled')) {
+      context.handle(
+        _isEnabledMeta,
+        isEnabled.isAcceptableOrUnknown(data['is_enabled']!, _isEnabledMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  LoyaltySettings map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return LoyaltySettings(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      pointsPerCurrencyUnit: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}points_per_currency_unit'],
+      )!,
+      minSpendForPoints: $LoyaltySettingsTableTable.$converterminSpendForPoints
+          .fromSql(
+            attachedDatabase.typeMapping.read(
+              DriftSqlType.int,
+              data['${effectivePrefix}min_spend_for_points'],
+            )!,
+          ),
+      pointsExpiryDays: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}points_expiry_days'],
+      ),
+      referralBonusPoints: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}referral_bonus_points'],
+      )!,
+      signupBonusPoints: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}signup_bonus_points'],
+      )!,
+      reviewBonusPoints: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}review_bonus_points'],
+      )!,
+      isEnabled: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_enabled'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $LoyaltySettingsTableTable createAlias(String alias) {
+    return $LoyaltySettingsTableTable(attachedDatabase, alias);
+  }
+
+  static TypeConverter<Decimal, int> $converterminSpendForPoints =
+      const MoneyConverter();
+}
+
+class LoyaltySettings extends DataClass implements Insertable<LoyaltySettings> {
+  final int id;
+  final int pointsPerCurrencyUnit;
+  final Decimal minSpendForPoints;
+  final int? pointsExpiryDays;
+  final int referralBonusPoints;
+  final int signupBonusPoints;
+  final int reviewBonusPoints;
+  final bool isEnabled;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  const LoyaltySettings({
+    required this.id,
+    required this.pointsPerCurrencyUnit,
+    required this.minSpendForPoints,
+    this.pointsExpiryDays,
+    required this.referralBonusPoints,
+    required this.signupBonusPoints,
+    required this.reviewBonusPoints,
+    required this.isEnabled,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['points_per_currency_unit'] = Variable<int>(pointsPerCurrencyUnit);
+    {
+      map['min_spend_for_points'] = Variable<int>(
+        $LoyaltySettingsTableTable.$converterminSpendForPoints.toSql(
+          minSpendForPoints,
+        ),
+      );
+    }
+    if (!nullToAbsent || pointsExpiryDays != null) {
+      map['points_expiry_days'] = Variable<int>(pointsExpiryDays);
+    }
+    map['referral_bonus_points'] = Variable<int>(referralBonusPoints);
+    map['signup_bonus_points'] = Variable<int>(signupBonusPoints);
+    map['review_bonus_points'] = Variable<int>(reviewBonusPoints);
+    map['is_enabled'] = Variable<bool>(isEnabled);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  LoyaltySettingsTableCompanion toCompanion(bool nullToAbsent) {
+    return LoyaltySettingsTableCompanion(
+      id: Value(id),
+      pointsPerCurrencyUnit: Value(pointsPerCurrencyUnit),
+      minSpendForPoints: Value(minSpendForPoints),
+      pointsExpiryDays: pointsExpiryDays == null && nullToAbsent
+          ? const Value.absent()
+          : Value(pointsExpiryDays),
+      referralBonusPoints: Value(referralBonusPoints),
+      signupBonusPoints: Value(signupBonusPoints),
+      reviewBonusPoints: Value(reviewBonusPoints),
+      isEnabled: Value(isEnabled),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory LoyaltySettings.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return LoyaltySettings(
+      id: serializer.fromJson<int>(json['id']),
+      pointsPerCurrencyUnit: serializer.fromJson<int>(
+        json['pointsPerCurrencyUnit'],
+      ),
+      minSpendForPoints: serializer.fromJson<Decimal>(
+        json['minSpendForPoints'],
+      ),
+      pointsExpiryDays: serializer.fromJson<int?>(json['pointsExpiryDays']),
+      referralBonusPoints: serializer.fromJson<int>(
+        json['referralBonusPoints'],
+      ),
+      signupBonusPoints: serializer.fromJson<int>(json['signupBonusPoints']),
+      reviewBonusPoints: serializer.fromJson<int>(json['reviewBonusPoints']),
+      isEnabled: serializer.fromJson<bool>(json['isEnabled']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'pointsPerCurrencyUnit': serializer.toJson<int>(pointsPerCurrencyUnit),
+      'minSpendForPoints': serializer.toJson<Decimal>(minSpendForPoints),
+      'pointsExpiryDays': serializer.toJson<int?>(pointsExpiryDays),
+      'referralBonusPoints': serializer.toJson<int>(referralBonusPoints),
+      'signupBonusPoints': serializer.toJson<int>(signupBonusPoints),
+      'reviewBonusPoints': serializer.toJson<int>(reviewBonusPoints),
+      'isEnabled': serializer.toJson<bool>(isEnabled),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  LoyaltySettings copyWith({
+    int? id,
+    int? pointsPerCurrencyUnit,
+    Decimal? minSpendForPoints,
+    Value<int?> pointsExpiryDays = const Value.absent(),
+    int? referralBonusPoints,
+    int? signupBonusPoints,
+    int? reviewBonusPoints,
+    bool? isEnabled,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) => LoyaltySettings(
+    id: id ?? this.id,
+    pointsPerCurrencyUnit: pointsPerCurrencyUnit ?? this.pointsPerCurrencyUnit,
+    minSpendForPoints: minSpendForPoints ?? this.minSpendForPoints,
+    pointsExpiryDays: pointsExpiryDays.present
+        ? pointsExpiryDays.value
+        : this.pointsExpiryDays,
+    referralBonusPoints: referralBonusPoints ?? this.referralBonusPoints,
+    signupBonusPoints: signupBonusPoints ?? this.signupBonusPoints,
+    reviewBonusPoints: reviewBonusPoints ?? this.reviewBonusPoints,
+    isEnabled: isEnabled ?? this.isEnabled,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  LoyaltySettings copyWithCompanion(LoyaltySettingsTableCompanion data) {
+    return LoyaltySettings(
+      id: data.id.present ? data.id.value : this.id,
+      pointsPerCurrencyUnit: data.pointsPerCurrencyUnit.present
+          ? data.pointsPerCurrencyUnit.value
+          : this.pointsPerCurrencyUnit,
+      minSpendForPoints: data.minSpendForPoints.present
+          ? data.minSpendForPoints.value
+          : this.minSpendForPoints,
+      pointsExpiryDays: data.pointsExpiryDays.present
+          ? data.pointsExpiryDays.value
+          : this.pointsExpiryDays,
+      referralBonusPoints: data.referralBonusPoints.present
+          ? data.referralBonusPoints.value
+          : this.referralBonusPoints,
+      signupBonusPoints: data.signupBonusPoints.present
+          ? data.signupBonusPoints.value
+          : this.signupBonusPoints,
+      reviewBonusPoints: data.reviewBonusPoints.present
+          ? data.reviewBonusPoints.value
+          : this.reviewBonusPoints,
+      isEnabled: data.isEnabled.present ? data.isEnabled.value : this.isEnabled,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LoyaltySettings(')
+          ..write('id: $id, ')
+          ..write('pointsPerCurrencyUnit: $pointsPerCurrencyUnit, ')
+          ..write('minSpendForPoints: $minSpendForPoints, ')
+          ..write('pointsExpiryDays: $pointsExpiryDays, ')
+          ..write('referralBonusPoints: $referralBonusPoints, ')
+          ..write('signupBonusPoints: $signupBonusPoints, ')
+          ..write('reviewBonusPoints: $reviewBonusPoints, ')
+          ..write('isEnabled: $isEnabled, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    pointsPerCurrencyUnit,
+    minSpendForPoints,
+    pointsExpiryDays,
+    referralBonusPoints,
+    signupBonusPoints,
+    reviewBonusPoints,
+    isEnabled,
+    createdAt,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is LoyaltySettings &&
+          other.id == this.id &&
+          other.pointsPerCurrencyUnit == this.pointsPerCurrencyUnit &&
+          other.minSpendForPoints == this.minSpendForPoints &&
+          other.pointsExpiryDays == this.pointsExpiryDays &&
+          other.referralBonusPoints == this.referralBonusPoints &&
+          other.signupBonusPoints == this.signupBonusPoints &&
+          other.reviewBonusPoints == this.reviewBonusPoints &&
+          other.isEnabled == this.isEnabled &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class LoyaltySettingsTableCompanion extends UpdateCompanion<LoyaltySettings> {
+  final Value<int> id;
+  final Value<int> pointsPerCurrencyUnit;
+  final Value<Decimal> minSpendForPoints;
+  final Value<int?> pointsExpiryDays;
+  final Value<int> referralBonusPoints;
+  final Value<int> signupBonusPoints;
+  final Value<int> reviewBonusPoints;
+  final Value<bool> isEnabled;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  const LoyaltySettingsTableCompanion({
+    this.id = const Value.absent(),
+    this.pointsPerCurrencyUnit = const Value.absent(),
+    this.minSpendForPoints = const Value.absent(),
+    this.pointsExpiryDays = const Value.absent(),
+    this.referralBonusPoints = const Value.absent(),
+    this.signupBonusPoints = const Value.absent(),
+    this.reviewBonusPoints = const Value.absent(),
+    this.isEnabled = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  });
+  LoyaltySettingsTableCompanion.insert({
+    this.id = const Value.absent(),
+    this.pointsPerCurrencyUnit = const Value.absent(),
+    this.minSpendForPoints = const Value.absent(),
+    this.pointsExpiryDays = const Value.absent(),
+    this.referralBonusPoints = const Value.absent(),
+    this.signupBonusPoints = const Value.absent(),
+    this.reviewBonusPoints = const Value.absent(),
+    this.isEnabled = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  });
+  static Insertable<LoyaltySettings> custom({
+    Expression<int>? id,
+    Expression<int>? pointsPerCurrencyUnit,
+    Expression<int>? minSpendForPoints,
+    Expression<int>? pointsExpiryDays,
+    Expression<int>? referralBonusPoints,
+    Expression<int>? signupBonusPoints,
+    Expression<int>? reviewBonusPoints,
+    Expression<bool>? isEnabled,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (pointsPerCurrencyUnit != null)
+        'points_per_currency_unit': pointsPerCurrencyUnit,
+      if (minSpendForPoints != null) 'min_spend_for_points': minSpendForPoints,
+      if (pointsExpiryDays != null) 'points_expiry_days': pointsExpiryDays,
+      if (referralBonusPoints != null)
+        'referral_bonus_points': referralBonusPoints,
+      if (signupBonusPoints != null) 'signup_bonus_points': signupBonusPoints,
+      if (reviewBonusPoints != null) 'review_bonus_points': reviewBonusPoints,
+      if (isEnabled != null) 'is_enabled': isEnabled,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+    });
+  }
+
+  LoyaltySettingsTableCompanion copyWith({
+    Value<int>? id,
+    Value<int>? pointsPerCurrencyUnit,
+    Value<Decimal>? minSpendForPoints,
+    Value<int?>? pointsExpiryDays,
+    Value<int>? referralBonusPoints,
+    Value<int>? signupBonusPoints,
+    Value<int>? reviewBonusPoints,
+    Value<bool>? isEnabled,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+  }) {
+    return LoyaltySettingsTableCompanion(
+      id: id ?? this.id,
+      pointsPerCurrencyUnit:
+          pointsPerCurrencyUnit ?? this.pointsPerCurrencyUnit,
+      minSpendForPoints: minSpendForPoints ?? this.minSpendForPoints,
+      pointsExpiryDays: pointsExpiryDays ?? this.pointsExpiryDays,
+      referralBonusPoints: referralBonusPoints ?? this.referralBonusPoints,
+      signupBonusPoints: signupBonusPoints ?? this.signupBonusPoints,
+      reviewBonusPoints: reviewBonusPoints ?? this.reviewBonusPoints,
+      isEnabled: isEnabled ?? this.isEnabled,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (pointsPerCurrencyUnit.present) {
+      map['points_per_currency_unit'] = Variable<int>(
+        pointsPerCurrencyUnit.value,
+      );
+    }
+    if (minSpendForPoints.present) {
+      map['min_spend_for_points'] = Variable<int>(
+        $LoyaltySettingsTableTable.$converterminSpendForPoints.toSql(
+          minSpendForPoints.value,
+        ),
+      );
+    }
+    if (pointsExpiryDays.present) {
+      map['points_expiry_days'] = Variable<int>(pointsExpiryDays.value);
+    }
+    if (referralBonusPoints.present) {
+      map['referral_bonus_points'] = Variable<int>(referralBonusPoints.value);
+    }
+    if (signupBonusPoints.present) {
+      map['signup_bonus_points'] = Variable<int>(signupBonusPoints.value);
+    }
+    if (reviewBonusPoints.present) {
+      map['review_bonus_points'] = Variable<int>(reviewBonusPoints.value);
+    }
+    if (isEnabled.present) {
+      map['is_enabled'] = Variable<bool>(isEnabled.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LoyaltySettingsTableCompanion(')
+          ..write('id: $id, ')
+          ..write('pointsPerCurrencyUnit: $pointsPerCurrencyUnit, ')
+          ..write('minSpendForPoints: $minSpendForPoints, ')
+          ..write('pointsExpiryDays: $pointsExpiryDays, ')
+          ..write('referralBonusPoints: $referralBonusPoints, ')
+          ..write('signupBonusPoints: $signupBonusPoints, ')
+          ..write('reviewBonusPoints: $reviewBonusPoints, ')
+          ..write('isEnabled: $isEnabled, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
   }
@@ -21198,9 +25475,17 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     this,
   );
   late final $ProductBatchesTable productBatches = $ProductBatchesTable(this);
+  late final $LoyaltyTiersTable loyaltyTiers = $LoyaltyTiersTable(this);
   late final $CustomersTable customers = $CustomersTable(this);
   late final $CustomerTransactionsTable customerTransactions =
       $CustomerTransactionsTable(this);
+  late final $LoyaltyPointTransactionsTable loyaltyPointTransactions =
+      $LoyaltyPointTransactionsTable(this);
+  late final $LoyaltyRewardsTable loyaltyRewards = $LoyaltyRewardsTable(this);
+  late final $CustomerRewardRedemptionsTable customerRewardRedemptions =
+      $CustomerRewardRedemptionsTable(this);
+  late final $LoyaltySettingsTableTable loyaltySettingsTable =
+      $LoyaltySettingsTableTable(this);
   late final $SupplierTransactionsTable supplierTransactions =
       $SupplierTransactionsTable(this);
   late final $EmployeesTable employees = $EmployeesTable(this);
@@ -21267,8 +25552,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     products,
     productVariants,
     productBatches,
+    loyaltyTiers,
     customers,
     customerTransactions,
+    loyaltyPointTransactions,
+    loyaltyRewards,
+    customerRewardRedemptions,
+    loyaltySettingsTable,
     supplierTransactions,
     employees,
     sales,
@@ -21314,6 +25604,38 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('product_batches', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'loyalty_tiers',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('customers', kind: UpdateKind.update)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'customers',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [
+        TableUpdate('loyalty_point_transactions', kind: UpdateKind.delete),
+      ],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'loyalty_tiers',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('loyalty_rewards', kind: UpdateKind.update)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'customers',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [
+        TableUpdate('customer_reward_redemptions', kind: UpdateKind.delete),
+      ],
     ),
     WritePropagation(
       on: TableUpdateQuery.onTableName(
@@ -29126,6 +33448,577 @@ typedef $$ProductBatchesTableProcessedTableManager =
       ProductBatch,
       PrefetchHooks Function({bool productId, bool variantId})
     >;
+typedef $$LoyaltyTiersTableCreateCompanionBuilder =
+    LoyaltyTiersCompanion Function({
+      Value<int> id,
+      required String name,
+      Value<String?> nameAr,
+      Value<String?> nameFr,
+      Value<int> minPoints,
+      Value<int?> maxPoints,
+      Value<double> pointsMultiplier,
+      Value<double> discountPercent,
+      Value<String> color,
+      Value<String?> icon,
+      Value<int> sortOrder,
+      Value<bool> isActive,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+    });
+typedef $$LoyaltyTiersTableUpdateCompanionBuilder =
+    LoyaltyTiersCompanion Function({
+      Value<int> id,
+      Value<String> name,
+      Value<String?> nameAr,
+      Value<String?> nameFr,
+      Value<int> minPoints,
+      Value<int?> maxPoints,
+      Value<double> pointsMultiplier,
+      Value<double> discountPercent,
+      Value<String> color,
+      Value<String?> icon,
+      Value<int> sortOrder,
+      Value<bool> isActive,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+    });
+
+final class $$LoyaltyTiersTableReferences
+    extends BaseReferences<_$AppDatabase, $LoyaltyTiersTable, LoyaltyTier> {
+  $$LoyaltyTiersTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static MultiTypedResultKey<$CustomersTable, List<Customer>>
+  _customersRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.customers,
+    aliasName: $_aliasNameGenerator(
+      db.loyaltyTiers.id,
+      db.customers.loyaltyTierId,
+    ),
+  );
+
+  $$CustomersTableProcessedTableManager get customersRefs {
+    final manager = $$CustomersTableTableManager(
+      $_db,
+      $_db.customers,
+    ).filter((f) => f.loyaltyTierId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_customersRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$LoyaltyRewardsTable, List<LoyaltyReward>>
+  _loyaltyRewardsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.loyaltyRewards,
+    aliasName: $_aliasNameGenerator(
+      db.loyaltyTiers.id,
+      db.loyaltyRewards.minTierId,
+    ),
+  );
+
+  $$LoyaltyRewardsTableProcessedTableManager get loyaltyRewardsRefs {
+    final manager = $$LoyaltyRewardsTableTableManager(
+      $_db,
+      $_db.loyaltyRewards,
+    ).filter((f) => f.minTierId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_loyaltyRewardsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$LoyaltyTiersTableFilterComposer
+    extends Composer<_$AppDatabase, $LoyaltyTiersTable> {
+  $$LoyaltyTiersTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get nameAr => $composableBuilder(
+    column: $table.nameAr,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get nameFr => $composableBuilder(
+    column: $table.nameFr,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get minPoints => $composableBuilder(
+    column: $table.minPoints,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get maxPoints => $composableBuilder(
+    column: $table.maxPoints,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get pointsMultiplier => $composableBuilder(
+    column: $table.pointsMultiplier,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get discountPercent => $composableBuilder(
+    column: $table.discountPercent,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get color => $composableBuilder(
+    column: $table.color,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get icon => $composableBuilder(
+    column: $table.icon,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isActive => $composableBuilder(
+    column: $table.isActive,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  Expression<bool> customersRefs(
+    Expression<bool> Function($$CustomersTableFilterComposer f) f,
+  ) {
+    final $$CustomersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.customers,
+      getReferencedColumn: (t) => t.loyaltyTierId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CustomersTableFilterComposer(
+            $db: $db,
+            $table: $db.customers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> loyaltyRewardsRefs(
+    Expression<bool> Function($$LoyaltyRewardsTableFilterComposer f) f,
+  ) {
+    final $$LoyaltyRewardsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.loyaltyRewards,
+      getReferencedColumn: (t) => t.minTierId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LoyaltyRewardsTableFilterComposer(
+            $db: $db,
+            $table: $db.loyaltyRewards,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$LoyaltyTiersTableOrderingComposer
+    extends Composer<_$AppDatabase, $LoyaltyTiersTable> {
+  $$LoyaltyTiersTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get nameAr => $composableBuilder(
+    column: $table.nameAr,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get nameFr => $composableBuilder(
+    column: $table.nameFr,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get minPoints => $composableBuilder(
+    column: $table.minPoints,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get maxPoints => $composableBuilder(
+    column: $table.maxPoints,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get pointsMultiplier => $composableBuilder(
+    column: $table.pointsMultiplier,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get discountPercent => $composableBuilder(
+    column: $table.discountPercent,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get color => $composableBuilder(
+    column: $table.color,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get icon => $composableBuilder(
+    column: $table.icon,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isActive => $composableBuilder(
+    column: $table.isActive,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$LoyaltyTiersTableAnnotationComposer
+    extends Composer<_$AppDatabase, $LoyaltyTiersTable> {
+  $$LoyaltyTiersTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get nameAr =>
+      $composableBuilder(column: $table.nameAr, builder: (column) => column);
+
+  GeneratedColumn<String> get nameFr =>
+      $composableBuilder(column: $table.nameFr, builder: (column) => column);
+
+  GeneratedColumn<int> get minPoints =>
+      $composableBuilder(column: $table.minPoints, builder: (column) => column);
+
+  GeneratedColumn<int> get maxPoints =>
+      $composableBuilder(column: $table.maxPoints, builder: (column) => column);
+
+  GeneratedColumn<double> get pointsMultiplier => $composableBuilder(
+    column: $table.pointsMultiplier,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get discountPercent => $composableBuilder(
+    column: $table.discountPercent,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get color =>
+      $composableBuilder(column: $table.color, builder: (column) => column);
+
+  GeneratedColumn<String> get icon =>
+      $composableBuilder(column: $table.icon, builder: (column) => column);
+
+  GeneratedColumn<int> get sortOrder =>
+      $composableBuilder(column: $table.sortOrder, builder: (column) => column);
+
+  GeneratedColumn<bool> get isActive =>
+      $composableBuilder(column: $table.isActive, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  Expression<T> customersRefs<T extends Object>(
+    Expression<T> Function($$CustomersTableAnnotationComposer a) f,
+  ) {
+    final $$CustomersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.customers,
+      getReferencedColumn: (t) => t.loyaltyTierId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CustomersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.customers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> loyaltyRewardsRefs<T extends Object>(
+    Expression<T> Function($$LoyaltyRewardsTableAnnotationComposer a) f,
+  ) {
+    final $$LoyaltyRewardsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.loyaltyRewards,
+      getReferencedColumn: (t) => t.minTierId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LoyaltyRewardsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.loyaltyRewards,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$LoyaltyTiersTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $LoyaltyTiersTable,
+          LoyaltyTier,
+          $$LoyaltyTiersTableFilterComposer,
+          $$LoyaltyTiersTableOrderingComposer,
+          $$LoyaltyTiersTableAnnotationComposer,
+          $$LoyaltyTiersTableCreateCompanionBuilder,
+          $$LoyaltyTiersTableUpdateCompanionBuilder,
+          (LoyaltyTier, $$LoyaltyTiersTableReferences),
+          LoyaltyTier,
+          PrefetchHooks Function({bool customersRefs, bool loyaltyRewardsRefs})
+        > {
+  $$LoyaltyTiersTableTableManager(_$AppDatabase db, $LoyaltyTiersTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$LoyaltyTiersTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$LoyaltyTiersTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$LoyaltyTiersTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String?> nameAr = const Value.absent(),
+                Value<String?> nameFr = const Value.absent(),
+                Value<int> minPoints = const Value.absent(),
+                Value<int?> maxPoints = const Value.absent(),
+                Value<double> pointsMultiplier = const Value.absent(),
+                Value<double> discountPercent = const Value.absent(),
+                Value<String> color = const Value.absent(),
+                Value<String?> icon = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
+                Value<bool> isActive = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => LoyaltyTiersCompanion(
+                id: id,
+                name: name,
+                nameAr: nameAr,
+                nameFr: nameFr,
+                minPoints: minPoints,
+                maxPoints: maxPoints,
+                pointsMultiplier: pointsMultiplier,
+                discountPercent: discountPercent,
+                color: color,
+                icon: icon,
+                sortOrder: sortOrder,
+                isActive: isActive,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required String name,
+                Value<String?> nameAr = const Value.absent(),
+                Value<String?> nameFr = const Value.absent(),
+                Value<int> minPoints = const Value.absent(),
+                Value<int?> maxPoints = const Value.absent(),
+                Value<double> pointsMultiplier = const Value.absent(),
+                Value<double> discountPercent = const Value.absent(),
+                Value<String> color = const Value.absent(),
+                Value<String?> icon = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
+                Value<bool> isActive = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => LoyaltyTiersCompanion.insert(
+                id: id,
+                name: name,
+                nameAr: nameAr,
+                nameFr: nameFr,
+                minPoints: minPoints,
+                maxPoints: maxPoints,
+                pointsMultiplier: pointsMultiplier,
+                discountPercent: discountPercent,
+                color: color,
+                icon: icon,
+                sortOrder: sortOrder,
+                isActive: isActive,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$LoyaltyTiersTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({customersRefs = false, loyaltyRewardsRefs = false}) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (customersRefs) db.customers,
+                    if (loyaltyRewardsRefs) db.loyaltyRewards,
+                  ],
+                  addJoins: null,
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (customersRefs)
+                        await $_getPrefetchedData<
+                          LoyaltyTier,
+                          $LoyaltyTiersTable,
+                          Customer
+                        >(
+                          currentTable: table,
+                          referencedTable: $$LoyaltyTiersTableReferences
+                              ._customersRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$LoyaltyTiersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).customersRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.loyaltyTierId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (loyaltyRewardsRefs)
+                        await $_getPrefetchedData<
+                          LoyaltyTier,
+                          $LoyaltyTiersTable,
+                          LoyaltyReward
+                        >(
+                          currentTable: table,
+                          referencedTable: $$LoyaltyTiersTableReferences
+                              ._loyaltyRewardsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$LoyaltyTiersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).loyaltyRewardsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.minTierId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$LoyaltyTiersTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $LoyaltyTiersTable,
+      LoyaltyTier,
+      $$LoyaltyTiersTableFilterComposer,
+      $$LoyaltyTiersTableOrderingComposer,
+      $$LoyaltyTiersTableAnnotationComposer,
+      $$LoyaltyTiersTableCreateCompanionBuilder,
+      $$LoyaltyTiersTableUpdateCompanionBuilder,
+      (LoyaltyTier, $$LoyaltyTiersTableReferences),
+      LoyaltyTier,
+      PrefetchHooks Function({bool customersRefs, bool loyaltyRewardsRefs})
+    >;
 typedef $$CustomersTableCreateCompanionBuilder =
     CustomersCompanion Function({
       Value<int> id,
@@ -29135,6 +34028,12 @@ typedef $$CustomersTableCreateCompanionBuilder =
       Value<String?> address,
       Value<Decimal> balanceCents,
       required int currencyId,
+      Value<String> segment,
+      Value<int?> loyaltyTierId,
+      Value<int> loyaltyPointsBalance,
+      Value<Decimal> totalSpentCents,
+      Value<int> totalTransactions,
+      Value<DateTime?> lastTransactionAt,
       Value<bool> isActive,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
@@ -29148,6 +34047,12 @@ typedef $$CustomersTableUpdateCompanionBuilder =
       Value<String?> address,
       Value<Decimal> balanceCents,
       Value<int> currencyId,
+      Value<String> segment,
+      Value<int?> loyaltyTierId,
+      Value<int> loyaltyPointsBalance,
+      Value<Decimal> totalSpentCents,
+      Value<int> totalTransactions,
+      Value<DateTime?> lastTransactionAt,
       Value<bool> isActive,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
@@ -29176,6 +34081,25 @@ final class $$CustomersTableReferences
     );
   }
 
+  static $LoyaltyTiersTable _loyaltyTierIdTable(_$AppDatabase db) =>
+      db.loyaltyTiers.createAlias(
+        $_aliasNameGenerator(db.customers.loyaltyTierId, db.loyaltyTiers.id),
+      );
+
+  $$LoyaltyTiersTableProcessedTableManager? get loyaltyTierId {
+    final $_column = $_itemColumn<int>('loyalty_tier_id');
+    if ($_column == null) return null;
+    final manager = $$LoyaltyTiersTableTableManager(
+      $_db,
+      $_db.loyaltyTiers,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_loyaltyTierIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
   static MultiTypedResultKey<
     $CustomerTransactionsTable,
     List<CustomerTransaction>
@@ -29198,6 +34122,62 @@ final class $$CustomersTableReferences
 
     final cache = $_typedResult.readTableOrNull(
       _customerTransactionsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $LoyaltyPointTransactionsTable,
+    List<LoyaltyPointTransaction>
+  >
+  _loyaltyPointTransactionsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.loyaltyPointTransactions,
+        aliasName: $_aliasNameGenerator(
+          db.customers.id,
+          db.loyaltyPointTransactions.customerId,
+        ),
+      );
+
+  $$LoyaltyPointTransactionsTableProcessedTableManager
+  get loyaltyPointTransactionsRefs {
+    final manager = $$LoyaltyPointTransactionsTableTableManager(
+      $_db,
+      $_db.loyaltyPointTransactions,
+    ).filter((f) => f.customerId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _loyaltyPointTransactionsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $CustomerRewardRedemptionsTable,
+    List<CustomerRewardRedemption>
+  >
+  _customerRewardRedemptionsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.customerRewardRedemptions,
+        aliasName: $_aliasNameGenerator(
+          db.customers.id,
+          db.customerRewardRedemptions.customerId,
+        ),
+      );
+
+  $$CustomerRewardRedemptionsTableProcessedTableManager
+  get customerRewardRedemptionsRefs {
+    final manager = $$CustomerRewardRedemptionsTableTableManager(
+      $_db,
+      $_db.customerRewardRedemptions,
+    ).filter((f) => f.customerId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _customerRewardRedemptionsRefsTable($_db),
     );
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
@@ -29264,6 +34244,32 @@ class $$CustomersTableFilterComposer
         builder: (column) => ColumnWithTypeConverterFilters(column),
       );
 
+  ColumnFilters<String> get segment => $composableBuilder(
+    column: $table.segment,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get loyaltyPointsBalance => $composableBuilder(
+    column: $table.loyaltyPointsBalance,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<Decimal, Decimal, int> get totalSpentCents =>
+      $composableBuilder(
+        column: $table.totalSpentCents,
+        builder: (column) => ColumnWithTypeConverterFilters(column),
+      );
+
+  ColumnFilters<int> get totalTransactions => $composableBuilder(
+    column: $table.totalTransactions,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastTransactionAt => $composableBuilder(
+    column: $table.lastTransactionAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<bool> get isActive => $composableBuilder(
     column: $table.isActive,
     builder: (column) => ColumnFilters(column),
@@ -29302,6 +34308,29 @@ class $$CustomersTableFilterComposer
     return composer;
   }
 
+  $$LoyaltyTiersTableFilterComposer get loyaltyTierId {
+    final $$LoyaltyTiersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.loyaltyTierId,
+      referencedTable: $db.loyaltyTiers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LoyaltyTiersTableFilterComposer(
+            $db: $db,
+            $table: $db.loyaltyTiers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
   Expression<bool> customerTransactionsRefs(
     Expression<bool> Function($$CustomerTransactionsTableFilterComposer f) f,
   ) {
@@ -29324,6 +34353,60 @@ class $$CustomersTableFilterComposer
                 $removeJoinBuilderFromRootComposer,
           ),
     );
+    return f(composer);
+  }
+
+  Expression<bool> loyaltyPointTransactionsRefs(
+    Expression<bool> Function($$LoyaltyPointTransactionsTableFilterComposer f)
+    f,
+  ) {
+    final $$LoyaltyPointTransactionsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.loyaltyPointTransactions,
+          getReferencedColumn: (t) => t.customerId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$LoyaltyPointTransactionsTableFilterComposer(
+                $db: $db,
+                $table: $db.loyaltyPointTransactions,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<bool> customerRewardRedemptionsRefs(
+    Expression<bool> Function($$CustomerRewardRedemptionsTableFilterComposer f)
+    f,
+  ) {
+    final $$CustomerRewardRedemptionsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.customerRewardRedemptions,
+          getReferencedColumn: (t) => t.customerId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$CustomerRewardRedemptionsTableFilterComposer(
+                $db: $db,
+                $table: $db.customerRewardRedemptions,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
     return f(composer);
   }
 
@@ -29392,6 +34475,31 @@ class $$CustomersTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get segment => $composableBuilder(
+    column: $table.segment,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get loyaltyPointsBalance => $composableBuilder(
+    column: $table.loyaltyPointsBalance,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get totalSpentCents => $composableBuilder(
+    column: $table.totalSpentCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get totalTransactions => $composableBuilder(
+    column: $table.totalTransactions,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastTransactionAt => $composableBuilder(
+    column: $table.lastTransactionAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get isActive => $composableBuilder(
     column: $table.isActive,
     builder: (column) => ColumnOrderings(column),
@@ -29421,6 +34529,29 @@ class $$CustomersTableOrderingComposer
           }) => $$CurrenciesTableOrderingComposer(
             $db: $db,
             $table: $db.currencies,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LoyaltyTiersTableOrderingComposer get loyaltyTierId {
+    final $$LoyaltyTiersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.loyaltyTierId,
+      referencedTable: $db.loyaltyTiers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LoyaltyTiersTableOrderingComposer(
+            $db: $db,
+            $table: $db.loyaltyTiers,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -29461,6 +34592,30 @@ class $$CustomersTableAnnotationComposer
         builder: (column) => column,
       );
 
+  GeneratedColumn<String> get segment =>
+      $composableBuilder(column: $table.segment, builder: (column) => column);
+
+  GeneratedColumn<int> get loyaltyPointsBalance => $composableBuilder(
+    column: $table.loyaltyPointsBalance,
+    builder: (column) => column,
+  );
+
+  GeneratedColumnWithTypeConverter<Decimal, int> get totalSpentCents =>
+      $composableBuilder(
+        column: $table.totalSpentCents,
+        builder: (column) => column,
+      );
+
+  GeneratedColumn<int> get totalTransactions => $composableBuilder(
+    column: $table.totalTransactions,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get lastTransactionAt => $composableBuilder(
+    column: $table.lastTransactionAt,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<bool> get isActive =>
       $composableBuilder(column: $table.isActive, builder: (column) => column);
 
@@ -29493,6 +34648,29 @@ class $$CustomersTableAnnotationComposer
     return composer;
   }
 
+  $$LoyaltyTiersTableAnnotationComposer get loyaltyTierId {
+    final $$LoyaltyTiersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.loyaltyTierId,
+      referencedTable: $db.loyaltyTiers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LoyaltyTiersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.loyaltyTiers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
   Expression<T> customerTransactionsRefs<T extends Object>(
     Expression<T> Function($$CustomerTransactionsTableAnnotationComposer a) f,
   ) {
@@ -29510,6 +34688,60 @@ class $$CustomersTableAnnotationComposer
               }) => $$CustomerTransactionsTableAnnotationComposer(
                 $db: $db,
                 $table: $db.customerTransactions,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<T> loyaltyPointTransactionsRefs<T extends Object>(
+    Expression<T> Function($$LoyaltyPointTransactionsTableAnnotationComposer a)
+    f,
+  ) {
+    final $$LoyaltyPointTransactionsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.loyaltyPointTransactions,
+          getReferencedColumn: (t) => t.customerId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$LoyaltyPointTransactionsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.loyaltyPointTransactions,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<T> customerRewardRedemptionsRefs<T extends Object>(
+    Expression<T> Function($$CustomerRewardRedemptionsTableAnnotationComposer a)
+    f,
+  ) {
+    final $$CustomerRewardRedemptionsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.customerRewardRedemptions,
+          getReferencedColumn: (t) => t.customerId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$CustomerRewardRedemptionsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.customerRewardRedemptions,
                 $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
                 joinBuilder: joinBuilder,
                 $removeJoinBuilderFromRootComposer:
@@ -29560,7 +34792,10 @@ class $$CustomersTableTableManager
           Customer,
           PrefetchHooks Function({
             bool currencyId,
+            bool loyaltyTierId,
             bool customerTransactionsRefs,
+            bool loyaltyPointTransactionsRefs,
+            bool customerRewardRedemptionsRefs,
             bool salesRefs,
           })
         > {
@@ -29584,6 +34819,12 @@ class $$CustomersTableTableManager
                 Value<String?> address = const Value.absent(),
                 Value<Decimal> balanceCents = const Value.absent(),
                 Value<int> currencyId = const Value.absent(),
+                Value<String> segment = const Value.absent(),
+                Value<int?> loyaltyTierId = const Value.absent(),
+                Value<int> loyaltyPointsBalance = const Value.absent(),
+                Value<Decimal> totalSpentCents = const Value.absent(),
+                Value<int> totalTransactions = const Value.absent(),
+                Value<DateTime?> lastTransactionAt = const Value.absent(),
                 Value<bool> isActive = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
@@ -29595,6 +34836,12 @@ class $$CustomersTableTableManager
                 address: address,
                 balanceCents: balanceCents,
                 currencyId: currencyId,
+                segment: segment,
+                loyaltyTierId: loyaltyTierId,
+                loyaltyPointsBalance: loyaltyPointsBalance,
+                totalSpentCents: totalSpentCents,
+                totalTransactions: totalTransactions,
+                lastTransactionAt: lastTransactionAt,
                 isActive: isActive,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
@@ -29608,6 +34855,12 @@ class $$CustomersTableTableManager
                 Value<String?> address = const Value.absent(),
                 Value<Decimal> balanceCents = const Value.absent(),
                 required int currencyId,
+                Value<String> segment = const Value.absent(),
+                Value<int?> loyaltyTierId = const Value.absent(),
+                Value<int> loyaltyPointsBalance = const Value.absent(),
+                Value<Decimal> totalSpentCents = const Value.absent(),
+                Value<int> totalTransactions = const Value.absent(),
+                Value<DateTime?> lastTransactionAt = const Value.absent(),
                 Value<bool> isActive = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
@@ -29619,6 +34872,12 @@ class $$CustomersTableTableManager
                 address: address,
                 balanceCents: balanceCents,
                 currencyId: currencyId,
+                segment: segment,
+                loyaltyTierId: loyaltyTierId,
+                loyaltyPointsBalance: loyaltyPointsBalance,
+                totalSpentCents: totalSpentCents,
+                totalTransactions: totalTransactions,
+                lastTransactionAt: lastTransactionAt,
                 isActive: isActive,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
@@ -29634,13 +34893,20 @@ class $$CustomersTableTableManager
           prefetchHooksCallback:
               ({
                 currencyId = false,
+                loyaltyTierId = false,
                 customerTransactionsRefs = false,
+                loyaltyPointTransactionsRefs = false,
+                customerRewardRedemptionsRefs = false,
                 salesRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
                   explicitlyWatchedTables: [
                     if (customerTransactionsRefs) db.customerTransactions,
+                    if (loyaltyPointTransactionsRefs)
+                      db.loyaltyPointTransactions,
+                    if (customerRewardRedemptionsRefs)
+                      db.customerRewardRedemptions,
                     if (salesRefs) db.sales,
                   ],
                   addJoins:
@@ -29672,6 +34938,19 @@ class $$CustomersTableTableManager
                                   )
                                   as T;
                         }
+                        if (loyaltyTierId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.loyaltyTierId,
+                                    referencedTable: $$CustomersTableReferences
+                                        ._loyaltyTierIdTable(db),
+                                    referencedColumn: $$CustomersTableReferences
+                                        ._loyaltyTierIdTable(db)
+                                        .id,
+                                  )
+                                  as T;
+                        }
 
                         return state;
                       },
@@ -29692,6 +34971,48 @@ class $$CustomersTableTableManager
                                 table,
                                 p0,
                               ).customerTransactionsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.customerId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (loyaltyPointTransactionsRefs)
+                        await $_getPrefetchedData<
+                          Customer,
+                          $CustomersTable,
+                          LoyaltyPointTransaction
+                        >(
+                          currentTable: table,
+                          referencedTable: $$CustomersTableReferences
+                              ._loyaltyPointTransactionsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$CustomersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).loyaltyPointTransactionsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.customerId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (customerRewardRedemptionsRefs)
+                        await $_getPrefetchedData<
+                          Customer,
+                          $CustomersTable,
+                          CustomerRewardRedemption
+                        >(
+                          currentTable: table,
+                          referencedTable: $$CustomersTableReferences
+                              ._customerRewardRedemptionsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$CustomersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).customerRewardRedemptionsRefs,
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
                                 (e) => e.customerId == item.id,
@@ -29741,7 +35062,10 @@ typedef $$CustomersTableProcessedTableManager =
       Customer,
       PrefetchHooks Function({
         bool currencyId,
+        bool loyaltyTierId,
         bool customerTransactionsRefs,
+        bool loyaltyPointTransactionsRefs,
+        bool customerRewardRedemptionsRefs,
         bool salesRefs,
       })
     >;
@@ -30281,6 +35605,2104 @@ typedef $$CustomerTransactionsTableProcessedTableManager =
       (CustomerTransaction, $$CustomerTransactionsTableReferences),
       CustomerTransaction,
       PrefetchHooks Function({bool customerId, bool currencyId})
+    >;
+typedef $$LoyaltyPointTransactionsTableCreateCompanionBuilder =
+    LoyaltyPointTransactionsCompanion Function({
+      Value<int> id,
+      required int customerId,
+      required String transactionType,
+      required int points,
+      required int balanceAfter,
+      Value<String?> source,
+      Value<int?> referenceId,
+      Value<String?> referenceType,
+      Value<String?> description,
+      Value<DateTime?> expiresAt,
+      Value<DateTime> transactionDate,
+      Value<DateTime> createdAt,
+    });
+typedef $$LoyaltyPointTransactionsTableUpdateCompanionBuilder =
+    LoyaltyPointTransactionsCompanion Function({
+      Value<int> id,
+      Value<int> customerId,
+      Value<String> transactionType,
+      Value<int> points,
+      Value<int> balanceAfter,
+      Value<String?> source,
+      Value<int?> referenceId,
+      Value<String?> referenceType,
+      Value<String?> description,
+      Value<DateTime?> expiresAt,
+      Value<DateTime> transactionDate,
+      Value<DateTime> createdAt,
+    });
+
+final class $$LoyaltyPointTransactionsTableReferences
+    extends
+        BaseReferences<
+          _$AppDatabase,
+          $LoyaltyPointTransactionsTable,
+          LoyaltyPointTransaction
+        > {
+  $$LoyaltyPointTransactionsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $CustomersTable _customerIdTable(_$AppDatabase db) =>
+      db.customers.createAlias(
+        $_aliasNameGenerator(
+          db.loyaltyPointTransactions.customerId,
+          db.customers.id,
+        ),
+      );
+
+  $$CustomersTableProcessedTableManager get customerId {
+    final $_column = $_itemColumn<int>('customer_id')!;
+
+    final manager = $$CustomersTableTableManager(
+      $_db,
+      $_db.customers,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_customerIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$LoyaltyPointTransactionsTableFilterComposer
+    extends Composer<_$AppDatabase, $LoyaltyPointTransactionsTable> {
+  $$LoyaltyPointTransactionsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get transactionType => $composableBuilder(
+    column: $table.transactionType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get points => $composableBuilder(
+    column: $table.points,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get balanceAfter => $composableBuilder(
+    column: $table.balanceAfter,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get source => $composableBuilder(
+    column: $table.source,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get referenceId => $composableBuilder(
+    column: $table.referenceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get referenceType => $composableBuilder(
+    column: $table.referenceType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get expiresAt => $composableBuilder(
+    column: $table.expiresAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get transactionDate => $composableBuilder(
+    column: $table.transactionDate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$CustomersTableFilterComposer get customerId {
+    final $$CustomersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.customerId,
+      referencedTable: $db.customers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CustomersTableFilterComposer(
+            $db: $db,
+            $table: $db.customers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$LoyaltyPointTransactionsTableOrderingComposer
+    extends Composer<_$AppDatabase, $LoyaltyPointTransactionsTable> {
+  $$LoyaltyPointTransactionsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get transactionType => $composableBuilder(
+    column: $table.transactionType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get points => $composableBuilder(
+    column: $table.points,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get balanceAfter => $composableBuilder(
+    column: $table.balanceAfter,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get source => $composableBuilder(
+    column: $table.source,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get referenceId => $composableBuilder(
+    column: $table.referenceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get referenceType => $composableBuilder(
+    column: $table.referenceType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get expiresAt => $composableBuilder(
+    column: $table.expiresAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get transactionDate => $composableBuilder(
+    column: $table.transactionDate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$CustomersTableOrderingComposer get customerId {
+    final $$CustomersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.customerId,
+      referencedTable: $db.customers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CustomersTableOrderingComposer(
+            $db: $db,
+            $table: $db.customers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$LoyaltyPointTransactionsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $LoyaltyPointTransactionsTable> {
+  $$LoyaltyPointTransactionsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get transactionType => $composableBuilder(
+    column: $table.transactionType,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get points =>
+      $composableBuilder(column: $table.points, builder: (column) => column);
+
+  GeneratedColumn<int> get balanceAfter => $composableBuilder(
+    column: $table.balanceAfter,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get source =>
+      $composableBuilder(column: $table.source, builder: (column) => column);
+
+  GeneratedColumn<int> get referenceId => $composableBuilder(
+    column: $table.referenceId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get referenceType => $composableBuilder(
+    column: $table.referenceType,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get expiresAt =>
+      $composableBuilder(column: $table.expiresAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get transactionDate => $composableBuilder(
+    column: $table.transactionDate,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$CustomersTableAnnotationComposer get customerId {
+    final $$CustomersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.customerId,
+      referencedTable: $db.customers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CustomersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.customers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$LoyaltyPointTransactionsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $LoyaltyPointTransactionsTable,
+          LoyaltyPointTransaction,
+          $$LoyaltyPointTransactionsTableFilterComposer,
+          $$LoyaltyPointTransactionsTableOrderingComposer,
+          $$LoyaltyPointTransactionsTableAnnotationComposer,
+          $$LoyaltyPointTransactionsTableCreateCompanionBuilder,
+          $$LoyaltyPointTransactionsTableUpdateCompanionBuilder,
+          (LoyaltyPointTransaction, $$LoyaltyPointTransactionsTableReferences),
+          LoyaltyPointTransaction,
+          PrefetchHooks Function({bool customerId})
+        > {
+  $$LoyaltyPointTransactionsTableTableManager(
+    _$AppDatabase db,
+    $LoyaltyPointTransactionsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$LoyaltyPointTransactionsTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$LoyaltyPointTransactionsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$LoyaltyPointTransactionsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> customerId = const Value.absent(),
+                Value<String> transactionType = const Value.absent(),
+                Value<int> points = const Value.absent(),
+                Value<int> balanceAfter = const Value.absent(),
+                Value<String?> source = const Value.absent(),
+                Value<int?> referenceId = const Value.absent(),
+                Value<String?> referenceType = const Value.absent(),
+                Value<String?> description = const Value.absent(),
+                Value<DateTime?> expiresAt = const Value.absent(),
+                Value<DateTime> transactionDate = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+              }) => LoyaltyPointTransactionsCompanion(
+                id: id,
+                customerId: customerId,
+                transactionType: transactionType,
+                points: points,
+                balanceAfter: balanceAfter,
+                source: source,
+                referenceId: referenceId,
+                referenceType: referenceType,
+                description: description,
+                expiresAt: expiresAt,
+                transactionDate: transactionDate,
+                createdAt: createdAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required int customerId,
+                required String transactionType,
+                required int points,
+                required int balanceAfter,
+                Value<String?> source = const Value.absent(),
+                Value<int?> referenceId = const Value.absent(),
+                Value<String?> referenceType = const Value.absent(),
+                Value<String?> description = const Value.absent(),
+                Value<DateTime?> expiresAt = const Value.absent(),
+                Value<DateTime> transactionDate = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+              }) => LoyaltyPointTransactionsCompanion.insert(
+                id: id,
+                customerId: customerId,
+                transactionType: transactionType,
+                points: points,
+                balanceAfter: balanceAfter,
+                source: source,
+                referenceId: referenceId,
+                referenceType: referenceType,
+                description: description,
+                expiresAt: expiresAt,
+                transactionDate: transactionDate,
+                createdAt: createdAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$LoyaltyPointTransactionsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({customerId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (customerId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.customerId,
+                                referencedTable:
+                                    $$LoyaltyPointTransactionsTableReferences
+                                        ._customerIdTable(db),
+                                referencedColumn:
+                                    $$LoyaltyPointTransactionsTableReferences
+                                        ._customerIdTable(db)
+                                        .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$LoyaltyPointTransactionsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $LoyaltyPointTransactionsTable,
+      LoyaltyPointTransaction,
+      $$LoyaltyPointTransactionsTableFilterComposer,
+      $$LoyaltyPointTransactionsTableOrderingComposer,
+      $$LoyaltyPointTransactionsTableAnnotationComposer,
+      $$LoyaltyPointTransactionsTableCreateCompanionBuilder,
+      $$LoyaltyPointTransactionsTableUpdateCompanionBuilder,
+      (LoyaltyPointTransaction, $$LoyaltyPointTransactionsTableReferences),
+      LoyaltyPointTransaction,
+      PrefetchHooks Function({bool customerId})
+    >;
+typedef $$LoyaltyRewardsTableCreateCompanionBuilder =
+    LoyaltyRewardsCompanion Function({
+      Value<int> id,
+      required String name,
+      Value<String?> nameAr,
+      Value<String?> nameFr,
+      Value<String?> description,
+      Value<String?> descriptionAr,
+      Value<String?> descriptionFr,
+      required String rewardType,
+      required int pointsCost,
+      Value<Decimal?> valueCents,
+      Value<double?> valuePercent,
+      Value<int?> productId,
+      Value<int?> minTierId,
+      Value<int?> maxRedemptionsPerCustomer,
+      Value<int> totalRedemptions,
+      Value<int?> maxTotalRedemptions,
+      Value<DateTime?> validFrom,
+      Value<DateTime?> validUntil,
+      Value<bool> isActive,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+    });
+typedef $$LoyaltyRewardsTableUpdateCompanionBuilder =
+    LoyaltyRewardsCompanion Function({
+      Value<int> id,
+      Value<String> name,
+      Value<String?> nameAr,
+      Value<String?> nameFr,
+      Value<String?> description,
+      Value<String?> descriptionAr,
+      Value<String?> descriptionFr,
+      Value<String> rewardType,
+      Value<int> pointsCost,
+      Value<Decimal?> valueCents,
+      Value<double?> valuePercent,
+      Value<int?> productId,
+      Value<int?> minTierId,
+      Value<int?> maxRedemptionsPerCustomer,
+      Value<int> totalRedemptions,
+      Value<int?> maxTotalRedemptions,
+      Value<DateTime?> validFrom,
+      Value<DateTime?> validUntil,
+      Value<bool> isActive,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+    });
+
+final class $$LoyaltyRewardsTableReferences
+    extends BaseReferences<_$AppDatabase, $LoyaltyRewardsTable, LoyaltyReward> {
+  $$LoyaltyRewardsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $LoyaltyTiersTable _minTierIdTable(_$AppDatabase db) =>
+      db.loyaltyTiers.createAlias(
+        $_aliasNameGenerator(db.loyaltyRewards.minTierId, db.loyaltyTiers.id),
+      );
+
+  $$LoyaltyTiersTableProcessedTableManager? get minTierId {
+    final $_column = $_itemColumn<int>('min_tier_id');
+    if ($_column == null) return null;
+    final manager = $$LoyaltyTiersTableTableManager(
+      $_db,
+      $_db.loyaltyTiers,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_minTierIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $CustomerRewardRedemptionsTable,
+    List<CustomerRewardRedemption>
+  >
+  _customerRewardRedemptionsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.customerRewardRedemptions,
+        aliasName: $_aliasNameGenerator(
+          db.loyaltyRewards.id,
+          db.customerRewardRedemptions.rewardId,
+        ),
+      );
+
+  $$CustomerRewardRedemptionsTableProcessedTableManager
+  get customerRewardRedemptionsRefs {
+    final manager = $$CustomerRewardRedemptionsTableTableManager(
+      $_db,
+      $_db.customerRewardRedemptions,
+    ).filter((f) => f.rewardId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _customerRewardRedemptionsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$LoyaltyRewardsTableFilterComposer
+    extends Composer<_$AppDatabase, $LoyaltyRewardsTable> {
+  $$LoyaltyRewardsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get nameAr => $composableBuilder(
+    column: $table.nameAr,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get nameFr => $composableBuilder(
+    column: $table.nameFr,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get descriptionAr => $composableBuilder(
+    column: $table.descriptionAr,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get descriptionFr => $composableBuilder(
+    column: $table.descriptionFr,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get rewardType => $composableBuilder(
+    column: $table.rewardType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get pointsCost => $composableBuilder(
+    column: $table.pointsCost,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<Decimal?, Decimal, int> get valueCents =>
+      $composableBuilder(
+        column: $table.valueCents,
+        builder: (column) => ColumnWithTypeConverterFilters(column),
+      );
+
+  ColumnFilters<double> get valuePercent => $composableBuilder(
+    column: $table.valuePercent,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get productId => $composableBuilder(
+    column: $table.productId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get maxRedemptionsPerCustomer => $composableBuilder(
+    column: $table.maxRedemptionsPerCustomer,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get totalRedemptions => $composableBuilder(
+    column: $table.totalRedemptions,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get maxTotalRedemptions => $composableBuilder(
+    column: $table.maxTotalRedemptions,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get validFrom => $composableBuilder(
+    column: $table.validFrom,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get validUntil => $composableBuilder(
+    column: $table.validUntil,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isActive => $composableBuilder(
+    column: $table.isActive,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$LoyaltyTiersTableFilterComposer get minTierId {
+    final $$LoyaltyTiersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.minTierId,
+      referencedTable: $db.loyaltyTiers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LoyaltyTiersTableFilterComposer(
+            $db: $db,
+            $table: $db.loyaltyTiers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<bool> customerRewardRedemptionsRefs(
+    Expression<bool> Function($$CustomerRewardRedemptionsTableFilterComposer f)
+    f,
+  ) {
+    final $$CustomerRewardRedemptionsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.customerRewardRedemptions,
+          getReferencedColumn: (t) => t.rewardId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$CustomerRewardRedemptionsTableFilterComposer(
+                $db: $db,
+                $table: $db.customerRewardRedemptions,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+}
+
+class $$LoyaltyRewardsTableOrderingComposer
+    extends Composer<_$AppDatabase, $LoyaltyRewardsTable> {
+  $$LoyaltyRewardsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get nameAr => $composableBuilder(
+    column: $table.nameAr,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get nameFr => $composableBuilder(
+    column: $table.nameFr,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get descriptionAr => $composableBuilder(
+    column: $table.descriptionAr,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get descriptionFr => $composableBuilder(
+    column: $table.descriptionFr,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get rewardType => $composableBuilder(
+    column: $table.rewardType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get pointsCost => $composableBuilder(
+    column: $table.pointsCost,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get valueCents => $composableBuilder(
+    column: $table.valueCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get valuePercent => $composableBuilder(
+    column: $table.valuePercent,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get productId => $composableBuilder(
+    column: $table.productId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get maxRedemptionsPerCustomer => $composableBuilder(
+    column: $table.maxRedemptionsPerCustomer,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get totalRedemptions => $composableBuilder(
+    column: $table.totalRedemptions,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get maxTotalRedemptions => $composableBuilder(
+    column: $table.maxTotalRedemptions,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get validFrom => $composableBuilder(
+    column: $table.validFrom,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get validUntil => $composableBuilder(
+    column: $table.validUntil,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isActive => $composableBuilder(
+    column: $table.isActive,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$LoyaltyTiersTableOrderingComposer get minTierId {
+    final $$LoyaltyTiersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.minTierId,
+      referencedTable: $db.loyaltyTiers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LoyaltyTiersTableOrderingComposer(
+            $db: $db,
+            $table: $db.loyaltyTiers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$LoyaltyRewardsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $LoyaltyRewardsTable> {
+  $$LoyaltyRewardsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get nameAr =>
+      $composableBuilder(column: $table.nameAr, builder: (column) => column);
+
+  GeneratedColumn<String> get nameFr =>
+      $composableBuilder(column: $table.nameFr, builder: (column) => column);
+
+  GeneratedColumn<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get descriptionAr => $composableBuilder(
+    column: $table.descriptionAr,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get descriptionFr => $composableBuilder(
+    column: $table.descriptionFr,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get rewardType => $composableBuilder(
+    column: $table.rewardType,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get pointsCost => $composableBuilder(
+    column: $table.pointsCost,
+    builder: (column) => column,
+  );
+
+  GeneratedColumnWithTypeConverter<Decimal?, int> get valueCents =>
+      $composableBuilder(
+        column: $table.valueCents,
+        builder: (column) => column,
+      );
+
+  GeneratedColumn<double> get valuePercent => $composableBuilder(
+    column: $table.valuePercent,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get productId =>
+      $composableBuilder(column: $table.productId, builder: (column) => column);
+
+  GeneratedColumn<int> get maxRedemptionsPerCustomer => $composableBuilder(
+    column: $table.maxRedemptionsPerCustomer,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get totalRedemptions => $composableBuilder(
+    column: $table.totalRedemptions,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get maxTotalRedemptions => $composableBuilder(
+    column: $table.maxTotalRedemptions,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get validFrom =>
+      $composableBuilder(column: $table.validFrom, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get validUntil => $composableBuilder(
+    column: $table.validUntil,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get isActive =>
+      $composableBuilder(column: $table.isActive, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  $$LoyaltyTiersTableAnnotationComposer get minTierId {
+    final $$LoyaltyTiersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.minTierId,
+      referencedTable: $db.loyaltyTiers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LoyaltyTiersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.loyaltyTiers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<T> customerRewardRedemptionsRefs<T extends Object>(
+    Expression<T> Function($$CustomerRewardRedemptionsTableAnnotationComposer a)
+    f,
+  ) {
+    final $$CustomerRewardRedemptionsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.customerRewardRedemptions,
+          getReferencedColumn: (t) => t.rewardId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$CustomerRewardRedemptionsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.customerRewardRedemptions,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+}
+
+class $$LoyaltyRewardsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $LoyaltyRewardsTable,
+          LoyaltyReward,
+          $$LoyaltyRewardsTableFilterComposer,
+          $$LoyaltyRewardsTableOrderingComposer,
+          $$LoyaltyRewardsTableAnnotationComposer,
+          $$LoyaltyRewardsTableCreateCompanionBuilder,
+          $$LoyaltyRewardsTableUpdateCompanionBuilder,
+          (LoyaltyReward, $$LoyaltyRewardsTableReferences),
+          LoyaltyReward,
+          PrefetchHooks Function({
+            bool minTierId,
+            bool customerRewardRedemptionsRefs,
+          })
+        > {
+  $$LoyaltyRewardsTableTableManager(
+    _$AppDatabase db,
+    $LoyaltyRewardsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$LoyaltyRewardsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$LoyaltyRewardsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$LoyaltyRewardsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String?> nameAr = const Value.absent(),
+                Value<String?> nameFr = const Value.absent(),
+                Value<String?> description = const Value.absent(),
+                Value<String?> descriptionAr = const Value.absent(),
+                Value<String?> descriptionFr = const Value.absent(),
+                Value<String> rewardType = const Value.absent(),
+                Value<int> pointsCost = const Value.absent(),
+                Value<Decimal?> valueCents = const Value.absent(),
+                Value<double?> valuePercent = const Value.absent(),
+                Value<int?> productId = const Value.absent(),
+                Value<int?> minTierId = const Value.absent(),
+                Value<int?> maxRedemptionsPerCustomer = const Value.absent(),
+                Value<int> totalRedemptions = const Value.absent(),
+                Value<int?> maxTotalRedemptions = const Value.absent(),
+                Value<DateTime?> validFrom = const Value.absent(),
+                Value<DateTime?> validUntil = const Value.absent(),
+                Value<bool> isActive = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => LoyaltyRewardsCompanion(
+                id: id,
+                name: name,
+                nameAr: nameAr,
+                nameFr: nameFr,
+                description: description,
+                descriptionAr: descriptionAr,
+                descriptionFr: descriptionFr,
+                rewardType: rewardType,
+                pointsCost: pointsCost,
+                valueCents: valueCents,
+                valuePercent: valuePercent,
+                productId: productId,
+                minTierId: minTierId,
+                maxRedemptionsPerCustomer: maxRedemptionsPerCustomer,
+                totalRedemptions: totalRedemptions,
+                maxTotalRedemptions: maxTotalRedemptions,
+                validFrom: validFrom,
+                validUntil: validUntil,
+                isActive: isActive,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required String name,
+                Value<String?> nameAr = const Value.absent(),
+                Value<String?> nameFr = const Value.absent(),
+                Value<String?> description = const Value.absent(),
+                Value<String?> descriptionAr = const Value.absent(),
+                Value<String?> descriptionFr = const Value.absent(),
+                required String rewardType,
+                required int pointsCost,
+                Value<Decimal?> valueCents = const Value.absent(),
+                Value<double?> valuePercent = const Value.absent(),
+                Value<int?> productId = const Value.absent(),
+                Value<int?> minTierId = const Value.absent(),
+                Value<int?> maxRedemptionsPerCustomer = const Value.absent(),
+                Value<int> totalRedemptions = const Value.absent(),
+                Value<int?> maxTotalRedemptions = const Value.absent(),
+                Value<DateTime?> validFrom = const Value.absent(),
+                Value<DateTime?> validUntil = const Value.absent(),
+                Value<bool> isActive = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => LoyaltyRewardsCompanion.insert(
+                id: id,
+                name: name,
+                nameAr: nameAr,
+                nameFr: nameFr,
+                description: description,
+                descriptionAr: descriptionAr,
+                descriptionFr: descriptionFr,
+                rewardType: rewardType,
+                pointsCost: pointsCost,
+                valueCents: valueCents,
+                valuePercent: valuePercent,
+                productId: productId,
+                minTierId: minTierId,
+                maxRedemptionsPerCustomer: maxRedemptionsPerCustomer,
+                totalRedemptions: totalRedemptions,
+                maxTotalRedemptions: maxTotalRedemptions,
+                validFrom: validFrom,
+                validUntil: validUntil,
+                isActive: isActive,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$LoyaltyRewardsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({minTierId = false, customerRewardRedemptionsRefs = false}) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (customerRewardRedemptionsRefs)
+                      db.customerRewardRedemptions,
+                  ],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (minTierId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.minTierId,
+                                    referencedTable:
+                                        $$LoyaltyRewardsTableReferences
+                                            ._minTierIdTable(db),
+                                    referencedColumn:
+                                        $$LoyaltyRewardsTableReferences
+                                            ._minTierIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (customerRewardRedemptionsRefs)
+                        await $_getPrefetchedData<
+                          LoyaltyReward,
+                          $LoyaltyRewardsTable,
+                          CustomerRewardRedemption
+                        >(
+                          currentTable: table,
+                          referencedTable: $$LoyaltyRewardsTableReferences
+                              ._customerRewardRedemptionsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$LoyaltyRewardsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).customerRewardRedemptionsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.rewardId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$LoyaltyRewardsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $LoyaltyRewardsTable,
+      LoyaltyReward,
+      $$LoyaltyRewardsTableFilterComposer,
+      $$LoyaltyRewardsTableOrderingComposer,
+      $$LoyaltyRewardsTableAnnotationComposer,
+      $$LoyaltyRewardsTableCreateCompanionBuilder,
+      $$LoyaltyRewardsTableUpdateCompanionBuilder,
+      (LoyaltyReward, $$LoyaltyRewardsTableReferences),
+      LoyaltyReward,
+      PrefetchHooks Function({
+        bool minTierId,
+        bool customerRewardRedemptionsRefs,
+      })
+    >;
+typedef $$CustomerRewardRedemptionsTableCreateCompanionBuilder =
+    CustomerRewardRedemptionsCompanion Function({
+      Value<int> id,
+      required int customerId,
+      required int rewardId,
+      required int pointsSpent,
+      Value<String> status,
+      Value<int?> saleId,
+      Value<DateTime?> usedAt,
+      Value<DateTime?> expiresAt,
+      Value<DateTime> redeemedAt,
+      Value<DateTime> createdAt,
+    });
+typedef $$CustomerRewardRedemptionsTableUpdateCompanionBuilder =
+    CustomerRewardRedemptionsCompanion Function({
+      Value<int> id,
+      Value<int> customerId,
+      Value<int> rewardId,
+      Value<int> pointsSpent,
+      Value<String> status,
+      Value<int?> saleId,
+      Value<DateTime?> usedAt,
+      Value<DateTime?> expiresAt,
+      Value<DateTime> redeemedAt,
+      Value<DateTime> createdAt,
+    });
+
+final class $$CustomerRewardRedemptionsTableReferences
+    extends
+        BaseReferences<
+          _$AppDatabase,
+          $CustomerRewardRedemptionsTable,
+          CustomerRewardRedemption
+        > {
+  $$CustomerRewardRedemptionsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $CustomersTable _customerIdTable(_$AppDatabase db) =>
+      db.customers.createAlias(
+        $_aliasNameGenerator(
+          db.customerRewardRedemptions.customerId,
+          db.customers.id,
+        ),
+      );
+
+  $$CustomersTableProcessedTableManager get customerId {
+    final $_column = $_itemColumn<int>('customer_id')!;
+
+    final manager = $$CustomersTableTableManager(
+      $_db,
+      $_db.customers,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_customerIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $LoyaltyRewardsTable _rewardIdTable(_$AppDatabase db) =>
+      db.loyaltyRewards.createAlias(
+        $_aliasNameGenerator(
+          db.customerRewardRedemptions.rewardId,
+          db.loyaltyRewards.id,
+        ),
+      );
+
+  $$LoyaltyRewardsTableProcessedTableManager get rewardId {
+    final $_column = $_itemColumn<int>('reward_id')!;
+
+    final manager = $$LoyaltyRewardsTableTableManager(
+      $_db,
+      $_db.loyaltyRewards,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_rewardIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$CustomerRewardRedemptionsTableFilterComposer
+    extends Composer<_$AppDatabase, $CustomerRewardRedemptionsTable> {
+  $$CustomerRewardRedemptionsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get pointsSpent => $composableBuilder(
+    column: $table.pointsSpent,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get saleId => $composableBuilder(
+    column: $table.saleId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get usedAt => $composableBuilder(
+    column: $table.usedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get expiresAt => $composableBuilder(
+    column: $table.expiresAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get redeemedAt => $composableBuilder(
+    column: $table.redeemedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$CustomersTableFilterComposer get customerId {
+    final $$CustomersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.customerId,
+      referencedTable: $db.customers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CustomersTableFilterComposer(
+            $db: $db,
+            $table: $db.customers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LoyaltyRewardsTableFilterComposer get rewardId {
+    final $$LoyaltyRewardsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.rewardId,
+      referencedTable: $db.loyaltyRewards,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LoyaltyRewardsTableFilterComposer(
+            $db: $db,
+            $table: $db.loyaltyRewards,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$CustomerRewardRedemptionsTableOrderingComposer
+    extends Composer<_$AppDatabase, $CustomerRewardRedemptionsTable> {
+  $$CustomerRewardRedemptionsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get pointsSpent => $composableBuilder(
+    column: $table.pointsSpent,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get saleId => $composableBuilder(
+    column: $table.saleId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get usedAt => $composableBuilder(
+    column: $table.usedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get expiresAt => $composableBuilder(
+    column: $table.expiresAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get redeemedAt => $composableBuilder(
+    column: $table.redeemedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$CustomersTableOrderingComposer get customerId {
+    final $$CustomersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.customerId,
+      referencedTable: $db.customers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CustomersTableOrderingComposer(
+            $db: $db,
+            $table: $db.customers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LoyaltyRewardsTableOrderingComposer get rewardId {
+    final $$LoyaltyRewardsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.rewardId,
+      referencedTable: $db.loyaltyRewards,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LoyaltyRewardsTableOrderingComposer(
+            $db: $db,
+            $table: $db.loyaltyRewards,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$CustomerRewardRedemptionsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $CustomerRewardRedemptionsTable> {
+  $$CustomerRewardRedemptionsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get pointsSpent => $composableBuilder(
+    column: $table.pointsSpent,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<int> get saleId =>
+      $composableBuilder(column: $table.saleId, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get usedAt =>
+      $composableBuilder(column: $table.usedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get expiresAt =>
+      $composableBuilder(column: $table.expiresAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get redeemedAt => $composableBuilder(
+    column: $table.redeemedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$CustomersTableAnnotationComposer get customerId {
+    final $$CustomersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.customerId,
+      referencedTable: $db.customers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CustomersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.customers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LoyaltyRewardsTableAnnotationComposer get rewardId {
+    final $$LoyaltyRewardsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.rewardId,
+      referencedTable: $db.loyaltyRewards,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LoyaltyRewardsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.loyaltyRewards,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$CustomerRewardRedemptionsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $CustomerRewardRedemptionsTable,
+          CustomerRewardRedemption,
+          $$CustomerRewardRedemptionsTableFilterComposer,
+          $$CustomerRewardRedemptionsTableOrderingComposer,
+          $$CustomerRewardRedemptionsTableAnnotationComposer,
+          $$CustomerRewardRedemptionsTableCreateCompanionBuilder,
+          $$CustomerRewardRedemptionsTableUpdateCompanionBuilder,
+          (
+            CustomerRewardRedemption,
+            $$CustomerRewardRedemptionsTableReferences,
+          ),
+          CustomerRewardRedemption,
+          PrefetchHooks Function({bool customerId, bool rewardId})
+        > {
+  $$CustomerRewardRedemptionsTableTableManager(
+    _$AppDatabase db,
+    $CustomerRewardRedemptionsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CustomerRewardRedemptionsTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$CustomerRewardRedemptionsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$CustomerRewardRedemptionsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> customerId = const Value.absent(),
+                Value<int> rewardId = const Value.absent(),
+                Value<int> pointsSpent = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<int?> saleId = const Value.absent(),
+                Value<DateTime?> usedAt = const Value.absent(),
+                Value<DateTime?> expiresAt = const Value.absent(),
+                Value<DateTime> redeemedAt = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+              }) => CustomerRewardRedemptionsCompanion(
+                id: id,
+                customerId: customerId,
+                rewardId: rewardId,
+                pointsSpent: pointsSpent,
+                status: status,
+                saleId: saleId,
+                usedAt: usedAt,
+                expiresAt: expiresAt,
+                redeemedAt: redeemedAt,
+                createdAt: createdAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required int customerId,
+                required int rewardId,
+                required int pointsSpent,
+                Value<String> status = const Value.absent(),
+                Value<int?> saleId = const Value.absent(),
+                Value<DateTime?> usedAt = const Value.absent(),
+                Value<DateTime?> expiresAt = const Value.absent(),
+                Value<DateTime> redeemedAt = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+              }) => CustomerRewardRedemptionsCompanion.insert(
+                id: id,
+                customerId: customerId,
+                rewardId: rewardId,
+                pointsSpent: pointsSpent,
+                status: status,
+                saleId: saleId,
+                usedAt: usedAt,
+                expiresAt: expiresAt,
+                redeemedAt: redeemedAt,
+                createdAt: createdAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$CustomerRewardRedemptionsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({customerId = false, rewardId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (customerId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.customerId,
+                                referencedTable:
+                                    $$CustomerRewardRedemptionsTableReferences
+                                        ._customerIdTable(db),
+                                referencedColumn:
+                                    $$CustomerRewardRedemptionsTableReferences
+                                        ._customerIdTable(db)
+                                        .id,
+                              )
+                              as T;
+                    }
+                    if (rewardId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.rewardId,
+                                referencedTable:
+                                    $$CustomerRewardRedemptionsTableReferences
+                                        ._rewardIdTable(db),
+                                referencedColumn:
+                                    $$CustomerRewardRedemptionsTableReferences
+                                        ._rewardIdTable(db)
+                                        .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$CustomerRewardRedemptionsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $CustomerRewardRedemptionsTable,
+      CustomerRewardRedemption,
+      $$CustomerRewardRedemptionsTableFilterComposer,
+      $$CustomerRewardRedemptionsTableOrderingComposer,
+      $$CustomerRewardRedemptionsTableAnnotationComposer,
+      $$CustomerRewardRedemptionsTableCreateCompanionBuilder,
+      $$CustomerRewardRedemptionsTableUpdateCompanionBuilder,
+      (CustomerRewardRedemption, $$CustomerRewardRedemptionsTableReferences),
+      CustomerRewardRedemption,
+      PrefetchHooks Function({bool customerId, bool rewardId})
+    >;
+typedef $$LoyaltySettingsTableTableCreateCompanionBuilder =
+    LoyaltySettingsTableCompanion Function({
+      Value<int> id,
+      Value<int> pointsPerCurrencyUnit,
+      Value<Decimal> minSpendForPoints,
+      Value<int?> pointsExpiryDays,
+      Value<int> referralBonusPoints,
+      Value<int> signupBonusPoints,
+      Value<int> reviewBonusPoints,
+      Value<bool> isEnabled,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+    });
+typedef $$LoyaltySettingsTableTableUpdateCompanionBuilder =
+    LoyaltySettingsTableCompanion Function({
+      Value<int> id,
+      Value<int> pointsPerCurrencyUnit,
+      Value<Decimal> minSpendForPoints,
+      Value<int?> pointsExpiryDays,
+      Value<int> referralBonusPoints,
+      Value<int> signupBonusPoints,
+      Value<int> reviewBonusPoints,
+      Value<bool> isEnabled,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+    });
+
+class $$LoyaltySettingsTableTableFilterComposer
+    extends Composer<_$AppDatabase, $LoyaltySettingsTableTable> {
+  $$LoyaltySettingsTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get pointsPerCurrencyUnit => $composableBuilder(
+    column: $table.pointsPerCurrencyUnit,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<Decimal, Decimal, int> get minSpendForPoints =>
+      $composableBuilder(
+        column: $table.minSpendForPoints,
+        builder: (column) => ColumnWithTypeConverterFilters(column),
+      );
+
+  ColumnFilters<int> get pointsExpiryDays => $composableBuilder(
+    column: $table.pointsExpiryDays,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get referralBonusPoints => $composableBuilder(
+    column: $table.referralBonusPoints,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get signupBonusPoints => $composableBuilder(
+    column: $table.signupBonusPoints,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get reviewBonusPoints => $composableBuilder(
+    column: $table.reviewBonusPoints,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isEnabled => $composableBuilder(
+    column: $table.isEnabled,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$LoyaltySettingsTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $LoyaltySettingsTableTable> {
+  $$LoyaltySettingsTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get pointsPerCurrencyUnit => $composableBuilder(
+    column: $table.pointsPerCurrencyUnit,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get minSpendForPoints => $composableBuilder(
+    column: $table.minSpendForPoints,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get pointsExpiryDays => $composableBuilder(
+    column: $table.pointsExpiryDays,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get referralBonusPoints => $composableBuilder(
+    column: $table.referralBonusPoints,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get signupBonusPoints => $composableBuilder(
+    column: $table.signupBonusPoints,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get reviewBonusPoints => $composableBuilder(
+    column: $table.reviewBonusPoints,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isEnabled => $composableBuilder(
+    column: $table.isEnabled,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$LoyaltySettingsTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $LoyaltySettingsTableTable> {
+  $$LoyaltySettingsTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get pointsPerCurrencyUnit => $composableBuilder(
+    column: $table.pointsPerCurrencyUnit,
+    builder: (column) => column,
+  );
+
+  GeneratedColumnWithTypeConverter<Decimal, int> get minSpendForPoints =>
+      $composableBuilder(
+        column: $table.minSpendForPoints,
+        builder: (column) => column,
+      );
+
+  GeneratedColumn<int> get pointsExpiryDays => $composableBuilder(
+    column: $table.pointsExpiryDays,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get referralBonusPoints => $composableBuilder(
+    column: $table.referralBonusPoints,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get signupBonusPoints => $composableBuilder(
+    column: $table.signupBonusPoints,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get reviewBonusPoints => $composableBuilder(
+    column: $table.reviewBonusPoints,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get isEnabled =>
+      $composableBuilder(column: $table.isEnabled, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$LoyaltySettingsTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $LoyaltySettingsTableTable,
+          LoyaltySettings,
+          $$LoyaltySettingsTableTableFilterComposer,
+          $$LoyaltySettingsTableTableOrderingComposer,
+          $$LoyaltySettingsTableTableAnnotationComposer,
+          $$LoyaltySettingsTableTableCreateCompanionBuilder,
+          $$LoyaltySettingsTableTableUpdateCompanionBuilder,
+          (
+            LoyaltySettings,
+            BaseReferences<
+              _$AppDatabase,
+              $LoyaltySettingsTableTable,
+              LoyaltySettings
+            >,
+          ),
+          LoyaltySettings,
+          PrefetchHooks Function()
+        > {
+  $$LoyaltySettingsTableTableTableManager(
+    _$AppDatabase db,
+    $LoyaltySettingsTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$LoyaltySettingsTableTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$LoyaltySettingsTableTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$LoyaltySettingsTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> pointsPerCurrencyUnit = const Value.absent(),
+                Value<Decimal> minSpendForPoints = const Value.absent(),
+                Value<int?> pointsExpiryDays = const Value.absent(),
+                Value<int> referralBonusPoints = const Value.absent(),
+                Value<int> signupBonusPoints = const Value.absent(),
+                Value<int> reviewBonusPoints = const Value.absent(),
+                Value<bool> isEnabled = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => LoyaltySettingsTableCompanion(
+                id: id,
+                pointsPerCurrencyUnit: pointsPerCurrencyUnit,
+                minSpendForPoints: minSpendForPoints,
+                pointsExpiryDays: pointsExpiryDays,
+                referralBonusPoints: referralBonusPoints,
+                signupBonusPoints: signupBonusPoints,
+                reviewBonusPoints: reviewBonusPoints,
+                isEnabled: isEnabled,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> pointsPerCurrencyUnit = const Value.absent(),
+                Value<Decimal> minSpendForPoints = const Value.absent(),
+                Value<int?> pointsExpiryDays = const Value.absent(),
+                Value<int> referralBonusPoints = const Value.absent(),
+                Value<int> signupBonusPoints = const Value.absent(),
+                Value<int> reviewBonusPoints = const Value.absent(),
+                Value<bool> isEnabled = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => LoyaltySettingsTableCompanion.insert(
+                id: id,
+                pointsPerCurrencyUnit: pointsPerCurrencyUnit,
+                minSpendForPoints: minSpendForPoints,
+                pointsExpiryDays: pointsExpiryDays,
+                referralBonusPoints: referralBonusPoints,
+                signupBonusPoints: signupBonusPoints,
+                reviewBonusPoints: reviewBonusPoints,
+                isEnabled: isEnabled,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$LoyaltySettingsTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $LoyaltySettingsTableTable,
+      LoyaltySettings,
+      $$LoyaltySettingsTableTableFilterComposer,
+      $$LoyaltySettingsTableTableOrderingComposer,
+      $$LoyaltySettingsTableTableAnnotationComposer,
+      $$LoyaltySettingsTableTableCreateCompanionBuilder,
+      $$LoyaltySettingsTableTableUpdateCompanionBuilder,
+      (
+        LoyaltySettings,
+        BaseReferences<
+          _$AppDatabase,
+          $LoyaltySettingsTableTable,
+          LoyaltySettings
+        >,
+      ),
+      LoyaltySettings,
+      PrefetchHooks Function()
     >;
 typedef $$SupplierTransactionsTableCreateCompanionBuilder =
     SupplierTransactionsCompanion Function({
@@ -43330,10 +50752,26 @@ class $AppDatabaseManager {
       $$ProductVariantsTableTableManager(_db, _db.productVariants);
   $$ProductBatchesTableTableManager get productBatches =>
       $$ProductBatchesTableTableManager(_db, _db.productBatches);
+  $$LoyaltyTiersTableTableManager get loyaltyTiers =>
+      $$LoyaltyTiersTableTableManager(_db, _db.loyaltyTiers);
   $$CustomersTableTableManager get customers =>
       $$CustomersTableTableManager(_db, _db.customers);
   $$CustomerTransactionsTableTableManager get customerTransactions =>
       $$CustomerTransactionsTableTableManager(_db, _db.customerTransactions);
+  $$LoyaltyPointTransactionsTableTableManager get loyaltyPointTransactions =>
+      $$LoyaltyPointTransactionsTableTableManager(
+        _db,
+        _db.loyaltyPointTransactions,
+      );
+  $$LoyaltyRewardsTableTableManager get loyaltyRewards =>
+      $$LoyaltyRewardsTableTableManager(_db, _db.loyaltyRewards);
+  $$CustomerRewardRedemptionsTableTableManager get customerRewardRedemptions =>
+      $$CustomerRewardRedemptionsTableTableManager(
+        _db,
+        _db.customerRewardRedemptions,
+      );
+  $$LoyaltySettingsTableTableTableManager get loyaltySettingsTable =>
+      $$LoyaltySettingsTableTableTableManager(_db, _db.loyaltySettingsTable);
   $$SupplierTransactionsTableTableManager get supplierTransactions =>
       $$SupplierTransactionsTableTableManager(_db, _db.supplierTransactions);
   $$EmployeesTableTableManager get employees =>

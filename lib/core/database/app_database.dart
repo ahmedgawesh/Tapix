@@ -6,6 +6,7 @@ import 'tables/settings.dart';
 import 'tables/users.dart';
 import 'tables/products.dart';
 import 'tables/parties.dart';
+import 'tables/loyalty.dart';
 import 'tables/people.dart';
 import 'tables/transactions.dart';
 import 'tables/accounting.dart';
@@ -45,6 +46,11 @@ part 'app_database.g.dart';
     ProductBatches,
     Customers,
     CustomerTransactions,
+    LoyaltyTiers,
+    LoyaltyPointTransactions,
+    LoyaltyRewards,
+    CustomerRewardRedemptions,
+    LoyaltySettingsTable,
     Suppliers,
     SupplierTransactions,
     Employees,
@@ -263,7 +269,7 @@ FROM product_variants__old
   }
 
   Future<void> _ensureSchemaIntegrity() async {
-    debugPrint('Starting schema integrity check...');
+    debugPrint('Ensuring schema integrity...');
     await _safeAddColumn('products', 'barcode', 'TEXT');
     await _safeAddColumn('products', 'name_ar', 'TEXT');
     await _safeAddColumn('products', 'name_fr', 'TEXT');
@@ -288,11 +294,113 @@ FROM product_variants__old
     await _safeAddColumn('product_variants', 'wholesale_price_cents', 'INTEGER');
     
     await _safeAddColumn('sizes', 'sort_order', 'INTEGER NOT NULL DEFAULT 0');
+
+    // Customers advanced fields (segmentation + loyalty + analytics)
+    await _safeAddColumn('customers', 'segment', "TEXT NOT NULL DEFAULT 'retail'");
+    await _safeAddColumn('customers', 'loyalty_tier_id', 'INTEGER REFERENCES loyalty_tiers(id)');
+    await _safeAddColumn('customers', 'loyalty_points_balance', 'INTEGER NOT NULL DEFAULT 0');
+    await _safeAddColumn('customers', 'total_spent_cents', 'INTEGER NOT NULL DEFAULT 0');
+    await _safeAddColumn('customers', 'total_transactions', 'INTEGER NOT NULL DEFAULT 0');
+    await _safeAddColumn('customers', 'last_transaction_at', 'TEXT');
+
+    // Loyalty program tables (if missing)
+    await customStatement('''
+CREATE TABLE IF NOT EXISTS loyalty_tiers (
+  id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  name_ar TEXT,
+  name_fr TEXT,
+  min_points INTEGER NOT NULL DEFAULT 0,
+  max_points INTEGER,
+  points_multiplier REAL NOT NULL DEFAULT 1.0,
+  discount_percent REAL NOT NULL DEFAULT 0.0,
+  color TEXT NOT NULL DEFAULT '#CD7F32',
+  icon TEXT,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+''');
+
+    await customStatement('''
+CREATE TABLE IF NOT EXISTS loyalty_point_transactions (
+  id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+  customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+  transaction_type TEXT NOT NULL,
+  points INTEGER NOT NULL,
+  balance_after INTEGER NOT NULL,
+  source TEXT,
+  reference_id INTEGER,
+  reference_type TEXT,
+  description TEXT,
+  expires_at TEXT,
+  transaction_date TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+''');
+
+    await customStatement('''
+CREATE TABLE IF NOT EXISTS loyalty_rewards (
+  id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  name_ar TEXT,
+  name_fr TEXT,
+  description TEXT,
+  description_ar TEXT,
+  description_fr TEXT,
+  reward_type TEXT NOT NULL,
+  points_cost INTEGER NOT NULL,
+  value_cents INTEGER,
+  value_percent REAL,
+  product_id INTEGER,
+  min_tier_id INTEGER REFERENCES loyalty_tiers(id) ON DELETE SET NULL,
+  max_redemptions_per_customer INTEGER,
+  total_redemptions INTEGER NOT NULL DEFAULT 0,
+  max_total_redemptions INTEGER,
+  valid_from TEXT,
+  valid_until TEXT,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+''');
+
+    await customStatement('''
+CREATE TABLE IF NOT EXISTS customer_reward_redemptions (
+  id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+  customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+  reward_id INTEGER NOT NULL REFERENCES loyalty_rewards(id) ON DELETE RESTRICT,
+  points_spent INTEGER NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  sale_id INTEGER,
+  used_at TEXT,
+  expires_at TEXT,
+  redeemed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+''');
+
+    await customStatement('''
+CREATE TABLE IF NOT EXISTS loyalty_settings (
+  id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+  points_per_currency_unit INTEGER NOT NULL DEFAULT 1,
+  min_spend_for_points INTEGER NOT NULL DEFAULT 0,
+  points_expiry_days INTEGER,
+  referral_bonus_points INTEGER NOT NULL DEFAULT 100,
+  signup_bonus_points INTEGER NOT NULL DEFAULT 50,
+  review_bonus_points INTEGER NOT NULL DEFAULT 10,
+  is_enabled INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+''');
+
     debugPrint('Schema integrity check completed.');
   }
 
   @override
-  int get schemaVersion => 10008;
+  int get schemaVersion => 10009;
 
   @override
   MigrationStrategy get migration {
@@ -347,6 +455,23 @@ FROM product_variants__old
         // Migration 10007 -> 10008: Add wholesale_price_cents to product_variants
         if (from < 10008) {
           await _safeAddColumn('product_variants', 'wholesale_price_cents', 'INTEGER');
+        }
+
+        // Migration 10008 -> 10009: Customers advanced fields + loyalty tables
+        if (from < 10009) {
+          await _safeAddColumn('customers', 'segment', "TEXT NOT NULL DEFAULT 'retail'");
+          await _safeAddColumn('customers', 'loyalty_tier_id', 'INTEGER REFERENCES loyalty_tiers(id)');
+          await _safeAddColumn('customers', 'loyalty_points_balance', 'INTEGER NOT NULL DEFAULT 0');
+          await _safeAddColumn('customers', 'total_spent_cents', 'INTEGER NOT NULL DEFAULT 0');
+          await _safeAddColumn('customers', 'total_transactions', 'INTEGER NOT NULL DEFAULT 0');
+          await _safeAddColumn('customers', 'last_transaction_at', 'TEXT');
+
+          // Create loyalty tables for existing DBs
+          await m.createTable(loyaltyTiers);
+          await m.createTable(loyaltyPointTransactions);
+          await m.createTable(loyaltyRewards);
+          await m.createTable(customerRewardRedemptions);
+          await m.createTable(loyaltySettingsTable);
         }
 
         await _createIndexes();
