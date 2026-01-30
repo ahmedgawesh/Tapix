@@ -247,6 +247,12 @@ class DashboardScreen extends StatelessWidget {
                     onTap: () => context.push('/purchases'),
                   ),
                   _DashboardCard(
+                    icon: LucideIcons.userCog,
+                    title: 'dashboard.employees'.tr(),
+                    color: const Color(0xFF00ACC1), // Cyan 600 - distinct and professional
+                    onTap: () => context.push('/employees'),
+                  ),
+                  _DashboardCard(
                     icon: LucideIcons.receipt,
                     title: 'dashboard.expenses'.tr(),
                     color: Colors.orange,

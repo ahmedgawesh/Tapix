@@ -53,8 +53,17 @@ part 'app_database.g.dart';
     LoyaltySettingsTable,
     Suppliers,
     SupplierTransactions,
+    Roles,
     Employees,
     Commissions,
+    Attendances,
+    LeaveRequests,
+    Payrolls,
+    PayrollDeductions,
+    ShiftSchedules,
+    EmployeeDocuments,
+    OvertimeRules,
+    PerformanceMetrics,
     Sales,
     SaleItems,
     SaleTaxBands,
@@ -400,7 +409,7 @@ CREATE TABLE IF NOT EXISTS loyalty_settings (
   }
 
   @override
-  int get schemaVersion => 10009;
+  int get schemaVersion => 10010;
 
   @override
   MigrationStrategy get migration {
@@ -474,6 +483,39 @@ CREATE TABLE IF NOT EXISTS loyalty_settings (
           await m.createTable(loyaltySettingsTable);
         }
 
+        // Migration 10009 -> 10010: Employee management system tables
+        if (from < 10010) {
+          // Add new columns to employees table
+          await _safeAddColumn('employees', 'employee_code', 'TEXT UNIQUE');
+          await _safeAddColumn('employees', 'user_id', 'INTEGER REFERENCES users(id) ON DELETE SET NULL');
+          await _safeAddColumn('employees', 'name_ar', 'TEXT');
+          await _safeAddColumn('employees', 'name_fr', 'TEXT');
+          await _safeAddColumn('employees', 'department', 'TEXT');
+          await _safeAddColumn('employees', 'role_id', 'INTEGER');
+          await _safeAddColumn('employees', 'manager_id', 'INTEGER');
+          await _safeAddColumn('employees', 'default_commission_rate_bps', 'INTEGER NOT NULL DEFAULT 0');
+          await _safeAddColumn('employees', 'termination_date', 'TEXT');
+          await _safeAddColumn('employees', 'notes', 'TEXT');
+
+          // Add new columns to commissions table
+          await _safeAddColumn('commissions', 'period', 'TEXT');
+          await _safeAddColumn('commissions', 'status', "TEXT NOT NULL DEFAULT 'pending'");
+
+          // Create new employee management tables
+          await m.createTable(roles);
+          await m.createTable(attendances);
+          await m.createTable(leaveRequests);
+          await m.createTable(payrolls);
+          await m.createTable(payrollDeductions);
+          await m.createTable(shiftSchedules);
+          await m.createTable(employeeDocuments);
+          await m.createTable(overtimeRules);
+          await m.createTable(performanceMetrics);
+
+          // Seed default roles
+          await _seedDefaultRoles();
+        }
+
         await _createIndexes();
         await _seedInitialData();
       },
@@ -520,6 +562,24 @@ CREATE TABLE IF NOT EXISTS loyalty_settings (
     await customStatement('CREATE INDEX IF NOT EXISTS idx_barcode_templates_default ON barcode_templates(is_default)');
     await customStatement('CREATE INDEX IF NOT EXISTS idx_print_history_product ON print_histories(product_id, print_date)');
     await customStatement('CREATE INDEX IF NOT EXISTS idx_print_history_date ON print_histories(print_date)');
+    
+    // Employee management indexes
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_employees_active ON employees(is_active)');
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_employees_role ON employees(role_id)');
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_employees_manager ON employees(manager_id)');
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_employees_department ON employees(department)');
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_attendances_employee_date ON attendances(employee_id, attendance_date)');
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_attendances_date ON attendances(attendance_date)');
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_leave_requests_employee ON leave_requests(employee_id)');
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_leave_requests_status ON leave_requests(status)');
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_payrolls_employee ON payrolls(employee_id)');
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_payrolls_period ON payrolls(period_start, period_end)');
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_payrolls_status ON payrolls(status)');
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_commissions_employee ON commissions(employee_id)');
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_commissions_period ON commissions(period)');
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_shift_schedules_employee_date ON shift_schedules(employee_id, shift_date)');
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_performance_metrics_employee ON performance_metrics(employee_id)');
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_performance_metrics_period ON performance_metrics(period_identifier)');
   }
 
   Future<void> _seedInitialData() async {
@@ -694,6 +754,12 @@ CREATE TABLE IF NOT EXISTS loyalty_settings (
       debugPrint('DB seed skipped (barcode templates): $e');
       debugPrint('$st');
     }
+    try {
+      await _seedDefaultRoles();
+    } catch (e, st) {
+      debugPrint('DB seed skipped (default roles): $e');
+      debugPrint('$st');
+    }
   }
 
   Future<void> _seedDefaultColors() async {
@@ -756,6 +822,84 @@ CREATE TABLE IF NOT EXISTS loyalty_settings (
     await upsertSize(name: 'Large', description: 'L', sortOrder: 4);
     await upsertSize(name: 'Extra Large', description: 'XL', sortOrder: 5);
     await upsertSize(name: 'Double Extra Large', description: 'XXL', sortOrder: 6);
+  }
+
+  Future<void> _seedDefaultRoles() async {
+    Future<void> upsertRole({
+      required String name,
+      String? nameAr,
+      String? nameFr,
+      String? description,
+      required String permissions,
+      bool isSystemRole = false,
+    }) async {
+      final existing = await (select(roles)
+            ..where((r) => r.name.equals(name)))
+          .getSingleOrNull();
+
+      if (existing == null) {
+        await into(roles).insert(
+          RolesCompanion.insert(
+            name: name,
+            nameAr: Value(nameAr),
+            nameFr: Value(nameFr),
+            description: Value(description),
+            permissions: Value(permissions),
+            isSystemRole: Value(isSystemRole),
+          ),
+        );
+      }
+    }
+
+    // Admin role - full access
+    await upsertRole(
+      name: 'admin',
+      nameAr: 'مدير النظام',
+      nameFr: 'Administrateur',
+      description: 'Full system access with all permissions',
+      permissions: '["employees.view","employees.create","employees.edit","employees.delete","employees.manage_permissions","payroll.view","payroll.create","payroll.approve","payroll.process","attendance.view","attendance.manage","attendance.approve","performance.view","performance.manage","reports.view","reports.export","settings.view","settings.manage","system.admin"]',
+      isSystemRole: true,
+    );
+
+    // Manager role - team management
+    await upsertRole(
+      name: 'manager',
+      nameAr: 'مدير',
+      nameFr: 'Gestionnaire',
+      description: 'Team management with limited admin access',
+      permissions: '["employees.view","employees.edit","attendance.view","attendance.manage","attendance.approve","performance.view","performance.manage","payroll.view","reports.view","reports.team"]',
+      isSystemRole: true,
+    );
+
+    // Staff role - basic access
+    await upsertRole(
+      name: 'staff',
+      nameAr: 'موظف',
+      nameFr: 'Employé',
+      description: 'Basic employee access',
+      permissions: '["profile.view","profile.edit","attendance.view","attendance.self","performance.view","payslip.view"]',
+      isSystemRole: true,
+    );
+
+    // Cashier role - POS access
+    await upsertRole(
+      name: 'cashier',
+      nameAr: 'كاشير',
+      nameFr: 'Caissier',
+      description: 'Point of sale and basic operations',
+      permissions: '["profile.view","attendance.view","attendance.self","sales.view","sales.create","products.view","customers.view"]',
+      isSystemRole: true,
+    );
+
+    // Salesperson role - sales focused
+    await upsertRole(
+      name: 'salesperson',
+      nameAr: 'مندوب مبيعات',
+      nameFr: 'Vendeur',
+      description: 'Sales operations with commission tracking',
+      permissions: '["profile.view","attendance.view","attendance.self","sales.view","sales.create","products.view","customers.view","customers.create","performance.view","commission.view"]',
+      isSystemRole: true,
+    );
   }
 
   Future<void> _seedDefaultBarcodeTemplates() async {

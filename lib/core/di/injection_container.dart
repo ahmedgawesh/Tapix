@@ -12,6 +12,7 @@ import '../database/daos/size_dao.dart';
 import '../database/daos/settings_dao.dart';
 import '../database/daos/barcode_template_dao.dart';
 import '../database/daos/purchase_dao.dart';
+import '../database/daos/employee_dao.dart';
 import '../services/currency_service.dart';
 import '../services/localization_service.dart';
 import '../services/theme_service.dart';
@@ -77,6 +78,14 @@ import '../../features/customers/presentation/bloc/loyalty_bloc.dart';
 import '../../features/customers/domain/repositories/loyalty_repository.dart';
 import '../../features/customers/data/repositories/loyalty_repository_impl.dart';
 import '../database/daos/loyalty_dao.dart';
+import '../../features/employees/domain/repositories/employee_repository.dart';
+import '../../features/employees/data/repositories/employee_repository_impl.dart';
+import '../../features/employees/presentation/bloc/employees_bloc.dart';
+import '../../features/employees/presentation/bloc/roles_bloc.dart';
+import '../../features/employees/presentation/bloc/attendance_bloc.dart';
+import '../../features/employees/presentation/bloc/payroll_bloc.dart';
+import '../../features/employees/presentation/bloc/leave_requests_bloc.dart';
+import '../../features/employees/presentation/bloc/performance_bloc.dart';
 
 final sl = GetIt.instance;
 
@@ -100,6 +109,7 @@ Future<void> init() async {
   sl.registerLazySingleton(() => SupplierDao(sl()));
   sl.registerLazySingleton(() => CustomerDao(sl()));
   sl.registerLazySingleton(() => LoyaltyDao(sl()));
+  sl.registerLazySingleton(() => EmployeeDao(sl()));
 
   // Auth Services
   sl.registerLazySingleton(() => PasswordService());
@@ -156,6 +166,9 @@ Future<void> init() async {
   );
   sl.registerLazySingleton<LoyaltyRepository>(
     () => LoyaltyRepositoryImpl(sl<LoyaltyDao>()),
+  );
+  sl.registerLazySingleton<EmployeeRepository>(
+    () => EmployeeRepositoryImpl(sl<EmployeeDao>()),
   );
 
   // Blocs
@@ -225,6 +238,14 @@ Future<void> init() async {
   sl.registerFactory(() => LoyaltyTiersBloc(sl<LoyaltyRepository>()));
   sl.registerFactory(() => LoyaltyRewardsBloc(sl<LoyaltyRepository>()));
   sl.registerFactory(() => LoyaltyMetricsBloc(sl<LoyaltyRepository>()));
+
+  // Employee Blocs
+  sl.registerFactory(() => EmployeesBloc(sl<EmployeeRepository>()));
+  sl.registerFactory(() => RolesBloc(sl<EmployeeRepository>()));
+  sl.registerFactory(() => AttendanceBloc(sl<EmployeeRepository>()));
+  sl.registerFactory(() => PayrollBloc(sl<EmployeeRepository>()));
+  sl.registerFactory(() => LeaveRequestsBloc(sl<EmployeeRepository>()));
+  sl.registerFactory(() => PerformanceBloc(sl<EmployeeRepository>()));
 
   // Barcode Services
   sl.registerLazySingleton(() => BarcodeValidationService());

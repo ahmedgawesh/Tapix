@@ -38,6 +38,7 @@ import '../../features/suppliers/presentation/screens/supplier_profile_screen.da
 import '../../features/customers/presentation/screens/customer_hub_screen.dart';
 import '../../features/customers/presentation/screens/customer_form_screen.dart';
 import '../../features/customers/presentation/screens/customer_profile_screen.dart';
+import '../../features/employees/presentation/screens/employee_hub_screen.dart';
 import '../di/injection_container.dart';
 import 'route_permissions.dart';
 
@@ -417,7 +418,7 @@ class AppRouter {
       ),
       GoRoute(
         path: '/employees',
-        builder: (context, state) => const PlaceholderScreen(title: 'Employees'),
+        builder: (context, state) => const EmployeeHubScreen(),
       ),
       GoRoute(
         path: '/accounting',
