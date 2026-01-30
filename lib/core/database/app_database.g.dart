@@ -6740,6 +6740,112 @@ class $LoyaltyTiersTable extends LoyaltyTiers
     requiredDuringInsert: false,
     defaultValue: const Constant(0.0),
   );
+  static const VerificationMeta _freeShippingMeta = const VerificationMeta(
+    'freeShipping',
+  );
+  @override
+  late final GeneratedColumn<bool> freeShipping = GeneratedColumn<bool>(
+    'free_shipping',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("free_shipping" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _freeShippingMinOrderCentsMeta =
+      const VerificationMeta('freeShippingMinOrderCents');
+  @override
+  late final GeneratedColumn<int> freeShippingMinOrderCents =
+      GeneratedColumn<int>(
+        'free_shipping_min_order_cents',
+        aliasedName,
+        true,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _prioritySupportMeta = const VerificationMeta(
+    'prioritySupport',
+  );
+  @override
+  late final GeneratedColumn<bool> prioritySupport = GeneratedColumn<bool>(
+    'priority_support',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("priority_support" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _earlyAccessDaysMeta = const VerificationMeta(
+    'earlyAccessDays',
+  );
+  @override
+  late final GeneratedColumn<int> earlyAccessDays = GeneratedColumn<int>(
+    'early_access_days',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _exclusiveOffersMeta = const VerificationMeta(
+    'exclusiveOffers',
+  );
+  @override
+  late final GeneratedColumn<bool> exclusiveOffers = GeneratedColumn<bool>(
+    'exclusive_offers',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("exclusive_offers" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _birthdayBonusMeta = const VerificationMeta(
+    'birthdayBonus',
+  );
+  @override
+  late final GeneratedColumn<bool> birthdayBonus = GeneratedColumn<bool>(
+    'birthday_bonus',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("birthday_bonus" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _birthdayBonusPointsMeta =
+      const VerificationMeta('birthdayBonusPoints');
+  @override
+  late final GeneratedColumn<int> birthdayBonusPoints = GeneratedColumn<int>(
+    'birthday_bonus_points',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _birthdayDiscountPercentMeta =
+      const VerificationMeta('birthdayDiscountPercent');
+  @override
+  late final GeneratedColumn<double> birthdayDiscountPercent =
+      GeneratedColumn<double>(
+        'birthday_discount_percent',
+        aliasedName,
+        false,
+        type: DriftSqlType.double,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(0.0),
+      );
   static const VerificationMeta _colorMeta = const VerificationMeta('color');
   @override
   late final GeneratedColumn<String> color = GeneratedColumn<String>(
@@ -6754,6 +6860,17 @@ class $LoyaltyTiersTable extends LoyaltyTiers
   @override
   late final GeneratedColumn<String> icon = GeneratedColumn<String>(
     'icon',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _badgeTextMeta = const VerificationMeta(
+    'badgeText',
+  );
+  @override
+  late final GeneratedColumn<String> badgeText = GeneratedColumn<String>(
+    'badge_text',
     aliasedName,
     true,
     type: DriftSqlType.string,
@@ -6820,8 +6937,17 @@ class $LoyaltyTiersTable extends LoyaltyTiers
     maxPoints,
     pointsMultiplier,
     discountPercent,
+    freeShipping,
+    freeShippingMinOrderCents,
+    prioritySupport,
+    earlyAccessDays,
+    exclusiveOffers,
+    birthdayBonus,
+    birthdayBonusPoints,
+    birthdayDiscountPercent,
     color,
     icon,
+    badgeText,
     sortOrder,
     isActive,
     createdAt,
@@ -6892,6 +7018,78 @@ class $LoyaltyTiersTable extends LoyaltyTiers
         ),
       );
     }
+    if (data.containsKey('free_shipping')) {
+      context.handle(
+        _freeShippingMeta,
+        freeShipping.isAcceptableOrUnknown(
+          data['free_shipping']!,
+          _freeShippingMeta,
+        ),
+      );
+    }
+    if (data.containsKey('free_shipping_min_order_cents')) {
+      context.handle(
+        _freeShippingMinOrderCentsMeta,
+        freeShippingMinOrderCents.isAcceptableOrUnknown(
+          data['free_shipping_min_order_cents']!,
+          _freeShippingMinOrderCentsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('priority_support')) {
+      context.handle(
+        _prioritySupportMeta,
+        prioritySupport.isAcceptableOrUnknown(
+          data['priority_support']!,
+          _prioritySupportMeta,
+        ),
+      );
+    }
+    if (data.containsKey('early_access_days')) {
+      context.handle(
+        _earlyAccessDaysMeta,
+        earlyAccessDays.isAcceptableOrUnknown(
+          data['early_access_days']!,
+          _earlyAccessDaysMeta,
+        ),
+      );
+    }
+    if (data.containsKey('exclusive_offers')) {
+      context.handle(
+        _exclusiveOffersMeta,
+        exclusiveOffers.isAcceptableOrUnknown(
+          data['exclusive_offers']!,
+          _exclusiveOffersMeta,
+        ),
+      );
+    }
+    if (data.containsKey('birthday_bonus')) {
+      context.handle(
+        _birthdayBonusMeta,
+        birthdayBonus.isAcceptableOrUnknown(
+          data['birthday_bonus']!,
+          _birthdayBonusMeta,
+        ),
+      );
+    }
+    if (data.containsKey('birthday_bonus_points')) {
+      context.handle(
+        _birthdayBonusPointsMeta,
+        birthdayBonusPoints.isAcceptableOrUnknown(
+          data['birthday_bonus_points']!,
+          _birthdayBonusPointsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('birthday_discount_percent')) {
+      context.handle(
+        _birthdayDiscountPercentMeta,
+        birthdayDiscountPercent.isAcceptableOrUnknown(
+          data['birthday_discount_percent']!,
+          _birthdayDiscountPercentMeta,
+        ),
+      );
+    }
     if (data.containsKey('color')) {
       context.handle(
         _colorMeta,
@@ -6902,6 +7100,12 @@ class $LoyaltyTiersTable extends LoyaltyTiers
       context.handle(
         _iconMeta,
         icon.isAcceptableOrUnknown(data['icon']!, _iconMeta),
+      );
+    }
+    if (data.containsKey('badge_text')) {
+      context.handle(
+        _badgeTextMeta,
+        badgeText.isAcceptableOrUnknown(data['badge_text']!, _badgeTextMeta),
       );
     }
     if (data.containsKey('sort_order')) {
@@ -6969,6 +7173,38 @@ class $LoyaltyTiersTable extends LoyaltyTiers
         DriftSqlType.double,
         data['${effectivePrefix}discount_percent'],
       )!,
+      freeShipping: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}free_shipping'],
+      )!,
+      freeShippingMinOrderCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}free_shipping_min_order_cents'],
+      ),
+      prioritySupport: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}priority_support'],
+      )!,
+      earlyAccessDays: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}early_access_days'],
+      )!,
+      exclusiveOffers: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}exclusive_offers'],
+      )!,
+      birthdayBonus: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}birthday_bonus'],
+      )!,
+      birthdayBonusPoints: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}birthday_bonus_points'],
+      )!,
+      birthdayDiscountPercent: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}birthday_discount_percent'],
+      )!,
       color: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}color'],
@@ -6976,6 +7212,10 @@ class $LoyaltyTiersTable extends LoyaltyTiers
       icon: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}icon'],
+      ),
+      badgeText: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}badge_text'],
       ),
       sortOrder: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
@@ -7011,8 +7251,17 @@ class LoyaltyTier extends DataClass implements Insertable<LoyaltyTier> {
   final int? maxPoints;
   final double pointsMultiplier;
   final double discountPercent;
+  final bool freeShipping;
+  final int? freeShippingMinOrderCents;
+  final bool prioritySupport;
+  final int earlyAccessDays;
+  final bool exclusiveOffers;
+  final bool birthdayBonus;
+  final int birthdayBonusPoints;
+  final double birthdayDiscountPercent;
   final String color;
   final String? icon;
+  final String? badgeText;
   final int sortOrder;
   final bool isActive;
   final DateTime createdAt;
@@ -7026,8 +7275,17 @@ class LoyaltyTier extends DataClass implements Insertable<LoyaltyTier> {
     this.maxPoints,
     required this.pointsMultiplier,
     required this.discountPercent,
+    required this.freeShipping,
+    this.freeShippingMinOrderCents,
+    required this.prioritySupport,
+    required this.earlyAccessDays,
+    required this.exclusiveOffers,
+    required this.birthdayBonus,
+    required this.birthdayBonusPoints,
+    required this.birthdayDiscountPercent,
     required this.color,
     this.icon,
+    this.badgeText,
     required this.sortOrder,
     required this.isActive,
     required this.createdAt,
@@ -7050,9 +7308,26 @@ class LoyaltyTier extends DataClass implements Insertable<LoyaltyTier> {
     }
     map['points_multiplier'] = Variable<double>(pointsMultiplier);
     map['discount_percent'] = Variable<double>(discountPercent);
+    map['free_shipping'] = Variable<bool>(freeShipping);
+    if (!nullToAbsent || freeShippingMinOrderCents != null) {
+      map['free_shipping_min_order_cents'] = Variable<int>(
+        freeShippingMinOrderCents,
+      );
+    }
+    map['priority_support'] = Variable<bool>(prioritySupport);
+    map['early_access_days'] = Variable<int>(earlyAccessDays);
+    map['exclusive_offers'] = Variable<bool>(exclusiveOffers);
+    map['birthday_bonus'] = Variable<bool>(birthdayBonus);
+    map['birthday_bonus_points'] = Variable<int>(birthdayBonusPoints);
+    map['birthday_discount_percent'] = Variable<double>(
+      birthdayDiscountPercent,
+    );
     map['color'] = Variable<String>(color);
     if (!nullToAbsent || icon != null) {
       map['icon'] = Variable<String>(icon);
+    }
+    if (!nullToAbsent || badgeText != null) {
+      map['badge_text'] = Variable<String>(badgeText);
     }
     map['sort_order'] = Variable<int>(sortOrder);
     map['is_active'] = Variable<bool>(isActive);
@@ -7077,8 +7352,22 @@ class LoyaltyTier extends DataClass implements Insertable<LoyaltyTier> {
           : Value(maxPoints),
       pointsMultiplier: Value(pointsMultiplier),
       discountPercent: Value(discountPercent),
+      freeShipping: Value(freeShipping),
+      freeShippingMinOrderCents:
+          freeShippingMinOrderCents == null && nullToAbsent
+          ? const Value.absent()
+          : Value(freeShippingMinOrderCents),
+      prioritySupport: Value(prioritySupport),
+      earlyAccessDays: Value(earlyAccessDays),
+      exclusiveOffers: Value(exclusiveOffers),
+      birthdayBonus: Value(birthdayBonus),
+      birthdayBonusPoints: Value(birthdayBonusPoints),
+      birthdayDiscountPercent: Value(birthdayDiscountPercent),
       color: Value(color),
       icon: icon == null && nullToAbsent ? const Value.absent() : Value(icon),
+      badgeText: badgeText == null && nullToAbsent
+          ? const Value.absent()
+          : Value(badgeText),
       sortOrder: Value(sortOrder),
       isActive: Value(isActive),
       createdAt: Value(createdAt),
@@ -7100,8 +7389,23 @@ class LoyaltyTier extends DataClass implements Insertable<LoyaltyTier> {
       maxPoints: serializer.fromJson<int?>(json['maxPoints']),
       pointsMultiplier: serializer.fromJson<double>(json['pointsMultiplier']),
       discountPercent: serializer.fromJson<double>(json['discountPercent']),
+      freeShipping: serializer.fromJson<bool>(json['freeShipping']),
+      freeShippingMinOrderCents: serializer.fromJson<int?>(
+        json['freeShippingMinOrderCents'],
+      ),
+      prioritySupport: serializer.fromJson<bool>(json['prioritySupport']),
+      earlyAccessDays: serializer.fromJson<int>(json['earlyAccessDays']),
+      exclusiveOffers: serializer.fromJson<bool>(json['exclusiveOffers']),
+      birthdayBonus: serializer.fromJson<bool>(json['birthdayBonus']),
+      birthdayBonusPoints: serializer.fromJson<int>(
+        json['birthdayBonusPoints'],
+      ),
+      birthdayDiscountPercent: serializer.fromJson<double>(
+        json['birthdayDiscountPercent'],
+      ),
       color: serializer.fromJson<String>(json['color']),
       icon: serializer.fromJson<String?>(json['icon']),
+      badgeText: serializer.fromJson<String?>(json['badgeText']),
       sortOrder: serializer.fromJson<int>(json['sortOrder']),
       isActive: serializer.fromJson<bool>(json['isActive']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
@@ -7120,8 +7424,21 @@ class LoyaltyTier extends DataClass implements Insertable<LoyaltyTier> {
       'maxPoints': serializer.toJson<int?>(maxPoints),
       'pointsMultiplier': serializer.toJson<double>(pointsMultiplier),
       'discountPercent': serializer.toJson<double>(discountPercent),
+      'freeShipping': serializer.toJson<bool>(freeShipping),
+      'freeShippingMinOrderCents': serializer.toJson<int?>(
+        freeShippingMinOrderCents,
+      ),
+      'prioritySupport': serializer.toJson<bool>(prioritySupport),
+      'earlyAccessDays': serializer.toJson<int>(earlyAccessDays),
+      'exclusiveOffers': serializer.toJson<bool>(exclusiveOffers),
+      'birthdayBonus': serializer.toJson<bool>(birthdayBonus),
+      'birthdayBonusPoints': serializer.toJson<int>(birthdayBonusPoints),
+      'birthdayDiscountPercent': serializer.toJson<double>(
+        birthdayDiscountPercent,
+      ),
       'color': serializer.toJson<String>(color),
       'icon': serializer.toJson<String?>(icon),
+      'badgeText': serializer.toJson<String?>(badgeText),
       'sortOrder': serializer.toJson<int>(sortOrder),
       'isActive': serializer.toJson<bool>(isActive),
       'createdAt': serializer.toJson<DateTime>(createdAt),
@@ -7138,8 +7455,17 @@ class LoyaltyTier extends DataClass implements Insertable<LoyaltyTier> {
     Value<int?> maxPoints = const Value.absent(),
     double? pointsMultiplier,
     double? discountPercent,
+    bool? freeShipping,
+    Value<int?> freeShippingMinOrderCents = const Value.absent(),
+    bool? prioritySupport,
+    int? earlyAccessDays,
+    bool? exclusiveOffers,
+    bool? birthdayBonus,
+    int? birthdayBonusPoints,
+    double? birthdayDiscountPercent,
     String? color,
     Value<String?> icon = const Value.absent(),
+    Value<String?> badgeText = const Value.absent(),
     int? sortOrder,
     bool? isActive,
     DateTime? createdAt,
@@ -7153,8 +7479,20 @@ class LoyaltyTier extends DataClass implements Insertable<LoyaltyTier> {
     maxPoints: maxPoints.present ? maxPoints.value : this.maxPoints,
     pointsMultiplier: pointsMultiplier ?? this.pointsMultiplier,
     discountPercent: discountPercent ?? this.discountPercent,
+    freeShipping: freeShipping ?? this.freeShipping,
+    freeShippingMinOrderCents: freeShippingMinOrderCents.present
+        ? freeShippingMinOrderCents.value
+        : this.freeShippingMinOrderCents,
+    prioritySupport: prioritySupport ?? this.prioritySupport,
+    earlyAccessDays: earlyAccessDays ?? this.earlyAccessDays,
+    exclusiveOffers: exclusiveOffers ?? this.exclusiveOffers,
+    birthdayBonus: birthdayBonus ?? this.birthdayBonus,
+    birthdayBonusPoints: birthdayBonusPoints ?? this.birthdayBonusPoints,
+    birthdayDiscountPercent:
+        birthdayDiscountPercent ?? this.birthdayDiscountPercent,
     color: color ?? this.color,
     icon: icon.present ? icon.value : this.icon,
+    badgeText: badgeText.present ? badgeText.value : this.badgeText,
     sortOrder: sortOrder ?? this.sortOrder,
     isActive: isActive ?? this.isActive,
     createdAt: createdAt ?? this.createdAt,
@@ -7174,8 +7512,33 @@ class LoyaltyTier extends DataClass implements Insertable<LoyaltyTier> {
       discountPercent: data.discountPercent.present
           ? data.discountPercent.value
           : this.discountPercent,
+      freeShipping: data.freeShipping.present
+          ? data.freeShipping.value
+          : this.freeShipping,
+      freeShippingMinOrderCents: data.freeShippingMinOrderCents.present
+          ? data.freeShippingMinOrderCents.value
+          : this.freeShippingMinOrderCents,
+      prioritySupport: data.prioritySupport.present
+          ? data.prioritySupport.value
+          : this.prioritySupport,
+      earlyAccessDays: data.earlyAccessDays.present
+          ? data.earlyAccessDays.value
+          : this.earlyAccessDays,
+      exclusiveOffers: data.exclusiveOffers.present
+          ? data.exclusiveOffers.value
+          : this.exclusiveOffers,
+      birthdayBonus: data.birthdayBonus.present
+          ? data.birthdayBonus.value
+          : this.birthdayBonus,
+      birthdayBonusPoints: data.birthdayBonusPoints.present
+          ? data.birthdayBonusPoints.value
+          : this.birthdayBonusPoints,
+      birthdayDiscountPercent: data.birthdayDiscountPercent.present
+          ? data.birthdayDiscountPercent.value
+          : this.birthdayDiscountPercent,
       color: data.color.present ? data.color.value : this.color,
       icon: data.icon.present ? data.icon.value : this.icon,
+      badgeText: data.badgeText.present ? data.badgeText.value : this.badgeText,
       sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
       isActive: data.isActive.present ? data.isActive.value : this.isActive,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
@@ -7194,8 +7557,17 @@ class LoyaltyTier extends DataClass implements Insertable<LoyaltyTier> {
           ..write('maxPoints: $maxPoints, ')
           ..write('pointsMultiplier: $pointsMultiplier, ')
           ..write('discountPercent: $discountPercent, ')
+          ..write('freeShipping: $freeShipping, ')
+          ..write('freeShippingMinOrderCents: $freeShippingMinOrderCents, ')
+          ..write('prioritySupport: $prioritySupport, ')
+          ..write('earlyAccessDays: $earlyAccessDays, ')
+          ..write('exclusiveOffers: $exclusiveOffers, ')
+          ..write('birthdayBonus: $birthdayBonus, ')
+          ..write('birthdayBonusPoints: $birthdayBonusPoints, ')
+          ..write('birthdayDiscountPercent: $birthdayDiscountPercent, ')
           ..write('color: $color, ')
           ..write('icon: $icon, ')
+          ..write('badgeText: $badgeText, ')
           ..write('sortOrder: $sortOrder, ')
           ..write('isActive: $isActive, ')
           ..write('createdAt: $createdAt, ')
@@ -7205,7 +7577,7 @@ class LoyaltyTier extends DataClass implements Insertable<LoyaltyTier> {
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     id,
     name,
     nameAr,
@@ -7214,13 +7586,22 @@ class LoyaltyTier extends DataClass implements Insertable<LoyaltyTier> {
     maxPoints,
     pointsMultiplier,
     discountPercent,
+    freeShipping,
+    freeShippingMinOrderCents,
+    prioritySupport,
+    earlyAccessDays,
+    exclusiveOffers,
+    birthdayBonus,
+    birthdayBonusPoints,
+    birthdayDiscountPercent,
     color,
     icon,
+    badgeText,
     sortOrder,
     isActive,
     createdAt,
     updatedAt,
-  );
+  ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -7233,8 +7614,17 @@ class LoyaltyTier extends DataClass implements Insertable<LoyaltyTier> {
           other.maxPoints == this.maxPoints &&
           other.pointsMultiplier == this.pointsMultiplier &&
           other.discountPercent == this.discountPercent &&
+          other.freeShipping == this.freeShipping &&
+          other.freeShippingMinOrderCents == this.freeShippingMinOrderCents &&
+          other.prioritySupport == this.prioritySupport &&
+          other.earlyAccessDays == this.earlyAccessDays &&
+          other.exclusiveOffers == this.exclusiveOffers &&
+          other.birthdayBonus == this.birthdayBonus &&
+          other.birthdayBonusPoints == this.birthdayBonusPoints &&
+          other.birthdayDiscountPercent == this.birthdayDiscountPercent &&
           other.color == this.color &&
           other.icon == this.icon &&
+          other.badgeText == this.badgeText &&
           other.sortOrder == this.sortOrder &&
           other.isActive == this.isActive &&
           other.createdAt == this.createdAt &&
@@ -7250,8 +7640,17 @@ class LoyaltyTiersCompanion extends UpdateCompanion<LoyaltyTier> {
   final Value<int?> maxPoints;
   final Value<double> pointsMultiplier;
   final Value<double> discountPercent;
+  final Value<bool> freeShipping;
+  final Value<int?> freeShippingMinOrderCents;
+  final Value<bool> prioritySupport;
+  final Value<int> earlyAccessDays;
+  final Value<bool> exclusiveOffers;
+  final Value<bool> birthdayBonus;
+  final Value<int> birthdayBonusPoints;
+  final Value<double> birthdayDiscountPercent;
   final Value<String> color;
   final Value<String?> icon;
+  final Value<String?> badgeText;
   final Value<int> sortOrder;
   final Value<bool> isActive;
   final Value<DateTime> createdAt;
@@ -7265,8 +7664,17 @@ class LoyaltyTiersCompanion extends UpdateCompanion<LoyaltyTier> {
     this.maxPoints = const Value.absent(),
     this.pointsMultiplier = const Value.absent(),
     this.discountPercent = const Value.absent(),
+    this.freeShipping = const Value.absent(),
+    this.freeShippingMinOrderCents = const Value.absent(),
+    this.prioritySupport = const Value.absent(),
+    this.earlyAccessDays = const Value.absent(),
+    this.exclusiveOffers = const Value.absent(),
+    this.birthdayBonus = const Value.absent(),
+    this.birthdayBonusPoints = const Value.absent(),
+    this.birthdayDiscountPercent = const Value.absent(),
     this.color = const Value.absent(),
     this.icon = const Value.absent(),
+    this.badgeText = const Value.absent(),
     this.sortOrder = const Value.absent(),
     this.isActive = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -7281,8 +7689,17 @@ class LoyaltyTiersCompanion extends UpdateCompanion<LoyaltyTier> {
     this.maxPoints = const Value.absent(),
     this.pointsMultiplier = const Value.absent(),
     this.discountPercent = const Value.absent(),
+    this.freeShipping = const Value.absent(),
+    this.freeShippingMinOrderCents = const Value.absent(),
+    this.prioritySupport = const Value.absent(),
+    this.earlyAccessDays = const Value.absent(),
+    this.exclusiveOffers = const Value.absent(),
+    this.birthdayBonus = const Value.absent(),
+    this.birthdayBonusPoints = const Value.absent(),
+    this.birthdayDiscountPercent = const Value.absent(),
     this.color = const Value.absent(),
     this.icon = const Value.absent(),
+    this.badgeText = const Value.absent(),
     this.sortOrder = const Value.absent(),
     this.isActive = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -7297,8 +7714,17 @@ class LoyaltyTiersCompanion extends UpdateCompanion<LoyaltyTier> {
     Expression<int>? maxPoints,
     Expression<double>? pointsMultiplier,
     Expression<double>? discountPercent,
+    Expression<bool>? freeShipping,
+    Expression<int>? freeShippingMinOrderCents,
+    Expression<bool>? prioritySupport,
+    Expression<int>? earlyAccessDays,
+    Expression<bool>? exclusiveOffers,
+    Expression<bool>? birthdayBonus,
+    Expression<int>? birthdayBonusPoints,
+    Expression<double>? birthdayDiscountPercent,
     Expression<String>? color,
     Expression<String>? icon,
+    Expression<String>? badgeText,
     Expression<int>? sortOrder,
     Expression<bool>? isActive,
     Expression<DateTime>? createdAt,
@@ -7313,8 +7739,20 @@ class LoyaltyTiersCompanion extends UpdateCompanion<LoyaltyTier> {
       if (maxPoints != null) 'max_points': maxPoints,
       if (pointsMultiplier != null) 'points_multiplier': pointsMultiplier,
       if (discountPercent != null) 'discount_percent': discountPercent,
+      if (freeShipping != null) 'free_shipping': freeShipping,
+      if (freeShippingMinOrderCents != null)
+        'free_shipping_min_order_cents': freeShippingMinOrderCents,
+      if (prioritySupport != null) 'priority_support': prioritySupport,
+      if (earlyAccessDays != null) 'early_access_days': earlyAccessDays,
+      if (exclusiveOffers != null) 'exclusive_offers': exclusiveOffers,
+      if (birthdayBonus != null) 'birthday_bonus': birthdayBonus,
+      if (birthdayBonusPoints != null)
+        'birthday_bonus_points': birthdayBonusPoints,
+      if (birthdayDiscountPercent != null)
+        'birthday_discount_percent': birthdayDiscountPercent,
       if (color != null) 'color': color,
       if (icon != null) 'icon': icon,
+      if (badgeText != null) 'badge_text': badgeText,
       if (sortOrder != null) 'sort_order': sortOrder,
       if (isActive != null) 'is_active': isActive,
       if (createdAt != null) 'created_at': createdAt,
@@ -7331,8 +7769,17 @@ class LoyaltyTiersCompanion extends UpdateCompanion<LoyaltyTier> {
     Value<int?>? maxPoints,
     Value<double>? pointsMultiplier,
     Value<double>? discountPercent,
+    Value<bool>? freeShipping,
+    Value<int?>? freeShippingMinOrderCents,
+    Value<bool>? prioritySupport,
+    Value<int>? earlyAccessDays,
+    Value<bool>? exclusiveOffers,
+    Value<bool>? birthdayBonus,
+    Value<int>? birthdayBonusPoints,
+    Value<double>? birthdayDiscountPercent,
     Value<String>? color,
     Value<String?>? icon,
+    Value<String?>? badgeText,
     Value<int>? sortOrder,
     Value<bool>? isActive,
     Value<DateTime>? createdAt,
@@ -7347,8 +7794,19 @@ class LoyaltyTiersCompanion extends UpdateCompanion<LoyaltyTier> {
       maxPoints: maxPoints ?? this.maxPoints,
       pointsMultiplier: pointsMultiplier ?? this.pointsMultiplier,
       discountPercent: discountPercent ?? this.discountPercent,
+      freeShipping: freeShipping ?? this.freeShipping,
+      freeShippingMinOrderCents:
+          freeShippingMinOrderCents ?? this.freeShippingMinOrderCents,
+      prioritySupport: prioritySupport ?? this.prioritySupport,
+      earlyAccessDays: earlyAccessDays ?? this.earlyAccessDays,
+      exclusiveOffers: exclusiveOffers ?? this.exclusiveOffers,
+      birthdayBonus: birthdayBonus ?? this.birthdayBonus,
+      birthdayBonusPoints: birthdayBonusPoints ?? this.birthdayBonusPoints,
+      birthdayDiscountPercent:
+          birthdayDiscountPercent ?? this.birthdayDiscountPercent,
       color: color ?? this.color,
       icon: icon ?? this.icon,
+      badgeText: badgeText ?? this.badgeText,
       sortOrder: sortOrder ?? this.sortOrder,
       isActive: isActive ?? this.isActive,
       createdAt: createdAt ?? this.createdAt,
@@ -7383,11 +7841,42 @@ class LoyaltyTiersCompanion extends UpdateCompanion<LoyaltyTier> {
     if (discountPercent.present) {
       map['discount_percent'] = Variable<double>(discountPercent.value);
     }
+    if (freeShipping.present) {
+      map['free_shipping'] = Variable<bool>(freeShipping.value);
+    }
+    if (freeShippingMinOrderCents.present) {
+      map['free_shipping_min_order_cents'] = Variable<int>(
+        freeShippingMinOrderCents.value,
+      );
+    }
+    if (prioritySupport.present) {
+      map['priority_support'] = Variable<bool>(prioritySupport.value);
+    }
+    if (earlyAccessDays.present) {
+      map['early_access_days'] = Variable<int>(earlyAccessDays.value);
+    }
+    if (exclusiveOffers.present) {
+      map['exclusive_offers'] = Variable<bool>(exclusiveOffers.value);
+    }
+    if (birthdayBonus.present) {
+      map['birthday_bonus'] = Variable<bool>(birthdayBonus.value);
+    }
+    if (birthdayBonusPoints.present) {
+      map['birthday_bonus_points'] = Variable<int>(birthdayBonusPoints.value);
+    }
+    if (birthdayDiscountPercent.present) {
+      map['birthday_discount_percent'] = Variable<double>(
+        birthdayDiscountPercent.value,
+      );
+    }
     if (color.present) {
       map['color'] = Variable<String>(color.value);
     }
     if (icon.present) {
       map['icon'] = Variable<String>(icon.value);
+    }
+    if (badgeText.present) {
+      map['badge_text'] = Variable<String>(badgeText.value);
     }
     if (sortOrder.present) {
       map['sort_order'] = Variable<int>(sortOrder.value);
@@ -7415,8 +7904,17 @@ class LoyaltyTiersCompanion extends UpdateCompanion<LoyaltyTier> {
           ..write('maxPoints: $maxPoints, ')
           ..write('pointsMultiplier: $pointsMultiplier, ')
           ..write('discountPercent: $discountPercent, ')
+          ..write('freeShipping: $freeShipping, ')
+          ..write('freeShippingMinOrderCents: $freeShippingMinOrderCents, ')
+          ..write('prioritySupport: $prioritySupport, ')
+          ..write('earlyAccessDays: $earlyAccessDays, ')
+          ..write('exclusiveOffers: $exclusiveOffers, ')
+          ..write('birthdayBonus: $birthdayBonus, ')
+          ..write('birthdayBonusPoints: $birthdayBonusPoints, ')
+          ..write('birthdayDiscountPercent: $birthdayDiscountPercent, ')
           ..write('color: $color, ')
           ..write('icon: $icon, ')
+          ..write('badgeText: $badgeText, ')
           ..write('sortOrder: $sortOrder, ')
           ..write('isActive: $isActive, ')
           ..write('createdAt: $createdAt, ')
@@ -40836,8 +41334,17 @@ typedef $$LoyaltyTiersTableCreateCompanionBuilder =
       Value<int?> maxPoints,
       Value<double> pointsMultiplier,
       Value<double> discountPercent,
+      Value<bool> freeShipping,
+      Value<int?> freeShippingMinOrderCents,
+      Value<bool> prioritySupport,
+      Value<int> earlyAccessDays,
+      Value<bool> exclusiveOffers,
+      Value<bool> birthdayBonus,
+      Value<int> birthdayBonusPoints,
+      Value<double> birthdayDiscountPercent,
       Value<String> color,
       Value<String?> icon,
+      Value<String?> badgeText,
       Value<int> sortOrder,
       Value<bool> isActive,
       Value<DateTime> createdAt,
@@ -40853,8 +41360,17 @@ typedef $$LoyaltyTiersTableUpdateCompanionBuilder =
       Value<int?> maxPoints,
       Value<double> pointsMultiplier,
       Value<double> discountPercent,
+      Value<bool> freeShipping,
+      Value<int?> freeShippingMinOrderCents,
+      Value<bool> prioritySupport,
+      Value<int> earlyAccessDays,
+      Value<bool> exclusiveOffers,
+      Value<bool> birthdayBonus,
+      Value<int> birthdayBonusPoints,
+      Value<double> birthdayDiscountPercent,
       Value<String> color,
       Value<String?> icon,
+      Value<String?> badgeText,
       Value<int> sortOrder,
       Value<bool> isActive,
       Value<DateTime> createdAt,
@@ -40957,6 +41473,46 @@ class $$LoyaltyTiersTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<bool> get freeShipping => $composableBuilder(
+    column: $table.freeShipping,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get freeShippingMinOrderCents => $composableBuilder(
+    column: $table.freeShippingMinOrderCents,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get prioritySupport => $composableBuilder(
+    column: $table.prioritySupport,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get earlyAccessDays => $composableBuilder(
+    column: $table.earlyAccessDays,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get exclusiveOffers => $composableBuilder(
+    column: $table.exclusiveOffers,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get birthdayBonus => $composableBuilder(
+    column: $table.birthdayBonus,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get birthdayBonusPoints => $composableBuilder(
+    column: $table.birthdayBonusPoints,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get birthdayDiscountPercent => $composableBuilder(
+    column: $table.birthdayDiscountPercent,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<String> get color => $composableBuilder(
     column: $table.color,
     builder: (column) => ColumnFilters(column),
@@ -40964,6 +41520,11 @@ class $$LoyaltyTiersTableFilterComposer
 
   ColumnFilters<String> get icon => $composableBuilder(
     column: $table.icon,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get badgeText => $composableBuilder(
+    column: $table.badgeText,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -41087,6 +41648,46 @@ class $$LoyaltyTiersTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get freeShipping => $composableBuilder(
+    column: $table.freeShipping,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get freeShippingMinOrderCents => $composableBuilder(
+    column: $table.freeShippingMinOrderCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get prioritySupport => $composableBuilder(
+    column: $table.prioritySupport,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get earlyAccessDays => $composableBuilder(
+    column: $table.earlyAccessDays,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get exclusiveOffers => $composableBuilder(
+    column: $table.exclusiveOffers,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get birthdayBonus => $composableBuilder(
+    column: $table.birthdayBonus,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get birthdayBonusPoints => $composableBuilder(
+    column: $table.birthdayBonusPoints,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get birthdayDiscountPercent => $composableBuilder(
+    column: $table.birthdayDiscountPercent,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get color => $composableBuilder(
     column: $table.color,
     builder: (column) => ColumnOrderings(column),
@@ -41094,6 +41695,11 @@ class $$LoyaltyTiersTableOrderingComposer
 
   ColumnOrderings<String> get icon => $composableBuilder(
     column: $table.icon,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get badgeText => $composableBuilder(
+    column: $table.badgeText,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -41155,11 +41761,54 @@ class $$LoyaltyTiersTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<bool> get freeShipping => $composableBuilder(
+    column: $table.freeShipping,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get freeShippingMinOrderCents => $composableBuilder(
+    column: $table.freeShippingMinOrderCents,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get prioritySupport => $composableBuilder(
+    column: $table.prioritySupport,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get earlyAccessDays => $composableBuilder(
+    column: $table.earlyAccessDays,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get exclusiveOffers => $composableBuilder(
+    column: $table.exclusiveOffers,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get birthdayBonus => $composableBuilder(
+    column: $table.birthdayBonus,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get birthdayBonusPoints => $composableBuilder(
+    column: $table.birthdayBonusPoints,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get birthdayDiscountPercent => $composableBuilder(
+    column: $table.birthdayDiscountPercent,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get color =>
       $composableBuilder(column: $table.color, builder: (column) => column);
 
   GeneratedColumn<String> get icon =>
       $composableBuilder(column: $table.icon, builder: (column) => column);
+
+  GeneratedColumn<String> get badgeText =>
+      $composableBuilder(column: $table.badgeText, builder: (column) => column);
 
   GeneratedColumn<int> get sortOrder =>
       $composableBuilder(column: $table.sortOrder, builder: (column) => column);
@@ -41260,8 +41909,17 @@ class $$LoyaltyTiersTableTableManager
                 Value<int?> maxPoints = const Value.absent(),
                 Value<double> pointsMultiplier = const Value.absent(),
                 Value<double> discountPercent = const Value.absent(),
+                Value<bool> freeShipping = const Value.absent(),
+                Value<int?> freeShippingMinOrderCents = const Value.absent(),
+                Value<bool> prioritySupport = const Value.absent(),
+                Value<int> earlyAccessDays = const Value.absent(),
+                Value<bool> exclusiveOffers = const Value.absent(),
+                Value<bool> birthdayBonus = const Value.absent(),
+                Value<int> birthdayBonusPoints = const Value.absent(),
+                Value<double> birthdayDiscountPercent = const Value.absent(),
                 Value<String> color = const Value.absent(),
                 Value<String?> icon = const Value.absent(),
+                Value<String?> badgeText = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
                 Value<bool> isActive = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -41275,8 +41933,17 @@ class $$LoyaltyTiersTableTableManager
                 maxPoints: maxPoints,
                 pointsMultiplier: pointsMultiplier,
                 discountPercent: discountPercent,
+                freeShipping: freeShipping,
+                freeShippingMinOrderCents: freeShippingMinOrderCents,
+                prioritySupport: prioritySupport,
+                earlyAccessDays: earlyAccessDays,
+                exclusiveOffers: exclusiveOffers,
+                birthdayBonus: birthdayBonus,
+                birthdayBonusPoints: birthdayBonusPoints,
+                birthdayDiscountPercent: birthdayDiscountPercent,
                 color: color,
                 icon: icon,
+                badgeText: badgeText,
                 sortOrder: sortOrder,
                 isActive: isActive,
                 createdAt: createdAt,
@@ -41292,8 +41959,17 @@ class $$LoyaltyTiersTableTableManager
                 Value<int?> maxPoints = const Value.absent(),
                 Value<double> pointsMultiplier = const Value.absent(),
                 Value<double> discountPercent = const Value.absent(),
+                Value<bool> freeShipping = const Value.absent(),
+                Value<int?> freeShippingMinOrderCents = const Value.absent(),
+                Value<bool> prioritySupport = const Value.absent(),
+                Value<int> earlyAccessDays = const Value.absent(),
+                Value<bool> exclusiveOffers = const Value.absent(),
+                Value<bool> birthdayBonus = const Value.absent(),
+                Value<int> birthdayBonusPoints = const Value.absent(),
+                Value<double> birthdayDiscountPercent = const Value.absent(),
                 Value<String> color = const Value.absent(),
                 Value<String?> icon = const Value.absent(),
+                Value<String?> badgeText = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
                 Value<bool> isActive = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -41307,8 +41983,17 @@ class $$LoyaltyTiersTableTableManager
                 maxPoints: maxPoints,
                 pointsMultiplier: pointsMultiplier,
                 discountPercent: discountPercent,
+                freeShipping: freeShipping,
+                freeShippingMinOrderCents: freeShippingMinOrderCents,
+                prioritySupport: prioritySupport,
+                earlyAccessDays: earlyAccessDays,
+                exclusiveOffers: exclusiveOffers,
+                birthdayBonus: birthdayBonus,
+                birthdayBonusPoints: birthdayBonusPoints,
+                birthdayDiscountPercent: birthdayDiscountPercent,
                 color: color,
                 icon: icon,
+                badgeText: badgeText,
                 sortOrder: sortOrder,
                 isActive: isActive,
                 createdAt: createdAt,

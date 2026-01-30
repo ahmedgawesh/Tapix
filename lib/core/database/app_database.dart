@@ -312,6 +312,17 @@ FROM product_variants__old
     await _safeAddColumn('customers', 'total_transactions', 'INTEGER NOT NULL DEFAULT 0');
     await _safeAddColumn('customers', 'last_transaction_at', 'TEXT');
 
+    // Loyalty tiers hybrid benefits columns (for older DBs)
+    await _safeAddColumn('loyalty_tiers', 'free_shipping', 'INTEGER NOT NULL DEFAULT 0');
+    await _safeAddColumn('loyalty_tiers', 'free_shipping_min_order_cents', 'INTEGER');
+    await _safeAddColumn('loyalty_tiers', 'priority_support', 'INTEGER NOT NULL DEFAULT 0');
+    await _safeAddColumn('loyalty_tiers', 'early_access_days', 'INTEGER NOT NULL DEFAULT 0');
+    await _safeAddColumn('loyalty_tiers', 'exclusive_offers', 'INTEGER NOT NULL DEFAULT 0');
+    await _safeAddColumn('loyalty_tiers', 'birthday_bonus', 'INTEGER NOT NULL DEFAULT 0');
+    await _safeAddColumn('loyalty_tiers', 'birthday_bonus_points', 'INTEGER NOT NULL DEFAULT 0');
+    await _safeAddColumn('loyalty_tiers', 'birthday_discount_percent', 'REAL NOT NULL DEFAULT 0.0');
+    await _safeAddColumn('loyalty_tiers', 'badge_text', 'TEXT');
+
     // Loyalty program tables (if missing)
     await customStatement('''
 CREATE TABLE IF NOT EXISTS loyalty_tiers (
@@ -323,8 +334,17 @@ CREATE TABLE IF NOT EXISTS loyalty_tiers (
   max_points INTEGER,
   points_multiplier REAL NOT NULL DEFAULT 1.0,
   discount_percent REAL NOT NULL DEFAULT 0.0,
+  free_shipping INTEGER NOT NULL DEFAULT 0,
+  free_shipping_min_order_cents INTEGER,
+  priority_support INTEGER NOT NULL DEFAULT 0,
+  early_access_days INTEGER NOT NULL DEFAULT 0,
+  exclusive_offers INTEGER NOT NULL DEFAULT 0,
+  birthday_bonus INTEGER NOT NULL DEFAULT 0,
+  birthday_bonus_points INTEGER NOT NULL DEFAULT 0,
+  birthday_discount_percent REAL NOT NULL DEFAULT 0.0,
   color TEXT NOT NULL DEFAULT '#CD7F32',
   icon TEXT,
+  badge_text TEXT,
   sort_order INTEGER NOT NULL DEFAULT 0,
   is_active INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -409,7 +429,7 @@ CREATE TABLE IF NOT EXISTS loyalty_settings (
   }
 
   @override
-  int get schemaVersion => 10010;
+  int get schemaVersion => 10011;
 
   @override
   MigrationStrategy get migration {
@@ -514,6 +534,22 @@ CREATE TABLE IF NOT EXISTS loyalty_settings (
 
           // Seed default roles
           await _seedDefaultRoles();
+        }
+
+        // Migration 10010 -> 10011: Loyalty tier hybrid benefits columns
+        if (from < 10011) {
+          await _safeAddColumn('loyalty_tiers', 'free_shipping', 'INTEGER NOT NULL DEFAULT 0');
+          await _safeAddColumn('loyalty_tiers', 'free_shipping_min_order_cents', 'INTEGER');
+          await _safeAddColumn('loyalty_tiers', 'priority_support', 'INTEGER NOT NULL DEFAULT 0');
+          await _safeAddColumn('loyalty_tiers', 'early_access_days', 'INTEGER NOT NULL DEFAULT 0');
+          await _safeAddColumn('loyalty_tiers', 'exclusive_offers', 'INTEGER NOT NULL DEFAULT 0');
+          await _safeAddColumn('loyalty_tiers', 'birthday_bonus', 'INTEGER NOT NULL DEFAULT 0');
+          await _safeAddColumn('loyalty_tiers', 'birthday_bonus_points', 'INTEGER NOT NULL DEFAULT 0');
+          await _safeAddColumn('loyalty_tiers', 'birthday_discount_percent', 'REAL NOT NULL DEFAULT 0.0');
+          await _safeAddColumn('loyalty_tiers', 'badge_text', 'TEXT');
+          
+          // Seed default loyalty tiers with hybrid benefits
+          await _seedDefaultLoyaltyTiers();
         }
 
         await _createIndexes();
@@ -755,6 +791,12 @@ CREATE TABLE IF NOT EXISTS loyalty_settings (
       debugPrint('$st');
     }
     try {
+      await _seedDefaultLoyaltyTiers();
+    } catch (e, st) {
+      debugPrint('DB seed skipped (default loyalty tiers): $e');
+      debugPrint('$st');
+    }
+    try {
       await _seedDefaultRoles();
     } catch (e, st) {
       debugPrint('DB seed skipped (default roles): $e');
@@ -899,6 +941,152 @@ CREATE TABLE IF NOT EXISTS loyalty_settings (
       description: 'Sales operations with commission tracking',
       permissions: '["profile.view","attendance.view","attendance.self","sales.view","sales.create","products.view","customers.view","customers.create","performance.view","commission.view"]',
       isSystemRole: true,
+    );
+  }
+
+  Future<void> _seedDefaultLoyaltyTiers() async {
+    Future<void> upsertTier({
+      required String name,
+      String? nameAr,
+      String? nameFr,
+      required int minPoints,
+      int? maxPoints,
+      required double pointsMultiplier,
+      required double discountPercent,
+      required bool freeShipping,
+      int? freeShippingMinOrderCents,
+      required bool prioritySupport,
+      required int earlyAccessDays,
+      required bool exclusiveOffers,
+      required bool birthdayBonus,
+      required int birthdayBonusPoints,
+      required double birthdayDiscountPercent,
+      required String color,
+      String? icon,
+      String? badgeText,
+      required int sortOrder,
+    }) async {
+      final existing = await (select(loyaltyTiers)
+            ..where((t) => t.name.equals(name)))
+          .getSingleOrNull();
+
+      if (existing == null) {
+        await into(loyaltyTiers).insert(
+          LoyaltyTiersCompanion.insert(
+            name: name,
+            nameAr: Value(nameAr),
+            nameFr: Value(nameFr),
+            minPoints: Value(minPoints),
+            maxPoints: Value(maxPoints),
+            pointsMultiplier: Value(pointsMultiplier),
+            discountPercent: Value(discountPercent),
+            freeShipping: Value(freeShipping),
+            freeShippingMinOrderCents: Value(freeShippingMinOrderCents),
+            prioritySupport: Value(prioritySupport),
+            earlyAccessDays: Value(earlyAccessDays),
+            exclusiveOffers: Value(exclusiveOffers),
+            birthdayBonus: Value(birthdayBonus),
+            birthdayBonusPoints: Value(birthdayBonusPoints),
+            birthdayDiscountPercent: Value(birthdayDiscountPercent),
+            color: Value(color),
+            icon: Value(icon),
+            badgeText: Value(badgeText),
+            sortOrder: Value(sortOrder),
+          ),
+        );
+      }
+    }
+
+    // Bronze Tier - Entry level, basic benefits
+    await upsertTier(
+      name: 'Bronze',
+      nameAr: 'برونزي',
+      nameFr: 'Bronze',
+      minPoints: 0,
+      maxPoints: 499,
+      pointsMultiplier: 1.0,
+      discountPercent: 0.0,
+      freeShipping: false,
+      freeShippingMinOrderCents: null,
+      prioritySupport: false,
+      earlyAccessDays: 0,
+      exclusiveOffers: false,
+      birthdayBonus: false,
+      birthdayBonusPoints: 0,
+      birthdayDiscountPercent: 0.0,
+      color: '#CD7F32',
+      icon: 'medal',
+      badgeText: null,
+      sortOrder: 1,
+    );
+
+    // Silver Tier - 5% discount, 1.25x points
+    await upsertTier(
+      name: 'Silver',
+      nameAr: 'فضي',
+      nameFr: 'Argent',
+      minPoints: 500,
+      maxPoints: 1499,
+      pointsMultiplier: 1.25,
+      discountPercent: 5.0,
+      freeShipping: false,
+      freeShippingMinOrderCents: 10000, // Free shipping on orders > $100
+      prioritySupport: false,
+      earlyAccessDays: 0,
+      exclusiveOffers: false,
+      birthdayBonus: true,
+      birthdayBonusPoints: 50,
+      birthdayDiscountPercent: 5.0,
+      color: '#C0C0C0',
+      icon: 'medal',
+      badgeText: '★',
+      sortOrder: 2,
+    );
+
+    // Gold Tier - 10% discount, 1.5x points, free shipping
+    await upsertTier(
+      name: 'Gold',
+      nameAr: 'ذهبي',
+      nameFr: 'Or',
+      minPoints: 1500,
+      maxPoints: 4999,
+      pointsMultiplier: 1.5,
+      discountPercent: 10.0,
+      freeShipping: true,
+      freeShippingMinOrderCents: 5000, // Free shipping on orders > $50
+      prioritySupport: true,
+      earlyAccessDays: 1,
+      exclusiveOffers: true,
+      birthdayBonus: true,
+      birthdayBonusPoints: 100,
+      birthdayDiscountPercent: 10.0,
+      color: '#FFD700',
+      icon: 'crown',
+      badgeText: '★★',
+      sortOrder: 3,
+    );
+
+    // Premium Tier - 15% discount, 2x points, all benefits
+    await upsertTier(
+      name: 'Premium',
+      nameAr: 'مميز',
+      nameFr: 'Premium',
+      minPoints: 5000,
+      maxPoints: null, // Unlimited
+      pointsMultiplier: 2.0,
+      discountPercent: 15.0,
+      freeShipping: true,
+      freeShippingMinOrderCents: null, // Always free shipping
+      prioritySupport: true,
+      earlyAccessDays: 3,
+      exclusiveOffers: true,
+      birthdayBonus: true,
+      birthdayBonusPoints: 200,
+      birthdayDiscountPercent: 20.0,
+      color: '#9B59B6',
+      icon: 'gem',
+      badgeText: 'VIP',
+      sortOrder: 4,
     );
   }
 

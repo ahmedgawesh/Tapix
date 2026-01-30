@@ -198,6 +198,145 @@ context.push('/my-feature/detail/123');
 - Desktop: Back button optional but recommended
 - Web: Browser back button works automatically
 
+---
+
+## 👥 Customers Module (Segmentation + Loyalty + Analytics)
+
+### Scope
+
+The **Customers** feature is responsible for:
+- Customer CRUD (create/edit/deactivate)
+- Customer segmentation (Retail / Wholesale / Premium)
+- Loyalty program (tiers, points, rewards, redemptions)
+- Customer analytics (health score, KPIs, trends)
+
+This module is **offline-first** via Drift and **real-time** via `RealtimeBloc` streams.
+
+### Key Database Schema
+
+#### `customers` table (advanced fields)
+
+The following fields are authoritative for segmentation + loyalty + analytics:
+- `segment` (TEXT, NOT NULL, default `retail`)
+- `loyalty_tier_id` (INTEGER, nullable FK to `loyalty_tiers.id`)
+- `loyalty_points_balance` (INTEGER, NOT NULL, default 0)
+- `total_spent_cents` (INTEGER, NOT NULL, default 0)
+- `total_transactions` (INTEGER, NOT NULL, default 0)
+- `last_transaction_at` (TEXT/DateTime nullable)
+
+#### Loyalty tables
+
+- `loyalty_tiers`
+  - Tiers are seeded and used to determine benefits.
+  - Hybrid benefits fields:
+    - `points_multiplier` (REAL)
+    - `discount_percent` (REAL)
+    - `free_shipping` (BOOL stored as INTEGER)
+    - `free_shipping_min_order_cents` (INTEGER nullable)
+    - `priority_support` (BOOL)
+    - `early_access_days` (INTEGER)
+    - `exclusive_offers` (BOOL)
+    - `birthday_bonus` (BOOL)
+    - `birthday_bonus_points` (INTEGER)
+    - `birthday_discount_percent` (REAL)
+    - `badge_text` (TEXT nullable)
+- `loyalty_point_transactions` (earn/redeem ledger)
+- `loyalty_rewards` (catalog)
+- `customer_reward_redemptions` (redemption history)
+- `loyalty_settings` (program-level knobs like points per currency unit)
+
+### Migrations & Safety Nets (CRITICAL)
+
+Because customers/loyalty evolved in a brownfield DB, the project relies on:
+- Versioned migrations in `AppDatabase.migration.onUpgrade`
+- `_ensureSchemaIntegrity()` as a fallback to add missing columns/tables
+
+When adding new columns to an existing table:
+- Add migration step using `_safeAddColumn()`
+- Also add the same column inside `_ensureSchemaIntegrity()`
+
+### Seeding (Idempotent)
+
+Default loyalty tiers are seeded via `_seedDefaultLoyaltyTiers()`.
+- The seed is **idempotent** (upsert by `name`) and safe to call repeatedly.
+- It is called from `_seedInitialData()` and also in migration for older DBs.
+
+Default tiers shipped:
+- Bronze
+- Silver
+- Gold
+- Premium
+
+### Domain & Data Layer
+
+#### Key entities
+- `Customer` (from Drift `customers` table)
+- `CustomerLoyaltySummary` (domain summary for profile UI)
+- `TierBenefitsSummary` and `TierBenefit` (UI-friendly benefit mapping)
+
+#### Repositories
+- `CustomerRepository`
+  - `createCustomer(...)` supports `segment` and persists it
+  - `watchAllCustomers`, `watchCustomer`, `searchCustomers`, etc.
+- `LoyaltyRepository`
+  - Tier/points/rewards operations, settings updates
+
+### Presentation Layer
+
+#### Customer Form (segment selection)
+- Screen: `lib/features/customers/presentation/screens/customer_form_screen.dart`
+- Adds a segment dropdown with values:
+  - `retail`
+  - `wholesale`
+  - `premium`
+- Saves segment via `CustomerFormBloc` -> `CustomerRepository.createCustomer/updateCustomer`.
+
+#### Customer Profile (loyalty hybrid benefits)
+- Screen: `lib/features/customers/presentation/screens/customer_profile_screen.dart`
+- Uses `CustomerLoyaltyBloc` to load `CustomerLoyaltySummary`
+- Displays:
+  - points balance
+  - tier progress
+  - **current tier benefits chips** (hybrid)
+  - **next tier benefits** bottom sheet (to reduce confusion and show what to unlock)
+
+#### Customer Hub (segments + trends)
+- Screen: `lib/features/customers/presentation/screens/customer_hub_screen.dart`
+- Shows segment overview counts and analytics sections.
+
+### Localization Keys
+
+Customers keys are under `customers.*` in:
+- `assets/translations/en.json`
+- `assets/translations/ar.json`
+- `assets/translations/fr.json`
+
+Important keys:
+- `customers.segment`, `customers.segment_hint`
+- `customers.segment_retail`, `customers.segment_wholesale`, `customers.segment_premium`
+- Loyalty benefit keys (hybrid):
+  - `customers.benefit_points_multiplier`
+  - `customers.benefit_discount`
+  - `customers.benefit_free_shipping`
+  - `customers.benefit_priority_support`
+  - `customers.benefit_early_access`
+  - `customers.benefit_exclusive_offers`
+  - `customers.benefit_birthday_bonus`
+  - `customers.your_benefits`, `customers.next_tier_benefits`, `customers.tier_progress`
+
+### Integration Points
+
+When implementing Sales/POS checkout logic later, integrate hybrid benefits as follows:
+- **Discount**: apply `loyalty_tiers.discount_percent` automatically for the customer tier
+- **Points**: earn base points from `loyalty_settings.points_per_currency_unit` then multiply by `loyalty_tiers.points_multiplier`
+- **Redemptions**: use `loyalty_rewards` and persist to `customer_reward_redemptions`
+- **Analytics counters**: update customer totals (`total_spent_cents`, `total_transactions`, `last_transaction_at`) during sale posting
+
+UX rules learned from research:
+- Always show "what I get" (benefits) directly in the customer view
+- Show progress visually toward next tier
+- Keep redemption flows simple (show eligible rewards clearly)
+
 **DO NOT override back button** unless absolutely necessary!
 
 ---
