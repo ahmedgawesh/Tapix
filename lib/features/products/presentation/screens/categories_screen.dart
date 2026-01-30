@@ -330,23 +330,21 @@ class _CategoriesViewState extends State<_CategoriesView> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(
-                      category.name,
+                    _MarqueeText(
+                      text: category.name,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.w600,
                           ),
                       maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                     ),
                     if (category.description != null && category.description!.isNotEmpty) ...[
                       const SizedBox(height: 4),
-                      Text(
-                        category.description!,
+                      _MarqueeText(
+                        text: category.description!,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                               color: colorScheme.onSurface.withValues(alpha: 0.6),
                             ),
                         maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
                     const SizedBox(height: 4),
@@ -399,6 +397,95 @@ class _CategoriesViewState extends State<_CategoriesView> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _MarqueeText extends StatefulWidget {
+  final String text;
+  final TextStyle? style;
+  final int maxLines;
+
+  const _MarqueeText({
+    required this.text,
+    this.style,
+    this.maxLines = 1,
+  });
+
+  @override
+  State<_MarqueeText> createState() => _MarqueeTextState();
+}
+
+class _MarqueeTextState extends State<_MarqueeText> {
+  final ScrollController _controller = ScrollController();
+  bool _isDisposed = false;
+  double _lastMaxScrollExtent = 0;
+
+  @override
+  void dispose() {
+    _isDisposed = true;
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _animateIfNeeded() async {
+    if (_isDisposed) return;
+    if (!_controller.hasClients) return;
+    final max = _controller.position.maxScrollExtent;
+    if (max <= 0) return;
+    if (_lastMaxScrollExtent == max) return;
+    _lastMaxScrollExtent = max;
+
+    await Future<void>.delayed(const Duration(milliseconds: 600));
+    if (_isDisposed) return;
+    if (!_controller.hasClients) return;
+
+    while (!_isDisposed && _controller.hasClients) {
+      final maxScroll = _controller.position.maxScrollExtent;
+      if (maxScroll <= 0) return;
+      final durationMs = (maxScroll * 25).clamp(900, 6000).toInt();
+      await _controller.animateTo(
+        maxScroll,
+        duration: Duration(milliseconds: durationMs),
+        curve: Curves.linear,
+      );
+      if (_isDisposed) return;
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      if (_isDisposed) return;
+      await _controller.animateTo(
+        0,
+        duration: const Duration(milliseconds: 900),
+        curve: Curves.easeOut,
+      );
+      if (_isDisposed) return;
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _animateIfNeeded();
+    });
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          controller: _controller,
+          scrollDirection: Axis.horizontal,
+          physics: const NeverScrollableScrollPhysics(),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minWidth: constraints.maxWidth),
+            child: Text(
+              widget.text,
+              style: widget.style,
+              maxLines: widget.maxLines,
+              overflow: TextOverflow.visible,
+              softWrap: false,
+            ),
+          ),
+        );
+      },
     );
   }
 }
