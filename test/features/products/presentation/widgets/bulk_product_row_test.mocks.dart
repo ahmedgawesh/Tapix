@@ -310,6 +310,18 @@ class MockProductVariantRepository extends _i1.Mock
           as _i3.Stream<Map<int, ({int count, int totalStock})>>);
 
   @override
+  _i3.Stream<Map<int, ({String? colorHex, String? sizeName})>>
+  watchVariantPreviews() =>
+      (super.noSuchMethod(
+            Invocation.method(#watchVariantPreviews, []),
+            returnValue:
+                _i3.Stream<
+                  Map<int, ({String? colorHex, String? sizeName})>
+                >.empty(),
+          )
+          as _i3.Stream<Map<int, ({String? colorHex, String? sizeName})>>);
+
+  @override
   _i3.Future<({int count, int totalStock})?> getVariantSummaryByProduct(
     int? productId,
   ) =>

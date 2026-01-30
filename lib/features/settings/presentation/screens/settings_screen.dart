@@ -177,7 +177,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   title: Text('settings.company.title'.tr()),
                   subtitle: Text('settings.company.subtitle'.tr()),
                   trailing: const Icon(LucideIcons.chevronRight),
-                  onTap: () => context.go('/settings/company'),
+                  onTap: () => context.push('/settings/company'),
                 ),
               ],
             ),

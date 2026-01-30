@@ -1026,7 +1026,10 @@ class _VariantsViewState extends State<_VariantsView> {
     final products = _getProductsFromBloc(context);
     final colors = _getColorsFromBloc(context);
     final sizes = _getSizesFromBloc(context);
-    final product = products.where((p) => p.id == variant.productId).toList();
+    final parentProduct = products
+        .where((p) => p.id == variant.productId)
+        .cast<Product?>()
+        .firstOrNull;
 
     final colorName = variant.colorId == null
         ? null
@@ -1035,12 +1038,47 @@ class _VariantsViewState extends State<_VariantsView> {
         ? null
         : sizes.where((s) => s.id == variant.sizeId).map((s) => s.name).cast<String?>().firstOrNull;
     final info = [sizeName, colorName].whereType<String>().where((v) => v.trim().isNotEmpty).join(' / ');
+
+    // IMPORTANT: print only this variant (do not let barcode screen fetch all variants for the product)
+    final printProduct = parentProduct == null
+        ? Product(
+            id: variant.id,
+            name: '',
+            nameAr: null,
+            nameFr: null,
+            description: null,
+            sku: variant.sku,
+            barcode: variant.barcode,
+            costCents: variant.costCents,
+            priceCents: variant.priceCents,
+            wholesalePriceCents: null,
+            stockQuantity: variant.stockQuantity,
+            minQuantity: 0,
+            categoryId: null,
+            supplierId: null,
+            currencyId: null,
+            imagePath: null,
+            hasVariants: false,
+            isTaxable: false,
+            taxRateBps: 0,
+            isActive: true,
+            trackInventory: false,
+          )
+        : parentProduct.copyWith(
+            id: variant.id,
+            sku: variant.sku,
+            barcode: variant.barcode,
+            priceCents: variant.priceCents,
+            costCents: variant.costCents,
+            stockQuantity: variant.stockQuantity,
+            hasVariants: false,
+          );
     context.push(
       '/products/barcode-design',
       extra: {
-        'products': product,
+        'products': [printProduct],
         'variantInfoByProductId': {
-          variant.productId: info,
+          printProduct.id: info,
         },
       },
     );

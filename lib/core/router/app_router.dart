@@ -32,6 +32,9 @@ import '../../features/barcode/presentation/screens/barcode_design_screen.dart';
 import '../../features/settings/presentation/screens/settings_screen.dart';
 import '../../features/settings/presentation/screens/admin_tools_screen.dart';
 import '../../features/settings/presentation/screens/company_profile_screen.dart';
+import '../../features/suppliers/presentation/screens/supplier_hub_screen.dart';
+import '../../features/suppliers/presentation/screens/supplier_form_screen.dart';
+import '../../features/suppliers/presentation/screens/supplier_profile_screen.dart';
 import '../di/injection_container.dart';
 import 'route_permissions.dart';
 
@@ -291,7 +294,30 @@ class AppRouter {
       ),
       GoRoute(
         path: '/suppliers',
-        builder: (context, state) => const PlaceholderScreen(title: 'Suppliers'),
+        builder: (context, state) => const SupplierHubScreen(),
+        routes: [
+          GoRoute(
+            path: 'new',
+            builder: (context, state) => const SupplierFormScreen(),
+          ),
+          GoRoute(
+            path: ':id',
+            builder: (context, state) {
+              final id = int.tryParse(state.pathParameters['id'] ?? '');
+              if (id == null) return const SupplierHubScreen();
+              return SupplierProfileScreen(supplierId: id);
+            },
+            routes: [
+              GoRoute(
+                path: 'edit',
+                builder: (context, state) {
+                  final id = int.tryParse(state.pathParameters['id'] ?? '');
+                  return SupplierFormScreen(supplierId: id);
+                },
+              ),
+            ],
+          ),
+        ],
       ),
       GoRoute(
         path: '/purchases',

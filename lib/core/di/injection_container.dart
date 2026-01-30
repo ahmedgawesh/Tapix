@@ -60,6 +60,12 @@ import '../../features/barcode/data/repositories/barcode_repository.dart';
 import '../../features/barcode/domain/usecases/get_invoice_print_data.dart';
 import '../../features/settings/data/services/company_profile_service.dart';
 import '../../features/settings/presentation/bloc/company_bloc.dart';
+import '../database/daos/supplier_dao.dart';
+import '../../features/suppliers/domain/repositories/supplier_repository.dart';
+import '../../features/suppliers/data/repositories/supplier_repository_impl.dart';
+import '../../features/suppliers/presentation/bloc/suppliers_bloc.dart';
+import '../../features/suppliers/presentation/bloc/supplier_metrics_bloc.dart';
+import '../../features/suppliers/presentation/bloc/supplier_form_bloc.dart';
 
 final sl = GetIt.instance;
 
@@ -80,6 +86,7 @@ Future<void> init() async {
   sl.registerLazySingleton(() => SettingsDao(sl()));
   sl.registerLazySingleton(() => BarcodeTemplateDao(sl()));
   sl.registerLazySingleton(() => PurchaseDao(sl()));
+  sl.registerLazySingleton(() => SupplierDao(sl()));
 
   // Auth Services
   sl.registerLazySingleton(() => PasswordService());
@@ -127,6 +134,9 @@ Future<void> init() async {
   );
   sl.registerLazySingleton<PurchaseRepository>(
     () => PurchaseRepositoryImpl(sl()),
+  );
+  sl.registerLazySingleton<SupplierRepository>(
+    () => SupplierRepositoryImpl(sl<SupplierDao>()),
   );
 
   // Blocs
@@ -178,6 +188,11 @@ Future<void> init() async {
     currencyService: sl<CurrencyService>(),
   ));
   sl.registerFactory(() => ExportBloc(sl<ExportService>()));
+  
+  // Supplier Blocs
+  sl.registerFactory(() => SuppliersBloc(sl<SupplierRepository>()));
+  sl.registerFactory(() => SupplierMetricsBloc(sl<SupplierRepository>()));
+  sl.registerFactory(() => SupplierFormBloc(sl<SupplierRepository>()));
 
   // Barcode Services
   sl.registerLazySingleton(() => BarcodeValidationService());
