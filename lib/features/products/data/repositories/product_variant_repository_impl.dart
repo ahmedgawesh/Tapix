@@ -86,6 +86,7 @@ class ProductVariantRepositoryImpl implements ProductVariantRepository {
     int? sizeId,
     required Decimal costCents,
     required Decimal priceCents,
+    Decimal? wholesalePriceCents,
     required int stockQuantity,
     bool isActive = true,
   }) {
@@ -98,6 +99,7 @@ class ProductVariantRepositoryImpl implements ProductVariantRepository {
         sizeId: Value(sizeId),
         costCents: Value(costCents),
         priceCents: Value(priceCents),
+        wholesalePriceCents: Value(wholesalePriceCents),
         priceAdjustmentCents: Value(Decimal.zero),
         stockQuantity: Value(stockQuantity),
         isActive: Value(isActive),
@@ -127,6 +129,7 @@ class ProductVariantRepositoryImpl implements ProductVariantRepository {
           sizeId: variant.sizeId,
           costCents: variant.costCents,
           priceCents: variant.priceCents,
+          wholesalePriceCents: variant.wholesalePriceCents,
           priceAdjustmentCents: variant.priceAdjustmentCents,
           stockQuantity: variant.stockQuantity,
           isActive: variant.isActive,

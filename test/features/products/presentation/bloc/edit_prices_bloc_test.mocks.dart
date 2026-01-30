@@ -54,8 +54,10 @@ class MockProductRepository extends _i1.Mock implements _i2.ProductRepository {
           as _i3.Stream<_i4.Product?>);
 
   @override
-  _i3.Future<List<_i4.Product>> searchProducts(String query,
-          {bool? isActive = true}) =>
+  _i3.Future<List<_i4.Product>> searchProducts(
+    String? query, {
+    bool? isActive = true,
+  }) =>
       (super.noSuchMethod(
             Invocation.method(#searchProducts, [query], {#isActive: isActive}),
             returnValue: _i3.Future<List<_i4.Product>>.value(<_i4.Product>[]),
@@ -81,18 +83,18 @@ class MockProductRepository extends _i1.Mock implements _i2.ProductRepository {
   @override
   _i3.Future<List<_i4.Product>> filterProducts({
     int? categoryId,
-    bool? isActive = true,
     String? stockStatus,
     int? limit = 50,
     int? offset = 0,
+    bool? isActive = true,
   }) =>
       (super.noSuchMethod(
             Invocation.method(#filterProducts, [], {
               #categoryId: categoryId,
-              #isActive: isActive,
               #stockStatus: stockStatus,
               #limit: limit,
               #offset: offset,
+              #isActive: isActive,
             }),
             returnValue: _i3.Future<List<_i4.Product>>.value(<_i4.Product>[]),
           )
@@ -101,14 +103,14 @@ class MockProductRepository extends _i1.Mock implements _i2.ProductRepository {
   @override
   _i3.Stream<List<_i4.Product>> watchFilteredProducts({
     int? categoryId,
-    bool? isActive = true,
     String? stockStatus,
+    bool? isActive = true,
   }) =>
       (super.noSuchMethod(
             Invocation.method(#watchFilteredProducts, [], {
               #categoryId: categoryId,
-              #isActive: isActive,
               #stockStatus: stockStatus,
+              #isActive: isActive,
             }),
             returnValue: _i3.Stream<List<_i4.Product>>.empty(),
           )

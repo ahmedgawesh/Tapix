@@ -5398,6 +5398,18 @@ class $ProductVariantsTable extends ProductVariants
         requiredDuringInsert: true,
       ).withConverter<Decimal>($ProductVariantsTable.$converterpriceCents);
   @override
+  late final GeneratedColumnWithTypeConverter<Decimal?, int>
+  wholesalePriceCents =
+      GeneratedColumn<int>(
+        'wholesale_price_cents',
+        aliasedName,
+        true,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+      ).withConverter<Decimal?>(
+        $ProductVariantsTable.$converterwholesalePriceCentsn,
+      );
+  @override
   late final GeneratedColumnWithTypeConverter<Decimal, int>
   priceAdjustmentCents =
       GeneratedColumn<int>(
@@ -5471,6 +5483,7 @@ class $ProductVariantsTable extends ProductVariants
     sizeId,
     costCents,
     priceCents,
+    wholesalePriceCents,
     priceAdjustmentCents,
     stockQuantity,
     isActive,
@@ -5596,6 +5609,13 @@ class $ProductVariantsTable extends ProductVariants
           data['${effectivePrefix}price_cents'],
         )!,
       ),
+      wholesalePriceCents: $ProductVariantsTable.$converterwholesalePriceCentsn
+          .fromSql(
+            attachedDatabase.typeMapping.read(
+              DriftSqlType.int,
+              data['${effectivePrefix}wholesale_price_cents'],
+            ),
+          ),
       priceAdjustmentCents: $ProductVariantsTable.$converterpriceAdjustmentCents
           .fromSql(
             attachedDatabase.typeMapping.read(
@@ -5631,6 +5651,10 @@ class $ProductVariantsTable extends ProductVariants
       const MoneyConverter();
   static TypeConverter<Decimal, int> $converterpriceCents =
       const MoneyConverter();
+  static TypeConverter<Decimal, int> $converterwholesalePriceCents =
+      const MoneyConverter();
+  static TypeConverter<Decimal?, int?> $converterwholesalePriceCentsn =
+      NullAwareTypeConverter.wrap($converterwholesalePriceCents);
   static TypeConverter<Decimal, int> $converterpriceAdjustmentCents =
       const MoneyConverter();
 }
@@ -5644,6 +5668,7 @@ class ProductVariant extends DataClass implements Insertable<ProductVariant> {
   final int? sizeId;
   final Decimal costCents;
   final Decimal priceCents;
+  final Decimal? wholesalePriceCents;
   final Decimal priceAdjustmentCents;
   final int stockQuantity;
   final bool isActive;
@@ -5658,6 +5683,7 @@ class ProductVariant extends DataClass implements Insertable<ProductVariant> {
     this.sizeId,
     required this.costCents,
     required this.priceCents,
+    this.wholesalePriceCents,
     required this.priceAdjustmentCents,
     required this.stockQuantity,
     required this.isActive,
@@ -5691,6 +5717,13 @@ class ProductVariant extends DataClass implements Insertable<ProductVariant> {
         $ProductVariantsTable.$converterpriceCents.toSql(priceCents),
       );
     }
+    if (!nullToAbsent || wholesalePriceCents != null) {
+      map['wholesale_price_cents'] = Variable<int>(
+        $ProductVariantsTable.$converterwholesalePriceCentsn.toSql(
+          wholesalePriceCents,
+        ),
+      );
+    }
     {
       map['price_adjustment_cents'] = Variable<int>(
         $ProductVariantsTable.$converterpriceAdjustmentCents.toSql(
@@ -5721,6 +5754,9 @@ class ProductVariant extends DataClass implements Insertable<ProductVariant> {
           : Value(sizeId),
       costCents: Value(costCents),
       priceCents: Value(priceCents),
+      wholesalePriceCents: wholesalePriceCents == null && nullToAbsent
+          ? const Value.absent()
+          : Value(wholesalePriceCents),
       priceAdjustmentCents: Value(priceAdjustmentCents),
       stockQuantity: Value(stockQuantity),
       isActive: Value(isActive),
@@ -5743,6 +5779,9 @@ class ProductVariant extends DataClass implements Insertable<ProductVariant> {
       sizeId: serializer.fromJson<int?>(json['sizeId']),
       costCents: serializer.fromJson<Decimal>(json['costCents']),
       priceCents: serializer.fromJson<Decimal>(json['priceCents']),
+      wholesalePriceCents: serializer.fromJson<Decimal?>(
+        json['wholesalePriceCents'],
+      ),
       priceAdjustmentCents: serializer.fromJson<Decimal>(
         json['priceAdjustmentCents'],
       ),
@@ -5764,6 +5803,7 @@ class ProductVariant extends DataClass implements Insertable<ProductVariant> {
       'sizeId': serializer.toJson<int?>(sizeId),
       'costCents': serializer.toJson<Decimal>(costCents),
       'priceCents': serializer.toJson<Decimal>(priceCents),
+      'wholesalePriceCents': serializer.toJson<Decimal?>(wholesalePriceCents),
       'priceAdjustmentCents': serializer.toJson<Decimal>(priceAdjustmentCents),
       'stockQuantity': serializer.toJson<int>(stockQuantity),
       'isActive': serializer.toJson<bool>(isActive),
@@ -5781,6 +5821,7 @@ class ProductVariant extends DataClass implements Insertable<ProductVariant> {
     Value<int?> sizeId = const Value.absent(),
     Decimal? costCents,
     Decimal? priceCents,
+    Value<Decimal?> wholesalePriceCents = const Value.absent(),
     Decimal? priceAdjustmentCents,
     int? stockQuantity,
     bool? isActive,
@@ -5795,6 +5836,9 @@ class ProductVariant extends DataClass implements Insertable<ProductVariant> {
     sizeId: sizeId.present ? sizeId.value : this.sizeId,
     costCents: costCents ?? this.costCents,
     priceCents: priceCents ?? this.priceCents,
+    wholesalePriceCents: wholesalePriceCents.present
+        ? wholesalePriceCents.value
+        : this.wholesalePriceCents,
     priceAdjustmentCents: priceAdjustmentCents ?? this.priceAdjustmentCents,
     stockQuantity: stockQuantity ?? this.stockQuantity,
     isActive: isActive ?? this.isActive,
@@ -5813,6 +5857,9 @@ class ProductVariant extends DataClass implements Insertable<ProductVariant> {
       priceCents: data.priceCents.present
           ? data.priceCents.value
           : this.priceCents,
+      wholesalePriceCents: data.wholesalePriceCents.present
+          ? data.wholesalePriceCents.value
+          : this.wholesalePriceCents,
       priceAdjustmentCents: data.priceAdjustmentCents.present
           ? data.priceAdjustmentCents.value
           : this.priceAdjustmentCents,
@@ -5836,6 +5883,7 @@ class ProductVariant extends DataClass implements Insertable<ProductVariant> {
           ..write('sizeId: $sizeId, ')
           ..write('costCents: $costCents, ')
           ..write('priceCents: $priceCents, ')
+          ..write('wholesalePriceCents: $wholesalePriceCents, ')
           ..write('priceAdjustmentCents: $priceAdjustmentCents, ')
           ..write('stockQuantity: $stockQuantity, ')
           ..write('isActive: $isActive, ')
@@ -5855,6 +5903,7 @@ class ProductVariant extends DataClass implements Insertable<ProductVariant> {
     sizeId,
     costCents,
     priceCents,
+    wholesalePriceCents,
     priceAdjustmentCents,
     stockQuantity,
     isActive,
@@ -5873,6 +5922,7 @@ class ProductVariant extends DataClass implements Insertable<ProductVariant> {
           other.sizeId == this.sizeId &&
           other.costCents == this.costCents &&
           other.priceCents == this.priceCents &&
+          other.wholesalePriceCents == this.wholesalePriceCents &&
           other.priceAdjustmentCents == this.priceAdjustmentCents &&
           other.stockQuantity == this.stockQuantity &&
           other.isActive == this.isActive &&
@@ -5889,6 +5939,7 @@ class ProductVariantsCompanion extends UpdateCompanion<ProductVariant> {
   final Value<int?> sizeId;
   final Value<Decimal> costCents;
   final Value<Decimal> priceCents;
+  final Value<Decimal?> wholesalePriceCents;
   final Value<Decimal> priceAdjustmentCents;
   final Value<int> stockQuantity;
   final Value<bool> isActive;
@@ -5903,6 +5954,7 @@ class ProductVariantsCompanion extends UpdateCompanion<ProductVariant> {
     this.sizeId = const Value.absent(),
     this.costCents = const Value.absent(),
     this.priceCents = const Value.absent(),
+    this.wholesalePriceCents = const Value.absent(),
     this.priceAdjustmentCents = const Value.absent(),
     this.stockQuantity = const Value.absent(),
     this.isActive = const Value.absent(),
@@ -5918,6 +5970,7 @@ class ProductVariantsCompanion extends UpdateCompanion<ProductVariant> {
     this.sizeId = const Value.absent(),
     required Decimal costCents,
     required Decimal priceCents,
+    this.wholesalePriceCents = const Value.absent(),
     this.priceAdjustmentCents = const Value.absent(),
     this.stockQuantity = const Value.absent(),
     this.isActive = const Value.absent(),
@@ -5935,6 +5988,7 @@ class ProductVariantsCompanion extends UpdateCompanion<ProductVariant> {
     Expression<int>? sizeId,
     Expression<int>? costCents,
     Expression<int>? priceCents,
+    Expression<int>? wholesalePriceCents,
     Expression<int>? priceAdjustmentCents,
     Expression<int>? stockQuantity,
     Expression<bool>? isActive,
@@ -5950,6 +6004,8 @@ class ProductVariantsCompanion extends UpdateCompanion<ProductVariant> {
       if (sizeId != null) 'size_id': sizeId,
       if (costCents != null) 'cost_cents': costCents,
       if (priceCents != null) 'price_cents': priceCents,
+      if (wholesalePriceCents != null)
+        'wholesale_price_cents': wholesalePriceCents,
       if (priceAdjustmentCents != null)
         'price_adjustment_cents': priceAdjustmentCents,
       if (stockQuantity != null) 'stock_quantity': stockQuantity,
@@ -5968,6 +6024,7 @@ class ProductVariantsCompanion extends UpdateCompanion<ProductVariant> {
     Value<int?>? sizeId,
     Value<Decimal>? costCents,
     Value<Decimal>? priceCents,
+    Value<Decimal?>? wholesalePriceCents,
     Value<Decimal>? priceAdjustmentCents,
     Value<int>? stockQuantity,
     Value<bool>? isActive,
@@ -5983,6 +6040,7 @@ class ProductVariantsCompanion extends UpdateCompanion<ProductVariant> {
       sizeId: sizeId ?? this.sizeId,
       costCents: costCents ?? this.costCents,
       priceCents: priceCents ?? this.priceCents,
+      wholesalePriceCents: wholesalePriceCents ?? this.wholesalePriceCents,
       priceAdjustmentCents: priceAdjustmentCents ?? this.priceAdjustmentCents,
       stockQuantity: stockQuantity ?? this.stockQuantity,
       isActive: isActive ?? this.isActive,
@@ -6022,6 +6080,13 @@ class ProductVariantsCompanion extends UpdateCompanion<ProductVariant> {
         $ProductVariantsTable.$converterpriceCents.toSql(priceCents.value),
       );
     }
+    if (wholesalePriceCents.present) {
+      map['wholesale_price_cents'] = Variable<int>(
+        $ProductVariantsTable.$converterwholesalePriceCentsn.toSql(
+          wholesalePriceCents.value,
+        ),
+      );
+    }
     if (priceAdjustmentCents.present) {
       map['price_adjustment_cents'] = Variable<int>(
         $ProductVariantsTable.$converterpriceAdjustmentCents.toSql(
@@ -6055,6 +6120,7 @@ class ProductVariantsCompanion extends UpdateCompanion<ProductVariant> {
           ..write('sizeId: $sizeId, ')
           ..write('costCents: $costCents, ')
           ..write('priceCents: $priceCents, ')
+          ..write('wholesalePriceCents: $wholesalePriceCents, ')
           ..write('priceAdjustmentCents: $priceAdjustmentCents, ')
           ..write('stockQuantity: $stockQuantity, ')
           ..write('isActive: $isActive, ')
@@ -27510,6 +27576,7 @@ typedef $$ProductVariantsTableCreateCompanionBuilder =
       Value<int?> sizeId,
       required Decimal costCents,
       required Decimal priceCents,
+      Value<Decimal?> wholesalePriceCents,
       Value<Decimal> priceAdjustmentCents,
       Value<int> stockQuantity,
       Value<bool> isActive,
@@ -27526,6 +27593,7 @@ typedef $$ProductVariantsTableUpdateCompanionBuilder =
       Value<int?> sizeId,
       Value<Decimal> costCents,
       Value<Decimal> priceCents,
+      Value<Decimal?> wholesalePriceCents,
       Value<Decimal> priceAdjustmentCents,
       Value<int> stockQuantity,
       Value<bool> isActive,
@@ -27718,6 +27786,12 @@ class $$ProductVariantsTableFilterComposer
         column: $table.priceCents,
         builder: (column) => ColumnWithTypeConverterFilters(column),
       );
+
+  ColumnWithTypeConverterFilters<Decimal?, Decimal, int>
+  get wholesalePriceCents => $composableBuilder(
+    column: $table.wholesalePriceCents,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
+  );
 
   ColumnWithTypeConverterFilters<Decimal, Decimal, int>
   get priceAdjustmentCents => $composableBuilder(
@@ -27949,6 +28023,11 @@ class $$ProductVariantsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get wholesalePriceCents => $composableBuilder(
+    column: $table.wholesalePriceCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get priceAdjustmentCents => $composableBuilder(
     column: $table.priceAdjustmentCents,
     builder: (column) => ColumnOrderings(column),
@@ -28068,6 +28147,12 @@ class $$ProductVariantsTableAnnotationComposer
   GeneratedColumnWithTypeConverter<Decimal, int> get priceCents =>
       $composableBuilder(
         column: $table.priceCents,
+        builder: (column) => column,
+      );
+
+  GeneratedColumnWithTypeConverter<Decimal?, int> get wholesalePriceCents =>
+      $composableBuilder(
+        column: $table.wholesalePriceCents,
         builder: (column) => column,
       );
 
@@ -28307,6 +28392,7 @@ class $$ProductVariantsTableTableManager
                 Value<int?> sizeId = const Value.absent(),
                 Value<Decimal> costCents = const Value.absent(),
                 Value<Decimal> priceCents = const Value.absent(),
+                Value<Decimal?> wholesalePriceCents = const Value.absent(),
                 Value<Decimal> priceAdjustmentCents = const Value.absent(),
                 Value<int> stockQuantity = const Value.absent(),
                 Value<bool> isActive = const Value.absent(),
@@ -28321,6 +28407,7 @@ class $$ProductVariantsTableTableManager
                 sizeId: sizeId,
                 costCents: costCents,
                 priceCents: priceCents,
+                wholesalePriceCents: wholesalePriceCents,
                 priceAdjustmentCents: priceAdjustmentCents,
                 stockQuantity: stockQuantity,
                 isActive: isActive,
@@ -28337,6 +28424,7 @@ class $$ProductVariantsTableTableManager
                 Value<int?> sizeId = const Value.absent(),
                 required Decimal costCents,
                 required Decimal priceCents,
+                Value<Decimal?> wholesalePriceCents = const Value.absent(),
                 Value<Decimal> priceAdjustmentCents = const Value.absent(),
                 Value<int> stockQuantity = const Value.absent(),
                 Value<bool> isActive = const Value.absent(),
@@ -28351,6 +28439,7 @@ class $$ProductVariantsTableTableManager
                 sizeId: sizeId,
                 costCents: costCents,
                 priceCents: priceCents,
+                wholesalePriceCents: wholesalePriceCents,
                 priceAdjustmentCents: priceAdjustmentCents,
                 stockQuantity: stockQuantity,
                 isActive: isActive,

@@ -221,6 +221,7 @@ class MockProductVariantRepository extends _i1.Mock
     int? sizeId,
     required _i7.Decimal? costCents,
     required _i7.Decimal? priceCents,
+    _i7.Decimal? wholesalePriceCents,
     required int? stockQuantity,
     bool? isActive = true,
   }) =>
@@ -233,6 +234,7 @@ class MockProductVariantRepository extends _i1.Mock
               #sizeId: sizeId,
               #costCents: costCents,
               #priceCents: priceCents,
+              #wholesalePriceCents: wholesalePriceCents,
               #stockQuantity: stockQuantity,
               #isActive: isActive,
             }),

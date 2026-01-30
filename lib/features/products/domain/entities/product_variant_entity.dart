@@ -10,6 +10,7 @@ class ProductVariant extends Equatable {
   final int? sizeId;
   final Decimal costCents;
   final Decimal priceCents;
+  final Decimal? wholesalePriceCents;
   final Decimal priceAdjustmentCents;
   final int stockQuantity;
   final bool isActive;
@@ -23,6 +24,7 @@ class ProductVariant extends Equatable {
     this.sizeId,
     required this.costCents,
     required this.priceCents,
+    this.wholesalePriceCents,
     required this.priceAdjustmentCents,
     required this.stockQuantity,
     required this.isActive,
@@ -37,6 +39,7 @@ class ProductVariant extends Equatable {
     int? sizeId,
     Decimal? costCents,
     Decimal? priceCents,
+    Decimal? wholesalePriceCents,
     Decimal? priceAdjustmentCents,
     int? stockQuantity,
     bool? isActive,
@@ -50,6 +53,7 @@ class ProductVariant extends Equatable {
       sizeId: sizeId ?? this.sizeId,
       costCents: costCents ?? this.costCents,
       priceCents: priceCents ?? this.priceCents,
+      wholesalePriceCents: wholesalePriceCents ?? this.wholesalePriceCents,
       priceAdjustmentCents: priceAdjustmentCents ?? this.priceAdjustmentCents,
       stockQuantity: stockQuantity ?? this.stockQuantity,
       isActive: isActive ?? this.isActive,
@@ -66,6 +70,7 @@ class ProductVariant extends Equatable {
         sizeId,
         costCents,
         priceCents,
+        wholesalePriceCents,
         priceAdjustmentCents,
         stockQuantity,
         isActive,

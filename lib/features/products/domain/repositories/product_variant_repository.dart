@@ -26,6 +26,7 @@ abstract class ProductVariantRepository {
     int? sizeId,
     required Decimal costCents,
     required Decimal priceCents,
+    Decimal? wholesalePriceCents,
     required int stockQuantity,
     bool isActive = true,
   });

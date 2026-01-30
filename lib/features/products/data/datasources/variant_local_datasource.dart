@@ -119,6 +119,7 @@ class VariantLocalDatasourceImpl implements VariantLocalDatasource {
         sizeId: variant.sizeId,
         costCents: variant.costCents,
         priceCents: variant.priceCents,
+        wholesalePriceCents: variant.wholesalePriceCents,
         priceAdjustmentCents: variant.priceAdjustmentCents,
         stockQuantity: variant.stockQuantity,
         isActive: variant.isActive,

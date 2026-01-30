@@ -29,6 +29,7 @@ class VariantCreateRequested extends ProductVariantsEvent {
   final int? sizeId;
   final Decimal costCents;
   final Decimal priceCents;
+  final Decimal? wholesalePriceCents;
   final int stockQuantity;
 
   const VariantCreateRequested({
@@ -39,6 +40,7 @@ class VariantCreateRequested extends ProductVariantsEvent {
     this.sizeId,
     required this.costCents,
     required this.priceCents,
+    this.wholesalePriceCents,
     required this.stockQuantity,
   });
 }
@@ -127,6 +129,7 @@ class ProductVariantsBloc extends RealtimeBloc<List<ProductVariant>, ProductVari
         sizeId: event.sizeId,
         costCents: event.costCents,
         priceCents: event.priceCents,
+        wholesalePriceCents: event.wholesalePriceCents,
         stockQuantity: event.stockQuantity,
       );
     } catch (e, st) {
@@ -227,6 +230,7 @@ class ProductVariantsBloc extends RealtimeBloc<List<ProductVariant>, ProductVari
       sizeId: variant.sizeId,
       costCents: variant.costCents,
       priceCents: variant.priceCents,
+      wholesalePriceCents: variant.wholesalePriceCents,
       priceAdjustmentCents: variant.priceAdjustmentCents,
       stockQuantity: newStock,
       isActive: variant.isActive,

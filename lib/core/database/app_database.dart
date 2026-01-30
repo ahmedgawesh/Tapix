@@ -137,6 +137,11 @@ class AppDatabase extends _$AppDatabase {
       foreignKeysDisabled = true;
       await customStatement('ALTER TABLE product_variants RENAME TO product_variants__old');
 
+      final wholesaleColumnRow = await customSelect(
+        "SELECT COUNT(*) as cnt FROM pragma_table_info('product_variants__old') WHERE name = 'wholesale_price_cents'",
+      ).getSingle();
+      final hasWholesalePriceCents = wholesaleColumnRow.read<int>('cnt') > 0;
+
       await customStatement('''
 CREATE TABLE product_variants (
   id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
@@ -147,6 +152,7 @@ CREATE TABLE product_variants (
   size_id INTEGER REFERENCES sizes (id) ON DELETE RESTRICT,
   cost_cents INTEGER NOT NULL,
   price_cents INTEGER NOT NULL,
+  wholesale_price_cents INTEGER,
   price_adjustment_cents INTEGER NOT NULL DEFAULT 0,
   stock_quantity INTEGER NOT NULL DEFAULT 0,
   is_active INTEGER NOT NULL DEFAULT 1,
@@ -155,7 +161,8 @@ CREATE TABLE product_variants (
 )
 ''');
 
-      await customStatement('''
+      if (hasWholesalePriceCents) {
+        await customStatement('''
 INSERT INTO product_variants (
   id,
   product_id,
@@ -165,6 +172,7 @@ INSERT INTO product_variants (
   size_id,
   cost_cents,
   price_cents,
+  wholesale_price_cents,
   price_adjustment_cents,
   stock_quantity,
   is_active,
@@ -180,6 +188,7 @@ SELECT
   size_id,
   COALESCE(cost_cents, 0),
   COALESCE(price_cents, 0),
+  wholesale_price_cents,
   COALESCE(price_adjustment_cents, 0),
   COALESCE(stock_quantity, 0),
   COALESCE(is_active, 1),
@@ -187,6 +196,42 @@ SELECT
   COALESCE(updated_at, CURRENT_TIMESTAMP)
 FROM product_variants__old
 ''');
+      } else {
+        await customStatement('''
+INSERT INTO product_variants (
+  id,
+  product_id,
+  sku,
+  barcode,
+  color_id,
+  size_id,
+  cost_cents,
+  price_cents,
+  wholesale_price_cents,
+  price_adjustment_cents,
+  stock_quantity,
+  is_active,
+  created_at,
+  updated_at
+)
+SELECT
+  id,
+  product_id,
+  NULLIF(sku, ''),
+  NULLIF(barcode, ''),
+  color_id,
+  size_id,
+  COALESCE(cost_cents, 0),
+  COALESCE(price_cents, 0),
+  NULL,
+  COALESCE(price_adjustment_cents, 0),
+  COALESCE(stock_quantity, 0),
+  COALESCE(is_active, 1),
+  COALESCE(created_at, CURRENT_TIMESTAMP),
+  COALESCE(updated_at, CURRENT_TIMESTAMP)
+FROM product_variants__old
+''');
+      }
 
       await customStatement('DROP TABLE product_variants__old');
       await customStatement('PRAGMA foreign_keys = ON');
@@ -240,13 +285,14 @@ FROM product_variants__old
     await _safeAddColumn('product_variants', 'price_adjustment_cents', 'INTEGER NOT NULL DEFAULT 0');
     await _safeAddColumn('product_variants', 'cost_cents', 'INTEGER NOT NULL DEFAULT 0');
     await _safeAddColumn('product_variants', 'price_cents', 'INTEGER NOT NULL DEFAULT 0');
+    await _safeAddColumn('product_variants', 'wholesale_price_cents', 'INTEGER');
     
     await _safeAddColumn('sizes', 'sort_order', 'INTEGER NOT NULL DEFAULT 0');
     debugPrint('Schema integrity check completed.');
   }
 
   @override
-  int get schemaVersion => 10007;
+  int get schemaVersion => 10008;
 
   @override
   MigrationStrategy get migration {
@@ -296,6 +342,11 @@ FROM product_variants__old
           await m.createTable(barcodeTemplates);
           await m.createTable(printHistories);
           await _seedDefaultBarcodeTemplates();
+        }
+
+        // Migration 10007 -> 10008: Add wholesale_price_cents to product_variants
+        if (from < 10008) {
+          await _safeAddColumn('product_variants', 'wholesale_price_cents', 'INTEGER');
         }
 
         await _createIndexes();
