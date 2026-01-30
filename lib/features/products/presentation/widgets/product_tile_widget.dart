@@ -5,6 +5,13 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:easy_localization/easy_localization.dart';
 
 import '../../domain/entities/product_entity.dart';
+import '../../domain/entities/product_variant_entity.dart';
+import '../../domain/entities/product_color_entity.dart';
+import '../../domain/entities/size_entity.dart';
+import '../../domain/repositories/product_variant_repository.dart';
+import '../../domain/repositories/product_color_repository.dart';
+import '../../domain/repositories/size_repository.dart';
+import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/currency_service.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/bloc/currency_bloc.dart';
@@ -21,6 +28,11 @@ class ProductTileWidget extends StatelessWidget {
   final int? variantCount;
   final int? totalVariantStock;
 
+  /// For product cards: preview of one variant's attributes (size + color shade)
+  /// Displayed next to SKU as: SKU (Size ●)
+  final String? previewSizeName;
+  final String? previewColorHex;
+
   const ProductTileWidget({
     super.key,
     required this.product,
@@ -29,7 +41,225 @@ class ProductTileWidget extends StatelessWidget {
     this.isSelected,
     this.variantCount,
     this.totalVariantStock,
+    this.previewSizeName,
+    this.previewColorHex,
   });
+
+  Color? _tryParseHexColor(String? hex) {
+    if (hex == null) return null;
+    final cleaned = hex.trim().replaceFirst('#', '');
+    if (cleaned.isEmpty) return null;
+    final buffer = StringBuffer();
+    if (cleaned.length == 6) buffer.write('ff');
+    buffer.write(cleaned);
+    try {
+      return Color(int.parse(buffer.toString(), radix: 16));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _showVariantsOverviewDialog(BuildContext context) async {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: colorScheme.surface,
+          title: Text(product.name),
+          content: SizedBox(
+            width: 520,
+            child: FutureBuilder<({
+              List<ProductVariant> variants,
+              List<ProductColor> colors,
+              List<Size> sizes,
+            })>(
+              future: () async {
+                final variantRepo = sl<ProductVariantRepository>();
+                final colorRepo = sl<ProductColorRepository>();
+                final sizeRepo = sl<SizeRepository>();
+
+                final results = await Future.wait([
+                  variantRepo.getVariantsByProduct(product.id),
+                  colorRepo.getAllColors(),
+                  sizeRepo.getAllSizes(),
+                ]);
+
+                return (
+                  variants: results[0] as List<ProductVariant>,
+                  colors: results[1] as List<ProductColor>,
+                  sizes: results[2] as List<Size>,
+                );
+              }(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) {
+                  return const SizedBox(
+                    height: 120,
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
+
+                final variants = snapshot.data!.variants;
+                final colorsById = {for (final c in snapshot.data!.colors) c.id: c};
+                final sizesById = {for (final s in snapshot.data!.sizes) s.id: s};
+
+                final distinctColorHexes = <String>{};
+                final distinctSizeNames = <String>{};
+
+                for (final v in variants.where((x) => x.isActive)) {
+                  final colorHex = v.colorId == null ? null : colorsById[v.colorId!]?.hexCode;
+                  if (colorHex != null && colorHex.trim().isNotEmpty) {
+                    distinctColorHexes.add(colorHex.trim());
+                  }
+                  final sizeName = v.sizeId == null ? null : sizesById[v.sizeId!]?.name;
+                  if (sizeName != null && sizeName.trim().isNotEmpty) {
+                    distinctSizeNames.add(sizeName.trim());
+                  }
+                }
+
+                final colorDots = distinctColorHexes
+                    .map(_tryParseHexColor)
+                    .whereType<Color>()
+                    .toList();
+                final sizeList = distinctSizeNames.toList()..sort();
+
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        if (variantCount != null)
+                          Text(
+                            '${'products.variants_badge'.tr()}: $variantCount',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        if (totalVariantStock != null) ...[
+                          const SizedBox(width: 12),
+                          Text(
+                            '${'variants.stock'.tr()}: $totalVariantStock',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+
+                    if (colorDots.isNotEmpty) ...[
+                      Text(
+                        'colors.title'.tr(),
+                        style: Theme.of(context).textTheme.labelMedium,
+                      ),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          for (final c in colorDots)
+                            Container(
+                              width: 14,
+                              height: 14,
+                              decoration: BoxDecoration(
+                                color: c,
+                                shape: BoxShape.circle,
+                                border: Border.all(color: colorScheme.outline),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+
+                    if (sizeList.isNotEmpty) ...[
+                      Text(
+                        'sizes.title'.tr(),
+                        style: Theme.of(context).textTheme.labelMedium,
+                      ),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          for (final s in sizeList)
+                            Chip(
+                              label: Text(
+                                s,
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+
+                    Text(
+                      'variants.title'.tr(),
+                      style: Theme.of(context).textTheme.labelMedium,
+                    ),
+                    const SizedBox(height: 6),
+                    SizedBox(
+                      height: 220,
+                      child: ListView.separated(
+                        itemCount: variants.length,
+                        separatorBuilder: (context, index) => const Divider(height: 1),
+                        itemBuilder: (context, index) {
+                          final v = variants[index];
+                          final sizeName = v.sizeId == null ? null : sizesById[v.sizeId!]?.name;
+                          final colorHex = v.colorId == null ? null : colorsById[v.colorId!]?.hexCode;
+                          final shade = _tryParseHexColor(colorHex);
+
+                          final title = v.sku?.isNotEmpty == true
+                              ? v.sku!
+                              : 'product_form.variant_item_title'.tr(args: ['${v.id}']);
+
+                          return ListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                            subtitle: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (sizeName != null && sizeName.trim().isNotEmpty)
+                                  Text(sizeName, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                if (sizeName != null && sizeName.trim().isNotEmpty && shade != null)
+                                  const SizedBox(width: 8),
+                                if (shade != null)
+                                  Container(
+                                    width: 10,
+                                    height: 10,
+                                    decoration: BoxDecoration(
+                                      color: shade,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(color: colorScheme.outline),
+                                    ),
+                                  ),
+                                const Spacer(),
+                                Text(
+                                  '${'variants.stock'.tr()}: ${v.stockQuantity}',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text('common.close'.tr()),
+            ),
+          ],
+        );
+      },
+    );
+  }
 
   bool get _isOutOfStock => product.stockQuantity <= 0;
 
@@ -45,6 +275,8 @@ class ProductTileWidget extends StatelessWidget {
     final currencyService = context.read<CurrencyService>();
     final inSelectionMode = isSelected != null;
     final selected = isSelected ?? false;
+    final previewShade = _tryParseHexColor(previewColorHex);
+    final showVariantsButton = product.hasVariants;
     
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -71,21 +303,82 @@ class ProductTileWidget extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      product.name,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            product.name,
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (showVariantsButton)
+                          IconButton(
+                            icon: const Icon(LucideIcons.info, size: 18),
+                            tooltip: 'variants.title'.tr(),
+                            onPressed: () => _showVariantsOverviewDialog(context),
+                          ),
+                      ],
                     ),
                     const SizedBox(height: 4),
                     if (product.sku != null && product.sku!.isNotEmpty)
-                      Text(
-                        'SKU: ${product.sku!}',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                        ),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              'SKU: ${product.sku!}',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: colorScheme.onSurfaceVariant,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (!product.hasVariants &&
+                              ((previewSizeName != null && previewSizeName!.trim().isNotEmpty) ||
+                                  previewShade != null)) ...[
+                            const SizedBox(width: 6),
+                            Text(
+                              '(',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                            if (previewSizeName != null && previewSizeName!.trim().isNotEmpty)
+                              Flexible(
+                                child: Text(
+                                  previewSizeName!.trim(),
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            if (previewSizeName != null && previewSizeName!.trim().isNotEmpty && previewShade != null)
+                              const SizedBox(width: 6),
+                            if (previewShade != null)
+                              Container(
+                                width: 12,
+                                height: 12,
+                                decoration: BoxDecoration(
+                                  color: previewShade,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: colorScheme.outline),
+                                ),
+                              ),
+                            Text(
+                              ')',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     const SizedBox(height: 8),
                     Row(

@@ -42,6 +42,29 @@ class ProductVariantDao extends DatabaseAccessor<AppDatabase> with _$ProductVari
     });
   }
 
+  /// Returns a map of productId -> (sizeName, colorHex) for the first active variant per product.
+  /// Used for compact product-card display (SKU (Size ●)).
+  Stream<Map<int, ({String? sizeName, String? colorHex})>> watchVariantPreviews() {
+    return customSelect(
+      'SELECT v.product_id, s.name AS size_name, c.hex_code AS color_hex '
+      'FROM product_variants v '
+      'LEFT JOIN sizes s ON s.id = v.size_id '
+      'LEFT JOIN product_colors c ON c.id = v.color_id '
+      'WHERE v.is_active = 1 '
+      'AND v.id IN (SELECT MIN(id) FROM product_variants WHERE is_active = 1 GROUP BY product_id)',
+      readsFrom: {productVariants, sizes, productColors},
+    ).watch().map((rows) {
+      final result = <int, ({String? sizeName, String? colorHex})>{};
+      for (final row in rows) {
+        final productId = row.read<int>('product_id');
+        final sizeName = row.readNullable<String>('size_name');
+        final colorHex = row.readNullable<String>('color_hex');
+        result[productId] = (sizeName: sizeName, colorHex: colorHex);
+      }
+      return result;
+    });
+  }
+
   Future<Map<int, String>> getVariantInfoByProductIds(List<int> productIds) async {
     final result = <int, String>{};
     for (final productId in productIds) {

@@ -46,6 +46,7 @@ abstract class ProductVariantRepository {
   
   // Variant summaries
   Stream<Map<int, ({int count, int totalStock})>> watchVariantSummaries();
+  Stream<Map<int, ({String? sizeName, String? colorHex})>> watchVariantPreviews();
   Future<({int count, int totalStock})?> getVariantSummaryByProduct(int productId);
 
   // Colors

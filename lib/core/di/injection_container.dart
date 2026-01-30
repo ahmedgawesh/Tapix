@@ -39,6 +39,7 @@ import '../../features/products/presentation/bloc/categories_bloc.dart';
 import '../../features/products/presentation/bloc/colors_bloc.dart';
 import '../../features/products/presentation/bloc/sizes_bloc.dart';
 import '../../features/products/presentation/bloc/variant_summaries_bloc.dart';
+import '../../features/products/presentation/bloc/product_variant_previews_bloc.dart';
 import '../../features/purchases/domain/repositories/purchase_repository.dart';
 import '../../features/purchases/data/repositories/purchase_repository_impl.dart';
 import '../../features/purchases/data/datasources/purchase_local_datasource.dart';
@@ -167,6 +168,7 @@ Future<void> init() async {
   sl.registerFactory(() => ColorsBloc(sl<ProductColorRepository>()));
   sl.registerFactory(() => SizesBloc(sl<SizeRepository>()));
   sl.registerFactory(() => VariantSummariesBloc(sl<ProductVariantRepository>()));
+  sl.registerFactory(() => ProductVariantPreviewsBloc(sl<ProductVariantRepository>()));
   sl.registerFactory(() => PurchasesBloc(sl<PurchaseRepository>()));
   sl.registerFactory(() => PurchaseFormBloc(sl<PurchaseRepository>()));
   sl.registerFactory(() => ImportProductsBloc(

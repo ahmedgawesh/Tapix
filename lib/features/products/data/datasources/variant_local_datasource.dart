@@ -22,6 +22,7 @@ abstract class VariantLocalDatasource {
   
   // Variant summaries (count + total stock per product)
   Stream<Map<int, ({int count, int totalStock})>> watchVariantSummaries();
+  Stream<Map<int, ({String? sizeName, String? colorHex})>> watchVariantPreviews();
   Future<({int count, int totalStock})?> getVariantSummaryByProduct(int productId);
 
   // Colors
@@ -137,6 +138,11 @@ class VariantLocalDatasourceImpl implements VariantLocalDatasource {
   @override
   Stream<Map<int, ({int count, int totalStock})>> watchVariantSummaries() {
     return _variantDao.watchVariantSummaries();
+  }
+
+  @override
+  Stream<Map<int, ({String? sizeName, String? colorHex})>> watchVariantPreviews() {
+    return _variantDao.watchVariantPreviews();
   }
 
   @override

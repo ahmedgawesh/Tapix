@@ -180,6 +180,11 @@ class ProductVariantRepositoryImpl implements ProductVariantRepository {
   }
 
   @override
+  Stream<Map<int, ({String? sizeName, String? colorHex})>> watchVariantPreviews() {
+    return _datasource.watchVariantPreviews();
+  }
+
+  @override
   Future<({int count, int totalStock})?> getVariantSummaryByProduct(int productId) {
     return _datasource.getVariantSummaryByProduct(productId);
   }

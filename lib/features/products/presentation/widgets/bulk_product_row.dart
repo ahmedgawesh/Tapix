@@ -714,11 +714,41 @@ class _BulkProductRowState extends State<BulkProductRow> {
               border: const OutlineInputBorder(),
               prefixIcon: const Icon(Icons.palette_outlined),
             ),
-            child: Text(selected?.name ?? 'common.none'.tr()),
+            child: selected == null
+                ? Text('common.none'.tr())
+                : Row(
+                    children: [
+                      Container(
+                        width: 18,
+                        height: 18,
+                        decoration: BoxDecoration(
+                          color: _tryParseHexColor(selected.hexCode) ?? Colors.grey,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Theme.of(context).colorScheme.outline),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(child: Text(selected.name)),
+                    ],
+                  ),
           ),
         );
       },
     );
+  }
+
+  Color? _tryParseHexColor(String? hex) {
+    if (hex == null) return null;
+    final cleaned = hex.trim().replaceFirst('#', '');
+    if (cleaned.isEmpty) return null;
+    final buffer = StringBuffer();
+    if (cleaned.length == 6) buffer.write('ff');
+    buffer.write(cleaned);
+    try {
+      return Color(int.parse(buffer.toString(), radix: 16));
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<void> _showColorPickerBottomSheet(BuildContext context) async {
@@ -775,6 +805,15 @@ class _BulkProductRowState extends State<BulkProductRow> {
                             }
                             final color = colors[index - 1];
                             return ListTile(
+                              leading: Container(
+                                width: 18,
+                                height: 18,
+                                decoration: BoxDecoration(
+                                  color: _tryParseHexColor(color.hexCode) ?? Colors.grey,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: Theme.of(context).colorScheme.outline),
+                                ),
+                              ),
                               title: Text(color.name),
                               onTap: () => Navigator.of(context).pop(color.id),
                             );

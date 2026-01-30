@@ -12,6 +12,7 @@ import '../../domain/entities/product_entity.dart';
 import '../../domain/repositories/product_repository.dart';
 import '../bloc/products_bloc.dart';
 import '../bloc/variant_summaries_bloc.dart';
+import '../bloc/product_variant_previews_bloc.dart';
 import '../widgets/product_tile_widget.dart';
 import '../widgets/product_search_widget.dart';
 import '../widgets/product_filter_widget.dart';
@@ -25,6 +26,7 @@ class ProductListScreen extends StatelessWidget {
       providers: [
         BlocProvider(create: (context) => sl<ProductsBloc>()),
         BlocProvider(create: (context) => sl<VariantSummariesBloc>()),
+        BlocProvider(create: (context) => sl<ProductVariantPreviewsBloc>()),
       ],
       child: const _ProductListView(),
     );
@@ -665,58 +667,73 @@ class _ProductListViewState extends State<_ProductListView> {
                       summaries = summariesState.previousData ?? const {};
                     }
 
-                    return ListView.builder(
-                      controller: _scrollController,
-                      padding: const EdgeInsets.only(bottom: 80),
-                      itemCount: displayProducts.length + (bloc.isLoadingMore ? 1 : 0),
-                      itemBuilder: (context, index) {
-                        if (index >= displayProducts.length) {
-                          return const Center(
-                            child: Padding(
-                              padding: EdgeInsets.all(16.0),
-                              child: CircularProgressIndicator(),
-                            ),
-                          );
+                    return BlocBuilder<ProductVariantPreviewsBloc, RealtimeState<Map<int, VariantPreview>>>(
+                      builder: (context, previewsState) {
+                        Map<int, VariantPreview> previews = const {};
+                        if (previewsState is RealtimeSuccess<Map<int, VariantPreview>>) {
+                          previews = previewsState.data;
+                        } else if (previewsState is RealtimeLoading<Map<int, VariantPreview>>) {
+                          previews = previewsState.previousData ?? const {};
                         }
 
-                        final product = displayProducts[index];
-                        final isSelected = _selectedProductIds.contains(product.id);
-                        final summary = product.hasVariants ? summaries[product.id] : null;
-                        
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                          child: ProductTileWidget(
-                            product: product,
-                            isSelected: _isSelectionMode ? isSelected : null,
-                            variantCount: summary?.count,
-                            totalVariantStock: summary?.totalStock,
-                            onTap: (p) {
-                              if (_isSelectionMode) {
-                                setState(() {
-                                  if (isSelected) {
-                                    _selectedProductIds.remove(p.id);
+                        return ListView.builder(
+                          controller: _scrollController,
+                          padding: const EdgeInsets.only(bottom: 80),
+                          itemCount: displayProducts.length + (bloc.isLoadingMore ? 1 : 0),
+                          itemBuilder: (context, index) {
+                            if (index >= displayProducts.length) {
+                              return const Center(
+                                child: Padding(
+                                  padding: EdgeInsets.all(16.0),
+                                  child: CircularProgressIndicator(),
+                                ),
+                              );
+                            }
+
+                            final product = displayProducts[index];
+                            final isSelected = _selectedProductIds.contains(product.id);
+                            final summary = product.hasVariants ? summaries[product.id] : null;
+                            final preview = previews[product.id];
+
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                              child: ProductTileWidget(
+                                product: product,
+                                isSelected: _isSelectionMode ? isSelected : null,
+                                variantCount: summary?.count,
+                                totalVariantStock: summary?.totalStock,
+                                previewSizeName: preview?.sizeName,
+                                previewColorHex: preview?.colorHex,
+                                onTap: (p) {
+                                  if (_isSelectionMode) {
+                                    setState(() {
+                                      if (isSelected) {
+                                        _selectedProductIds.remove(p.id);
+                                      } else {
+                                        _selectedProductIds.add(p.id);
+                                      }
+                                    });
                                   } else {
-                                    _selectedProductIds.add(p.id);
+                                    () async {
+                                      await context.push('/products/${p.id}/edit');
+                                      if (!context.mounted) return;
+                                      context.read<ProductsBloc>().refresh();
+                                      context.read<VariantSummariesBloc>().refresh();
+                                      context.read<ProductVariantPreviewsBloc>().refresh();
+                                    }();
                                   }
-                                });
-                              } else {
-                                () async {
-                                  await context.push('/products/${p.id}/edit');
-                                  if (!context.mounted) return;
-                                  context.read<ProductsBloc>().refresh();
-                                  context.read<VariantSummariesBloc>().refresh();
-                                }();
-                              }
-                            },
-                            onLongPress: (p) {
-                              if (!_isSelectionMode) {
-                                setState(() {
-                                  _isSelectionMode = true;
-                                  _selectedProductIds.add(p.id);
-                                });
-                              }
-                            },
-                          ),
+                                },
+                                onLongPress: (p) {
+                                  if (!_isSelectionMode) {
+                                    setState(() {
+                                      _isSelectionMode = true;
+                                      _selectedProductIds.add(p.id);
+                                    });
+                                  }
+                                },
+                              ),
+                            );
+                          },
                         );
                       },
                     );
