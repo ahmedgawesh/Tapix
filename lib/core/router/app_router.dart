@@ -44,6 +44,9 @@ import '../../features/employees/presentation/screens/employee_profile_screen.da
 import '../../features/employees/presentation/screens/attendance_screen.dart';
 import '../../features/employees/presentation/screens/leave_requests_screen.dart';
 import '../../features/employees/presentation/screens/payroll_screen.dart';
+import '../../features/users/presentation/screens/users_hub_screen.dart';
+import '../../features/users/presentation/screens/user_form_screen.dart';
+import '../../features/users/presentation/screens/roles_permissions_screen.dart';
 import '../di/injection_container.dart';
 import 'route_permissions.dart';
 
@@ -419,7 +422,29 @@ class AppRouter {
       ),
       GoRoute(
         path: '/users',
-        builder: (context, state) => const PlaceholderScreen(title: 'Users'),
+        builder: (context, state) => const UsersHubScreen(),
+      ),
+      GoRoute(
+        path: '/users/add',
+        builder: (context, state) => const UserFormScreen(),
+      ),
+      GoRoute(
+        path: '/users/:id',
+        builder: (context, state) {
+          final id = int.tryParse(state.pathParameters['id'] ?? '') ?? 0;
+          return UserFormScreen(userId: id);
+        },
+      ),
+      GoRoute(
+        path: '/users/:id/edit',
+        builder: (context, state) {
+          final id = int.tryParse(state.pathParameters['id'] ?? '') ?? 0;
+          return UserFormScreen(userId: id);
+        },
+      ),
+      GoRoute(
+        path: '/users/roles',
+        builder: (context, state) => const RolesPermissionsScreen(),
       ),
       GoRoute(
         path: '/employees',

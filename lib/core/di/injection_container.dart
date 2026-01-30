@@ -17,6 +17,8 @@ import '../services/currency_service.dart';
 import '../services/localization_service.dart';
 import '../services/theme_service.dart';
 import '../../features/auth/auth.dart';
+import '../../features/users/data/repositories/user_repository.dart';
+import '../../features/users/presentation/bloc/users_bloc.dart';
 import '../../features/products/domain/repositories/product_repository.dart';
 import '../../features/products/domain/repositories/product_variant_repository.dart';
 import '../../features/products/domain/repositories/category_repository.dart';
@@ -246,6 +248,10 @@ Future<void> init() async {
   sl.registerFactory(() => PayrollBloc(sl<EmployeeRepository>()));
   sl.registerFactory(() => LeaveRequestsBloc(sl<EmployeeRepository>()));
   sl.registerFactory(() => PerformanceBloc(sl<EmployeeRepository>()));
+
+  // User Management
+  sl.registerLazySingleton<UserRepository>(() => UserRepository(sl<AppDatabase>(), sl<PasswordService>()));
+  sl.registerFactory(() => UsersBloc(sl<UserRepository>()));
 
   // Barcode Services
   sl.registerLazySingleton(() => BarcodeValidationService());
