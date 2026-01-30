@@ -306,6 +306,7 @@ FROM product_variants__old
 
     // Customers advanced fields (segmentation + loyalty + analytics)
     await _safeAddColumn('customers', 'segment', "TEXT NOT NULL DEFAULT 'retail'");
+    await _safeAddColumn('customers', 'loyalty_enabled', 'INTEGER NOT NULL DEFAULT 1');
     await _safeAddColumn('customers', 'loyalty_tier_id', 'INTEGER REFERENCES loyalty_tiers(id)');
     await _safeAddColumn('customers', 'loyalty_points_balance', 'INTEGER NOT NULL DEFAULT 0');
     await _safeAddColumn('customers', 'total_spent_cents', 'INTEGER NOT NULL DEFAULT 0');
@@ -429,7 +430,7 @@ CREATE TABLE IF NOT EXISTS loyalty_settings (
   }
 
   @override
-  int get schemaVersion => 10011;
+  int get schemaVersion => 10012;
 
   @override
   MigrationStrategy get migration {
@@ -550,6 +551,11 @@ CREATE TABLE IF NOT EXISTS loyalty_settings (
           
           // Seed default loyalty tiers with hybrid benefits
           await _seedDefaultLoyaltyTiers();
+        }
+
+        // Migration 10011 -> 10012: Per-customer loyalty enable/disable
+        if (from < 10012) {
+          await _safeAddColumn('customers', 'loyalty_enabled', 'INTEGER NOT NULL DEFAULT 1');
         }
 
         await _createIndexes();

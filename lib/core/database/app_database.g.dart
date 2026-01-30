@@ -8017,6 +8017,21 @@ class $CustomersTable extends Customers
     requiredDuringInsert: false,
     defaultValue: const Constant('retail'),
   );
+  static const VerificationMeta _loyaltyEnabledMeta = const VerificationMeta(
+    'loyaltyEnabled',
+  );
+  @override
+  late final GeneratedColumn<bool> loyaltyEnabled = GeneratedColumn<bool>(
+    'loyalty_enabled',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("loyalty_enabled" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
   static const VerificationMeta _loyaltyTierIdMeta = const VerificationMeta(
     'loyaltyTierId',
   );
@@ -8125,6 +8140,7 @@ class $CustomersTable extends Customers
     balanceCents,
     currencyId,
     segment,
+    loyaltyEnabled,
     loyaltyTierId,
     loyaltyPointsBalance,
     totalSpentCents,
@@ -8187,6 +8203,15 @@ class $CustomersTable extends Customers
       context.handle(
         _segmentMeta,
         segment.isAcceptableOrUnknown(data['segment']!, _segmentMeta),
+      );
+    }
+    if (data.containsKey('loyalty_enabled')) {
+      context.handle(
+        _loyaltyEnabledMeta,
+        loyaltyEnabled.isAcceptableOrUnknown(
+          data['loyalty_enabled']!,
+          _loyaltyEnabledMeta,
+        ),
       );
     }
     if (data.containsKey('loyalty_tier_id')) {
@@ -8286,6 +8311,10 @@ class $CustomersTable extends Customers
         DriftSqlType.string,
         data['${effectivePrefix}segment'],
       )!,
+      loyaltyEnabled: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}loyalty_enabled'],
+      )!,
       loyaltyTierId: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}loyalty_tier_id'],
@@ -8343,6 +8372,7 @@ class Customer extends DataClass implements Insertable<Customer> {
   final Decimal balanceCents;
   final int currencyId;
   final String segment;
+  final bool loyaltyEnabled;
   final int? loyaltyTierId;
   final int loyaltyPointsBalance;
   final Decimal totalSpentCents;
@@ -8360,6 +8390,7 @@ class Customer extends DataClass implements Insertable<Customer> {
     required this.balanceCents,
     required this.currencyId,
     required this.segment,
+    required this.loyaltyEnabled,
     this.loyaltyTierId,
     required this.loyaltyPointsBalance,
     required this.totalSpentCents,
@@ -8390,6 +8421,7 @@ class Customer extends DataClass implements Insertable<Customer> {
     }
     map['currency_id'] = Variable<int>(currencyId);
     map['segment'] = Variable<String>(segment);
+    map['loyalty_enabled'] = Variable<bool>(loyaltyEnabled);
     if (!nullToAbsent || loyaltyTierId != null) {
       map['loyalty_tier_id'] = Variable<int>(loyaltyTierId);
     }
@@ -8425,6 +8457,7 @@ class Customer extends DataClass implements Insertable<Customer> {
       balanceCents: Value(balanceCents),
       currencyId: Value(currencyId),
       segment: Value(segment),
+      loyaltyEnabled: Value(loyaltyEnabled),
       loyaltyTierId: loyaltyTierId == null && nullToAbsent
           ? const Value.absent()
           : Value(loyaltyTierId),
@@ -8454,6 +8487,7 @@ class Customer extends DataClass implements Insertable<Customer> {
       balanceCents: serializer.fromJson<Decimal>(json['balanceCents']),
       currencyId: serializer.fromJson<int>(json['currencyId']),
       segment: serializer.fromJson<String>(json['segment']),
+      loyaltyEnabled: serializer.fromJson<bool>(json['loyaltyEnabled']),
       loyaltyTierId: serializer.fromJson<int?>(json['loyaltyTierId']),
       loyaltyPointsBalance: serializer.fromJson<int>(
         json['loyaltyPointsBalance'],
@@ -8480,6 +8514,7 @@ class Customer extends DataClass implements Insertable<Customer> {
       'balanceCents': serializer.toJson<Decimal>(balanceCents),
       'currencyId': serializer.toJson<int>(currencyId),
       'segment': serializer.toJson<String>(segment),
+      'loyaltyEnabled': serializer.toJson<bool>(loyaltyEnabled),
       'loyaltyTierId': serializer.toJson<int?>(loyaltyTierId),
       'loyaltyPointsBalance': serializer.toJson<int>(loyaltyPointsBalance),
       'totalSpentCents': serializer.toJson<Decimal>(totalSpentCents),
@@ -8500,6 +8535,7 @@ class Customer extends DataClass implements Insertable<Customer> {
     Decimal? balanceCents,
     int? currencyId,
     String? segment,
+    bool? loyaltyEnabled,
     Value<int?> loyaltyTierId = const Value.absent(),
     int? loyaltyPointsBalance,
     Decimal? totalSpentCents,
@@ -8517,6 +8553,7 @@ class Customer extends DataClass implements Insertable<Customer> {
     balanceCents: balanceCents ?? this.balanceCents,
     currencyId: currencyId ?? this.currencyId,
     segment: segment ?? this.segment,
+    loyaltyEnabled: loyaltyEnabled ?? this.loyaltyEnabled,
     loyaltyTierId: loyaltyTierId.present
         ? loyaltyTierId.value
         : this.loyaltyTierId,
@@ -8544,6 +8581,9 @@ class Customer extends DataClass implements Insertable<Customer> {
           ? data.currencyId.value
           : this.currencyId,
       segment: data.segment.present ? data.segment.value : this.segment,
+      loyaltyEnabled: data.loyaltyEnabled.present
+          ? data.loyaltyEnabled.value
+          : this.loyaltyEnabled,
       loyaltyTierId: data.loyaltyTierId.present
           ? data.loyaltyTierId.value
           : this.loyaltyTierId,
@@ -8576,6 +8616,7 @@ class Customer extends DataClass implements Insertable<Customer> {
           ..write('balanceCents: $balanceCents, ')
           ..write('currencyId: $currencyId, ')
           ..write('segment: $segment, ')
+          ..write('loyaltyEnabled: $loyaltyEnabled, ')
           ..write('loyaltyTierId: $loyaltyTierId, ')
           ..write('loyaltyPointsBalance: $loyaltyPointsBalance, ')
           ..write('totalSpentCents: $totalSpentCents, ')
@@ -8598,6 +8639,7 @@ class Customer extends DataClass implements Insertable<Customer> {
     balanceCents,
     currencyId,
     segment,
+    loyaltyEnabled,
     loyaltyTierId,
     loyaltyPointsBalance,
     totalSpentCents,
@@ -8619,6 +8661,7 @@ class Customer extends DataClass implements Insertable<Customer> {
           other.balanceCents == this.balanceCents &&
           other.currencyId == this.currencyId &&
           other.segment == this.segment &&
+          other.loyaltyEnabled == this.loyaltyEnabled &&
           other.loyaltyTierId == this.loyaltyTierId &&
           other.loyaltyPointsBalance == this.loyaltyPointsBalance &&
           other.totalSpentCents == this.totalSpentCents &&
@@ -8638,6 +8681,7 @@ class CustomersCompanion extends UpdateCompanion<Customer> {
   final Value<Decimal> balanceCents;
   final Value<int> currencyId;
   final Value<String> segment;
+  final Value<bool> loyaltyEnabled;
   final Value<int?> loyaltyTierId;
   final Value<int> loyaltyPointsBalance;
   final Value<Decimal> totalSpentCents;
@@ -8655,6 +8699,7 @@ class CustomersCompanion extends UpdateCompanion<Customer> {
     this.balanceCents = const Value.absent(),
     this.currencyId = const Value.absent(),
     this.segment = const Value.absent(),
+    this.loyaltyEnabled = const Value.absent(),
     this.loyaltyTierId = const Value.absent(),
     this.loyaltyPointsBalance = const Value.absent(),
     this.totalSpentCents = const Value.absent(),
@@ -8673,6 +8718,7 @@ class CustomersCompanion extends UpdateCompanion<Customer> {
     this.balanceCents = const Value.absent(),
     required int currencyId,
     this.segment = const Value.absent(),
+    this.loyaltyEnabled = const Value.absent(),
     this.loyaltyTierId = const Value.absent(),
     this.loyaltyPointsBalance = const Value.absent(),
     this.totalSpentCents = const Value.absent(),
@@ -8692,6 +8738,7 @@ class CustomersCompanion extends UpdateCompanion<Customer> {
     Expression<int>? balanceCents,
     Expression<int>? currencyId,
     Expression<String>? segment,
+    Expression<bool>? loyaltyEnabled,
     Expression<int>? loyaltyTierId,
     Expression<int>? loyaltyPointsBalance,
     Expression<int>? totalSpentCents,
@@ -8710,6 +8757,7 @@ class CustomersCompanion extends UpdateCompanion<Customer> {
       if (balanceCents != null) 'balance_cents': balanceCents,
       if (currencyId != null) 'currency_id': currencyId,
       if (segment != null) 'segment': segment,
+      if (loyaltyEnabled != null) 'loyalty_enabled': loyaltyEnabled,
       if (loyaltyTierId != null) 'loyalty_tier_id': loyaltyTierId,
       if (loyaltyPointsBalance != null)
         'loyalty_points_balance': loyaltyPointsBalance,
@@ -8731,6 +8779,7 @@ class CustomersCompanion extends UpdateCompanion<Customer> {
     Value<Decimal>? balanceCents,
     Value<int>? currencyId,
     Value<String>? segment,
+    Value<bool>? loyaltyEnabled,
     Value<int?>? loyaltyTierId,
     Value<int>? loyaltyPointsBalance,
     Value<Decimal>? totalSpentCents,
@@ -8749,6 +8798,7 @@ class CustomersCompanion extends UpdateCompanion<Customer> {
       balanceCents: balanceCents ?? this.balanceCents,
       currencyId: currencyId ?? this.currencyId,
       segment: segment ?? this.segment,
+      loyaltyEnabled: loyaltyEnabled ?? this.loyaltyEnabled,
       loyaltyTierId: loyaltyTierId ?? this.loyaltyTierId,
       loyaltyPointsBalance: loyaltyPointsBalance ?? this.loyaltyPointsBalance,
       totalSpentCents: totalSpentCents ?? this.totalSpentCents,
@@ -8788,6 +8838,9 @@ class CustomersCompanion extends UpdateCompanion<Customer> {
     }
     if (segment.present) {
       map['segment'] = Variable<String>(segment.value);
+    }
+    if (loyaltyEnabled.present) {
+      map['loyalty_enabled'] = Variable<bool>(loyaltyEnabled.value);
     }
     if (loyaltyTierId.present) {
       map['loyalty_tier_id'] = Variable<int>(loyaltyTierId.value);
@@ -8829,6 +8882,7 @@ class CustomersCompanion extends UpdateCompanion<Customer> {
           ..write('balanceCents: $balanceCents, ')
           ..write('currencyId: $currencyId, ')
           ..write('segment: $segment, ')
+          ..write('loyaltyEnabled: $loyaltyEnabled, ')
           ..write('loyaltyTierId: $loyaltyTierId, ')
           ..write('loyaltyPointsBalance: $loyaltyPointsBalance, ')
           ..write('totalSpentCents: $totalSpentCents, ')
@@ -42092,6 +42146,7 @@ typedef $$CustomersTableCreateCompanionBuilder =
       Value<Decimal> balanceCents,
       required int currencyId,
       Value<String> segment,
+      Value<bool> loyaltyEnabled,
       Value<int?> loyaltyTierId,
       Value<int> loyaltyPointsBalance,
       Value<Decimal> totalSpentCents,
@@ -42111,6 +42166,7 @@ typedef $$CustomersTableUpdateCompanionBuilder =
       Value<Decimal> balanceCents,
       Value<int> currencyId,
       Value<String> segment,
+      Value<bool> loyaltyEnabled,
       Value<int?> loyaltyTierId,
       Value<int> loyaltyPointsBalance,
       Value<Decimal> totalSpentCents,
@@ -42309,6 +42365,11 @@ class $$CustomersTableFilterComposer
 
   ColumnFilters<String> get segment => $composableBuilder(
     column: $table.segment,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get loyaltyEnabled => $composableBuilder(
+    column: $table.loyaltyEnabled,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -42543,6 +42604,11 @@ class $$CustomersTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get loyaltyEnabled => $composableBuilder(
+    column: $table.loyaltyEnabled,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get loyaltyPointsBalance => $composableBuilder(
     column: $table.loyaltyPointsBalance,
     builder: (column) => ColumnOrderings(column),
@@ -42657,6 +42723,11 @@ class $$CustomersTableAnnotationComposer
 
   GeneratedColumn<String> get segment =>
       $composableBuilder(column: $table.segment, builder: (column) => column);
+
+  GeneratedColumn<bool> get loyaltyEnabled => $composableBuilder(
+    column: $table.loyaltyEnabled,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<int> get loyaltyPointsBalance => $composableBuilder(
     column: $table.loyaltyPointsBalance,
@@ -42883,6 +42954,7 @@ class $$CustomersTableTableManager
                 Value<Decimal> balanceCents = const Value.absent(),
                 Value<int> currencyId = const Value.absent(),
                 Value<String> segment = const Value.absent(),
+                Value<bool> loyaltyEnabled = const Value.absent(),
                 Value<int?> loyaltyTierId = const Value.absent(),
                 Value<int> loyaltyPointsBalance = const Value.absent(),
                 Value<Decimal> totalSpentCents = const Value.absent(),
@@ -42900,6 +42972,7 @@ class $$CustomersTableTableManager
                 balanceCents: balanceCents,
                 currencyId: currencyId,
                 segment: segment,
+                loyaltyEnabled: loyaltyEnabled,
                 loyaltyTierId: loyaltyTierId,
                 loyaltyPointsBalance: loyaltyPointsBalance,
                 totalSpentCents: totalSpentCents,
@@ -42919,6 +42992,7 @@ class $$CustomersTableTableManager
                 Value<Decimal> balanceCents = const Value.absent(),
                 required int currencyId,
                 Value<String> segment = const Value.absent(),
+                Value<bool> loyaltyEnabled = const Value.absent(),
                 Value<int?> loyaltyTierId = const Value.absent(),
                 Value<int> loyaltyPointsBalance = const Value.absent(),
                 Value<Decimal> totalSpentCents = const Value.absent(),
@@ -42936,6 +43010,7 @@ class $$CustomersTableTableManager
                 balanceCents: balanceCents,
                 currencyId: currencyId,
                 segment: segment,
+                loyaltyEnabled: loyaltyEnabled,
                 loyaltyTierId: loyaltyTierId,
                 loyaltyPointsBalance: loyaltyPointsBalance,
                 totalSpentCents: totalSpentCents,

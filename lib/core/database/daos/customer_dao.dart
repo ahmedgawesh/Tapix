@@ -112,4 +112,13 @@ class CustomerDao extends DatabaseAccessor<AppDatabase> with _$CustomerDaoMixin 
       ),
     );
   }
+
+  Future<void> updateCustomerLoyaltyEnabled(int customerId, bool loyaltyEnabled) async {
+    await (update(customers)..where((c) => c.id.equals(customerId))).write(
+      CustomersCompanion(
+        loyaltyEnabled: Value(loyaltyEnabled),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+  }
 }

@@ -13,6 +13,7 @@ class Customers extends Table {
   IntColumn get balanceCents => integer().map(const MoneyConverter()).withDefault(const Constant(0))();
   IntColumn get currencyId => integer().references(Currencies, #id, onDelete: KeyAction.restrict)();
   TextColumn get segment => text().withDefault(const Constant('retail'))(); // retail, wholesale, premium
+  BoolColumn get loyaltyEnabled => boolean().withDefault(const Constant(true))();
   IntColumn get loyaltyTierId => integer().nullable().references(LoyaltyTiers, #id, onDelete: KeyAction.setNull)();
   IntColumn get loyaltyPointsBalance => integer().withDefault(const Constant(0))();
   IntColumn get totalSpentCents => integer().map(const MoneyConverter()).withDefault(const Constant(0))();
