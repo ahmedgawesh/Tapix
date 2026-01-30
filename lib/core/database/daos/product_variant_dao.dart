@@ -29,6 +29,7 @@ class ProductVariantDao extends DatabaseAccessor<AppDatabase> with _$ProductVari
     return customSelect(
       'SELECT product_id, COUNT(*) as cnt, SUM(stock_quantity) as total_stock '
       'FROM product_variants WHERE is_active = 1 GROUP BY product_id',
+      readsFrom: {productVariants},
     ).watch().map((rows) {
       final result = <int, ({int count, int totalStock})>{};
       for (final row in rows) {
@@ -161,8 +162,14 @@ class ProductVariantDao extends DatabaseAccessor<AppDatabase> with _$ProductVari
               variant.sizeId.present && variant.sizeId.value != null;
       if (hasDimensions) {
         await customUpdate(
-          'UPDATE products SET has_variants = 1 WHERE id = ?',
-          variables: [Variable.withInt(productId)],
+          'UPDATE products SET has_variants = 1, updated_at = ? WHERE id = ?',
+          variables: [Variable.withDateTime(DateTime.now()), Variable.withInt(productId)],
+          updates: {products},
+        );
+      } else {
+        await customUpdate(
+          'UPDATE products SET updated_at = ? WHERE id = ?',
+          variables: [Variable.withDateTime(DateTime.now()), Variable.withInt(productId)],
           updates: {products},
         );
       }
@@ -190,9 +197,10 @@ class ProductVariantDao extends DatabaseAccessor<AppDatabase> with _$ProductVari
       final activeCount = row.read<int>('cnt');
 
       await customUpdate(
-        'UPDATE products SET is_active = ? WHERE id = ?',
+        'UPDATE products SET is_active = ?, updated_at = ? WHERE id = ?',
         variables: [
           Variable.withInt(activeCount > 0 ? 1 : 0),
+          Variable.withDateTime(DateTime.now()),
           Variable.withInt(variant.productId),
         ],
         updates: {products},
@@ -217,8 +225,14 @@ class ProductVariantDao extends DatabaseAccessor<AppDatabase> with _$ProductVari
         final remaining = row.read<int>('cnt');
         if (remaining == 0) {
           await customUpdate(
-            'UPDATE products SET has_variants = 0 WHERE id = ?',
-            variables: [Variable.withInt(productId)],
+            'UPDATE products SET has_variants = 0, updated_at = ? WHERE id = ?',
+            variables: [Variable.withDateTime(DateTime.now()), Variable.withInt(productId)],
+            updates: {products},
+          );
+        } else {
+          await customUpdate(
+            'UPDATE products SET updated_at = ? WHERE id = ?',
+            variables: [Variable.withDateTime(DateTime.now()), Variable.withInt(productId)],
             updates: {products},
           );
         }
