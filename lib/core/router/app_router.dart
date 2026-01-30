@@ -39,6 +39,11 @@ import '../../features/customers/presentation/screens/customer_hub_screen.dart';
 import '../../features/customers/presentation/screens/customer_form_screen.dart';
 import '../../features/customers/presentation/screens/customer_profile_screen.dart';
 import '../../features/employees/presentation/screens/employee_hub_screen.dart';
+import '../../features/employees/presentation/screens/employee_form_screen.dart';
+import '../../features/employees/presentation/screens/employee_profile_screen.dart';
+import '../../features/employees/presentation/screens/attendance_screen.dart';
+import '../../features/employees/presentation/screens/leave_requests_screen.dart';
+import '../../features/employees/presentation/screens/payroll_screen.dart';
 import '../di/injection_container.dart';
 import 'route_permissions.dart';
 
@@ -419,6 +424,57 @@ class AppRouter {
       GoRoute(
         path: '/employees',
         builder: (context, state) => const EmployeeHubScreen(),
+      ),
+      GoRoute(
+        path: '/employees/add',
+        builder: (context, state) => const EmployeeFormScreen(),
+      ),
+      GoRoute(
+        path: '/employees/:id',
+        builder: (context, state) {
+          final id = int.tryParse(state.pathParameters['id'] ?? '') ?? 0;
+          return EmployeeProfileScreen(employeeId: id);
+        },
+      ),
+      GoRoute(
+        path: '/employees/:id/edit',
+        builder: (context, state) {
+          final id = int.tryParse(state.pathParameters['id'] ?? '') ?? 0;
+          return EmployeeFormScreen(employeeId: id);
+        },
+      ),
+      GoRoute(
+        path: '/employees/:id/attendance',
+        builder: (context, state) {
+          final id = int.tryParse(state.pathParameters['id'] ?? '') ?? 0;
+          return AttendanceScreen(employeeId: id);
+        },
+      ),
+      GoRoute(
+        path: '/employees/:id/leave',
+        builder: (context, state) {
+          final id = int.tryParse(state.pathParameters['id'] ?? '') ?? 0;
+          return LeaveRequestsScreen(employeeId: id);
+        },
+      ),
+      GoRoute(
+        path: '/employees/:id/payroll',
+        builder: (context, state) {
+          final id = int.tryParse(state.pathParameters['id'] ?? '') ?? 0;
+          return PayrollScreen(employeeId: id);
+        },
+      ),
+      GoRoute(
+        path: '/attendance',
+        builder: (context, state) => const AttendanceScreen(),
+      ),
+      GoRoute(
+        path: '/leave-requests',
+        builder: (context, state) => const LeaveRequestsScreen(),
+      ),
+      GoRoute(
+        path: '/payroll',
+        builder: (context, state) => const PayrollScreen(),
       ),
       GoRoute(
         path: '/accounting',
