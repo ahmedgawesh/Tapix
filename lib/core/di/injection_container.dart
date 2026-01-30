@@ -66,6 +66,12 @@ import '../../features/suppliers/data/repositories/supplier_repository_impl.dart
 import '../../features/suppliers/presentation/bloc/suppliers_bloc.dart';
 import '../../features/suppliers/presentation/bloc/supplier_metrics_bloc.dart';
 import '../../features/suppliers/presentation/bloc/supplier_form_bloc.dart';
+import '../database/daos/customer_dao.dart';
+import '../../features/customers/domain/repositories/customer_repository.dart';
+import '../../features/customers/data/repositories/customer_repository_impl.dart';
+import '../../features/customers/presentation/bloc/customers_bloc.dart';
+import '../../features/customers/presentation/bloc/customer_metrics_bloc.dart';
+import '../../features/customers/presentation/bloc/customer_form_bloc.dart';
 
 final sl = GetIt.instance;
 
@@ -87,6 +93,7 @@ Future<void> init() async {
   sl.registerLazySingleton(() => BarcodeTemplateDao(sl()));
   sl.registerLazySingleton(() => PurchaseDao(sl()));
   sl.registerLazySingleton(() => SupplierDao(sl()));
+  sl.registerLazySingleton(() => CustomerDao(sl()));
 
   // Auth Services
   sl.registerLazySingleton(() => PasswordService());
@@ -137,6 +144,9 @@ Future<void> init() async {
   );
   sl.registerLazySingleton<SupplierRepository>(
     () => SupplierRepositoryImpl(sl<SupplierDao>()),
+  );
+  sl.registerLazySingleton<CustomerRepository>(
+    () => CustomerRepositoryImpl(sl<CustomerDao>()),
   );
 
   // Blocs
@@ -193,6 +203,11 @@ Future<void> init() async {
   sl.registerFactory(() => SuppliersBloc(sl<SupplierRepository>()));
   sl.registerFactory(() => SupplierMetricsBloc(sl<SupplierRepository>()));
   sl.registerFactory(() => SupplierFormBloc(sl<SupplierRepository>()));
+
+  // Customer Blocs
+  sl.registerFactory(() => CustomersBloc(sl<CustomerRepository>()));
+  sl.registerFactory(() => CustomerMetricsBloc(sl<CustomerRepository>()));
+  sl.registerFactory(() => CustomerFormBloc(sl<CustomerRepository>()));
 
   // Barcode Services
   sl.registerLazySingleton(() => BarcodeValidationService());

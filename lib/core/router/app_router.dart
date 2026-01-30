@@ -35,6 +35,9 @@ import '../../features/settings/presentation/screens/company_profile_screen.dart
 import '../../features/suppliers/presentation/screens/supplier_hub_screen.dart';
 import '../../features/suppliers/presentation/screens/supplier_form_screen.dart';
 import '../../features/suppliers/presentation/screens/supplier_profile_screen.dart';
+import '../../features/customers/presentation/screens/customer_hub_screen.dart';
+import '../../features/customers/presentation/screens/customer_form_screen.dart';
+import '../../features/customers/presentation/screens/customer_profile_screen.dart';
 import '../di/injection_container.dart';
 import 'route_permissions.dart';
 
@@ -290,7 +293,30 @@ class AppRouter {
       ),
       GoRoute(
         path: '/customers',
-        builder: (context, state) => const PlaceholderScreen(title: 'Customers'),
+        builder: (context, state) => const CustomerHubScreen(),
+        routes: [
+          GoRoute(
+            path: 'new',
+            builder: (context, state) => const CustomerFormScreen(),
+          ),
+          GoRoute(
+            path: ':id',
+            builder: (context, state) {
+              final id = int.tryParse(state.pathParameters['id'] ?? '');
+              if (id == null) return const CustomerHubScreen();
+              return CustomerProfileScreen(customerId: id);
+            },
+            routes: [
+              GoRoute(
+                path: 'edit',
+                builder: (context, state) {
+                  final id = int.tryParse(state.pathParameters['id'] ?? '');
+                  return CustomerFormScreen(customerId: id);
+                },
+              ),
+            ],
+          ),
+        ],
       ),
       GoRoute(
         path: '/suppliers',
