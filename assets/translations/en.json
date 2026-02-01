@@ -1118,6 +1118,13 @@
     "basic_salary": "Basic Salary",
     "net_pay": "Net Pay"
   },
+  "roles": {
+    "admin": "Admin",
+    "cashier": "Cashier",
+    "manager": "Manager",
+    "salesperson": "Salesperson",
+    "staff": "Staff"
+  },
   "variant_dialog": {
     "add_title": "Add Variant",
     "edit_title": "Edit Variant",

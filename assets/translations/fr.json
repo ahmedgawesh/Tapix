@@ -1189,6 +1189,13 @@
     "cancel": "Annuler",
     "submit": "Soumettre"
   },
+  "roles": {
+    "admin": "Administrateur",
+    "cashier": "Caissier",
+    "manager": "Responsable",
+    "salesperson": "Vendeur",
+    "staff": "Employé"
+  },
   "users": {
     "title": "Utilisateurs & Permissions",
     "add": "Ajouter Utilisateur",
