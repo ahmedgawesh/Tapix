@@ -1,0 +1,60 @@
+// GENERATED CODE - DO NOT MODIFY BY HAND
+
+part of 'purchase_dao.dart';
+
+// ignore_for_file: type=lint
+mixin _$PurchaseDaoMixin on DatabaseAccessor<AppDatabase> {
+  $CurrenciesTable get currencies => attachedDatabase.currencies;
+  $SuppliersTable get suppliers => attachedDatabase.suppliers;
+  $PurchasesTable get purchases => attachedDatabase.purchases;
+  $ProductCategoriesTable get productCategories =>
+      attachedDatabase.productCategories;
+  $ProductsTable get products => attachedDatabase.products;
+  $ProductColorsTable get productColors => attachedDatabase.productColors;
+  $SizesTable get sizes => attachedDatabase.sizes;
+  $ProductVariantsTable get productVariants => attachedDatabase.productVariants;
+  $PurchaseItemsTable get purchaseItems => attachedDatabase.purchaseItems;
+  $PurchaseReturnsTable get purchaseReturns => attachedDatabase.purchaseReturns;
+  $PurchaseReturnItemsTable get purchaseReturnItems =>
+      attachedDatabase.purchaseReturnItems;
+  PurchaseDaoManager get managers => PurchaseDaoManager(this);
+}
+
+class PurchaseDaoManager {
+  final _$PurchaseDaoMixin _db;
+  PurchaseDaoManager(this._db);
+  $$CurrenciesTableTableManager get currencies =>
+      $$CurrenciesTableTableManager(_db.attachedDatabase, _db.currencies);
+  $$SuppliersTableTableManager get suppliers =>
+      $$SuppliersTableTableManager(_db.attachedDatabase, _db.suppliers);
+  $$PurchasesTableTableManager get purchases =>
+      $$PurchasesTableTableManager(_db.attachedDatabase, _db.purchases);
+  $$ProductCategoriesTableTableManager get productCategories =>
+      $$ProductCategoriesTableTableManager(
+        _db.attachedDatabase,
+        _db.productCategories,
+      );
+  $$ProductsTableTableManager get products =>
+      $$ProductsTableTableManager(_db.attachedDatabase, _db.products);
+  $$ProductColorsTableTableManager get productColors =>
+      $$ProductColorsTableTableManager(_db.attachedDatabase, _db.productColors);
+  $$SizesTableTableManager get sizes =>
+      $$SizesTableTableManager(_db.attachedDatabase, _db.sizes);
+  $$ProductVariantsTableTableManager get productVariants =>
+      $$ProductVariantsTableTableManager(
+        _db.attachedDatabase,
+        _db.productVariants,
+      );
+  $$PurchaseItemsTableTableManager get purchaseItems =>
+      $$PurchaseItemsTableTableManager(_db.attachedDatabase, _db.purchaseItems);
+  $$PurchaseReturnsTableTableManager get purchaseReturns =>
+      $$PurchaseReturnsTableTableManager(
+        _db.attachedDatabase,
+        _db.purchaseReturns,
+      );
+  $$PurchaseReturnItemsTableTableManager get purchaseReturnItems =>
+      $$PurchaseReturnItemsTableTableManager(
+        _db.attachedDatabase,
+        _db.purchaseReturnItems,
+      );
+}

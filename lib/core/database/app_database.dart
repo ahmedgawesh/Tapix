@@ -92,10 +92,10 @@ part 'app_database.g.dart';
     SizeDao,
     SaleDao,
     CustomerDao,
+    PurchaseDao,
     AccountingDao,
     SettingsDao,
     BarcodeTemplateDao,
-    PurchaseDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {

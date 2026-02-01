@@ -21,32 +21,21 @@ import '../../features/products/presentation/screens/color_magazine_screen.dart'
 import '../../features/products/presentation/screens/sizes_screen.dart';
 import '../../features/products/presentation/screens/size_form_screen.dart';
 import '../../features/products/presentation/screens/variants_screen.dart';
-import '../../features/purchases/presentation/screens/purchase_list_screen.dart';
-import '../../features/purchases/presentation/screens/purchase_form_screen.dart';
 import '../../features/products/presentation/bloc/categories_bloc.dart';
 import '../../features/products/presentation/bloc/colors_bloc.dart';
 import '../../features/products/domain/entities/product_entity.dart';
+import '../../features/purchases/presentation/screens/purchase_list_screen.dart';
+import '../../features/purchases/presentation/screens/purchase_form_screen.dart';
+import '../../features/customers/presentation/screens/customer_hub_screen.dart';
+import '../../features/customers/presentation/screens/customer_form_screen.dart';
+import '../../features/customers/presentation/screens/customer_profile_screen.dart';
+import '../../features/customers/presentation/screens/receive_payment_screen.dart';
 import '../../features/barcode/presentation/screens/barcode_scanner_screen.dart';
 import '../../features/barcode/presentation/screens/barcode_label_designer_screen.dart';
 import '../../features/barcode/presentation/screens/barcode_design_screen.dart';
 import '../../features/settings/presentation/screens/settings_screen.dart';
 import '../../features/settings/presentation/screens/admin_tools_screen.dart';
 import '../../features/settings/presentation/screens/company_profile_screen.dart';
-import '../../features/suppliers/presentation/screens/supplier_hub_screen.dart';
-import '../../features/suppliers/presentation/screens/supplier_form_screen.dart';
-import '../../features/suppliers/presentation/screens/supplier_profile_screen.dart';
-import '../../features/customers/presentation/screens/customer_hub_screen.dart';
-import '../../features/customers/presentation/screens/customer_form_screen.dart';
-import '../../features/customers/presentation/screens/customer_profile_screen.dart';
-import '../../features/employees/presentation/screens/employee_hub_screen.dart';
-import '../../features/employees/presentation/screens/employee_form_screen.dart';
-import '../../features/employees/presentation/screens/employee_profile_screen.dart';
-import '../../features/employees/presentation/screens/attendance_screen.dart';
-import '../../features/employees/presentation/screens/leave_requests_screen.dart';
-import '../../features/employees/presentation/screens/payroll_screen.dart';
-import '../../features/users/presentation/screens/users_hub_screen.dart';
-import '../../features/users/presentation/screens/user_form_screen.dart';
-import '../../features/users/presentation/screens/roles_permissions_screen.dart';
 import '../di/injection_container.dart';
 import 'route_permissions.dart';
 
@@ -309,6 +298,14 @@ class AppRouter {
             builder: (context, state) => const CustomerFormScreen(),
           ),
           GoRoute(
+            path: 'receive-payment',
+            builder: (context, state) {
+              final extra = state.extra as Map<String, dynamic>?;
+              final customerId = extra?['customerId'] as int?;
+              return ReceivePaymentScreen(preselectedCustomerId: customerId);
+            },
+          ),
+          GoRoute(
             path: ':id',
             builder: (context, state) {
               final id = int.tryParse(state.pathParameters['id'] ?? '');
@@ -329,25 +326,25 @@ class AppRouter {
       ),
       GoRoute(
         path: '/suppliers',
-        builder: (context, state) => const SupplierHubScreen(),
+        builder: (context, state) => const PlaceholderScreen(title: 'Suppliers'),
         routes: [
           GoRoute(
             path: 'new',
-            builder: (context, state) => const SupplierFormScreen(),
+            builder: (context, state) => const PlaceholderScreen(title: 'Suppliers'),
           ),
           GoRoute(
             path: ':id',
             builder: (context, state) {
               final id = int.tryParse(state.pathParameters['id'] ?? '');
-              if (id == null) return const SupplierHubScreen();
-              return SupplierProfileScreen(supplierId: id);
+              if (id == null) return const PlaceholderScreen(title: 'Suppliers');
+              return PlaceholderScreen(title: 'Supplier $id');
             },
             routes: [
               GoRoute(
                 path: 'edit',
                 builder: (context, state) {
                   final id = int.tryParse(state.pathParameters['id'] ?? '');
-                  return SupplierFormScreen(supplierId: id);
+                  return PlaceholderScreen(title: 'Supplier ${id ?? 0}');
                 },
               ),
             ],
@@ -422,84 +419,84 @@ class AppRouter {
       ),
       GoRoute(
         path: '/users',
-        builder: (context, state) => const UsersHubScreen(),
+        builder: (context, state) => const PlaceholderScreen(title: 'Users'),
       ),
       GoRoute(
         path: '/users/add',
-        builder: (context, state) => const UserFormScreen(),
+        builder: (context, state) => const PlaceholderScreen(title: 'Users'),
       ),
       GoRoute(
         path: '/users/:id',
         builder: (context, state) {
           final id = int.tryParse(state.pathParameters['id'] ?? '') ?? 0;
-          return UserFormScreen(userId: id);
+          return PlaceholderScreen(title: 'User $id');
         },
       ),
       GoRoute(
         path: '/users/:id/edit',
         builder: (context, state) {
           final id = int.tryParse(state.pathParameters['id'] ?? '') ?? 0;
-          return UserFormScreen(userId: id);
+          return PlaceholderScreen(title: 'User $id');
         },
       ),
       GoRoute(
         path: '/users/roles',
-        builder: (context, state) => const RolesPermissionsScreen(),
+        builder: (context, state) => const PlaceholderScreen(title: 'Roles'),
       ),
       GoRoute(
         path: '/employees',
-        builder: (context, state) => const EmployeeHubScreen(),
+        builder: (context, state) => const PlaceholderScreen(title: 'Employees'),
       ),
       GoRoute(
         path: '/employees/add',
-        builder: (context, state) => const EmployeeFormScreen(),
+        builder: (context, state) => const PlaceholderScreen(title: 'Employees'),
       ),
       GoRoute(
         path: '/employees/:id',
         builder: (context, state) {
           final id = int.tryParse(state.pathParameters['id'] ?? '') ?? 0;
-          return EmployeeProfileScreen(employeeId: id);
+          return PlaceholderScreen(title: 'Employee $id');
         },
       ),
       GoRoute(
         path: '/employees/:id/edit',
         builder: (context, state) {
           final id = int.tryParse(state.pathParameters['id'] ?? '') ?? 0;
-          return EmployeeFormScreen(employeeId: id);
+          return PlaceholderScreen(title: 'Employee $id');
         },
       ),
       GoRoute(
         path: '/employees/:id/attendance',
         builder: (context, state) {
           final id = int.tryParse(state.pathParameters['id'] ?? '') ?? 0;
-          return AttendanceScreen(employeeId: id);
+          return PlaceholderScreen(title: 'Attendance $id');
         },
       ),
       GoRoute(
         path: '/employees/:id/leave',
         builder: (context, state) {
           final id = int.tryParse(state.pathParameters['id'] ?? '') ?? 0;
-          return LeaveRequestsScreen(employeeId: id);
+          return PlaceholderScreen(title: 'Leave Requests $id');
         },
       ),
       GoRoute(
         path: '/employees/:id/payroll',
         builder: (context, state) {
           final id = int.tryParse(state.pathParameters['id'] ?? '') ?? 0;
-          return PayrollScreen(employeeId: id);
+          return PlaceholderScreen(title: 'Payroll $id');
         },
       ),
       GoRoute(
         path: '/attendance',
-        builder: (context, state) => const AttendanceScreen(),
+        builder: (context, state) => const PlaceholderScreen(title: 'Attendance'),
       ),
       GoRoute(
         path: '/leave-requests',
-        builder: (context, state) => const LeaveRequestsScreen(),
+        builder: (context, state) => const PlaceholderScreen(title: 'Leave Requests'),
       ),
       GoRoute(
         path: '/payroll',
-        builder: (context, state) => const PayrollScreen(),
+        builder: (context, state) => const PlaceholderScreen(title: 'Payroll'),
       ),
       GoRoute(
         path: '/accounting',

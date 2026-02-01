@@ -150,7 +150,168 @@ assets/translations/
 ### RTL Support
 
 - **Arabic automatically uses RTL layout**
-- **Directional widgets handle RTL automatically**
+- **Directional widgets handle RTL automatically**## 📦 Product Variants System (CRITICAL)
+ 
+> **REFERENCE**: See `docs/VARIANTS_IMPLEMENTATION_PLAN.md` for full implementation details and status.
+ 
+### Core Variant Model
+ 
+**EVERY sellable/stockable unit is a `ProductVariant`** - NOT the Product itself.
+ 
+```dart
+// Variant is the authoritative source for:
+class ProductVariant {
+  int id;
+  int productId;                    // Links to Product (container)
+  String? sku;                      // Optional SKU
+  String? barcode;                  // Auto-generated deterministic barcode
+  int? colorId;                     // Optional color reference
+  int? sizeId;                      // Optional size reference
+  int costCents;                    // Cost in cents (integer)
+  int priceCents;                   // Price in cents (integer)
+  int priceAdjustmentCents;         // Price adjustment (for future pricing rules)
+  int stockQuantity;                // Stock quantity (authoritative)
+  bool isActive;                    // Active/inactive status
+}
+```
+ 
+### Product vs Variant Relationship
+ 
+| Concept | Product | Variant |
+|---------|---------|---------|
+| **Role** | Container (name, category, description, image) | Sellable/stockable unit |
+| **hasVariants=false** | Uses **single variant** as canonical unit | One variant (may have color/size) |
+| **hasVariants=true** | No direct stock/cost/price | Multiple variants (each with stock/cost/price) |
+| **Barcode Generation** | N/A | `29 + zeroPad(variantId, 11)` (deterministic) |
+ 
+### Default/Single Variant Pattern
+ 
+**Products without variants use ONE variant**:
+- **Preferred**: `colorId=null, sizeId=null` (strict default)
+- **Fallback**: First active variant for the product (DAO handles this)
+- **Product form maps**: cost/price/stock ↔ single variant
+ 
+### Unique Constraints (Database)
+ 
+```sql
+-- Prevent duplicate SKUs/barcodes across system
+UNIQUE(product_variants.sku)
+UNIQUE(product_variants.barcode)
+-- Prevent duplicate variant combinations per product
+UNIQUE(product_variants.product_id, product_variants.color_id, product_variants.size_id)
+```
+ 
+### Variant Management Architecture
+ 
+**Required Layers (Clean Architecture):**
+```
+lib/features/products/
+├── data/
+│   ├── datasources/variant_local_datasource.dart
+│   └── repositories/product_variant_repository_impl.dart
+├── domain/
+│   ├── entities/product_variant_entity.dart
+│   └── repositories/product_variant_repository.dart
+└── presentation/
+    ├── bloc/product_variants_bloc.dart
+    ├── bloc/variant_summaries_bloc.dart
+    ├── screens/variants_screen.dart
+    └── widgets/variant_edit_dialog.dart
+```
+ 
+### RealtimeBloc Pattern for Variants
+ 
+```dart
+class ProductVariantsBloc extends RealtimeBloc<List<ProductVariant>, ProductVariantsEvent> {
+  @override
+  Stream<List<ProductVariant>> get dataStream => _repository.watchAllVariants();
+ 
+  // Events: AllVariantsInitialized, VariantsByProductInitialized, 
+  //         VariantCreateRequested, VariantUpdateRequested, VariantDeleteRequested
+}
+```
+ 
+### Variant Summaries (for Product List)
+ 
+**ProductVariantRepository provides:**
+```dart
+Stream<Map<int, ({int count, int totalStock})>> watchVariantSummaries();
+Future<({int count, int totalStock})?> getVariantSummaryByProduct(int productId);
+```
+ 
+**Used in ProductListScreen to show:**
+- Variant count badge
+- Total stock across variants
+- "N × Stock" format
+ 
+### SKU/Barcode Uniqueness Validation
+ 
+**ProductFormBloc validates before save:**
+```dart
+// Check both products and product_variants tables
+Future<Map<String, String>> _validateSkuUniqueness() async {
+  // Check product-level uniqueness
+  // Check variant-level uniqueness
+  // Allow current variant's own values during edit
+}
+```
+ 
+### Database Repair on Startup
+ 
+**AppDatabase runs idempotent dedupe beforeOpen:**
+```dart
+await _dedupeUniqueSkuBarcodeIfNeeded();
+// Keeps first occurrence, sets duplicates to NULL
+```
+ 
+### Variant UI Patterns
+ 
+#### VariantsScreen (Full Management)
+- **Filters**: Product, Color, Size, Stock levels, Active status
+- **Search**: Barcode, SKU, Color, Size
+- **Bulk Actions**: Print labels, Activate/Deactivate
+- **Quick Stock**: +/- buttons for instant adjustment
+- **Split View**: List + Detail panel (desktop)
+ 
+#### VariantEditDialog (Add/Edit)
+- **Sections**: Attributes, Identity (SKU/Barcode), Pricing, Stock, Status
+- **Auto-generate**: Barcode (deterministic) after save
+- **Validation**: Real-time uniqueness checks
+- **Responsive**: Dialog (desktop) / BottomSheet (mobile)
+ 
+### Variant State Management Rules
+ 
+1. **Stock Authority**: Variant.stockQuantity is the single source of truth
+2. **Product Stock Display**: Sum of variant stocks when hasVariants=true
+3. **Default Variant**: Single variant for hasVariants=false products
+4. **Barcode Stability**: Never regenerate - deterministic per variantId
+5. **Active/Inactive**: Use isActive flag instead of delete for data integrity
+ 
+### Integration Points
+ 
+**Purchases/Sales MUST reference variantId:**
+```dart
+class PurchaseItem {
+  int variantId;  // REQUIRED - not productId
+  int quantity;
+  int unitCostCents;
+}
+```
+ 
+**Printing uses variant data:**
+- Barcode from variant.barcode
+- Product name + variant color/size
+- Price from variant.priceCents
+ 
+### Key Variant Files
+ 
+- `lib/core/database/daos/product_variant_dao.dart` - Database operations
+- `lib/features/products/data/repositories/product_variant_repository_impl.dart` - Repository
+- `lib/features/products/presentation/bloc/product_variants_bloc.dart` - State management
+- `lib/features/products/presentation/screens/variants_screen.dart` - Management UI
+- `lib/features/products/presentation/widgets/variant_edit_dialog.dart` - Add/Edit UI
+ 
+---
 - **Test EVERY screen in Arabic** to verify RTL works
 
 **Localization Bloc**: `lib/core/bloc/localization_bloc.dart`  
@@ -211,6 +372,55 @@ The **Customers** feature is responsible for:
 - Customer analytics (health score, KPIs, trends)
 
 This module is **offline-first** via Drift and **real-time** via `RealtimeBloc` streams.
+
+### UI Screens (Presentation)
+
+- **Customer Hub**: `lib/features/customers/presentation/screens/customer_hub_screen.dart`
+  - Shows quick stats, segment counts, search, and customer list.
+  - Must be responsive across mobile/tablet/desktop.
+- **Customer Profile**: `lib/features/customers/presentation/screens/customer_profile_screen.dart`
+  - 360° view: balance, loyalty, quick actions, contact information, recent transactions.
+  - Uses realtime blocs to keep the profile always updated.
+- **Customer Form (Add/Edit)**: `lib/features/customers/presentation/screens/customer_form_screen.dart`
+  - Add/edit customer data with segmented sections.
+  - Uses filled form fields and theme-aware colors.
+- **Receive Payment**: `lib/features/customers/presentation/screens/receive_payment_screen.dart`
+  - Record a payment for a selected customer (supports a preselected customer id via routing).
+
+### Theme-Aware UI Rules (Light/Dark)
+
+- Avoid hardcoded grays/whites/blacks for cards and typography.
+- Prefer `Theme.of(context).colorScheme` for:
+  - Backgrounds: `primaryContainer/secondaryContainer/tertiaryContainer/surface`
+  - Text: `onSurface`, `onSurfaceVariant`, `onPrimaryContainer`
+  - Borders: `outlineVariant`
+
+### Loyalty Toggle + Contact Information (Customer Profile)
+
+- `CustomerProfileScreen` includes a **loyalty enable/disable** card (switch) that updates the `customers.loyaltyEnabled` field.
+- After toggling loyalty:
+  - Refresh `CustomerProfileBloc` and `CustomerLoyaltyBloc` to ensure UI reflects realtime changes.
+- The profile includes a **Contact Information** card which shows:
+  - Email
+  - Phone
+  - Address
+  - The section is hidden when all are null.
+
+### Overflow Prevention Notes (Customers)
+
+Recent fixes to eliminate `RenderFlex overflow` across devices:
+
+- **CustomerHubScreen empty state**: replaced centered `Column` with `SingleChildScrollView` + `mainAxisSize: MainAxisSize.min`.
+  - Prevents bottom overflow on short screens / large fonts.
+- **CustomerHubScreen quick stats**: replaced a 3-card `Row` with a `LayoutBuilder` responsive layout.
+  - Wide screens: 3 cards in one row.
+  - Narrow screens: 2 cards in a row + 1 card below.
+- **CustomerProfileScreen quick actions**: replaced a fixed 3-button `Row` with a `LayoutBuilder` responsive layout.
+  - Wide screens: 3 buttons in one row.
+  - Narrow screens: 2 buttons in a row + 1 button below.
+  - Button labels enforce `maxLines: 1` and `TextOverflow.ellipsis`.
+- **ReceivePaymentScreen selected customer tile**: made the customer name `Expanded` with ellipsis and wrapped the segment badge with `Flexible`.
+  - Prevents overflow when names are long or text scale factor is high.
 
 ### Key Database Schema
 
@@ -378,6 +588,24 @@ LayoutBuilder(
 - Tablet (768x1024)
 - Desktop (1920x1080)
 - NO overflow allowed on ANY screen size!
+
+### Overflow Prevention Checklist (MANDATORY)
+
+When adding or modifying UI (especially in Customers screens), apply these rules:
+
+- **[Rows with text]**
+  - If a `Row` contains text that can grow (names, emails, translated strings):
+    - Wrap the text in `Expanded` or `Flexible`.
+    - Add `maxLines: 1` + `overflow: TextOverflow.ellipsis`.
+- **[Narrow screens]**
+  - Any 3+ item horizontal layout must be responsive:
+    - Use `LayoutBuilder` to switch to a 2+1 or vertical layout.
+- **[Empty states & dialogs]**
+  - If using a centered `Column`, prefer `SingleChildScrollView` to avoid vertical overflow.
+- **[Wrap for chips]**
+  - Use `Wrap` (not a fixed `Row`) for chips/buttons so they can flow to the next line.
+- **[Text scale]**
+  - Assume users can increase font size. Prevent overflow using flexible layouts and ellipsis.
 
 ---
 

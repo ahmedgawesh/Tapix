@@ -12,7 +12,6 @@ import '../../domain/entities/product_entity.dart';
 import '../../domain/repositories/product_repository.dart';
 import '../bloc/products_bloc.dart';
 import '../bloc/variant_summaries_bloc.dart';
-import '../bloc/product_variant_previews_bloc.dart';
 import '../widgets/product_tile_widget.dart';
 import '../widgets/product_search_widget.dart';
 import '../widgets/product_filter_widget.dart';
@@ -26,7 +25,6 @@ class ProductListScreen extends StatelessWidget {
       providers: [
         BlocProvider(create: (context) => sl<ProductsBloc>()),
         BlocProvider(create: (context) => sl<VariantSummariesBloc>()),
-        BlocProvider(create: (context) => sl<ProductVariantPreviewsBloc>()),
       ],
       child: const _ProductListView(),
     );
@@ -667,73 +665,66 @@ class _ProductListViewState extends State<_ProductListView> {
                       summaries = summariesState.previousData ?? const {};
                     }
 
-                    return BlocBuilder<ProductVariantPreviewsBloc, RealtimeState<Map<int, VariantPreview>>>(
-                      builder: (context, previewsState) {
-                        Map<int, VariantPreview> previews = const {};
-                        if (previewsState is RealtimeSuccess<Map<int, VariantPreview>>) {
-                          previews = previewsState.data;
-                        } else if (previewsState is RealtimeLoading<Map<int, VariantPreview>>) {
-                          previews = previewsState.previousData ?? const {};
+                    return ListView.builder(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.only(bottom: 80),
+                      itemCount: displayProducts.length + (bloc.isLoadingMore ? 1 : 0),
+                      itemBuilder: (context, index) {
+                        if (index >= displayProducts.length) {
+                          return const Center(
+                            child: Padding(
+                              padding: EdgeInsets.all(16.0),
+                              child: CircularProgressIndicator(),
+                            ),
+                          );
                         }
 
-                        return ListView.builder(
-                          controller: _scrollController,
-                          padding: const EdgeInsets.only(bottom: 80),
-                          itemCount: displayProducts.length + (bloc.isLoadingMore ? 1 : 0),
-                          itemBuilder: (context, index) {
-                            if (index >= displayProducts.length) {
-                              return const Center(
-                                child: Padding(
-                                  padding: EdgeInsets.all(16.0),
-                                  child: CircularProgressIndicator(),
-                                ),
-                              );
-                            }
+                        final p = displayProducts[index];
+                        final summary = summaries[p.id];
+                        final variantCount = summary?.count ?? 0;
+                        final totalStock = summary?.totalStock ?? 0;
 
-                            final product = displayProducts[index];
-                            final isSelected = _selectedProductIds.contains(product.id);
-                            final summary = product.hasVariants ? summaries[product.id] : null;
-                            final preview = previews[product.id];
+                        // variantInfo is used for display in ProductTileWidget
+                        final _ = variantCount > 0
+                            ? '${variantCount.toString()} × ${'variants.title'.tr()}'
+                            : null;
 
-                            return Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                              child: ProductTileWidget(
-                                product: product,
-                                isSelected: _isSelectionMode ? isSelected : null,
-                                variantCount: summary?.count,
-                                totalVariantStock: summary?.totalStock,
-                                previewSizeName: preview?.sizeName,
-                                previewColorHex: preview?.colorHex,
-                                onTap: (p) {
-                                  if (_isSelectionMode) {
-                                    setState(() {
-                                      if (isSelected) {
-                                        _selectedProductIds.remove(p.id);
-                                      } else {
-                                        _selectedProductIds.add(p.id);
-                                      }
-                                    });
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                          child: ProductTileWidget(
+                            product: p,
+                            isSelected: _selectedProductIds.contains(p.id),
+                            variantCount: variantCount,
+                            totalVariantStock: totalStock,
+                            onTap: (_) async {
+                              if (_isSelectionMode) {
+                                setState(() {
+                                  if (_selectedProductIds.contains(p.id)) {
+                                    _selectedProductIds.remove(p.id);
                                   } else {
-                                    () async {
-                                      await context.push('/products/${p.id}/edit');
-                                      if (!context.mounted) return;
-                                      context.read<ProductsBloc>().refresh();
-                                      context.read<VariantSummariesBloc>().refresh();
-                                      context.read<ProductVariantPreviewsBloc>().refresh();
-                                    }();
+                                    _selectedProductIds.add(p.id);
                                   }
-                                },
-                                onLongPress: (p) {
-                                  if (!_isSelectionMode) {
-                                    setState(() {
-                                      _isSelectionMode = true;
-                                      _selectedProductIds.add(p.id);
-                                    });
+                                  if (_selectedProductIds.isEmpty) {
+                                    _isSelectionMode = false;
                                   }
-                                },
-                              ),
-                            );
-                          },
+                                });
+                                return;
+                              }
+
+                              await context.push('/products/${p.id}/edit');
+                              if (!context.mounted) return;
+                              context.read<ProductsBloc>().refresh();
+                              context.read<VariantSummariesBloc>().refresh();
+                            },
+                            onLongPress: (_) {
+                              if (!_isSelectionMode) {
+                                setState(() {
+                                  _isSelectionMode = true;
+                                  _selectedProductIds.add(p.id);
+                                });
+                              }
+                            },
+                          ),
                         );
                       },
                     );

@@ -9569,9 +9569,6 @@ class $LoyaltyPointTransactionsTable extends LoyaltyPointTransactions
     false,
     type: DriftSqlType.int,
     requiredDuringInsert: true,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'REFERENCES customers (id) ON DELETE CASCADE',
-    ),
   );
   static const VerificationMeta _transactionTypeMeta = const VerificationMeta(
     'transactionType',
@@ -10377,15 +10374,17 @@ class $LoyaltyRewardsTable extends LoyaltyRewards
     type: DriftSqlType.int,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _valueCentsMeta = const VerificationMeta(
+    'valueCents',
+  );
   @override
-  late final GeneratedColumnWithTypeConverter<Decimal?, int> valueCents =
-      GeneratedColumn<int>(
-        'value_cents',
-        aliasedName,
-        true,
-        type: DriftSqlType.int,
-        requiredDuringInsert: false,
-      ).withConverter<Decimal?>($LoyaltyRewardsTable.$convertervalueCentsn);
+  late final GeneratedColumn<int> valueCents = GeneratedColumn<int>(
+    'value_cents',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _valuePercentMeta = const VerificationMeta(
     'valuePercent',
   );
@@ -10418,9 +10417,6 @@ class $LoyaltyRewardsTable extends LoyaltyRewards
     true,
     type: DriftSqlType.int,
     requiredDuringInsert: false,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'REFERENCES loyalty_tiers (id) ON DELETE SET NULL',
-    ),
   );
   static const VerificationMeta _maxRedemptionsPerCustomerMeta =
       const VerificationMeta('maxRedemptionsPerCustomer');
@@ -10618,6 +10614,12 @@ class $LoyaltyRewardsTable extends LoyaltyRewards
     } else if (isInserting) {
       context.missing(_pointsCostMeta);
     }
+    if (data.containsKey('value_cents')) {
+      context.handle(
+        _valueCentsMeta,
+        valueCents.isAcceptableOrUnknown(data['value_cents']!, _valueCentsMeta),
+      );
+    }
     if (data.containsKey('value_percent')) {
       context.handle(
         _valuePercentMeta,
@@ -10741,11 +10743,9 @@ class $LoyaltyRewardsTable extends LoyaltyRewards
         DriftSqlType.int,
         data['${effectivePrefix}points_cost'],
       )!,
-      valueCents: $LoyaltyRewardsTable.$convertervalueCentsn.fromSql(
-        attachedDatabase.typeMapping.read(
-          DriftSqlType.int,
-          data['${effectivePrefix}value_cents'],
-        ),
+      valueCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}value_cents'],
       ),
       valuePercent: attachedDatabase.typeMapping.read(
         DriftSqlType.double,
@@ -10798,11 +10798,6 @@ class $LoyaltyRewardsTable extends LoyaltyRewards
   $LoyaltyRewardsTable createAlias(String alias) {
     return $LoyaltyRewardsTable(attachedDatabase, alias);
   }
-
-  static TypeConverter<Decimal, int> $convertervalueCents =
-      const MoneyConverter();
-  static TypeConverter<Decimal?, int?> $convertervalueCentsn =
-      NullAwareTypeConverter.wrap($convertervalueCents);
 }
 
 class LoyaltyReward extends DataClass implements Insertable<LoyaltyReward> {
@@ -10815,7 +10810,7 @@ class LoyaltyReward extends DataClass implements Insertable<LoyaltyReward> {
   final String? descriptionFr;
   final String rewardType;
   final int pointsCost;
-  final Decimal? valueCents;
+  final int? valueCents;
   final double? valuePercent;
   final int? productId;
   final int? minTierId;
@@ -10873,9 +10868,7 @@ class LoyaltyReward extends DataClass implements Insertable<LoyaltyReward> {
     map['reward_type'] = Variable<String>(rewardType);
     map['points_cost'] = Variable<int>(pointsCost);
     if (!nullToAbsent || valueCents != null) {
-      map['value_cents'] = Variable<int>(
-        $LoyaltyRewardsTable.$convertervalueCentsn.toSql(valueCents),
-      );
+      map['value_cents'] = Variable<int>(valueCents);
     }
     if (!nullToAbsent || valuePercent != null) {
       map['value_percent'] = Variable<double>(valuePercent);
@@ -10975,7 +10968,7 @@ class LoyaltyReward extends DataClass implements Insertable<LoyaltyReward> {
       descriptionFr: serializer.fromJson<String?>(json['descriptionFr']),
       rewardType: serializer.fromJson<String>(json['rewardType']),
       pointsCost: serializer.fromJson<int>(json['pointsCost']),
-      valueCents: serializer.fromJson<Decimal?>(json['valueCents']),
+      valueCents: serializer.fromJson<int?>(json['valueCents']),
       valuePercent: serializer.fromJson<double?>(json['valuePercent']),
       productId: serializer.fromJson<int?>(json['productId']),
       minTierId: serializer.fromJson<int?>(json['minTierId']),
@@ -11006,7 +10999,7 @@ class LoyaltyReward extends DataClass implements Insertable<LoyaltyReward> {
       'descriptionFr': serializer.toJson<String?>(descriptionFr),
       'rewardType': serializer.toJson<String>(rewardType),
       'pointsCost': serializer.toJson<int>(pointsCost),
-      'valueCents': serializer.toJson<Decimal?>(valueCents),
+      'valueCents': serializer.toJson<int?>(valueCents),
       'valuePercent': serializer.toJson<double?>(valuePercent),
       'productId': serializer.toJson<int?>(productId),
       'minTierId': serializer.toJson<int?>(minTierId),
@@ -11033,7 +11026,7 @@ class LoyaltyReward extends DataClass implements Insertable<LoyaltyReward> {
     Value<String?> descriptionFr = const Value.absent(),
     String? rewardType,
     int? pointsCost,
-    Value<Decimal?> valueCents = const Value.absent(),
+    Value<int?> valueCents = const Value.absent(),
     Value<double?> valuePercent = const Value.absent(),
     Value<int?> productId = const Value.absent(),
     Value<int?> minTierId = const Value.absent(),
@@ -11213,7 +11206,7 @@ class LoyaltyRewardsCompanion extends UpdateCompanion<LoyaltyReward> {
   final Value<String?> descriptionFr;
   final Value<String> rewardType;
   final Value<int> pointsCost;
-  final Value<Decimal?> valueCents;
+  final Value<int?> valueCents;
   final Value<double?> valuePercent;
   final Value<int?> productId;
   final Value<int?> minTierId;
@@ -11333,7 +11326,7 @@ class LoyaltyRewardsCompanion extends UpdateCompanion<LoyaltyReward> {
     Value<String?>? descriptionFr,
     Value<String>? rewardType,
     Value<int>? pointsCost,
-    Value<Decimal?>? valueCents,
+    Value<int?>? valueCents,
     Value<double?>? valuePercent,
     Value<int?>? productId,
     Value<int?>? minTierId,
@@ -11403,9 +11396,7 @@ class LoyaltyRewardsCompanion extends UpdateCompanion<LoyaltyReward> {
       map['points_cost'] = Variable<int>(pointsCost.value);
     }
     if (valueCents.present) {
-      map['value_cents'] = Variable<int>(
-        $LoyaltyRewardsTable.$convertervalueCentsn.toSql(valueCents.value),
-      );
+      map['value_cents'] = Variable<int>(valueCents.value);
     }
     if (valuePercent.present) {
       map['value_percent'] = Variable<double>(valuePercent.value);
@@ -11503,9 +11494,6 @@ class $CustomerRewardRedemptionsTable extends CustomerRewardRedemptions
     false,
     type: DriftSqlType.int,
     requiredDuringInsert: true,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'REFERENCES customers (id) ON DELETE CASCADE',
-    ),
   );
   static const VerificationMeta _rewardIdMeta = const VerificationMeta(
     'rewardId',
@@ -11517,9 +11505,6 @@ class $CustomerRewardRedemptionsTable extends CustomerRewardRedemptions
     false,
     type: DriftSqlType.int,
     requiredDuringInsert: true,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'REFERENCES loyalty_rewards (id) ON DELETE RESTRICT',
-    ),
   );
   static const VerificationMeta _pointsSpentMeta = const VerificationMeta(
     'pointsSpent',
@@ -12115,18 +12100,18 @@ class $LoyaltySettingsTableTable extends LoyaltySettingsTable
     requiredDuringInsert: false,
     defaultValue: const Constant(1),
   );
+  static const VerificationMeta _minSpendForPointsMeta = const VerificationMeta(
+    'minSpendForPoints',
+  );
   @override
-  late final GeneratedColumnWithTypeConverter<Decimal, int> minSpendForPoints =
-      GeneratedColumn<int>(
-        'min_spend_for_points',
-        aliasedName,
-        false,
-        type: DriftSqlType.int,
-        requiredDuringInsert: false,
-        defaultValue: const Constant(0),
-      ).withConverter<Decimal>(
-        $LoyaltySettingsTableTable.$converterminSpendForPoints,
-      );
+  late final GeneratedColumn<int> minSpendForPoints = GeneratedColumn<int>(
+    'min_spend_for_points',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   static const VerificationMeta _pointsExpiryDaysMeta = const VerificationMeta(
     'pointsExpiryDays',
   );
@@ -12249,6 +12234,15 @@ class $LoyaltySettingsTableTable extends LoyaltySettingsTable
         ),
       );
     }
+    if (data.containsKey('min_spend_for_points')) {
+      context.handle(
+        _minSpendForPointsMeta,
+        minSpendForPoints.isAcceptableOrUnknown(
+          data['min_spend_for_points']!,
+          _minSpendForPointsMeta,
+        ),
+      );
+    }
     if (data.containsKey('points_expiry_days')) {
       context.handle(
         _pointsExpiryDaysMeta,
@@ -12320,13 +12314,10 @@ class $LoyaltySettingsTableTable extends LoyaltySettingsTable
         DriftSqlType.int,
         data['${effectivePrefix}points_per_currency_unit'],
       )!,
-      minSpendForPoints: $LoyaltySettingsTableTable.$converterminSpendForPoints
-          .fromSql(
-            attachedDatabase.typeMapping.read(
-              DriftSqlType.int,
-              data['${effectivePrefix}min_spend_for_points'],
-            )!,
-          ),
+      minSpendForPoints: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}min_spend_for_points'],
+      )!,
       pointsExpiryDays: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}points_expiry_days'],
@@ -12362,15 +12353,12 @@ class $LoyaltySettingsTableTable extends LoyaltySettingsTable
   $LoyaltySettingsTableTable createAlias(String alias) {
     return $LoyaltySettingsTableTable(attachedDatabase, alias);
   }
-
-  static TypeConverter<Decimal, int> $converterminSpendForPoints =
-      const MoneyConverter();
 }
 
 class LoyaltySettings extends DataClass implements Insertable<LoyaltySettings> {
   final int id;
   final int pointsPerCurrencyUnit;
-  final Decimal minSpendForPoints;
+  final int minSpendForPoints;
   final int? pointsExpiryDays;
   final int referralBonusPoints;
   final int signupBonusPoints;
@@ -12395,13 +12383,7 @@ class LoyaltySettings extends DataClass implements Insertable<LoyaltySettings> {
     final map = <String, Expression>{};
     map['id'] = Variable<int>(id);
     map['points_per_currency_unit'] = Variable<int>(pointsPerCurrencyUnit);
-    {
-      map['min_spend_for_points'] = Variable<int>(
-        $LoyaltySettingsTableTable.$converterminSpendForPoints.toSql(
-          minSpendForPoints,
-        ),
-      );
-    }
+    map['min_spend_for_points'] = Variable<int>(minSpendForPoints);
     if (!nullToAbsent || pointsExpiryDays != null) {
       map['points_expiry_days'] = Variable<int>(pointsExpiryDays);
     }
@@ -12441,9 +12423,7 @@ class LoyaltySettings extends DataClass implements Insertable<LoyaltySettings> {
       pointsPerCurrencyUnit: serializer.fromJson<int>(
         json['pointsPerCurrencyUnit'],
       ),
-      minSpendForPoints: serializer.fromJson<Decimal>(
-        json['minSpendForPoints'],
-      ),
+      minSpendForPoints: serializer.fromJson<int>(json['minSpendForPoints']),
       pointsExpiryDays: serializer.fromJson<int?>(json['pointsExpiryDays']),
       referralBonusPoints: serializer.fromJson<int>(
         json['referralBonusPoints'],
@@ -12461,7 +12441,7 @@ class LoyaltySettings extends DataClass implements Insertable<LoyaltySettings> {
     return <String, dynamic>{
       'id': serializer.toJson<int>(id),
       'pointsPerCurrencyUnit': serializer.toJson<int>(pointsPerCurrencyUnit),
-      'minSpendForPoints': serializer.toJson<Decimal>(minSpendForPoints),
+      'minSpendForPoints': serializer.toJson<int>(minSpendForPoints),
       'pointsExpiryDays': serializer.toJson<int?>(pointsExpiryDays),
       'referralBonusPoints': serializer.toJson<int>(referralBonusPoints),
       'signupBonusPoints': serializer.toJson<int>(signupBonusPoints),
@@ -12475,7 +12455,7 @@ class LoyaltySettings extends DataClass implements Insertable<LoyaltySettings> {
   LoyaltySettings copyWith({
     int? id,
     int? pointsPerCurrencyUnit,
-    Decimal? minSpendForPoints,
+    int? minSpendForPoints,
     Value<int?> pointsExpiryDays = const Value.absent(),
     int? referralBonusPoints,
     int? signupBonusPoints,
@@ -12573,7 +12553,7 @@ class LoyaltySettings extends DataClass implements Insertable<LoyaltySettings> {
 class LoyaltySettingsTableCompanion extends UpdateCompanion<LoyaltySettings> {
   final Value<int> id;
   final Value<int> pointsPerCurrencyUnit;
-  final Value<Decimal> minSpendForPoints;
+  final Value<int> minSpendForPoints;
   final Value<int?> pointsExpiryDays;
   final Value<int> referralBonusPoints;
   final Value<int> signupBonusPoints;
@@ -12636,7 +12616,7 @@ class LoyaltySettingsTableCompanion extends UpdateCompanion<LoyaltySettings> {
   LoyaltySettingsTableCompanion copyWith({
     Value<int>? id,
     Value<int>? pointsPerCurrencyUnit,
-    Value<Decimal>? minSpendForPoints,
+    Value<int>? minSpendForPoints,
     Value<int?>? pointsExpiryDays,
     Value<int>? referralBonusPoints,
     Value<int>? signupBonusPoints,
@@ -12672,11 +12652,7 @@ class LoyaltySettingsTableCompanion extends UpdateCompanion<LoyaltySettings> {
       );
     }
     if (minSpendForPoints.present) {
-      map['min_spend_for_points'] = Variable<int>(
-        $LoyaltySettingsTableTable.$converterminSpendForPoints.toSql(
-          minSpendForPoints.value,
-        ),
-      );
+      map['min_spend_for_points'] = Variable<int>(minSpendForPoints.value);
     }
     if (pointsExpiryDays.present) {
       map['points_expiry_days'] = Variable<int>(pointsExpiryDays.value);
@@ -32981,7 +32957,6 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final BarcodeTemplateDao barcodeTemplateDao = BarcodeTemplateDao(
     this as AppDatabase,
   );
-  late final PurchaseDao purchaseDao = PurchaseDao(this as AppDatabase);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -33067,31 +33042,6 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('customers', kind: UpdateKind.update)],
-    ),
-    WritePropagation(
-      on: TableUpdateQuery.onTableName(
-        'customers',
-        limitUpdateKind: UpdateKind.delete,
-      ),
-      result: [
-        TableUpdate('loyalty_point_transactions', kind: UpdateKind.delete),
-      ],
-    ),
-    WritePropagation(
-      on: TableUpdateQuery.onTableName(
-        'loyalty_tiers',
-        limitUpdateKind: UpdateKind.delete,
-      ),
-      result: [TableUpdate('loyalty_rewards', kind: UpdateKind.update)],
-    ),
-    WritePropagation(
-      on: TableUpdateQuery.onTableName(
-        'customers',
-        limitUpdateKind: UpdateKind.delete,
-      ),
-      result: [
-        TableUpdate('customer_reward_redemptions', kind: UpdateKind.delete),
-      ],
     ),
     WritePropagation(
       on: TableUpdateQuery.onTableName(
@@ -41455,27 +41405,6 @@ final class $$LoyaltyTiersTableReferences
       manager.$state.copyWith(prefetchedData: cache),
     );
   }
-
-  static MultiTypedResultKey<$LoyaltyRewardsTable, List<LoyaltyReward>>
-  _loyaltyRewardsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
-    db.loyaltyRewards,
-    aliasName: $_aliasNameGenerator(
-      db.loyaltyTiers.id,
-      db.loyaltyRewards.minTierId,
-    ),
-  );
-
-  $$LoyaltyRewardsTableProcessedTableManager get loyaltyRewardsRefs {
-    final manager = $$LoyaltyRewardsTableTableManager(
-      $_db,
-      $_db.loyaltyRewards,
-    ).filter((f) => f.minTierId.id.sqlEquals($_itemColumn<int>('id')!));
-
-    final cache = $_typedResult.readTableOrNull(_loyaltyRewardsRefsTable($_db));
-    return ProcessedTableManager(
-      manager.$state.copyWith(prefetchedData: cache),
-    );
-  }
 }
 
 class $$LoyaltyTiersTableFilterComposer
@@ -41618,31 +41547,6 @@ class $$LoyaltyTiersTableFilterComposer
           }) => $$CustomersTableFilterComposer(
             $db: $db,
             $table: $db.customers,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return f(composer);
-  }
-
-  Expression<bool> loyaltyRewardsRefs(
-    Expression<bool> Function($$LoyaltyRewardsTableFilterComposer f) f,
-  ) {
-    final $$LoyaltyRewardsTableFilterComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.id,
-      referencedTable: $db.loyaltyRewards,
-      getReferencedColumn: (t) => t.minTierId,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$LoyaltyRewardsTableFilterComposer(
-            $db: $db,
-            $table: $db.loyaltyRewards,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -41900,31 +41804,6 @@ class $$LoyaltyTiersTableAnnotationComposer
     );
     return f(composer);
   }
-
-  Expression<T> loyaltyRewardsRefs<T extends Object>(
-    Expression<T> Function($$LoyaltyRewardsTableAnnotationComposer a) f,
-  ) {
-    final $$LoyaltyRewardsTableAnnotationComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.id,
-      referencedTable: $db.loyaltyRewards,
-      getReferencedColumn: (t) => t.minTierId,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$LoyaltyRewardsTableAnnotationComposer(
-            $db: $db,
-            $table: $db.loyaltyRewards,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return f(composer);
-  }
 }
 
 class $$LoyaltyTiersTableTableManager
@@ -41940,7 +41819,7 @@ class $$LoyaltyTiersTableTableManager
           $$LoyaltyTiersTableUpdateCompanionBuilder,
           (LoyaltyTier, $$LoyaltyTiersTableReferences),
           LoyaltyTier,
-          PrefetchHooks Function({bool customersRefs, bool loyaltyRewardsRefs})
+          PrefetchHooks Function({bool customersRefs})
         > {
   $$LoyaltyTiersTableTableManager(_$AppDatabase db, $LoyaltyTiersTable table)
     : super(
@@ -42061,63 +41940,38 @@ class $$LoyaltyTiersTableTableManager
                 ),
               )
               .toList(),
-          prefetchHooksCallback:
-              ({customersRefs = false, loyaltyRewardsRefs = false}) {
-                return PrefetchHooks(
-                  db: db,
-                  explicitlyWatchedTables: [
-                    if (customersRefs) db.customers,
-                    if (loyaltyRewardsRefs) db.loyaltyRewards,
-                  ],
-                  addJoins: null,
-                  getPrefetchedDataCallback: (items) async {
-                    return [
-                      if (customersRefs)
-                        await $_getPrefetchedData<
-                          LoyaltyTier,
-                          $LoyaltyTiersTable,
-                          Customer
-                        >(
-                          currentTable: table,
-                          referencedTable: $$LoyaltyTiersTableReferences
-                              ._customersRefsTable(db),
-                          managerFromTypedResult: (p0) =>
-                              $$LoyaltyTiersTableReferences(
-                                db,
-                                table,
-                                p0,
-                              ).customersRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.loyaltyTierId == item.id,
-                              ),
-                          typedResults: items,
-                        ),
-                      if (loyaltyRewardsRefs)
-                        await $_getPrefetchedData<
-                          LoyaltyTier,
-                          $LoyaltyTiersTable,
-                          LoyaltyReward
-                        >(
-                          currentTable: table,
-                          referencedTable: $$LoyaltyTiersTableReferences
-                              ._loyaltyRewardsRefsTable(db),
-                          managerFromTypedResult: (p0) =>
-                              $$LoyaltyTiersTableReferences(
-                                db,
-                                table,
-                                p0,
-                              ).loyaltyRewardsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.minTierId == item.id,
-                              ),
-                          typedResults: items,
-                        ),
-                    ];
-                  },
-                );
+          prefetchHooksCallback: ({customersRefs = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [if (customersRefs) db.customers],
+              addJoins: null,
+              getPrefetchedDataCallback: (items) async {
+                return [
+                  if (customersRefs)
+                    await $_getPrefetchedData<
+                      LoyaltyTier,
+                      $LoyaltyTiersTable,
+                      Customer
+                    >(
+                      currentTable: table,
+                      referencedTable: $$LoyaltyTiersTableReferences
+                          ._customersRefsTable(db),
+                      managerFromTypedResult: (p0) =>
+                          $$LoyaltyTiersTableReferences(
+                            db,
+                            table,
+                            p0,
+                          ).customersRefs,
+                      referencedItemsForCurrentItem: (item, referencedItems) =>
+                          referencedItems.where(
+                            (e) => e.loyaltyTierId == item.id,
+                          ),
+                      typedResults: items,
+                    ),
+                ];
               },
+            );
+          },
         ),
       );
 }
@@ -42134,7 +41988,7 @@ typedef $$LoyaltyTiersTableProcessedTableManager =
       $$LoyaltyTiersTableUpdateCompanionBuilder,
       (LoyaltyTier, $$LoyaltyTiersTableReferences),
       LoyaltyTier,
-      PrefetchHooks Function({bool customersRefs, bool loyaltyRewardsRefs})
+      PrefetchHooks Function({bool customersRefs})
     >;
 typedef $$CustomersTableCreateCompanionBuilder =
     CustomersCompanion Function({
@@ -42241,62 +42095,6 @@ final class $$CustomersTableReferences
 
     final cache = $_typedResult.readTableOrNull(
       _customerTransactionsRefsTable($_db),
-    );
-    return ProcessedTableManager(
-      manager.$state.copyWith(prefetchedData: cache),
-    );
-  }
-
-  static MultiTypedResultKey<
-    $LoyaltyPointTransactionsTable,
-    List<LoyaltyPointTransaction>
-  >
-  _loyaltyPointTransactionsRefsTable(_$AppDatabase db) =>
-      MultiTypedResultKey.fromTable(
-        db.loyaltyPointTransactions,
-        aliasName: $_aliasNameGenerator(
-          db.customers.id,
-          db.loyaltyPointTransactions.customerId,
-        ),
-      );
-
-  $$LoyaltyPointTransactionsTableProcessedTableManager
-  get loyaltyPointTransactionsRefs {
-    final manager = $$LoyaltyPointTransactionsTableTableManager(
-      $_db,
-      $_db.loyaltyPointTransactions,
-    ).filter((f) => f.customerId.id.sqlEquals($_itemColumn<int>('id')!));
-
-    final cache = $_typedResult.readTableOrNull(
-      _loyaltyPointTransactionsRefsTable($_db),
-    );
-    return ProcessedTableManager(
-      manager.$state.copyWith(prefetchedData: cache),
-    );
-  }
-
-  static MultiTypedResultKey<
-    $CustomerRewardRedemptionsTable,
-    List<CustomerRewardRedemption>
-  >
-  _customerRewardRedemptionsRefsTable(_$AppDatabase db) =>
-      MultiTypedResultKey.fromTable(
-        db.customerRewardRedemptions,
-        aliasName: $_aliasNameGenerator(
-          db.customers.id,
-          db.customerRewardRedemptions.customerId,
-        ),
-      );
-
-  $$CustomerRewardRedemptionsTableProcessedTableManager
-  get customerRewardRedemptionsRefs {
-    final manager = $$CustomerRewardRedemptionsTableTableManager(
-      $_db,
-      $_db.customerRewardRedemptions,
-    ).filter((f) => f.customerId.id.sqlEquals($_itemColumn<int>('id')!));
-
-    final cache = $_typedResult.readTableOrNull(
-      _customerRewardRedemptionsRefsTable($_db),
     );
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
@@ -42477,60 +42275,6 @@ class $$CustomersTableFilterComposer
                 $removeJoinBuilderFromRootComposer,
           ),
     );
-    return f(composer);
-  }
-
-  Expression<bool> loyaltyPointTransactionsRefs(
-    Expression<bool> Function($$LoyaltyPointTransactionsTableFilterComposer f)
-    f,
-  ) {
-    final $$LoyaltyPointTransactionsTableFilterComposer composer =
-        $composerBuilder(
-          composer: this,
-          getCurrentColumn: (t) => t.id,
-          referencedTable: $db.loyaltyPointTransactions,
-          getReferencedColumn: (t) => t.customerId,
-          builder:
-              (
-                joinBuilder, {
-                $addJoinBuilderToRootComposer,
-                $removeJoinBuilderFromRootComposer,
-              }) => $$LoyaltyPointTransactionsTableFilterComposer(
-                $db: $db,
-                $table: $db.loyaltyPointTransactions,
-                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-                joinBuilder: joinBuilder,
-                $removeJoinBuilderFromRootComposer:
-                    $removeJoinBuilderFromRootComposer,
-              ),
-        );
-    return f(composer);
-  }
-
-  Expression<bool> customerRewardRedemptionsRefs(
-    Expression<bool> Function($$CustomerRewardRedemptionsTableFilterComposer f)
-    f,
-  ) {
-    final $$CustomerRewardRedemptionsTableFilterComposer composer =
-        $composerBuilder(
-          composer: this,
-          getCurrentColumn: (t) => t.id,
-          referencedTable: $db.customerRewardRedemptions,
-          getReferencedColumn: (t) => t.customerId,
-          builder:
-              (
-                joinBuilder, {
-                $addJoinBuilderToRootComposer,
-                $removeJoinBuilderFromRootComposer,
-              }) => $$CustomerRewardRedemptionsTableFilterComposer(
-                $db: $db,
-                $table: $db.customerRewardRedemptions,
-                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-                joinBuilder: joinBuilder,
-                $removeJoinBuilderFromRootComposer:
-                    $removeJoinBuilderFromRootComposer,
-              ),
-        );
     return f(composer);
   }
 
@@ -42831,60 +42575,6 @@ class $$CustomersTableAnnotationComposer
     return f(composer);
   }
 
-  Expression<T> loyaltyPointTransactionsRefs<T extends Object>(
-    Expression<T> Function($$LoyaltyPointTransactionsTableAnnotationComposer a)
-    f,
-  ) {
-    final $$LoyaltyPointTransactionsTableAnnotationComposer composer =
-        $composerBuilder(
-          composer: this,
-          getCurrentColumn: (t) => t.id,
-          referencedTable: $db.loyaltyPointTransactions,
-          getReferencedColumn: (t) => t.customerId,
-          builder:
-              (
-                joinBuilder, {
-                $addJoinBuilderToRootComposer,
-                $removeJoinBuilderFromRootComposer,
-              }) => $$LoyaltyPointTransactionsTableAnnotationComposer(
-                $db: $db,
-                $table: $db.loyaltyPointTransactions,
-                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-                joinBuilder: joinBuilder,
-                $removeJoinBuilderFromRootComposer:
-                    $removeJoinBuilderFromRootComposer,
-              ),
-        );
-    return f(composer);
-  }
-
-  Expression<T> customerRewardRedemptionsRefs<T extends Object>(
-    Expression<T> Function($$CustomerRewardRedemptionsTableAnnotationComposer a)
-    f,
-  ) {
-    final $$CustomerRewardRedemptionsTableAnnotationComposer composer =
-        $composerBuilder(
-          composer: this,
-          getCurrentColumn: (t) => t.id,
-          referencedTable: $db.customerRewardRedemptions,
-          getReferencedColumn: (t) => t.customerId,
-          builder:
-              (
-                joinBuilder, {
-                $addJoinBuilderToRootComposer,
-                $removeJoinBuilderFromRootComposer,
-              }) => $$CustomerRewardRedemptionsTableAnnotationComposer(
-                $db: $db,
-                $table: $db.customerRewardRedemptions,
-                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-                joinBuilder: joinBuilder,
-                $removeJoinBuilderFromRootComposer:
-                    $removeJoinBuilderFromRootComposer,
-              ),
-        );
-    return f(composer);
-  }
-
   Expression<T> salesRefs<T extends Object>(
     Expression<T> Function($$SalesTableAnnotationComposer a) f,
   ) {
@@ -42928,8 +42618,6 @@ class $$CustomersTableTableManager
             bool currencyId,
             bool loyaltyTierId,
             bool customerTransactionsRefs,
-            bool loyaltyPointTransactionsRefs,
-            bool customerRewardRedemptionsRefs,
             bool salesRefs,
           })
         > {
@@ -43033,18 +42721,12 @@ class $$CustomersTableTableManager
                 currencyId = false,
                 loyaltyTierId = false,
                 customerTransactionsRefs = false,
-                loyaltyPointTransactionsRefs = false,
-                customerRewardRedemptionsRefs = false,
                 salesRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
                   explicitlyWatchedTables: [
                     if (customerTransactionsRefs) db.customerTransactions,
-                    if (loyaltyPointTransactionsRefs)
-                      db.loyaltyPointTransactions,
-                    if (customerRewardRedemptionsRefs)
-                      db.customerRewardRedemptions,
                     if (salesRefs) db.sales,
                   ],
                   addJoins:
@@ -43115,48 +42797,6 @@ class $$CustomersTableTableManager
                               ),
                           typedResults: items,
                         ),
-                      if (loyaltyPointTransactionsRefs)
-                        await $_getPrefetchedData<
-                          Customer,
-                          $CustomersTable,
-                          LoyaltyPointTransaction
-                        >(
-                          currentTable: table,
-                          referencedTable: $$CustomersTableReferences
-                              ._loyaltyPointTransactionsRefsTable(db),
-                          managerFromTypedResult: (p0) =>
-                              $$CustomersTableReferences(
-                                db,
-                                table,
-                                p0,
-                              ).loyaltyPointTransactionsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.customerId == item.id,
-                              ),
-                          typedResults: items,
-                        ),
-                      if (customerRewardRedemptionsRefs)
-                        await $_getPrefetchedData<
-                          Customer,
-                          $CustomersTable,
-                          CustomerRewardRedemption
-                        >(
-                          currentTable: table,
-                          referencedTable: $$CustomersTableReferences
-                              ._customerRewardRedemptionsRefsTable(db),
-                          managerFromTypedResult: (p0) =>
-                              $$CustomersTableReferences(
-                                db,
-                                table,
-                                p0,
-                              ).customerRewardRedemptionsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.customerId == item.id,
-                              ),
-                          typedResults: items,
-                        ),
                       if (salesRefs)
                         await $_getPrefetchedData<
                           Customer,
@@ -43202,8 +42842,6 @@ typedef $$CustomersTableProcessedTableManager =
         bool currencyId,
         bool loyaltyTierId,
         bool customerTransactionsRefs,
-        bool loyaltyPointTransactionsRefs,
-        bool customerRewardRedemptionsRefs,
         bool salesRefs,
       })
     >;
@@ -43775,42 +43413,6 @@ typedef $$LoyaltyPointTransactionsTableUpdateCompanionBuilder =
       Value<DateTime> createdAt,
     });
 
-final class $$LoyaltyPointTransactionsTableReferences
-    extends
-        BaseReferences<
-          _$AppDatabase,
-          $LoyaltyPointTransactionsTable,
-          LoyaltyPointTransaction
-        > {
-  $$LoyaltyPointTransactionsTableReferences(
-    super.$_db,
-    super.$_table,
-    super.$_typedResult,
-  );
-
-  static $CustomersTable _customerIdTable(_$AppDatabase db) =>
-      db.customers.createAlias(
-        $_aliasNameGenerator(
-          db.loyaltyPointTransactions.customerId,
-          db.customers.id,
-        ),
-      );
-
-  $$CustomersTableProcessedTableManager get customerId {
-    final $_column = $_itemColumn<int>('customer_id')!;
-
-    final manager = $$CustomersTableTableManager(
-      $_db,
-      $_db.customers,
-    ).filter((f) => f.id.sqlEquals($_column));
-    final item = $_typedResult.readTableOrNull(_customerIdTable($_db));
-    if (item == null) return manager;
-    return ProcessedTableManager(
-      manager.$state.copyWith(prefetchedData: [item]),
-    );
-  }
-}
-
 class $$LoyaltyPointTransactionsTableFilterComposer
     extends Composer<_$AppDatabase, $LoyaltyPointTransactionsTable> {
   $$LoyaltyPointTransactionsTableFilterComposer({
@@ -43822,6 +43424,11 @@ class $$LoyaltyPointTransactionsTableFilterComposer
   });
   ColumnFilters<int> get id => $composableBuilder(
     column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get customerId => $composableBuilder(
+    column: $table.customerId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -43874,29 +43481,6 @@ class $$LoyaltyPointTransactionsTableFilterComposer
     column: $table.createdAt,
     builder: (column) => ColumnFilters(column),
   );
-
-  $$CustomersTableFilterComposer get customerId {
-    final $$CustomersTableFilterComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.customerId,
-      referencedTable: $db.customers,
-      getReferencedColumn: (t) => t.id,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$CustomersTableFilterComposer(
-            $db: $db,
-            $table: $db.customers,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return composer;
-  }
 }
 
 class $$LoyaltyPointTransactionsTableOrderingComposer
@@ -43910,6 +43494,11 @@ class $$LoyaltyPointTransactionsTableOrderingComposer
   });
   ColumnOrderings<int> get id => $composableBuilder(
     column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get customerId => $composableBuilder(
+    column: $table.customerId,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -43962,29 +43551,6 @@ class $$LoyaltyPointTransactionsTableOrderingComposer
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
   );
-
-  $$CustomersTableOrderingComposer get customerId {
-    final $$CustomersTableOrderingComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.customerId,
-      referencedTable: $db.customers,
-      getReferencedColumn: (t) => t.id,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$CustomersTableOrderingComposer(
-            $db: $db,
-            $table: $db.customers,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return composer;
-  }
 }
 
 class $$LoyaltyPointTransactionsTableAnnotationComposer
@@ -43998,6 +43564,11 @@ class $$LoyaltyPointTransactionsTableAnnotationComposer
   });
   GeneratedColumn<int> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get customerId => $composableBuilder(
+    column: $table.customerId,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<String> get transactionType => $composableBuilder(
     column: $table.transactionType,
@@ -44040,29 +43611,6 @@ class $$LoyaltyPointTransactionsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
-
-  $$CustomersTableAnnotationComposer get customerId {
-    final $$CustomersTableAnnotationComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.customerId,
-      referencedTable: $db.customers,
-      getReferencedColumn: (t) => t.id,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$CustomersTableAnnotationComposer(
-            $db: $db,
-            $table: $db.customers,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return composer;
-  }
 }
 
 class $$LoyaltyPointTransactionsTableTableManager
@@ -44076,9 +43624,16 @@ class $$LoyaltyPointTransactionsTableTableManager
           $$LoyaltyPointTransactionsTableAnnotationComposer,
           $$LoyaltyPointTransactionsTableCreateCompanionBuilder,
           $$LoyaltyPointTransactionsTableUpdateCompanionBuilder,
-          (LoyaltyPointTransaction, $$LoyaltyPointTransactionsTableReferences),
+          (
+            LoyaltyPointTransaction,
+            BaseReferences<
+              _$AppDatabase,
+              $LoyaltyPointTransactionsTable,
+              LoyaltyPointTransaction
+            >,
+          ),
           LoyaltyPointTransaction,
-          PrefetchHooks Function({bool customerId})
+          PrefetchHooks Function()
         > {
   $$LoyaltyPointTransactionsTableTableManager(
     _$AppDatabase db,
@@ -44159,56 +43714,9 @@ class $$LoyaltyPointTransactionsTableTableManager
                 createdAt: createdAt,
               ),
           withReferenceMapper: (p0) => p0
-              .map(
-                (e) => (
-                  e.readTable(table),
-                  $$LoyaltyPointTransactionsTableReferences(db, table, e),
-                ),
-              )
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
               .toList(),
-          prefetchHooksCallback: ({customerId = false}) {
-            return PrefetchHooks(
-              db: db,
-              explicitlyWatchedTables: [],
-              addJoins:
-                  <
-                    T extends TableManagerState<
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic
-                    >
-                  >(state) {
-                    if (customerId) {
-                      state =
-                          state.withJoin(
-                                currentTable: table,
-                                currentColumn: table.customerId,
-                                referencedTable:
-                                    $$LoyaltyPointTransactionsTableReferences
-                                        ._customerIdTable(db),
-                                referencedColumn:
-                                    $$LoyaltyPointTransactionsTableReferences
-                                        ._customerIdTable(db)
-                                        .id,
-                              )
-                              as T;
-                    }
-
-                    return state;
-                  },
-              getPrefetchedDataCallback: (items) async {
-                return [];
-              },
-            );
-          },
+          prefetchHooksCallback: null,
         ),
       );
 }
@@ -44223,9 +43731,16 @@ typedef $$LoyaltyPointTransactionsTableProcessedTableManager =
       $$LoyaltyPointTransactionsTableAnnotationComposer,
       $$LoyaltyPointTransactionsTableCreateCompanionBuilder,
       $$LoyaltyPointTransactionsTableUpdateCompanionBuilder,
-      (LoyaltyPointTransaction, $$LoyaltyPointTransactionsTableReferences),
+      (
+        LoyaltyPointTransaction,
+        BaseReferences<
+          _$AppDatabase,
+          $LoyaltyPointTransactionsTable,
+          LoyaltyPointTransaction
+        >,
+      ),
       LoyaltyPointTransaction,
-      PrefetchHooks Function({bool customerId})
+      PrefetchHooks Function()
     >;
 typedef $$LoyaltyRewardsTableCreateCompanionBuilder =
     LoyaltyRewardsCompanion Function({
@@ -44238,7 +43753,7 @@ typedef $$LoyaltyRewardsTableCreateCompanionBuilder =
       Value<String?> descriptionFr,
       required String rewardType,
       required int pointsCost,
-      Value<Decimal?> valueCents,
+      Value<int?> valueCents,
       Value<double?> valuePercent,
       Value<int?> productId,
       Value<int?> minTierId,
@@ -44262,7 +43777,7 @@ typedef $$LoyaltyRewardsTableUpdateCompanionBuilder =
       Value<String?> descriptionFr,
       Value<String> rewardType,
       Value<int> pointsCost,
-      Value<Decimal?> valueCents,
+      Value<int?> valueCents,
       Value<double?> valuePercent,
       Value<int?> productId,
       Value<int?> minTierId,
@@ -44275,62 +43790,6 @@ typedef $$LoyaltyRewardsTableUpdateCompanionBuilder =
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
     });
-
-final class $$LoyaltyRewardsTableReferences
-    extends BaseReferences<_$AppDatabase, $LoyaltyRewardsTable, LoyaltyReward> {
-  $$LoyaltyRewardsTableReferences(
-    super.$_db,
-    super.$_table,
-    super.$_typedResult,
-  );
-
-  static $LoyaltyTiersTable _minTierIdTable(_$AppDatabase db) =>
-      db.loyaltyTiers.createAlias(
-        $_aliasNameGenerator(db.loyaltyRewards.minTierId, db.loyaltyTiers.id),
-      );
-
-  $$LoyaltyTiersTableProcessedTableManager? get minTierId {
-    final $_column = $_itemColumn<int>('min_tier_id');
-    if ($_column == null) return null;
-    final manager = $$LoyaltyTiersTableTableManager(
-      $_db,
-      $_db.loyaltyTiers,
-    ).filter((f) => f.id.sqlEquals($_column));
-    final item = $_typedResult.readTableOrNull(_minTierIdTable($_db));
-    if (item == null) return manager;
-    return ProcessedTableManager(
-      manager.$state.copyWith(prefetchedData: [item]),
-    );
-  }
-
-  static MultiTypedResultKey<
-    $CustomerRewardRedemptionsTable,
-    List<CustomerRewardRedemption>
-  >
-  _customerRewardRedemptionsRefsTable(_$AppDatabase db) =>
-      MultiTypedResultKey.fromTable(
-        db.customerRewardRedemptions,
-        aliasName: $_aliasNameGenerator(
-          db.loyaltyRewards.id,
-          db.customerRewardRedemptions.rewardId,
-        ),
-      );
-
-  $$CustomerRewardRedemptionsTableProcessedTableManager
-  get customerRewardRedemptionsRefs {
-    final manager = $$CustomerRewardRedemptionsTableTableManager(
-      $_db,
-      $_db.customerRewardRedemptions,
-    ).filter((f) => f.rewardId.id.sqlEquals($_itemColumn<int>('id')!));
-
-    final cache = $_typedResult.readTableOrNull(
-      _customerRewardRedemptionsRefsTable($_db),
-    );
-    return ProcessedTableManager(
-      manager.$state.copyWith(prefetchedData: cache),
-    );
-  }
-}
 
 class $$LoyaltyRewardsTableFilterComposer
     extends Composer<_$AppDatabase, $LoyaltyRewardsTable> {
@@ -44386,11 +43845,10 @@ class $$LoyaltyRewardsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnWithTypeConverterFilters<Decimal?, Decimal, int> get valueCents =>
-      $composableBuilder(
-        column: $table.valueCents,
-        builder: (column) => ColumnWithTypeConverterFilters(column),
-      );
+  ColumnFilters<int> get valueCents => $composableBuilder(
+    column: $table.valueCents,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<double> get valuePercent => $composableBuilder(
     column: $table.valuePercent,
@@ -44399,6 +43857,11 @@ class $$LoyaltyRewardsTableFilterComposer
 
   ColumnFilters<int> get productId => $composableBuilder(
     column: $table.productId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get minTierId => $composableBuilder(
+    column: $table.minTierId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -44441,56 +43904,6 @@ class $$LoyaltyRewardsTableFilterComposer
     column: $table.updatedAt,
     builder: (column) => ColumnFilters(column),
   );
-
-  $$LoyaltyTiersTableFilterComposer get minTierId {
-    final $$LoyaltyTiersTableFilterComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.minTierId,
-      referencedTable: $db.loyaltyTiers,
-      getReferencedColumn: (t) => t.id,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$LoyaltyTiersTableFilterComposer(
-            $db: $db,
-            $table: $db.loyaltyTiers,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return composer;
-  }
-
-  Expression<bool> customerRewardRedemptionsRefs(
-    Expression<bool> Function($$CustomerRewardRedemptionsTableFilterComposer f)
-    f,
-  ) {
-    final $$CustomerRewardRedemptionsTableFilterComposer composer =
-        $composerBuilder(
-          composer: this,
-          getCurrentColumn: (t) => t.id,
-          referencedTable: $db.customerRewardRedemptions,
-          getReferencedColumn: (t) => t.rewardId,
-          builder:
-              (
-                joinBuilder, {
-                $addJoinBuilderToRootComposer,
-                $removeJoinBuilderFromRootComposer,
-              }) => $$CustomerRewardRedemptionsTableFilterComposer(
-                $db: $db,
-                $table: $db.customerRewardRedemptions,
-                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-                joinBuilder: joinBuilder,
-                $removeJoinBuilderFromRootComposer:
-                    $removeJoinBuilderFromRootComposer,
-              ),
-        );
-    return f(composer);
-  }
 }
 
 class $$LoyaltyRewardsTableOrderingComposer
@@ -44562,6 +43975,11 @@ class $$LoyaltyRewardsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get minTierId => $composableBuilder(
+    column: $table.minTierId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get maxRedemptionsPerCustomer => $composableBuilder(
     column: $table.maxRedemptionsPerCustomer,
     builder: (column) => ColumnOrderings(column),
@@ -44601,29 +44019,6 @@ class $$LoyaltyRewardsTableOrderingComposer
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
   );
-
-  $$LoyaltyTiersTableOrderingComposer get minTierId {
-    final $$LoyaltyTiersTableOrderingComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.minTierId,
-      referencedTable: $db.loyaltyTiers,
-      getReferencedColumn: (t) => t.id,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$LoyaltyTiersTableOrderingComposer(
-            $db: $db,
-            $table: $db.loyaltyTiers,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return composer;
-  }
 }
 
 class $$LoyaltyRewardsTableAnnotationComposer
@@ -44672,11 +44067,10 @@ class $$LoyaltyRewardsTableAnnotationComposer
     builder: (column) => column,
   );
 
-  GeneratedColumnWithTypeConverter<Decimal?, int> get valueCents =>
-      $composableBuilder(
-        column: $table.valueCents,
-        builder: (column) => column,
-      );
+  GeneratedColumn<int> get valueCents => $composableBuilder(
+    column: $table.valueCents,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<double> get valuePercent => $composableBuilder(
     column: $table.valuePercent,
@@ -44685,6 +44079,9 @@ class $$LoyaltyRewardsTableAnnotationComposer
 
   GeneratedColumn<int> get productId =>
       $composableBuilder(column: $table.productId, builder: (column) => column);
+
+  GeneratedColumn<int> get minTierId =>
+      $composableBuilder(column: $table.minTierId, builder: (column) => column);
 
   GeneratedColumn<int> get maxRedemptionsPerCustomer => $composableBuilder(
     column: $table.maxRedemptionsPerCustomer,
@@ -44717,56 +44114,6 @@ class $$LoyaltyRewardsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
-
-  $$LoyaltyTiersTableAnnotationComposer get minTierId {
-    final $$LoyaltyTiersTableAnnotationComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.minTierId,
-      referencedTable: $db.loyaltyTiers,
-      getReferencedColumn: (t) => t.id,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$LoyaltyTiersTableAnnotationComposer(
-            $db: $db,
-            $table: $db.loyaltyTiers,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return composer;
-  }
-
-  Expression<T> customerRewardRedemptionsRefs<T extends Object>(
-    Expression<T> Function($$CustomerRewardRedemptionsTableAnnotationComposer a)
-    f,
-  ) {
-    final $$CustomerRewardRedemptionsTableAnnotationComposer composer =
-        $composerBuilder(
-          composer: this,
-          getCurrentColumn: (t) => t.id,
-          referencedTable: $db.customerRewardRedemptions,
-          getReferencedColumn: (t) => t.rewardId,
-          builder:
-              (
-                joinBuilder, {
-                $addJoinBuilderToRootComposer,
-                $removeJoinBuilderFromRootComposer,
-              }) => $$CustomerRewardRedemptionsTableAnnotationComposer(
-                $db: $db,
-                $table: $db.customerRewardRedemptions,
-                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-                joinBuilder: joinBuilder,
-                $removeJoinBuilderFromRootComposer:
-                    $removeJoinBuilderFromRootComposer,
-              ),
-        );
-    return f(composer);
-  }
 }
 
 class $$LoyaltyRewardsTableTableManager
@@ -44780,12 +44127,12 @@ class $$LoyaltyRewardsTableTableManager
           $$LoyaltyRewardsTableAnnotationComposer,
           $$LoyaltyRewardsTableCreateCompanionBuilder,
           $$LoyaltyRewardsTableUpdateCompanionBuilder,
-          (LoyaltyReward, $$LoyaltyRewardsTableReferences),
+          (
+            LoyaltyReward,
+            BaseReferences<_$AppDatabase, $LoyaltyRewardsTable, LoyaltyReward>,
+          ),
           LoyaltyReward,
-          PrefetchHooks Function({
-            bool minTierId,
-            bool customerRewardRedemptionsRefs,
-          })
+          PrefetchHooks Function()
         > {
   $$LoyaltyRewardsTableTableManager(
     _$AppDatabase db,
@@ -44811,7 +44158,7 @@ class $$LoyaltyRewardsTableTableManager
                 Value<String?> descriptionFr = const Value.absent(),
                 Value<String> rewardType = const Value.absent(),
                 Value<int> pointsCost = const Value.absent(),
-                Value<Decimal?> valueCents = const Value.absent(),
+                Value<int?> valueCents = const Value.absent(),
                 Value<double?> valuePercent = const Value.absent(),
                 Value<int?> productId = const Value.absent(),
                 Value<int?> minTierId = const Value.absent(),
@@ -44857,7 +44204,7 @@ class $$LoyaltyRewardsTableTableManager
                 Value<String?> descriptionFr = const Value.absent(),
                 required String rewardType,
                 required int pointsCost,
-                Value<Decimal?> valueCents = const Value.absent(),
+                Value<int?> valueCents = const Value.absent(),
                 Value<double?> valuePercent = const Value.absent(),
                 Value<int?> productId = const Value.absent(),
                 Value<int?> minTierId = const Value.absent(),
@@ -44893,82 +44240,9 @@ class $$LoyaltyRewardsTableTableManager
                 updatedAt: updatedAt,
               ),
           withReferenceMapper: (p0) => p0
-              .map(
-                (e) => (
-                  e.readTable(table),
-                  $$LoyaltyRewardsTableReferences(db, table, e),
-                ),
-              )
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
               .toList(),
-          prefetchHooksCallback:
-              ({minTierId = false, customerRewardRedemptionsRefs = false}) {
-                return PrefetchHooks(
-                  db: db,
-                  explicitlyWatchedTables: [
-                    if (customerRewardRedemptionsRefs)
-                      db.customerRewardRedemptions,
-                  ],
-                  addJoins:
-                      <
-                        T extends TableManagerState<
-                          dynamic,
-                          dynamic,
-                          dynamic,
-                          dynamic,
-                          dynamic,
-                          dynamic,
-                          dynamic,
-                          dynamic,
-                          dynamic,
-                          dynamic,
-                          dynamic
-                        >
-                      >(state) {
-                        if (minTierId) {
-                          state =
-                              state.withJoin(
-                                    currentTable: table,
-                                    currentColumn: table.minTierId,
-                                    referencedTable:
-                                        $$LoyaltyRewardsTableReferences
-                                            ._minTierIdTable(db),
-                                    referencedColumn:
-                                        $$LoyaltyRewardsTableReferences
-                                            ._minTierIdTable(db)
-                                            .id,
-                                  )
-                                  as T;
-                        }
-
-                        return state;
-                      },
-                  getPrefetchedDataCallback: (items) async {
-                    return [
-                      if (customerRewardRedemptionsRefs)
-                        await $_getPrefetchedData<
-                          LoyaltyReward,
-                          $LoyaltyRewardsTable,
-                          CustomerRewardRedemption
-                        >(
-                          currentTable: table,
-                          referencedTable: $$LoyaltyRewardsTableReferences
-                              ._customerRewardRedemptionsRefsTable(db),
-                          managerFromTypedResult: (p0) =>
-                              $$LoyaltyRewardsTableReferences(
-                                db,
-                                table,
-                                p0,
-                              ).customerRewardRedemptionsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.rewardId == item.id,
-                              ),
-                          typedResults: items,
-                        ),
-                    ];
-                  },
-                );
-              },
+          prefetchHooksCallback: null,
         ),
       );
 }
@@ -44983,12 +44257,12 @@ typedef $$LoyaltyRewardsTableProcessedTableManager =
       $$LoyaltyRewardsTableAnnotationComposer,
       $$LoyaltyRewardsTableCreateCompanionBuilder,
       $$LoyaltyRewardsTableUpdateCompanionBuilder,
-      (LoyaltyReward, $$LoyaltyRewardsTableReferences),
+      (
+        LoyaltyReward,
+        BaseReferences<_$AppDatabase, $LoyaltyRewardsTable, LoyaltyReward>,
+      ),
       LoyaltyReward,
-      PrefetchHooks Function({
-        bool minTierId,
-        bool customerRewardRedemptionsRefs,
-      })
+      PrefetchHooks Function()
     >;
 typedef $$CustomerRewardRedemptionsTableCreateCompanionBuilder =
     CustomerRewardRedemptionsCompanion Function({
@@ -45017,64 +44291,6 @@ typedef $$CustomerRewardRedemptionsTableUpdateCompanionBuilder =
       Value<DateTime> createdAt,
     });
 
-final class $$CustomerRewardRedemptionsTableReferences
-    extends
-        BaseReferences<
-          _$AppDatabase,
-          $CustomerRewardRedemptionsTable,
-          CustomerRewardRedemption
-        > {
-  $$CustomerRewardRedemptionsTableReferences(
-    super.$_db,
-    super.$_table,
-    super.$_typedResult,
-  );
-
-  static $CustomersTable _customerIdTable(_$AppDatabase db) =>
-      db.customers.createAlias(
-        $_aliasNameGenerator(
-          db.customerRewardRedemptions.customerId,
-          db.customers.id,
-        ),
-      );
-
-  $$CustomersTableProcessedTableManager get customerId {
-    final $_column = $_itemColumn<int>('customer_id')!;
-
-    final manager = $$CustomersTableTableManager(
-      $_db,
-      $_db.customers,
-    ).filter((f) => f.id.sqlEquals($_column));
-    final item = $_typedResult.readTableOrNull(_customerIdTable($_db));
-    if (item == null) return manager;
-    return ProcessedTableManager(
-      manager.$state.copyWith(prefetchedData: [item]),
-    );
-  }
-
-  static $LoyaltyRewardsTable _rewardIdTable(_$AppDatabase db) =>
-      db.loyaltyRewards.createAlias(
-        $_aliasNameGenerator(
-          db.customerRewardRedemptions.rewardId,
-          db.loyaltyRewards.id,
-        ),
-      );
-
-  $$LoyaltyRewardsTableProcessedTableManager get rewardId {
-    final $_column = $_itemColumn<int>('reward_id')!;
-
-    final manager = $$LoyaltyRewardsTableTableManager(
-      $_db,
-      $_db.loyaltyRewards,
-    ).filter((f) => f.id.sqlEquals($_column));
-    final item = $_typedResult.readTableOrNull(_rewardIdTable($_db));
-    if (item == null) return manager;
-    return ProcessedTableManager(
-      manager.$state.copyWith(prefetchedData: [item]),
-    );
-  }
-}
-
 class $$CustomerRewardRedemptionsTableFilterComposer
     extends Composer<_$AppDatabase, $CustomerRewardRedemptionsTable> {
   $$CustomerRewardRedemptionsTableFilterComposer({
@@ -45086,6 +44302,16 @@ class $$CustomerRewardRedemptionsTableFilterComposer
   });
   ColumnFilters<int> get id => $composableBuilder(
     column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get customerId => $composableBuilder(
+    column: $table.customerId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get rewardId => $composableBuilder(
+    column: $table.rewardId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -45123,52 +44349,6 @@ class $$CustomerRewardRedemptionsTableFilterComposer
     column: $table.createdAt,
     builder: (column) => ColumnFilters(column),
   );
-
-  $$CustomersTableFilterComposer get customerId {
-    final $$CustomersTableFilterComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.customerId,
-      referencedTable: $db.customers,
-      getReferencedColumn: (t) => t.id,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$CustomersTableFilterComposer(
-            $db: $db,
-            $table: $db.customers,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return composer;
-  }
-
-  $$LoyaltyRewardsTableFilterComposer get rewardId {
-    final $$LoyaltyRewardsTableFilterComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.rewardId,
-      referencedTable: $db.loyaltyRewards,
-      getReferencedColumn: (t) => t.id,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$LoyaltyRewardsTableFilterComposer(
-            $db: $db,
-            $table: $db.loyaltyRewards,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return composer;
-  }
 }
 
 class $$CustomerRewardRedemptionsTableOrderingComposer
@@ -45182,6 +44362,16 @@ class $$CustomerRewardRedemptionsTableOrderingComposer
   });
   ColumnOrderings<int> get id => $composableBuilder(
     column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get customerId => $composableBuilder(
+    column: $table.customerId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get rewardId => $composableBuilder(
+    column: $table.rewardId,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -45219,52 +44409,6 @@ class $$CustomerRewardRedemptionsTableOrderingComposer
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
   );
-
-  $$CustomersTableOrderingComposer get customerId {
-    final $$CustomersTableOrderingComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.customerId,
-      referencedTable: $db.customers,
-      getReferencedColumn: (t) => t.id,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$CustomersTableOrderingComposer(
-            $db: $db,
-            $table: $db.customers,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return composer;
-  }
-
-  $$LoyaltyRewardsTableOrderingComposer get rewardId {
-    final $$LoyaltyRewardsTableOrderingComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.rewardId,
-      referencedTable: $db.loyaltyRewards,
-      getReferencedColumn: (t) => t.id,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$LoyaltyRewardsTableOrderingComposer(
-            $db: $db,
-            $table: $db.loyaltyRewards,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return composer;
-  }
 }
 
 class $$CustomerRewardRedemptionsTableAnnotationComposer
@@ -45278,6 +44422,14 @@ class $$CustomerRewardRedemptionsTableAnnotationComposer
   });
   GeneratedColumn<int> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get customerId => $composableBuilder(
+    column: $table.customerId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get rewardId =>
+      $composableBuilder(column: $table.rewardId, builder: (column) => column);
 
   GeneratedColumn<int> get pointsSpent => $composableBuilder(
     column: $table.pointsSpent,
@@ -45303,52 +44455,6 @@ class $$CustomerRewardRedemptionsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
-
-  $$CustomersTableAnnotationComposer get customerId {
-    final $$CustomersTableAnnotationComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.customerId,
-      referencedTable: $db.customers,
-      getReferencedColumn: (t) => t.id,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$CustomersTableAnnotationComposer(
-            $db: $db,
-            $table: $db.customers,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return composer;
-  }
-
-  $$LoyaltyRewardsTableAnnotationComposer get rewardId {
-    final $$LoyaltyRewardsTableAnnotationComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.rewardId,
-      referencedTable: $db.loyaltyRewards,
-      getReferencedColumn: (t) => t.id,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$LoyaltyRewardsTableAnnotationComposer(
-            $db: $db,
-            $table: $db.loyaltyRewards,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return composer;
-  }
 }
 
 class $$CustomerRewardRedemptionsTableTableManager
@@ -45364,10 +44470,14 @@ class $$CustomerRewardRedemptionsTableTableManager
           $$CustomerRewardRedemptionsTableUpdateCompanionBuilder,
           (
             CustomerRewardRedemption,
-            $$CustomerRewardRedemptionsTableReferences,
+            BaseReferences<
+              _$AppDatabase,
+              $CustomerRewardRedemptionsTable,
+              CustomerRewardRedemption
+            >,
           ),
           CustomerRewardRedemption,
-          PrefetchHooks Function({bool customerId, bool rewardId})
+          PrefetchHooks Function()
         > {
   $$CustomerRewardRedemptionsTableTableManager(
     _$AppDatabase db,
@@ -45440,71 +44550,9 @@ class $$CustomerRewardRedemptionsTableTableManager
                 createdAt: createdAt,
               ),
           withReferenceMapper: (p0) => p0
-              .map(
-                (e) => (
-                  e.readTable(table),
-                  $$CustomerRewardRedemptionsTableReferences(db, table, e),
-                ),
-              )
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
               .toList(),
-          prefetchHooksCallback: ({customerId = false, rewardId = false}) {
-            return PrefetchHooks(
-              db: db,
-              explicitlyWatchedTables: [],
-              addJoins:
-                  <
-                    T extends TableManagerState<
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic
-                    >
-                  >(state) {
-                    if (customerId) {
-                      state =
-                          state.withJoin(
-                                currentTable: table,
-                                currentColumn: table.customerId,
-                                referencedTable:
-                                    $$CustomerRewardRedemptionsTableReferences
-                                        ._customerIdTable(db),
-                                referencedColumn:
-                                    $$CustomerRewardRedemptionsTableReferences
-                                        ._customerIdTable(db)
-                                        .id,
-                              )
-                              as T;
-                    }
-                    if (rewardId) {
-                      state =
-                          state.withJoin(
-                                currentTable: table,
-                                currentColumn: table.rewardId,
-                                referencedTable:
-                                    $$CustomerRewardRedemptionsTableReferences
-                                        ._rewardIdTable(db),
-                                referencedColumn:
-                                    $$CustomerRewardRedemptionsTableReferences
-                                        ._rewardIdTable(db)
-                                        .id,
-                              )
-                              as T;
-                    }
-
-                    return state;
-                  },
-              getPrefetchedDataCallback: (items) async {
-                return [];
-              },
-            );
-          },
+          prefetchHooksCallback: null,
         ),
       );
 }
@@ -45519,15 +44567,22 @@ typedef $$CustomerRewardRedemptionsTableProcessedTableManager =
       $$CustomerRewardRedemptionsTableAnnotationComposer,
       $$CustomerRewardRedemptionsTableCreateCompanionBuilder,
       $$CustomerRewardRedemptionsTableUpdateCompanionBuilder,
-      (CustomerRewardRedemption, $$CustomerRewardRedemptionsTableReferences),
+      (
+        CustomerRewardRedemption,
+        BaseReferences<
+          _$AppDatabase,
+          $CustomerRewardRedemptionsTable,
+          CustomerRewardRedemption
+        >,
+      ),
       CustomerRewardRedemption,
-      PrefetchHooks Function({bool customerId, bool rewardId})
+      PrefetchHooks Function()
     >;
 typedef $$LoyaltySettingsTableTableCreateCompanionBuilder =
     LoyaltySettingsTableCompanion Function({
       Value<int> id,
       Value<int> pointsPerCurrencyUnit,
-      Value<Decimal> minSpendForPoints,
+      Value<int> minSpendForPoints,
       Value<int?> pointsExpiryDays,
       Value<int> referralBonusPoints,
       Value<int> signupBonusPoints,
@@ -45540,7 +44595,7 @@ typedef $$LoyaltySettingsTableTableUpdateCompanionBuilder =
     LoyaltySettingsTableCompanion Function({
       Value<int> id,
       Value<int> pointsPerCurrencyUnit,
-      Value<Decimal> minSpendForPoints,
+      Value<int> minSpendForPoints,
       Value<int?> pointsExpiryDays,
       Value<int> referralBonusPoints,
       Value<int> signupBonusPoints,
@@ -45569,11 +44624,10 @@ class $$LoyaltySettingsTableTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnWithTypeConverterFilters<Decimal, Decimal, int> get minSpendForPoints =>
-      $composableBuilder(
-        column: $table.minSpendForPoints,
-        builder: (column) => ColumnWithTypeConverterFilters(column),
-      );
+  ColumnFilters<int> get minSpendForPoints => $composableBuilder(
+    column: $table.minSpendForPoints,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<int> get pointsExpiryDays => $composableBuilder(
     column: $table.pointsExpiryDays,
@@ -45688,11 +44742,10 @@ class $$LoyaltySettingsTableTableAnnotationComposer
     builder: (column) => column,
   );
 
-  GeneratedColumnWithTypeConverter<Decimal, int> get minSpendForPoints =>
-      $composableBuilder(
-        column: $table.minSpendForPoints,
-        builder: (column) => column,
-      );
+  GeneratedColumn<int> get minSpendForPoints => $composableBuilder(
+    column: $table.minSpendForPoints,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<int> get pointsExpiryDays => $composableBuilder(
     column: $table.pointsExpiryDays,
@@ -45769,7 +44822,7 @@ class $$LoyaltySettingsTableTableTableManager
               ({
                 Value<int> id = const Value.absent(),
                 Value<int> pointsPerCurrencyUnit = const Value.absent(),
-                Value<Decimal> minSpendForPoints = const Value.absent(),
+                Value<int> minSpendForPoints = const Value.absent(),
                 Value<int?> pointsExpiryDays = const Value.absent(),
                 Value<int> referralBonusPoints = const Value.absent(),
                 Value<int> signupBonusPoints = const Value.absent(),
@@ -45793,7 +44846,7 @@ class $$LoyaltySettingsTableTableTableManager
               ({
                 Value<int> id = const Value.absent(),
                 Value<int> pointsPerCurrencyUnit = const Value.absent(),
-                Value<Decimal> minSpendForPoints = const Value.absent(),
+                Value<int> minSpendForPoints = const Value.absent(),
                 Value<int?> pointsExpiryDays = const Value.absent(),
                 Value<int> referralBonusPoints = const Value.absent(),
                 Value<int> signupBonusPoints = const Value.absent(),
