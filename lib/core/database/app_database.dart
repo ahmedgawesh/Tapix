@@ -26,6 +26,7 @@ import 'daos/accounting_dao.dart';
 import 'daos/settings_dao.dart';
 import 'daos/barcode_template_dao.dart';
 import 'daos/purchase_dao.dart';
+import 'daos/employee_dao.dart';
 
 import 'database_native.dart' if (dart.library.html) 'database_web.dart';
 
@@ -96,6 +97,7 @@ part 'app_database.g.dart';
     AccountingDao,
     SettingsDao,
     BarcodeTemplateDao,
+    EmployeeDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {

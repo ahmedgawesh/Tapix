@@ -67,6 +67,14 @@ import '../../features/customers/presentation/bloc/customer_form_bloc.dart';
 import '../../features/customers/presentation/bloc/customer_loyalty_bloc.dart';
 import '../../features/customers/presentation/bloc/customer_profile_bloc.dart';
 import '../database/daos/customer_dao.dart';
+import '../database/daos/employee_dao.dart';
+import '../../features/employees/domain/repositories/employee_repository.dart';
+import '../../features/employees/data/repositories/employee_repository_impl.dart';
+import '../../features/employees/presentation/bloc/employees_bloc.dart';
+import '../../features/employees/presentation/bloc/attendance_bloc.dart';
+import '../../features/employees/presentation/bloc/leave_requests_bloc.dart';
+import '../../features/employees/presentation/bloc/payroll_bloc.dart';
+import '../../features/employees/presentation/bloc/roles_bloc.dart';
 
 final sl = GetIt.instance;
 
@@ -88,6 +96,7 @@ Future<void> init() async {
   sl.registerLazySingleton(() => BarcodeTemplateDao(sl()));
   sl.registerLazySingleton(() => PurchaseDao(sl()));
   sl.registerLazySingleton(() => CustomerDao(sl()));
+  sl.registerLazySingleton(() => EmployeeDao(sl()));
 
   // Auth Services
   sl.registerLazySingleton(() => PasswordService());
@@ -150,6 +159,11 @@ Future<void> init() async {
     () => LoyaltyRepositoryImpl(sl<AppDatabase>()),
   );
 
+  // Employees
+  sl.registerLazySingleton<EmployeeRepository>(
+    () => EmployeeRepositoryImpl(sl<EmployeeDao>()),
+  );
+
   // Blocs
   sl.registerFactory(() => ThemeBloc(sl()));
   sl.registerFactory(() => LocalizationBloc(sl()));
@@ -206,6 +220,14 @@ Future<void> init() async {
   sl.registerFactory(() => CustomerFormBloc(sl<CustomerRepository>()));
   sl.registerFactory(() => CustomerLoyaltyBloc(sl<LoyaltyRepository>()));
   sl.registerFactory(() => CustomerProfileBloc(sl<CustomerRepository>()));
+
+  // Employees Blocs
+  sl.registerFactory(() => EmployeesBloc(sl<EmployeeRepository>()));
+  sl.registerFactory(() => EmployeeStatsBloc(sl<EmployeeRepository>()));
+  sl.registerFactory(() => AttendanceBloc(sl<EmployeeRepository>()));
+  sl.registerFactory(() => LeaveRequestsBloc(sl<EmployeeRepository>()));
+  sl.registerFactory(() => PayrollBloc(sl<EmployeeRepository>()));
+  sl.registerFactory(() => RolesBloc(sl<EmployeeRepository>()));
 
   // Barcode Services
   sl.registerLazySingleton(() => BarcodeValidationService());

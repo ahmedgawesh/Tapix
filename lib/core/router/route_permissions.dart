@@ -16,6 +16,11 @@ class RoutePermissions {
     '/settings/admin-tools': [UserRole.owner],
     '/users': [UserRole.owner],
     '/employees': [UserRole.owner, UserRole.manager],
+    '/employees/attendance': [UserRole.owner, UserRole.manager],
+    '/employees/leave-requests': [UserRole.owner, UserRole.manager],
+    '/employees/payroll': [UserRole.owner, UserRole.manager],
+    '/employees/create': [UserRole.owner, UserRole.manager],
+    '/employees/settings': [UserRole.owner, UserRole.manager],
     '/accounting': [UserRole.owner],
     '/audit': [UserRole.owner],
   };
