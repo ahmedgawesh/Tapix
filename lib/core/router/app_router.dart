@@ -28,6 +28,7 @@ import '../../features/purchases/presentation/screens/purchase_list_screen.dart'
 import '../../features/purchases/presentation/screens/purchase_form_screen.dart';
 import '../../features/purchases/presentation/screens/purchase_detail_screen.dart';
 import '../../features/purchases/presentation/screens/purchase_returns_screen.dart';
+import '../../features/purchases/presentation/screens/purchase_return_form_screen.dart';
 import '../../features/customers/presentation/screens/customer_hub_screen.dart';
 import '../../features/customers/presentation/screens/customer_form_screen.dart';
 import '../../features/customers/presentation/screens/customer_profile_screen.dart';
@@ -373,6 +374,17 @@ class AppRouter {
           GoRoute(
             path: 'returns',
             builder: (context, state) => const PurchaseReturnsScreen(),
+            routes: [
+              GoRoute(
+                path: 'new',
+                builder: (context, state) {
+                  final purchaseId = int.tryParse(
+                      state.uri.queryParameters['purchaseId'] ?? '');
+                  if (purchaseId == null) return const PurchaseReturnsScreen();
+                  return PurchaseReturnFormScreen(purchaseId: purchaseId);
+                },
+              ),
+            ],
           ),
           GoRoute(
             path: ':id',
@@ -444,29 +456,24 @@ class AppRouter {
       ),
       GoRoute(
         path: '/users',
-        builder: (context, state) => const PlaceholderScreen(title: 'Users'),
-      ),
-      GoRoute(
-        path: '/users/add',
-        builder: (context, state) => const PlaceholderScreen(title: 'Users'),
-      ),
-      GoRoute(
-        path: '/users/:id',
-        builder: (context, state) {
-          final id = int.tryParse(state.pathParameters['id'] ?? '') ?? 0;
-          return PlaceholderScreen(title: 'User $id');
-        },
-      ),
-      GoRoute(
-        path: '/users/:id/edit',
-        builder: (context, state) {
-          final id = int.tryParse(state.pathParameters['id'] ?? '') ?? 0;
-          return PlaceholderScreen(title: 'User $id');
-        },
-      ),
-      GoRoute(
-        path: '/users/roles',
-        builder: (context, state) => const PlaceholderScreen(title: 'Roles'),
+        builder: (context, state) => const UsersScreen(),
+        routes: [
+          GoRoute(
+            path: 'add',
+            builder: (context, state) => const UserFormScreen(),
+          ),
+          GoRoute(
+            path: 'roles',
+            builder: (context, state) => const RolesScreen(),
+          ),
+          GoRoute(
+            path: ':id/edit',
+            builder: (context, state) {
+              final id = int.tryParse(state.pathParameters['id'] ?? '');
+              return UserFormScreen(userId: id);
+            },
+          ),
+        ],
       ),
       GoRoute(
         path: '/employees',

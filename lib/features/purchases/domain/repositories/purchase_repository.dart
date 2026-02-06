@@ -64,6 +64,9 @@ abstract class PurchaseRepository {
   /// Watch returns for a specific purchase
   Stream<List<PurchaseReturnEntity>> watchPurchaseReturnsByPurchase(int purchaseId);
 
+  /// Get returns for a specific purchase
+  Future<List<PurchaseReturnEntity>> getPurchaseReturns(int purchaseId);
+
   /// Get return by ID
   Future<PurchaseReturnEntity?> getPurchaseReturnById(int id);
 

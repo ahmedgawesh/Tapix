@@ -269,6 +269,91 @@ FROM product_variants__old
     }
   }
 
+  /// Converts any integer (Unix epoch seconds) DateTime columns to ISO 8601 text.
+  /// This is needed after switching Drift from storeDateTimeAsText: false → true.
+  /// SQLite's typeof() returns 'integer' for numeric values and 'text' for strings.
+  Future<void> _convertIntegerTimestampsToText() async {
+    debugPrint('Converting integer timestamps to ISO 8601 text...');
+
+    // Map of table → list of DateTime column names that may contain integer timestamps
+    const tableColumns = <String, List<String>>{
+      'products': ['created_at', 'updated_at'],
+      'product_variants': ['created_at', 'updated_at'],
+      'product_batches': ['expiry_date', 'created_at'],
+      'sales': ['sale_date', 'created_at', 'updated_at'],
+      'sale_items': ['created_at'],
+      'sale_returns': ['return_date', 'created_at'],
+      'sale_return_items': ['created_at'],
+      'purchases': ['purchase_date', 'expected_delivery_date', 'created_at', 'updated_at'],
+      'purchase_items': ['created_at'],
+      'purchase_returns': ['return_date', 'created_at'],
+      'purchase_return_items': ['created_at'],
+      'customers': ['last_transaction_at', 'created_at', 'updated_at'],
+      'customer_transactions': ['created_at'],
+      'suppliers': ['created_at', 'updated_at'],
+      'supplier_transactions': ['created_at'],
+      'employees': ['hire_date', 'termination_date', 'created_at', 'updated_at'],
+      'commissions': ['created_at'],
+      'attendances': ['attendance_date', 'check_in_time', 'check_out_time', 'created_at', 'updated_at'],
+      'leave_requests': ['start_date', 'end_date', 'approved_at', 'created_at', 'updated_at'],
+      'payrolls': ['period_start', 'period_end', 'processed_at', 'created_at', 'updated_at'],
+      'payroll_deductions': ['created_at'],
+      'shift_schedules': ['shift_date', 'start_time', 'end_time', 'created_at', 'updated_at'],
+      'employee_documents': ['expiry_date', 'created_at'],
+      'overtime_rules': ['created_at', 'updated_at'],
+      'performance_metrics': ['created_at', 'updated_at'],
+      'accounts': ['created_at'],
+      'journal_entries': ['entry_date', 'created_at'],
+      'journal_entry_lines': ['created_at'],
+      'accounting_periods': ['start_date', 'end_date', 'created_at'],
+      'expenses': ['expense_date', 'created_at'],
+      'audit_logs': ['created_at'],
+      'void_logs': ['voided_at'],
+      'notifications': ['created_at'],
+      'barcode_templates': ['created_at', 'updated_at'],
+      'print_histories': ['print_date'],
+      'currencies': ['created_at', 'updated_at'],
+      'app_settings': ['created_at', 'updated_at'],
+      'users': ['created_at', 'updated_at'],
+      'roles': ['created_at', 'updated_at'],
+      'loyalty_tiers': ['created_at', 'updated_at'],
+      'loyalty_point_transactions': ['expires_at', 'transaction_date', 'created_at'],
+      'loyalty_rewards': ['valid_from', 'valid_until', 'created_at', 'updated_at'],
+      'customer_reward_redemptions': ['used_at', 'expires_at', 'redeemed_at', 'created_at'],
+      'loyalty_settings': ['created_at', 'updated_at'],
+    };
+
+    for (final entry in tableColumns.entries) {
+      final table = entry.key;
+      final columns = entry.value;
+
+      // Check if table exists
+      final tableExists = await customSelect(
+        "SELECT COUNT(*) as cnt FROM sqlite_master WHERE type = 'table' AND name = '$table'",
+      ).getSingle();
+      if (tableExists.read<int>('cnt') == 0) continue;
+
+      for (final col in columns) {
+        // Check if column exists
+        final colExists = await customSelect(
+          "SELECT COUNT(*) as cnt FROM pragma_table_info('$table') WHERE name = '$col'",
+        ).getSingle();
+        if (colExists.read<int>('cnt') == 0) continue;
+
+        // Convert integer timestamps to ISO 8601 text using SQLite's datetime() function
+        // datetime(value, 'unixepoch') converts Unix seconds to 'YYYY-MM-DD HH:MM:SS'
+        try {
+          await customStatement(
+            "UPDATE $table SET $col = datetime($col, 'unixepoch') WHERE typeof($col) = 'integer'",
+          );
+        } catch (e) {
+          debugPrint('Warning: could not convert $table.$col: $e');
+        }
+      }
+    }
+    debugPrint('Integer timestamp conversion completed.');
+  }
+
   Future<void> _safeAddColumn(String table, String column, String type) async {
     final result = await customSelect(
       "SELECT COUNT(*) as cnt FROM pragma_table_info('$table') WHERE name = '$column'",
@@ -441,7 +526,7 @@ CREATE TABLE IF NOT EXISTS loyalty_settings (
   }
 
   @override
-  int get schemaVersion => 10013;
+  int get schemaVersion => 10014;
 
   @override
   MigrationStrategy get migration {
@@ -578,6 +663,11 @@ CREATE TABLE IF NOT EXISTS loyalty_settings (
           await _safeAddColumn('employees', 'late_deduction_rate_bps', 'INTEGER NOT NULL DEFAULT 2500');
         }
 
+        // Migration 10013 -> 10014: Switch DateTime storage from integer to text (ISO 8601)
+        if (from < 10014) {
+          await _convertIntegerTimestampsToText();
+        }
+
         await _createIndexes();
         await _seedInitialData();
       },
@@ -588,6 +678,7 @@ CREATE TABLE IF NOT EXISTS loyalty_settings (
         await customStatement('PRAGMA foreign_keys = ON');
         await _ensureSchemaIntegrity();
         await _repairProductVariantsSkuNullabilityIfNeeded();
+        await _convertIntegerTimestampsToText();
         await _dedupeUniqueSkuBarcodeIfNeeded();
         try {
           await _seedDefaultBarcodeTemplates();

@@ -33497,6 +33497,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       result: [TableUpdate('print_histories', kind: UpdateKind.update)],
     ),
   ]);
+  @override
+  DriftDatabaseOptions get options =>
+      const DriftDatabaseOptions(storeDateTimeAsText: true);
 }
 
 typedef $$UsersTableCreateCompanionBuilder =

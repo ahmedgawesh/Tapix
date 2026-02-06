@@ -9,6 +9,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../domain/entities/product_color_entity.dart';
+import '../../domain/entities/product_entity.dart';
 import '../../domain/entities/product_variant_entity.dart';
 import '../../domain/entities/size_entity.dart';
 import '../../domain/repositories/product_variant_repository.dart';
@@ -130,6 +131,7 @@ class _VariantEditDialogState extends State<VariantEditDialog> {
   int? _sizeId;
   Decimal _costCents = Decimal.zero;
   Decimal _priceCents = Decimal.zero;
+  Decimal? _wholesalePriceCents;
   bool _isActive = true;
   bool _isLoading = false;
   String? _errorMessage;
@@ -153,6 +155,7 @@ class _VariantEditDialogState extends State<VariantEditDialog> {
       _sizeId = v.sizeId;
       _costCents = v.costCents;
       _priceCents = v.priceCents;
+      _wholesalePriceCents = v.wholesalePriceCents;
       _isActive = v.isActive;
     } else {
       _stockController.text = '0';
@@ -170,6 +173,7 @@ class _VariantEditDialogState extends State<VariantEditDialog> {
       setState(() {
         _costCents = product.costCents;
         _priceCents = product.priceCents;
+        _wholesalePriceCents = product.wholesalePriceCents;
         _baseSku = (product.sku ?? '').trim();
 
         if (_skuController.text.trim().isEmpty && _baseSku != null && _baseSku!.isNotEmpty) {
@@ -782,6 +786,14 @@ class _VariantEditDialogState extends State<VariantEditDialog> {
             ),
           ],
         ),
+        const SizedBox(height: 16),
+        MoneyInputWidget(
+          value: _wholesalePriceCents ?? Decimal.zero,
+          label: 'variant_dialog.wholesale_price'.tr(),
+          onChanged: (value) => setState(() {
+            _wholesalePriceCents = value == Decimal.zero ? null : value;
+          }),
+        ),
         if (_priceCents < _costCents && _priceCents > Decimal.zero)
           Padding(
             padding: const EdgeInsets.only(top: 8),
@@ -1151,12 +1163,42 @@ class _VariantEditDialogState extends State<VariantEditDialog> {
   void _printLabel() {
     if (widget.variant == null) return;
     final v = widget.variant!;
+
+    // Build a Product object from the variant data for the barcode design screen
+    final printProduct = Product(
+      id: v.productId,
+      name: widget.productName ?? '',
+      sku: v.sku,
+      barcode: v.barcode,
+      costCents: v.costCents,
+      priceCents: v.priceCents,
+      wholesalePriceCents: v.wholesalePriceCents,
+      stockQuantity: v.stockQuantity,
+      minQuantity: 0,
+      categoryId: null,
+      supplierId: null,
+      currencyId: null,
+      imagePath: null,
+      hasVariants: false,
+      isTaxable: false,
+      taxRateBps: 0,
+      isActive: v.isActive,
+      trackInventory: false,
+    );
+
+    // Build variant info string from color/size
+    final parts = <String>[];
+    if (v.colorId != null) parts.add('C#${v.colorId}');
+    if (v.sizeId != null) parts.add('S#${v.sizeId}');
+    final variantInfo = parts.isNotEmpty ? parts.join(' / ') : null;
+
+    Navigator.pop(context);
     context.push(
       '/products/barcode-design',
       extra: {
-        'variantId': v.id,
-        'barcode': v.barcode,
-        'productId': v.productId,
+        'products': [printProduct],
+        if (variantInfo != null)
+          'variantInfoByProductId': <int, String>{printProduct.id: variantInfo},
       },
     );
   }
@@ -1245,6 +1287,7 @@ class _VariantEditDialogState extends State<VariantEditDialog> {
           sizeId: _sizeId,
           costCents: _costCents,
           priceCents: _priceCents,
+          wholesalePriceCents: _wholesalePriceCents,
           priceAdjustmentCents: widget.variant!.priceAdjustmentCents,
           stockQuantity: newStock,
           isActive: _isActive,
@@ -1262,6 +1305,7 @@ class _VariantEditDialogState extends State<VariantEditDialog> {
           sizeId: _sizeId,
           costCents: _costCents,
           priceCents: _priceCents,
+          wholesalePriceCents: _wholesalePriceCents,
           stockQuantity: stock,
         ));
       }

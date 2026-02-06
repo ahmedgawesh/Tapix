@@ -128,6 +128,11 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
   }
 
   @override
+  Future<List<PurchaseReturnEntity>> getPurchaseReturns(int purchaseId) {
+    return _datasource.getPurchaseReturns(purchaseId);
+  }
+
+  @override
   Future<PurchaseReturnEntity?> getPurchaseReturnById(int id) {
     return _datasource.getPurchaseReturnById(id);
   }

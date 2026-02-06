@@ -58,6 +58,7 @@ import '../../features/purchases/domain/repositories/purchase_repository.dart';
 import '../../features/purchases/presentation/bloc/purchases_bloc.dart';
 import '../../features/purchases/presentation/bloc/purchase_form_bloc.dart';
 import '../../features/purchases/presentation/bloc/purchase_returns_bloc.dart';
+import '../../features/purchases/presentation/bloc/purchase_return_form_bloc.dart';
 import '../../features/customers/domain/repositories/customer_repository.dart';
 import '../../features/customers/domain/repositories/loyalty_repository.dart';
 import '../../features/customers/data/datasources/customer_local_datasource.dart';
@@ -116,6 +117,12 @@ Future<void> init() async {
       database: sl(),
       passwordService: sl(),
       sessionService: sl(),
+    ),
+  );
+  sl.registerLazySingleton<UserRepositoryInterface>(
+    () => UserRepository(
+      database: sl(),
+      passwordService: sl(),
     ),
   );
 
@@ -187,6 +194,9 @@ Future<void> init() async {
   sl.registerFactory(() => CurrencyBloc(sl<CurrencyService>()));
   // AuthBloc must be singleton so router and widgets share the same instance
   sl.registerLazySingleton(() => AuthBloc(repository: sl()));
+  sl.registerFactory(() => UsersBloc(sl<UserRepositoryInterface>()));
+  sl.registerFactory(() => UserStatsBloc(sl<UserRepositoryInterface>()));
+  sl.registerFactory(() => UserFormBloc(sl<UserRepositoryInterface>()));
   
   // Import Products Services
   sl.registerLazySingleton<ParseImportFile>(() => FileImportService());
@@ -232,6 +242,7 @@ Future<void> init() async {
   sl.registerFactory(() => PurchasesBloc(sl<PurchaseRepository>()));
   sl.registerFactory(() => PurchaseFormBloc(sl<PurchaseRepository>()));
   sl.registerFactory(() => PurchaseReturnsBloc(sl<PurchaseRepository>()));
+  sl.registerFactory(() => PurchaseReturnFormBloc(sl<PurchaseRepository>()));
 
   // Customers Blocs
   sl.registerFactory(() => CustomersBloc(sl<CustomerRepository>()));

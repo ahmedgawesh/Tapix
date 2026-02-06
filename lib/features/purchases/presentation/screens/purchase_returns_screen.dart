@@ -31,6 +31,7 @@ class _PurchaseReturnsView extends StatefulWidget {
 
 class _PurchaseReturnsViewState extends State<_PurchaseReturnsView> {
   final _searchController = TextEditingController();
+  DateTimeRange? _dateRange;
 
   @override
   void dispose() {
@@ -38,11 +39,19 @@ class _PurchaseReturnsViewState extends State<_PurchaseReturnsView> {
     super.dispose();
   }
 
+  List<PurchaseReturnEntity> _applyDateFilter(List<PurchaseReturnEntity> returns) {
+    if (_dateRange == null) return returns;
+    return returns.where((r) {
+      return !r.returnDate.isBefore(_dateRange!.start) &&
+          !r.returnDate.isAfter(_dateRange!.end.add(const Duration(days: 1)));
+    }).toList();
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final currencyService = sl<CurrencyService>();
+    final cs = sl<CurrencyService>();
 
     return Scaffold(
       appBar: AppBar(
@@ -73,15 +82,12 @@ class _PurchaseReturnsViewState extends State<_PurchaseReturnsView> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(LucideIcons.alertCircle,
-                        size: 64, color: colorScheme.error),
+                    Icon(LucideIcons.alertCircle, size: 64, color: colorScheme.error),
                     const SizedBox(height: 16),
-                    Text('common.error'.tr(),
-                        style: theme.textTheme.titleLarge),
+                    Text('common.error'.tr(), style: theme.textTheme.titleLarge),
                     const SizedBox(height: 8),
                     TextButton.icon(
-                      onPressed: () =>
-                          context.read<PurchaseReturnsBloc>().refresh(),
+                      onPressed: () => context.read<PurchaseReturnsBloc>().refresh(),
                       icon: const Icon(LucideIcons.rotateCcw),
                       label: Text('common.retry'.tr()),
                     ),
@@ -99,41 +105,70 @@ class _PurchaseReturnsViewState extends State<_PurchaseReturnsView> {
               returns = state.previousData;
             }
 
-            final displayReturns = returns ?? [];
+            final displayReturns = _applyDateFilter(returns ?? []);
 
             return Column(
               children: [
-                // Search bar
+                // Search + Date filter
                 Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: TextField(
-                    controller: _searchController,
-                    decoration: InputDecoration(
-                      hintText: 'purchases.search_returns'.tr(),
-                      prefixIcon: const Icon(LucideIcons.search),
-                      suffixIcon: _searchController.text.isNotEmpty
-                          ? IconButton(
-                              icon: const Icon(LucideIcons.x),
-                              onPressed: () {
-                                _searchController.clear();
-                                context
-                                    .read<PurchaseReturnsBloc>()
-                                    .add(const PurchaseReturnsSearchRequested(
-                                        ''));
-                              },
-                            )
-                          : null,
-                      border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                      filled: true,
-                    ),
-                    onChanged: (value) {
-                      context
-                          .read<PurchaseReturnsBloc>()
-                          .add(PurchaseReturnsSearchRequested(value));
-                    },
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _searchController,
+                          decoration: InputDecoration(
+                            hintText: 'purchases.search_returns'.tr(),
+                            prefixIcon: const Icon(LucideIcons.search),
+                            suffixIcon: _searchController.text.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(LucideIcons.x),
+                                    onPressed: () {
+                                      _searchController.clear();
+                                      context.read<PurchaseReturnsBloc>()
+                                          .add(const PurchaseReturnsSearchRequested(''));
+                                    },
+                                  )
+                                : null,
+                            border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12)),
+                            filled: true,
+                            isDense: true,
+                          ),
+                          onChanged: (value) {
+                            context.read<PurchaseReturnsBloc>()
+                                .add(PurchaseReturnsSearchRequested(value));
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      _buildDateFilterButton(context),
+                    ],
                   ),
                 ),
+
+                // Active date filter chip
+                if (_dateRange != null)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      child: Chip(
+                        avatar: const Icon(LucideIcons.calendar, size: 14),
+                        label: Text(
+                          '${DateFormat.MMMd().format(_dateRange!.start)} – ${DateFormat.MMMd().format(_dateRange!.end)}',
+                          style: theme.textTheme.labelSmall,
+                        ),
+                        deleteIcon: const Icon(LucideIcons.x, size: 14),
+                        onDeleted: () => setState(() => _dateRange = null),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ),
+                  ),
+
+                // Summary bar
+                if (displayReturns.isNotEmpty)
+                  _buildSummaryBar(context, displayReturns, cs),
 
                 // List
                 Expanded(
@@ -146,7 +181,7 @@ class _PurchaseReturnsViewState extends State<_PurchaseReturnsView> {
                             final ret = displayReturns[index];
                             return _ReturnTile(
                               returnEntity: ret,
-                              currencyService: currencyService,
+                              currencyService: cs,
                             );
                           },
                         ),
@@ -159,23 +194,84 @@ class _PurchaseReturnsViewState extends State<_PurchaseReturnsView> {
     );
   }
 
+  Widget _buildDateFilterButton(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final hasFilter = _dateRange != null;
+
+    return Material(
+      color: hasFilter ? cs.primaryContainer : cs.surfaceContainerHighest,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () async {
+          final range = await showDateRangePicker(
+            context: context,
+            firstDate: DateTime(2020),
+            lastDate: DateTime.now().add(const Duration(days: 30)),
+            initialDateRange: _dateRange,
+          );
+          if (range != null) {
+            setState(() => _dateRange = range);
+          }
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Icon(LucideIcons.calendarRange, size: 20,
+              color: hasFilter ? cs.onPrimaryContainer : cs.onSurfaceVariant),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSummaryBar(BuildContext context, List<PurchaseReturnEntity> returns,
+      CurrencyService cs) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final totalRefund = returns.fold<int>(
+        0, (sum, r) => sum + r.totalCents.toBigInt().toInt());
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: colorScheme.errorContainer.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: colorScheme.error.withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        children: [
+          Icon(LucideIcons.undo2, size: 16, color: colorScheme.error),
+          const SizedBox(width: 8),
+          Text('${returns.length} ${'purchases.returns'.tr().toLowerCase()}',
+              style: theme.textTheme.labelMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant)),
+          const Spacer(),
+          Text(cs.format(totalRefund),
+              style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.bold, color: colorScheme.error)),
+        ],
+      ),
+    );
+  }
+
   Widget _buildEmptyState(BuildContext context) {
     final theme = Theme.of(context);
+    final cs = theme.colorScheme;
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(LucideIcons.undo2, size: 80, color: theme.colorScheme.outline),
+          Icon(LucideIcons.undo2, size: 64,
+              color: cs.onSurface.withValues(alpha: 0.15)),
           const SizedBox(height: 16),
           Text('purchases.no_returns'.tr(),
-              style: theme.textTheme.titleLarge, textAlign: TextAlign.center),
-          const SizedBox(height: 8),
-          Text(
-            'purchases.no_returns_hint'.tr(),
-            style: theme.textTheme.bodyMedium
-                ?.copyWith(color: theme.colorScheme.outline),
-            textAlign: TextAlign.center,
-          ),
+              style: theme.textTheme.titleMedium?.copyWith(
+                  color: cs.onSurfaceVariant)),
+          const SizedBox(height: 6),
+          Text('purchases.no_returns_hint'.tr(),
+              style: theme.textTheme.bodySmall?.copyWith(
+                  color: cs.onSurfaceVariant.withValues(alpha: 0.7)),
+              textAlign: TextAlign.center),
         ],
       ),
     );
@@ -194,82 +290,83 @@ class _ReturnTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    final cs = theme.colorScheme;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(
-            color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+        side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.5)),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        padding: const EdgeInsets.all(14),
+        child: Row(
           children: [
-            Row(
-              children: [
-                CircleAvatar(
-                  radius: 20,
-                  backgroundColor: colorScheme.errorContainer,
-                  child: Icon(LucideIcons.undo2,
-                      size: 20, color: colorScheme.onErrorContainer),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: cs.errorContainer.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(LucideIcons.undo2, size: 20, color: cs.error),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(returnEntity.returnNumber,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 2),
+                  Row(
                     children: [
-                      Text(returnEntity.returnNumber,
-                          style: theme.textTheme.titleSmall
-                              ?.copyWith(fontWeight: FontWeight.w600)),
-                      if (returnEntity.supplierName != null)
-                        Text(returnEntity.supplierName!,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                                color: colorScheme.onSurfaceVariant),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis),
+                      if (returnEntity.supplierName != null) ...[
+                        Icon(LucideIcons.building2, size: 12,
+                            color: cs.onSurfaceVariant),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(returnEntity.supplierName!,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                  color: cs.onSurfaceVariant),
+                              maxLines: 1, overflow: TextOverflow.ellipsis),
+                        ),
+                        const SizedBox(width: 8),
+                      ],
+                      Icon(LucideIcons.calendar, size: 12,
+                          color: cs.onSurfaceVariant),
+                      const SizedBox(width: 4),
+                      Text(DateFormat.yMMMd().format(returnEntity.returnDate),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                              color: cs.onSurfaceVariant)),
                     ],
                   ),
-                ),
-                Text(
-                  currencyService
-                      .format(returnEntity.totalCents.toBigInt().toInt()),
-                  style: theme.textTheme.titleMedium?.copyWith(
-                      color: colorScheme.error, fontWeight: FontWeight.bold),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Icon(LucideIcons.calendar,
-                    size: 14, color: colorScheme.onSurfaceVariant),
-                const SizedBox(width: 4),
-                Text(
-                  DateFormat.yMMMd().format(returnEntity.returnDate),
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: colorScheme.onSurfaceVariant),
-                ),
-                if (returnEntity.reason != null &&
-                    returnEntity.reason!.isNotEmpty) ...[
-                  const SizedBox(width: 16),
-                  Icon(LucideIcons.messageSquare,
-                      size: 14, color: colorScheme.onSurfaceVariant),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      returnEntity.reason!,
-                      style: theme.textTheme.bodySmall
-                          ?.copyWith(color: colorScheme.onSurfaceVariant),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                  if (returnEntity.reason != null &&
+                      returnEntity.reason!.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Icon(LucideIcons.messageSquare, size: 12,
+                            color: cs.onSurfaceVariant),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(returnEntity.reason!,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                  color: cs.onSurfaceVariant),
+                              maxLines: 1, overflow: TextOverflow.ellipsis),
+                        ),
+                      ],
                     ),
-                  ),
+                  ],
                 ],
-              ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              currencyService.format(returnEntity.totalCents.toBigInt().toInt()),
+              style: theme.textTheme.titleSmall?.copyWith(
+                  color: cs.error, fontWeight: FontWeight.bold),
             ),
           ],
         ),

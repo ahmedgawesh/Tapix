@@ -6,6 +6,11 @@ import '../../domain/repositories/purchase_repository.dart';
 import '../../../products/domain/entities/product_entity.dart';
 import '../../../products/domain/entities/product_variant_entity.dart';
 
+// ==================== ENUMS ====================
+
+/// Discount mode: per-item discounts or a single invoice-level discount
+enum DiscountMode { perItem, invoice }
+
 // ==================== STATE ====================
 
 class PurchaseFormState extends Equatable {
@@ -14,9 +19,12 @@ class PurchaseFormState extends Equatable {
   final String? supplierName;
   final int currencyId;
   final List<PurchaseLineItem> items;
+  final DiscountMode discountMode;
   final Decimal invoiceDiscountCents;
+  final String? supplierInvoiceRef;
   final String? notes;
   final DateTime purchaseDate;
+  final DateTime? dueDate;
   final bool isSubmitting;
   final String? error;
   final bool isSuccess;
@@ -27,9 +35,12 @@ class PurchaseFormState extends Equatable {
     this.supplierName,
     required this.currencyId,
     this.items = const [],
+    this.discountMode = DiscountMode.perItem,
     Decimal? invoiceDiscountCents,
+    this.supplierInvoiceRef,
     this.notes,
     required this.purchaseDate,
+    this.dueDate,
     this.isSubmitting = false,
     this.error,
     this.isSuccess = false,
@@ -45,16 +56,26 @@ class PurchaseFormState extends Equatable {
         (sum, item) => sum + item.discountCents,
       );
 
-  Decimal get totalDiscountCents => itemDiscountCents + invoiceDiscountCents;
+  Decimal get totalDiscountCents {
+    if (discountMode == DiscountMode.invoice) {
+      return invoiceDiscountCents;
+    }
+    return itemDiscountCents;
+  }
 
   Decimal get taxCents => items.fold(
         Decimal.zero,
         (sum, item) => sum + item.taxCents,
       );
 
-  Decimal get totalCents => subtotalCents - totalDiscountCents + taxCents;
+  Decimal get totalCents {
+    final net = subtotalCents - totalDiscountCents + taxCents;
+    return net < Decimal.zero ? Decimal.zero : net;
+  }
 
   int get totalQuantity => items.fold(0, (sum, item) => sum + item.quantity);
+
+  bool get isDraft => purchaseId == null;
 
   PurchaseFormState copyWith({
     int? purchaseId,
@@ -62,12 +83,16 @@ class PurchaseFormState extends Equatable {
     String? supplierName,
     int? currencyId,
     List<PurchaseLineItem>? items,
+    DiscountMode? discountMode,
     Decimal? invoiceDiscountCents,
+    String? supplierInvoiceRef,
     String? notes,
     DateTime? purchaseDate,
+    DateTime? dueDate,
     bool? isSubmitting,
     String? error,
     bool? isSuccess,
+    bool clearDueDate = false,
   }) {
     return PurchaseFormState(
       purchaseId: purchaseId ?? this.purchaseId,
@@ -75,9 +100,12 @@ class PurchaseFormState extends Equatable {
       supplierName: supplierName ?? this.supplierName,
       currencyId: currencyId ?? this.currencyId,
       items: items ?? this.items,
+      discountMode: discountMode ?? this.discountMode,
       invoiceDiscountCents: invoiceDiscountCents ?? this.invoiceDiscountCents,
+      supplierInvoiceRef: supplierInvoiceRef ?? this.supplierInvoiceRef,
       notes: notes ?? this.notes,
       purchaseDate: purchaseDate ?? this.purchaseDate,
+      dueDate: clearDueDate ? null : (dueDate ?? this.dueDate),
       isSubmitting: isSubmitting ?? this.isSubmitting,
       error: error,
       isSuccess: isSuccess ?? this.isSuccess,
@@ -87,7 +115,8 @@ class PurchaseFormState extends Equatable {
   @override
   List<Object?> get props => [
         purchaseId, supplierId, supplierName, currencyId, items,
-        invoiceDiscountCents, notes, purchaseDate,
+        discountMode, invoiceDiscountCents, supplierInvoiceRef,
+        notes, purchaseDate, dueDate,
         isSubmitting, error, isSuccess,
       ];
 }
@@ -135,6 +164,7 @@ class PurchaseLineItem extends Equatable {
     Decimal? discountCents,
     Decimal? taxCents,
     DateTime? expiryDate,
+    bool clearExpiry = false,
   }) {
     return PurchaseLineItem(
       tempId: tempId ?? this.tempId,
@@ -144,7 +174,7 @@ class PurchaseLineItem extends Equatable {
       unitCostCents: unitCostCents ?? this.unitCostCents,
       discountCents: discountCents ?? this.discountCents,
       taxCents: taxCents ?? this.taxCents,
-      expiryDate: expiryDate ?? this.expiryDate,
+      expiryDate: clearExpiry ? null : (expiryDate ?? this.expiryDate),
     );
   }
 
@@ -191,12 +221,36 @@ class PurchaseDateChanged extends PurchaseFormEvent {
   List<Object?> get props => [date];
 }
 
+class PurchaseDueDateChanged extends PurchaseFormEvent {
+  final DateTime? dueDate;
+  const PurchaseDueDateChanged(this.dueDate);
+
+  @override
+  List<Object?> get props => [dueDate];
+}
+
 class PurchaseNotesChanged extends PurchaseFormEvent {
   final String notes;
   const PurchaseNotesChanged(this.notes);
 
   @override
   List<Object?> get props => [notes];
+}
+
+class PurchaseSupplierRefChanged extends PurchaseFormEvent {
+  final String ref;
+  const PurchaseSupplierRefChanged(this.ref);
+
+  @override
+  List<Object?> get props => [ref];
+}
+
+class PurchaseDiscountModeChanged extends PurchaseFormEvent {
+  final DiscountMode mode;
+  const PurchaseDiscountModeChanged(this.mode);
+
+  @override
+  List<Object?> get props => [mode];
 }
 
 class PurchaseInvoiceDiscountChanged extends PurchaseFormEvent {
@@ -234,6 +288,7 @@ class PurchaseLineItemUpdated extends PurchaseFormEvent {
   final Decimal? unitCostCents;
   final Decimal? discountCents;
   final DateTime? expiryDate;
+  final bool clearExpiry;
 
   const PurchaseLineItemUpdated({
     required this.tempId,
@@ -241,10 +296,11 @@ class PurchaseLineItemUpdated extends PurchaseFormEvent {
     this.unitCostCents,
     this.discountCents,
     this.expiryDate,
+    this.clearExpiry = false,
   });
 
   @override
-  List<Object?> get props => [tempId, quantity, unitCostCents, discountCents, expiryDate];
+  List<Object?> get props => [tempId, quantity, unitCostCents, discountCents, expiryDate, clearExpiry];
 }
 
 class PurchaseLineItemRemoved extends PurchaseFormEvent {
@@ -277,7 +333,10 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
     on<PurchaseFormInitialized>(_onInitialized);
     on<PurchaseSupplierChanged>(_onSupplierChanged);
     on<PurchaseDateChanged>(_onDateChanged);
+    on<PurchaseDueDateChanged>(_onDueDateChanged);
     on<PurchaseNotesChanged>(_onNotesChanged);
+    on<PurchaseSupplierRefChanged>(_onSupplierRefChanged);
+    on<PurchaseDiscountModeChanged>(_onDiscountModeChanged);
     on<PurchaseInvoiceDiscountChanged>(_onInvoiceDiscountChanged);
     on<PurchaseLineItemAdded>(_onLineItemAdded);
     on<PurchaseLineItemUpdated>(_onLineItemUpdated);
@@ -318,11 +377,39 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
     emit(state.copyWith(purchaseDate: event.date));
   }
 
+  void _onDueDateChanged(
+    PurchaseDueDateChanged event,
+    Emitter<PurchaseFormState> emit,
+  ) {
+    if (event.dueDate == null) {
+      emit(state.copyWith(clearDueDate: true));
+    } else {
+      emit(state.copyWith(dueDate: event.dueDate));
+    }
+  }
+
   void _onNotesChanged(
     PurchaseNotesChanged event,
     Emitter<PurchaseFormState> emit,
   ) {
     emit(state.copyWith(notes: event.notes));
+  }
+
+  void _onSupplierRefChanged(
+    PurchaseSupplierRefChanged event,
+    Emitter<PurchaseFormState> emit,
+  ) {
+    emit(state.copyWith(supplierInvoiceRef: event.ref));
+  }
+
+  void _onDiscountModeChanged(
+    PurchaseDiscountModeChanged event,
+    Emitter<PurchaseFormState> emit,
+  ) {
+    emit(state.copyWith(
+      discountMode: event.mode,
+      invoiceDiscountCents: Decimal.zero,
+    ));
   }
 
   void _onInvoiceDiscountChanged(
@@ -359,6 +446,7 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
           unitCostCents: event.unitCostCents,
           discountCents: event.discountCents,
           expiryDate: event.expiryDate,
+          clearExpiry: event.clearExpiry,
         );
       }
       return item;
