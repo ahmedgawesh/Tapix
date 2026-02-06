@@ -41,6 +41,16 @@ class Employees extends Table {
   IntColumn get salaryCents => integer().map(const MoneyConverter()).nullable()();
   /// Default commission rate in basis points (e.g., 500 = 5%)
   IntColumn get defaultCommissionRateBps => integer().withDefault(const Constant(0))();
+  /// Pay period type: monthly, weekly, daily
+  TextColumn get payPeriodType => text().withDefault(const Constant('monthly'))();
+  /// Working days per pay period (e.g., 26 for monthly)
+  IntColumn get workingDaysPerPeriod => integer().withDefault(const Constant(26))();
+  /// Working hours per day (e.g., 8)
+  IntColumn get workingHoursPerDay => integer().withDefault(const Constant(8))();
+  /// Absence deduction rate in basis points (10000 = 100% of daily rate)
+  IntColumn get absenceDeductionRateBps => integer().withDefault(const Constant(10000))();
+  /// Late deduction rate in basis points (2500 = 25% of daily rate)
+  IntColumn get lateDeductionRateBps => integer().withDefault(const Constant(2500))();
   IntColumn get currencyId => integer().references(Currencies, #id, onDelete: KeyAction.restrict)();
   BoolColumn get isActive => boolean().withDefault(const Constant(true))();
   DateTimeColumn get hireDate => dateTime().nullable()();

@@ -1,0 +1,164 @@
+import 'package:decimal/decimal.dart';
+import 'package:drift/drift.dart';
+import '../../../../core/database/app_database.dart';
+import '../../domain/repositories/customer_repository.dart';
+import '../datasources/customer_local_datasource.dart';
+
+/// Implementation of CustomerRepository
+class CustomerRepositoryImpl implements CustomerRepository {
+  final CustomerLocalDatasource _datasource;
+
+  CustomerRepositoryImpl(this._datasource);
+
+  @override
+  Stream<List<Customer>> watchAllCustomers({bool? isActive}) {
+    return _datasource.watchAllCustomers(isActive: isActive);
+  }
+
+  @override
+  Stream<Customer?> watchCustomer(int id) {
+    return _datasource.watchCustomer(id);
+  }
+
+  @override
+  Future<Customer?> getCustomer(int id) {
+    return _datasource.getCustomer(id);
+  }
+
+  @override
+  Future<List<Customer>> searchCustomers(String query, {bool? isActive}) {
+    return _datasource.searchCustomers(query, isActive: isActive);
+  }
+
+  @override
+  Future<int> createCustomer({
+    required String name,
+    String? email,
+    String? phone,
+    String? address,
+    required int currencyId,
+    Decimal? initialBalance,
+    String segment = 'retail',
+    bool loyaltyEnabled = true,
+  }) {
+    final companion = CustomersCompanion(
+      name: Value(name),
+      email: Value(email),
+      phone: Value(phone),
+      address: Value(address),
+      currencyId: Value(currencyId),
+      balanceCents: Value(initialBalance ?? Decimal.zero),
+      segment: Value(segment),
+      loyaltyEnabled: Value(loyaltyEnabled),
+      isActive: const Value(true),
+      createdAt: Value(DateTime.now()),
+      updatedAt: Value(DateTime.now()),
+    );
+    return _datasource.createCustomer(companion);
+  }
+
+  @override
+  Future<bool> updateCustomer(Customer customer) {
+    return _datasource.updateCustomer(customer);
+  }
+
+  @override
+  Future<int> deleteCustomer(int id) {
+    return _datasource.deleteCustomer(id);
+  }
+
+  @override
+  Stream<int> watchCustomerCount({bool? isActive}) {
+    return _datasource.watchCustomerCount(isActive: isActive);
+  }
+
+  @override
+  Stream<int> watchTotalBalanceCents() {
+    return _datasource.watchTotalBalanceCents();
+  }
+
+  @override
+  Stream<List<Customer>> watchCustomersWithPositiveBalance() {
+    return _datasource.watchCustomersWithPositiveBalance();
+  }
+
+  @override
+  Stream<List<Customer>> watchTopCustomersByBalance({int limit = 5}) {
+    return _datasource.watchTopCustomersByBalance(limit: limit);
+  }
+
+  @override
+  Future<void> updateCustomerBalance(int customerId, int newBalanceCents) {
+    return _datasource.updateCustomerBalance(customerId, newBalanceCents);
+  }
+
+  @override
+  Future<void> updateCustomerLoyaltyEnabled(int customerId, bool loyaltyEnabled) {
+    return _datasource.updateCustomerLoyaltyEnabled(customerId, loyaltyEnabled);
+  }
+
+  @override
+  Future<int> recordTransaction({
+    required int customerId,
+    required String transactionType,
+    required int amountCents,
+    required int currencyId,
+    String? description,
+    int? referenceId,
+    String? referenceType,
+  }) {
+    final companion = CustomerTransactionsCompanion(
+      customerId: Value(customerId),
+      transactionType: Value(transactionType),
+      amountCents: Value(Decimal.fromInt(amountCents)),
+      currencyId: Value(currencyId),
+      description: Value(description),
+      referenceId: Value(referenceId),
+      referenceType: Value(referenceType),
+      transactionDate: Value(DateTime.now()),
+      createdAt: Value(DateTime.now()),
+    );
+    return _datasource.createTransaction(companion);
+  }
+
+  @override
+  Stream<List<CustomerTransaction>> watchCustomerTransactions(int customerId) {
+    return _datasource.watchCustomerTransactions(customerId);
+  }
+
+  @override
+  Future<List<CustomerTransaction>> getCustomerTransactions(
+    int customerId, {
+    DateTime? startDate,
+    DateTime? endDate,
+  }) {
+    return _datasource.getCustomerTransactions(
+      customerId,
+      startDate: startDate,
+      endDate: endDate,
+    );
+  }
+
+  @override
+  Stream<List<Customer>> watchCustomersBySegment(String segment) {
+    return _datasource.watchAllCustomers(isActive: true).map(
+      (customers) => customers.where((c) => c.segment == segment).toList(),
+    );
+  }
+
+  @override
+  Stream<Map<String, int>> watchCustomerCountBySegment() {
+    return _datasource.watchAllCustomers(isActive: true).map((customers) {
+      final counts = <String, int>{
+        'retail': 0,
+        'wholesale': 0,
+        'premium': 0,
+      };
+      for (final customer in customers) {
+        final segment = customer.segment;
+        counts[segment] = (counts[segment] ?? 0) + 1;
+      }
+      return counts;
+    });
+  }
+}

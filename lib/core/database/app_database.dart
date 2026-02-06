@@ -27,6 +27,7 @@ import 'daos/settings_dao.dart';
 import 'daos/barcode_template_dao.dart';
 import 'daos/purchase_dao.dart';
 import 'daos/employee_dao.dart';
+import 'daos/supplier_dao.dart';
 
 import 'database_native.dart' if (dart.library.html) 'database_web.dart';
 
@@ -98,6 +99,7 @@ part 'app_database.g.dart';
     SettingsDao,
     BarcodeTemplateDao,
     EmployeeDao,
+    SupplierDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -306,6 +308,13 @@ FROM product_variants__old
     
     await _safeAddColumn('sizes', 'sort_order', 'INTEGER NOT NULL DEFAULT 0');
 
+    // Employee payroll configuration columns
+    await _safeAddColumn('employees', 'pay_period_type', "TEXT NOT NULL DEFAULT 'monthly'");
+    await _safeAddColumn('employees', 'working_days_per_period', 'INTEGER NOT NULL DEFAULT 26');
+    await _safeAddColumn('employees', 'working_hours_per_day', 'INTEGER NOT NULL DEFAULT 8');
+    await _safeAddColumn('employees', 'absence_deduction_rate_bps', 'INTEGER NOT NULL DEFAULT 10000');
+    await _safeAddColumn('employees', 'late_deduction_rate_bps', 'INTEGER NOT NULL DEFAULT 2500');
+
     // Customers advanced fields (segmentation + loyalty + analytics)
     await _safeAddColumn('customers', 'segment', "TEXT NOT NULL DEFAULT 'retail'");
     await _safeAddColumn('customers', 'loyalty_enabled', 'INTEGER NOT NULL DEFAULT 1');
@@ -432,7 +441,7 @@ CREATE TABLE IF NOT EXISTS loyalty_settings (
   }
 
   @override
-  int get schemaVersion => 10012;
+  int get schemaVersion => 10013;
 
   @override
   MigrationStrategy get migration {
@@ -558,6 +567,15 @@ CREATE TABLE IF NOT EXISTS loyalty_settings (
         // Migration 10011 -> 10012: Per-customer loyalty enable/disable
         if (from < 10012) {
           await _safeAddColumn('customers', 'loyalty_enabled', 'INTEGER NOT NULL DEFAULT 1');
+        }
+
+        // Migration 10012 -> 10013: Employee payroll configuration columns
+        if (from < 10013) {
+          await _safeAddColumn('employees', 'pay_period_type', "TEXT NOT NULL DEFAULT 'monthly'");
+          await _safeAddColumn('employees', 'working_days_per_period', 'INTEGER NOT NULL DEFAULT 26');
+          await _safeAddColumn('employees', 'working_hours_per_day', 'INTEGER NOT NULL DEFAULT 8');
+          await _safeAddColumn('employees', 'absence_deduction_rate_bps', 'INTEGER NOT NULL DEFAULT 10000');
+          await _safeAddColumn('employees', 'late_deduction_rate_bps', 'INTEGER NOT NULL DEFAULT 2500');
         }
 
         await _createIndexes();

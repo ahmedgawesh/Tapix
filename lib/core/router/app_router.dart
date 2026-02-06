@@ -41,6 +41,10 @@ import '../../features/employees/presentation/screens/attendance_screen.dart';
 import '../../features/employees/presentation/screens/leave_requests_screen.dart';
 import '../../features/employees/presentation/screens/payroll_screen.dart';
 import '../../features/employees/presentation/screens/employee_form_screen.dart';
+import '../../features/employees/presentation/screens/employee_detail_screen.dart';
+import '../../features/suppliers/presentation/screens/supplier_hub_screen.dart';
+import '../../features/suppliers/presentation/screens/supplier_form_screen.dart';
+import '../../features/suppliers/presentation/screens/supplier_profile_screen.dart';
 import '../di/injection_container.dart';
 import 'route_permissions.dart';
 
@@ -331,25 +335,25 @@ class AppRouter {
       ),
       GoRoute(
         path: '/suppliers',
-        builder: (context, state) => const PlaceholderScreen(title: 'Suppliers'),
+        builder: (context, state) => const SupplierHubScreen(),
         routes: [
           GoRoute(
             path: 'new',
-            builder: (context, state) => const PlaceholderScreen(title: 'Suppliers'),
+            builder: (context, state) => const SupplierFormScreen(),
           ),
           GoRoute(
             path: ':id',
             builder: (context, state) {
               final id = int.tryParse(state.pathParameters['id'] ?? '');
-              if (id == null) return const PlaceholderScreen(title: 'Suppliers');
-              return PlaceholderScreen(title: 'Supplier $id');
+              if (id == null) return const SupplierHubScreen();
+              return SupplierProfileScreen(supplierId: id);
             },
             routes: [
               GoRoute(
                 path: 'edit',
                 builder: (context, state) {
                   final id = int.tryParse(state.pathParameters['id'] ?? '');
-                  return PlaceholderScreen(title: 'Supplier ${id ?? 0}');
+                  return SupplierFormScreen(supplierId: id);
                 },
               ),
             ],
@@ -471,9 +475,18 @@ class AppRouter {
           GoRoute(
             path: ':id',
             builder: (context, state) {
-              final id = int.tryParse(state.pathParameters['id'] ?? '');
-              return EmployeeFormScreen(employeeId: id);
+              final id = int.tryParse(state.pathParameters['id'] ?? '') ?? 0;
+              return EmployeeDetailScreen(employeeId: id);
             },
+            routes: [
+              GoRoute(
+                path: 'edit',
+                builder: (context, state) {
+                  final id = int.tryParse(state.pathParameters['id'] ?? '');
+                  return EmployeeFormScreen(employeeId: id);
+                },
+              ),
+            ],
           ),
           GoRoute(
             path: 'settings',

@@ -14102,6 +14102,63 @@ class $EmployeesTable extends Employees
         requiredDuringInsert: false,
         defaultValue: const Constant(0),
       );
+  static const VerificationMeta _payPeriodTypeMeta = const VerificationMeta(
+    'payPeriodType',
+  );
+  @override
+  late final GeneratedColumn<String> payPeriodType = GeneratedColumn<String>(
+    'pay_period_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('monthly'),
+  );
+  static const VerificationMeta _workingDaysPerPeriodMeta =
+      const VerificationMeta('workingDaysPerPeriod');
+  @override
+  late final GeneratedColumn<int> workingDaysPerPeriod = GeneratedColumn<int>(
+    'working_days_per_period',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(26),
+  );
+  static const VerificationMeta _workingHoursPerDayMeta =
+      const VerificationMeta('workingHoursPerDay');
+  @override
+  late final GeneratedColumn<int> workingHoursPerDay = GeneratedColumn<int>(
+    'working_hours_per_day',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(8),
+  );
+  static const VerificationMeta _absenceDeductionRateBpsMeta =
+      const VerificationMeta('absenceDeductionRateBps');
+  @override
+  late final GeneratedColumn<int> absenceDeductionRateBps =
+      GeneratedColumn<int>(
+        'absence_deduction_rate_bps',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(10000),
+      );
+  static const VerificationMeta _lateDeductionRateBpsMeta =
+      const VerificationMeta('lateDeductionRateBps');
+  @override
+  late final GeneratedColumn<int> lateDeductionRateBps = GeneratedColumn<int>(
+    'late_deduction_rate_bps',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(2500),
+  );
   static const VerificationMeta _currencyIdMeta = const VerificationMeta(
     'currencyId',
   );
@@ -14203,6 +14260,11 @@ class $EmployeesTable extends Employees
     managerId,
     salaryCents,
     defaultCommissionRateBps,
+    payPeriodType,
+    workingDaysPerPeriod,
+    workingHoursPerDay,
+    absenceDeductionRateBps,
+    lateDeductionRateBps,
     currencyId,
     isActive,
     hireDate,
@@ -14303,6 +14365,51 @@ class $EmployeesTable extends Employees
         defaultCommissionRateBps.isAcceptableOrUnknown(
           data['default_commission_rate_bps']!,
           _defaultCommissionRateBpsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('pay_period_type')) {
+      context.handle(
+        _payPeriodTypeMeta,
+        payPeriodType.isAcceptableOrUnknown(
+          data['pay_period_type']!,
+          _payPeriodTypeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('working_days_per_period')) {
+      context.handle(
+        _workingDaysPerPeriodMeta,
+        workingDaysPerPeriod.isAcceptableOrUnknown(
+          data['working_days_per_period']!,
+          _workingDaysPerPeriodMeta,
+        ),
+      );
+    }
+    if (data.containsKey('working_hours_per_day')) {
+      context.handle(
+        _workingHoursPerDayMeta,
+        workingHoursPerDay.isAcceptableOrUnknown(
+          data['working_hours_per_day']!,
+          _workingHoursPerDayMeta,
+        ),
+      );
+    }
+    if (data.containsKey('absence_deduction_rate_bps')) {
+      context.handle(
+        _absenceDeductionRateBpsMeta,
+        absenceDeductionRateBps.isAcceptableOrUnknown(
+          data['absence_deduction_rate_bps']!,
+          _absenceDeductionRateBpsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('late_deduction_rate_bps')) {
+      context.handle(
+        _lateDeductionRateBpsMeta,
+        lateDeductionRateBps.isAcceptableOrUnknown(
+          data['late_deduction_rate_bps']!,
+          _lateDeductionRateBpsMeta,
         ),
       );
     }
@@ -14420,6 +14527,26 @@ class $EmployeesTable extends Employees
         DriftSqlType.int,
         data['${effectivePrefix}default_commission_rate_bps'],
       )!,
+      payPeriodType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}pay_period_type'],
+      )!,
+      workingDaysPerPeriod: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}working_days_per_period'],
+      )!,
+      workingHoursPerDay: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}working_hours_per_day'],
+      )!,
+      absenceDeductionRateBps: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}absence_deduction_rate_bps'],
+      )!,
+      lateDeductionRateBps: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}late_deduction_rate_bps'],
+      )!,
       currencyId: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}currency_id'],
@@ -14487,6 +14614,21 @@ class Employee extends DataClass implements Insertable<Employee> {
 
   /// Default commission rate in basis points (e.g., 500 = 5%)
   final int defaultCommissionRateBps;
+
+  /// Pay period type: monthly, weekly, daily
+  final String payPeriodType;
+
+  /// Working days per pay period (e.g., 26 for monthly)
+  final int workingDaysPerPeriod;
+
+  /// Working hours per day (e.g., 8)
+  final int workingHoursPerDay;
+
+  /// Absence deduction rate in basis points (10000 = 100% of daily rate)
+  final int absenceDeductionRateBps;
+
+  /// Late deduction rate in basis points (2500 = 25% of daily rate)
+  final int lateDeductionRateBps;
   final int currencyId;
   final bool isActive;
   final DateTime? hireDate;
@@ -14509,6 +14651,11 @@ class Employee extends DataClass implements Insertable<Employee> {
     this.managerId,
     this.salaryCents,
     required this.defaultCommissionRateBps,
+    required this.payPeriodType,
+    required this.workingDaysPerPeriod,
+    required this.workingHoursPerDay,
+    required this.absenceDeductionRateBps,
+    required this.lateDeductionRateBps,
     required this.currencyId,
     required this.isActive,
     this.hireDate,
@@ -14560,6 +14707,11 @@ class Employee extends DataClass implements Insertable<Employee> {
     map['default_commission_rate_bps'] = Variable<int>(
       defaultCommissionRateBps,
     );
+    map['pay_period_type'] = Variable<String>(payPeriodType);
+    map['working_days_per_period'] = Variable<int>(workingDaysPerPeriod);
+    map['working_hours_per_day'] = Variable<int>(workingHoursPerDay);
+    map['absence_deduction_rate_bps'] = Variable<int>(absenceDeductionRateBps);
+    map['late_deduction_rate_bps'] = Variable<int>(lateDeductionRateBps);
     map['currency_id'] = Variable<int>(currencyId);
     map['is_active'] = Variable<bool>(isActive);
     if (!nullToAbsent || hireDate != null) {
@@ -14614,6 +14766,11 @@ class Employee extends DataClass implements Insertable<Employee> {
           ? const Value.absent()
           : Value(salaryCents),
       defaultCommissionRateBps: Value(defaultCommissionRateBps),
+      payPeriodType: Value(payPeriodType),
+      workingDaysPerPeriod: Value(workingDaysPerPeriod),
+      workingHoursPerDay: Value(workingHoursPerDay),
+      absenceDeductionRateBps: Value(absenceDeductionRateBps),
+      lateDeductionRateBps: Value(lateDeductionRateBps),
       currencyId: Value(currencyId),
       isActive: Value(isActive),
       hireDate: hireDate == null && nullToAbsent
@@ -14652,6 +14809,17 @@ class Employee extends DataClass implements Insertable<Employee> {
       defaultCommissionRateBps: serializer.fromJson<int>(
         json['defaultCommissionRateBps'],
       ),
+      payPeriodType: serializer.fromJson<String>(json['payPeriodType']),
+      workingDaysPerPeriod: serializer.fromJson<int>(
+        json['workingDaysPerPeriod'],
+      ),
+      workingHoursPerDay: serializer.fromJson<int>(json['workingHoursPerDay']),
+      absenceDeductionRateBps: serializer.fromJson<int>(
+        json['absenceDeductionRateBps'],
+      ),
+      lateDeductionRateBps: serializer.fromJson<int>(
+        json['lateDeductionRateBps'],
+      ),
       currencyId: serializer.fromJson<int>(json['currencyId']),
       isActive: serializer.fromJson<bool>(json['isActive']),
       hireDate: serializer.fromJson<DateTime?>(json['hireDate']),
@@ -14681,6 +14849,13 @@ class Employee extends DataClass implements Insertable<Employee> {
       'defaultCommissionRateBps': serializer.toJson<int>(
         defaultCommissionRateBps,
       ),
+      'payPeriodType': serializer.toJson<String>(payPeriodType),
+      'workingDaysPerPeriod': serializer.toJson<int>(workingDaysPerPeriod),
+      'workingHoursPerDay': serializer.toJson<int>(workingHoursPerDay),
+      'absenceDeductionRateBps': serializer.toJson<int>(
+        absenceDeductionRateBps,
+      ),
+      'lateDeductionRateBps': serializer.toJson<int>(lateDeductionRateBps),
       'currencyId': serializer.toJson<int>(currencyId),
       'isActive': serializer.toJson<bool>(isActive),
       'hireDate': serializer.toJson<DateTime?>(hireDate),
@@ -14706,6 +14881,11 @@ class Employee extends DataClass implements Insertable<Employee> {
     Value<int?> managerId = const Value.absent(),
     Value<Decimal?> salaryCents = const Value.absent(),
     int? defaultCommissionRateBps,
+    String? payPeriodType,
+    int? workingDaysPerPeriod,
+    int? workingHoursPerDay,
+    int? absenceDeductionRateBps,
+    int? lateDeductionRateBps,
     int? currencyId,
     bool? isActive,
     Value<DateTime?> hireDate = const Value.absent(),
@@ -14729,6 +14909,12 @@ class Employee extends DataClass implements Insertable<Employee> {
     salaryCents: salaryCents.present ? salaryCents.value : this.salaryCents,
     defaultCommissionRateBps:
         defaultCommissionRateBps ?? this.defaultCommissionRateBps,
+    payPeriodType: payPeriodType ?? this.payPeriodType,
+    workingDaysPerPeriod: workingDaysPerPeriod ?? this.workingDaysPerPeriod,
+    workingHoursPerDay: workingHoursPerDay ?? this.workingHoursPerDay,
+    absenceDeductionRateBps:
+        absenceDeductionRateBps ?? this.absenceDeductionRateBps,
+    lateDeductionRateBps: lateDeductionRateBps ?? this.lateDeductionRateBps,
     currencyId: currencyId ?? this.currencyId,
     isActive: isActive ?? this.isActive,
     hireDate: hireDate.present ? hireDate.value : this.hireDate,
@@ -14763,6 +14949,21 @@ class Employee extends DataClass implements Insertable<Employee> {
       defaultCommissionRateBps: data.defaultCommissionRateBps.present
           ? data.defaultCommissionRateBps.value
           : this.defaultCommissionRateBps,
+      payPeriodType: data.payPeriodType.present
+          ? data.payPeriodType.value
+          : this.payPeriodType,
+      workingDaysPerPeriod: data.workingDaysPerPeriod.present
+          ? data.workingDaysPerPeriod.value
+          : this.workingDaysPerPeriod,
+      workingHoursPerDay: data.workingHoursPerDay.present
+          ? data.workingHoursPerDay.value
+          : this.workingHoursPerDay,
+      absenceDeductionRateBps: data.absenceDeductionRateBps.present
+          ? data.absenceDeductionRateBps.value
+          : this.absenceDeductionRateBps,
+      lateDeductionRateBps: data.lateDeductionRateBps.present
+          ? data.lateDeductionRateBps.value
+          : this.lateDeductionRateBps,
       currencyId: data.currencyId.present
           ? data.currencyId.value
           : this.currencyId,
@@ -14794,6 +14995,11 @@ class Employee extends DataClass implements Insertable<Employee> {
           ..write('managerId: $managerId, ')
           ..write('salaryCents: $salaryCents, ')
           ..write('defaultCommissionRateBps: $defaultCommissionRateBps, ')
+          ..write('payPeriodType: $payPeriodType, ')
+          ..write('workingDaysPerPeriod: $workingDaysPerPeriod, ')
+          ..write('workingHoursPerDay: $workingHoursPerDay, ')
+          ..write('absenceDeductionRateBps: $absenceDeductionRateBps, ')
+          ..write('lateDeductionRateBps: $lateDeductionRateBps, ')
           ..write('currencyId: $currencyId, ')
           ..write('isActive: $isActive, ')
           ..write('hireDate: $hireDate, ')
@@ -14821,6 +15027,11 @@ class Employee extends DataClass implements Insertable<Employee> {
     managerId,
     salaryCents,
     defaultCommissionRateBps,
+    payPeriodType,
+    workingDaysPerPeriod,
+    workingHoursPerDay,
+    absenceDeductionRateBps,
+    lateDeductionRateBps,
     currencyId,
     isActive,
     hireDate,
@@ -14847,6 +15058,11 @@ class Employee extends DataClass implements Insertable<Employee> {
           other.managerId == this.managerId &&
           other.salaryCents == this.salaryCents &&
           other.defaultCommissionRateBps == this.defaultCommissionRateBps &&
+          other.payPeriodType == this.payPeriodType &&
+          other.workingDaysPerPeriod == this.workingDaysPerPeriod &&
+          other.workingHoursPerDay == this.workingHoursPerDay &&
+          other.absenceDeductionRateBps == this.absenceDeductionRateBps &&
+          other.lateDeductionRateBps == this.lateDeductionRateBps &&
           other.currencyId == this.currencyId &&
           other.isActive == this.isActive &&
           other.hireDate == this.hireDate &&
@@ -14871,6 +15087,11 @@ class EmployeesCompanion extends UpdateCompanion<Employee> {
   final Value<int?> managerId;
   final Value<Decimal?> salaryCents;
   final Value<int> defaultCommissionRateBps;
+  final Value<String> payPeriodType;
+  final Value<int> workingDaysPerPeriod;
+  final Value<int> workingHoursPerDay;
+  final Value<int> absenceDeductionRateBps;
+  final Value<int> lateDeductionRateBps;
   final Value<int> currencyId;
   final Value<bool> isActive;
   final Value<DateTime?> hireDate;
@@ -14893,6 +15114,11 @@ class EmployeesCompanion extends UpdateCompanion<Employee> {
     this.managerId = const Value.absent(),
     this.salaryCents = const Value.absent(),
     this.defaultCommissionRateBps = const Value.absent(),
+    this.payPeriodType = const Value.absent(),
+    this.workingDaysPerPeriod = const Value.absent(),
+    this.workingHoursPerDay = const Value.absent(),
+    this.absenceDeductionRateBps = const Value.absent(),
+    this.lateDeductionRateBps = const Value.absent(),
     this.currencyId = const Value.absent(),
     this.isActive = const Value.absent(),
     this.hireDate = const Value.absent(),
@@ -14916,6 +15142,11 @@ class EmployeesCompanion extends UpdateCompanion<Employee> {
     this.managerId = const Value.absent(),
     this.salaryCents = const Value.absent(),
     this.defaultCommissionRateBps = const Value.absent(),
+    this.payPeriodType = const Value.absent(),
+    this.workingDaysPerPeriod = const Value.absent(),
+    this.workingHoursPerDay = const Value.absent(),
+    this.absenceDeductionRateBps = const Value.absent(),
+    this.lateDeductionRateBps = const Value.absent(),
     required int currencyId,
     this.isActive = const Value.absent(),
     this.hireDate = const Value.absent(),
@@ -14940,6 +15171,11 @@ class EmployeesCompanion extends UpdateCompanion<Employee> {
     Expression<int>? managerId,
     Expression<int>? salaryCents,
     Expression<int>? defaultCommissionRateBps,
+    Expression<String>? payPeriodType,
+    Expression<int>? workingDaysPerPeriod,
+    Expression<int>? workingHoursPerDay,
+    Expression<int>? absenceDeductionRateBps,
+    Expression<int>? lateDeductionRateBps,
     Expression<int>? currencyId,
     Expression<bool>? isActive,
     Expression<DateTime>? hireDate,
@@ -14964,6 +15200,15 @@ class EmployeesCompanion extends UpdateCompanion<Employee> {
       if (salaryCents != null) 'salary_cents': salaryCents,
       if (defaultCommissionRateBps != null)
         'default_commission_rate_bps': defaultCommissionRateBps,
+      if (payPeriodType != null) 'pay_period_type': payPeriodType,
+      if (workingDaysPerPeriod != null)
+        'working_days_per_period': workingDaysPerPeriod,
+      if (workingHoursPerDay != null)
+        'working_hours_per_day': workingHoursPerDay,
+      if (absenceDeductionRateBps != null)
+        'absence_deduction_rate_bps': absenceDeductionRateBps,
+      if (lateDeductionRateBps != null)
+        'late_deduction_rate_bps': lateDeductionRateBps,
       if (currencyId != null) 'currency_id': currencyId,
       if (isActive != null) 'is_active': isActive,
       if (hireDate != null) 'hire_date': hireDate,
@@ -14989,6 +15234,11 @@ class EmployeesCompanion extends UpdateCompanion<Employee> {
     Value<int?>? managerId,
     Value<Decimal?>? salaryCents,
     Value<int>? defaultCommissionRateBps,
+    Value<String>? payPeriodType,
+    Value<int>? workingDaysPerPeriod,
+    Value<int>? workingHoursPerDay,
+    Value<int>? absenceDeductionRateBps,
+    Value<int>? lateDeductionRateBps,
     Value<int>? currencyId,
     Value<bool>? isActive,
     Value<DateTime?>? hireDate,
@@ -15013,6 +15263,12 @@ class EmployeesCompanion extends UpdateCompanion<Employee> {
       salaryCents: salaryCents ?? this.salaryCents,
       defaultCommissionRateBps:
           defaultCommissionRateBps ?? this.defaultCommissionRateBps,
+      payPeriodType: payPeriodType ?? this.payPeriodType,
+      workingDaysPerPeriod: workingDaysPerPeriod ?? this.workingDaysPerPeriod,
+      workingHoursPerDay: workingHoursPerDay ?? this.workingHoursPerDay,
+      absenceDeductionRateBps:
+          absenceDeductionRateBps ?? this.absenceDeductionRateBps,
+      lateDeductionRateBps: lateDeductionRateBps ?? this.lateDeductionRateBps,
       currencyId: currencyId ?? this.currencyId,
       isActive: isActive ?? this.isActive,
       hireDate: hireDate ?? this.hireDate,
@@ -15072,6 +15328,27 @@ class EmployeesCompanion extends UpdateCompanion<Employee> {
         defaultCommissionRateBps.value,
       );
     }
+    if (payPeriodType.present) {
+      map['pay_period_type'] = Variable<String>(payPeriodType.value);
+    }
+    if (workingDaysPerPeriod.present) {
+      map['working_days_per_period'] = Variable<int>(
+        workingDaysPerPeriod.value,
+      );
+    }
+    if (workingHoursPerDay.present) {
+      map['working_hours_per_day'] = Variable<int>(workingHoursPerDay.value);
+    }
+    if (absenceDeductionRateBps.present) {
+      map['absence_deduction_rate_bps'] = Variable<int>(
+        absenceDeductionRateBps.value,
+      );
+    }
+    if (lateDeductionRateBps.present) {
+      map['late_deduction_rate_bps'] = Variable<int>(
+        lateDeductionRateBps.value,
+      );
+    }
     if (currencyId.present) {
       map['currency_id'] = Variable<int>(currencyId.value);
     }
@@ -15113,6 +15390,11 @@ class EmployeesCompanion extends UpdateCompanion<Employee> {
           ..write('managerId: $managerId, ')
           ..write('salaryCents: $salaryCents, ')
           ..write('defaultCommissionRateBps: $defaultCommissionRateBps, ')
+          ..write('payPeriodType: $payPeriodType, ')
+          ..write('workingDaysPerPeriod: $workingDaysPerPeriod, ')
+          ..write('workingHoursPerDay: $workingHoursPerDay, ')
+          ..write('absenceDeductionRateBps: $absenceDeductionRateBps, ')
+          ..write('lateDeductionRateBps: $lateDeductionRateBps, ')
           ..write('currencyId: $currencyId, ')
           ..write('isActive: $isActive, ')
           ..write('hireDate: $hireDate, ')
@@ -32959,6 +33241,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     this as AppDatabase,
   );
   late final EmployeeDao employeeDao = EmployeeDao(this as AppDatabase);
+  late final SupplierDao supplierDao = SupplierDao(this as AppDatabase);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -45835,6 +46118,11 @@ typedef $$EmployeesTableCreateCompanionBuilder =
       Value<int?> managerId,
       Value<Decimal?> salaryCents,
       Value<int> defaultCommissionRateBps,
+      Value<String> payPeriodType,
+      Value<int> workingDaysPerPeriod,
+      Value<int> workingHoursPerDay,
+      Value<int> absenceDeductionRateBps,
+      Value<int> lateDeductionRateBps,
       required int currencyId,
       Value<bool> isActive,
       Value<DateTime?> hireDate,
@@ -45859,6 +46147,11 @@ typedef $$EmployeesTableUpdateCompanionBuilder =
       Value<int?> managerId,
       Value<Decimal?> salaryCents,
       Value<int> defaultCommissionRateBps,
+      Value<String> payPeriodType,
+      Value<int> workingDaysPerPeriod,
+      Value<int> workingHoursPerDay,
+      Value<int> absenceDeductionRateBps,
+      Value<int> lateDeductionRateBps,
       Value<int> currencyId,
       Value<bool> isActive,
       Value<DateTime?> hireDate,
@@ -46120,6 +46413,31 @@ class $$EmployeesTableFilterComposer
 
   ColumnFilters<int> get defaultCommissionRateBps => $composableBuilder(
     column: $table.defaultCommissionRateBps,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get payPeriodType => $composableBuilder(
+    column: $table.payPeriodType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get workingDaysPerPeriod => $composableBuilder(
+    column: $table.workingDaysPerPeriod,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get workingHoursPerDay => $composableBuilder(
+    column: $table.workingHoursPerDay,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get absenceDeductionRateBps => $composableBuilder(
+    column: $table.absenceDeductionRateBps,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get lateDeductionRateBps => $composableBuilder(
+    column: $table.lateDeductionRateBps,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -46442,6 +46760,31 @@ class $$EmployeesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get payPeriodType => $composableBuilder(
+    column: $table.payPeriodType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get workingDaysPerPeriod => $composableBuilder(
+    column: $table.workingDaysPerPeriod,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get workingHoursPerDay => $composableBuilder(
+    column: $table.workingHoursPerDay,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get absenceDeductionRateBps => $composableBuilder(
+    column: $table.absenceDeductionRateBps,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get lateDeductionRateBps => $composableBuilder(
+    column: $table.lateDeductionRateBps,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get isActive => $composableBuilder(
     column: $table.isActive,
     builder: (column) => ColumnOrderings(column),
@@ -46593,6 +46936,31 @@ class $$EmployeesTableAnnotationComposer
 
   GeneratedColumn<int> get defaultCommissionRateBps => $composableBuilder(
     column: $table.defaultCommissionRateBps,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get payPeriodType => $composableBuilder(
+    column: $table.payPeriodType,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get workingDaysPerPeriod => $composableBuilder(
+    column: $table.workingDaysPerPeriod,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get workingHoursPerDay => $composableBuilder(
+    column: $table.workingHoursPerDay,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get absenceDeductionRateBps => $composableBuilder(
+    column: $table.absenceDeductionRateBps,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get lateDeductionRateBps => $composableBuilder(
+    column: $table.lateDeductionRateBps,
     builder: (column) => column,
   );
 
@@ -46890,6 +47258,11 @@ class $$EmployeesTableTableManager
                 Value<int?> managerId = const Value.absent(),
                 Value<Decimal?> salaryCents = const Value.absent(),
                 Value<int> defaultCommissionRateBps = const Value.absent(),
+                Value<String> payPeriodType = const Value.absent(),
+                Value<int> workingDaysPerPeriod = const Value.absent(),
+                Value<int> workingHoursPerDay = const Value.absent(),
+                Value<int> absenceDeductionRateBps = const Value.absent(),
+                Value<int> lateDeductionRateBps = const Value.absent(),
                 Value<int> currencyId = const Value.absent(),
                 Value<bool> isActive = const Value.absent(),
                 Value<DateTime?> hireDate = const Value.absent(),
@@ -46912,6 +47285,11 @@ class $$EmployeesTableTableManager
                 managerId: managerId,
                 salaryCents: salaryCents,
                 defaultCommissionRateBps: defaultCommissionRateBps,
+                payPeriodType: payPeriodType,
+                workingDaysPerPeriod: workingDaysPerPeriod,
+                workingHoursPerDay: workingHoursPerDay,
+                absenceDeductionRateBps: absenceDeductionRateBps,
+                lateDeductionRateBps: lateDeductionRateBps,
                 currencyId: currencyId,
                 isActive: isActive,
                 hireDate: hireDate,
@@ -46936,6 +47314,11 @@ class $$EmployeesTableTableManager
                 Value<int?> managerId = const Value.absent(),
                 Value<Decimal?> salaryCents = const Value.absent(),
                 Value<int> defaultCommissionRateBps = const Value.absent(),
+                Value<String> payPeriodType = const Value.absent(),
+                Value<int> workingDaysPerPeriod = const Value.absent(),
+                Value<int> workingHoursPerDay = const Value.absent(),
+                Value<int> absenceDeductionRateBps = const Value.absent(),
+                Value<int> lateDeductionRateBps = const Value.absent(),
                 required int currencyId,
                 Value<bool> isActive = const Value.absent(),
                 Value<DateTime?> hireDate = const Value.absent(),
@@ -46958,6 +47341,11 @@ class $$EmployeesTableTableManager
                 managerId: managerId,
                 salaryCents: salaryCents,
                 defaultCommissionRateBps: defaultCommissionRateBps,
+                payPeriodType: payPeriodType,
+                workingDaysPerPeriod: workingDaysPerPeriod,
+                workingHoursPerDay: workingHoursPerDay,
+                absenceDeductionRateBps: absenceDeductionRateBps,
+                lateDeductionRateBps: lateDeductionRateBps,
                 currencyId: currencyId,
                 isActive: isActive,
                 hireDate: hireDate,
