@@ -412,10 +412,14 @@ class EmployeeDao extends DatabaseAccessor<AppDatabase>
   /// Get distinct payroll periods
   Future<List<String>> getPayrollPeriods() async {
     final result = await customSelect(
-      "SELECT DISTINCT strftime('%Y-%m', period_start) as period FROM payrolls ORDER BY period DESC",
+      "SELECT DISTINCT strftime('%Y-%m', period_start) as period FROM payrolls WHERE period_start IS NOT NULL ORDER BY period DESC",
     ).get();
 
-    return result.map((row) => row.read<String>('period')).toList();
+    return result
+        .map((row) => row.readNullable<String>('period'))
+        .where((p) => p != null)
+        .cast<String>()
+        .toList();
   }
 
   // ==================== COMMISSIONS ====================
@@ -462,11 +466,11 @@ class EmployeeDao extends DatabaseAccessor<AppDatabase>
   /// Get total commission for an employee in a period
   Future<int> getTotalCommissionCents(int employeeId, String period) async {
     final result = await customSelect(
-      'SELECT SUM(commission_amount_cents) as total FROM commissions WHERE employee_id = ? AND period = ?',
+      'SELECT COALESCE(SUM(commission_amount_cents), 0) as total FROM commissions WHERE employee_id = ? AND period = ?',
       variables: [Variable.withInt(employeeId), Variable.withString(period)],
     ).getSingleOrNull();
 
-    return result?.read<int?>('total') ?? 0;
+    return result?.readNullable<int>('total') ?? 0;
   }
 
   // ==================== PERFORMANCE ====================

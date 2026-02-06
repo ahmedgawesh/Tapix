@@ -2,6 +2,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons/lucide_icons.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/services/currency_service.dart';
@@ -43,7 +44,7 @@ class _SupplierHubContentState extends State<_SupplierHubContent> {
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
+          icon: const Icon(LucideIcons.arrowLeft),
           onPressed: () {
             if (context.canPop()) {
               context.pop();
@@ -55,7 +56,7 @@ class _SupplierHubContentState extends State<_SupplierHubContent> {
         title: Text('suppliers.title'.tr()),
         actions: [
           IconButton(
-            icon: const Icon(Icons.settings_outlined),
+            icon: const Icon(LucideIcons.settings),
             onPressed: () => context.push('/settings'),
             tooltip: 'settings.title'.tr(),
           ),
@@ -82,7 +83,7 @@ class _SupplierHubContentState extends State<_SupplierHubContent> {
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => context.push('/suppliers/new'),
-        icon: const Icon(Icons.add),
+        icon: const Icon(LucideIcons.plus),
         label: Text('suppliers.add'.tr()),
       ),
     );
@@ -94,7 +95,7 @@ class _SupplierHubContentState extends State<_SupplierHubContent> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
-            Icons.error_outline,
+            LucideIcons.alertCircle,
             size: 64,
             color: Theme.of(context).colorScheme.error,
           ),
@@ -106,7 +107,7 @@ class _SupplierHubContentState extends State<_SupplierHubContent> {
           const SizedBox(height: 8),
           TextButton.icon(
             onPressed: () => context.read<SuppliersBloc>().refresh(),
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(LucideIcons.rotateCcw),
             label: Text('common.retry'.tr()),
           ),
         ],
@@ -152,25 +153,25 @@ class _SupplierHubContentState extends State<_SupplierHubContent> {
                       final isNarrow = constraints.maxWidth < 700;
 
                       final activeCard = _StatCard(
-                        icon: Icons.local_shipping_outlined,
+                        icon: LucideIcons.truck,
                         iconColor: colorScheme.primary,
-                        backgroundColor: colorScheme.primaryContainer,
+                        backgroundColor: colorScheme.primaryContainer.withValues(alpha: 0.5),
                         label: 'suppliers.active_suppliers'.tr(),
                         value: activeCount.toString(),
                       );
 
                       final payablesCard = _StatCard(
-                        icon: Icons.account_balance_wallet_outlined,
+                        icon: LucideIcons.wallet,
                         iconColor: colorScheme.secondary,
-                        backgroundColor: colorScheme.secondaryContainer,
+                        backgroundColor: colorScheme.secondaryContainer.withValues(alpha: 0.5),
                         label: 'suppliers.total_payables'.tr(),
                         value: currencyService.format(totalBalanceCents),
                       );
 
                       final withBalanceCard = _StatCard(
-                        icon: Icons.receipt_long_outlined,
+                        icon: LucideIcons.fileText,
                         iconColor: colorScheme.tertiary,
-                        backgroundColor: colorScheme.tertiaryContainer,
+                        backgroundColor: colorScheme.tertiaryContainer.withValues(alpha: 0.5),
                         label: 'suppliers.with_balance'.tr(),
                         value: withBalanceCount.toString(),
                       );
@@ -215,10 +216,10 @@ class _SupplierHubContentState extends State<_SupplierHubContent> {
                 controller: _searchController,
                 decoration: InputDecoration(
                   hintText: 'suppliers.search_hint'.tr(),
-                  prefixIcon: const Icon(Icons.search),
+                  prefixIcon: const Icon(LucideIcons.search),
                   suffixIcon: _searchController.text.isNotEmpty
                       ? IconButton(
-                          icon: const Icon(Icons.clear),
+                          icon: const Icon(LucideIcons.x),
                           onPressed: () {
                             _searchController.clear();
                             context.read<SuppliersBloc>().add(
@@ -250,19 +251,19 @@ class _SupplierHubContentState extends State<_SupplierHubContent> {
                 runSpacing: 8,
                 children: [
                   ActionChip(
-                    avatar: const Icon(Icons.add, size: 18),
+                    avatar: const Icon(LucideIcons.plus, size: 18),
                     label: Text('suppliers.add'.tr()),
                     onPressed: () => context.push('/suppliers/new'),
                   ),
                   ActionChip(
-                    avatar: const Icon(Icons.payment, size: 18),
+                    avatar: const Icon(LucideIcons.banknote, size: 18),
                     label: Text('suppliers.make_payment'.tr()),
                     onPressed: () {
                       // TODO: Navigate to supplier payment
                     },
                   ),
                   ActionChip(
-                    avatar: const Icon(Icons.analytics_outlined, size: 18),
+                    avatar: const Icon(LucideIcons.barChart3, size: 18),
                     label: Text('suppliers.view_reports'.tr()),
                     onPressed: () {
                       // TODO: Navigate to reports
@@ -326,7 +327,7 @@ class _SupplierHubContentState extends State<_SupplierHubContent> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              Icons.local_shipping_outlined,
+              LucideIcons.truck,
               size: 80,
               color: theme.colorScheme.outline,
             ),
@@ -349,7 +350,7 @@ class _SupplierHubContentState extends State<_SupplierHubContent> {
             const SizedBox(height: 24),
             FilledButton.icon(
               onPressed: () => context.push('/suppliers/new'),
-              icon: const Icon(Icons.add),
+              icon: const Icon(LucideIcons.plus),
               label: Text('suppliers.add_first'.tr()),
             ),
           ],
@@ -383,6 +384,9 @@ class _StatCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: backgroundColor,
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -473,7 +477,7 @@ class _SupplierListTile extends StatelessWidget {
                         child: Row(
                           children: [
                             Icon(
-                              supplier.phone != null ? Icons.phone_outlined : Icons.email_outlined,
+                              supplier.phone != null ? LucideIcons.phone : LucideIcons.mail,
                               size: 14,
                               color: theme.colorScheme.onSurfaceVariant,
                             ),

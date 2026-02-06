@@ -1,4 +1,3 @@
-
 import 'package:decimal/decimal.dart';
 import 'package:equatable/equatable.dart';
 
@@ -6,44 +5,44 @@ class PurchaseEntity extends Equatable {
   final int id;
   final String purchaseNumber;
   final int supplierId;
+  final String? supplierName;
   final Decimal subtotalCents;
+  final Decimal discountCents;
   final Decimal taxCents;
   final Decimal totalCents;
   final int currencyId;
   final String status;
+  final String? notes;
   final DateTime purchaseDate;
   final DateTime createdAt;
   final DateTime updatedAt;
 
-  const PurchaseEntity({
+  PurchaseEntity({
     required this.id,
     required this.purchaseNumber,
     required this.supplierId,
+    this.supplierName,
     required this.subtotalCents,
+    Decimal? discountCents,
     required this.taxCents,
     required this.totalCents,
     required this.currencyId,
     required this.status,
+    this.notes,
     required this.purchaseDate,
     required this.createdAt,
     required this.updatedAt,
-  });
+  }) : discountCents = discountCents ?? Decimal.zero;
 
-  bool get isPending => status == 'pending' || status == 'draft';
+  bool get isDraft => status == 'draft' || status == 'pending';
+  bool get isPosted => status == 'posted';
+  bool get isVoided => status == 'voided';
 
   @override
   List<Object?> get props => [
-        id,
-        purchaseNumber,
-        supplierId,
-        subtotalCents,
-        taxCents,
-        totalCents,
-        currencyId,
-        status,
-        purchaseDate,
-        createdAt,
-        updatedAt,
+        id, purchaseNumber, supplierId, supplierName,
+        subtotalCents, discountCents, taxCents, totalCents,
+        currencyId, status, notes, purchaseDate, createdAt, updatedAt,
       ];
 }
 
@@ -52,38 +51,96 @@ class PurchaseItemEntity extends Equatable {
   final int purchaseId;
   final int productId;
   final int? variantId;
+  final String? productName;
+  final String? variantSku;
   final int quantity;
   final Decimal unitCostCents;
+  final Decimal discountCents;
   final Decimal subtotalCents;
   final Decimal taxCents;
   final Decimal totalCents;
+  final DateTime? expiryDate;
   final DateTime createdAt;
 
-  const PurchaseItemEntity({
+  PurchaseItemEntity({
     required this.id,
     required this.purchaseId,
     required this.productId,
     this.variantId,
+    this.productName,
+    this.variantSku,
     required this.quantity,
     required this.unitCostCents,
+    Decimal? discountCents,
     required this.subtotalCents,
     required this.taxCents,
     required this.totalCents,
+    this.expiryDate,
+    required this.createdAt,
+  }) : discountCents = discountCents ?? Decimal.zero;
+
+  @override
+  List<Object?> get props => [
+        id, purchaseId, productId, variantId, productName, variantSku,
+        quantity, unitCostCents, discountCents, subtotalCents, taxCents,
+        totalCents, expiryDate, createdAt,
+      ];
+}
+
+class PurchaseReturnEntity extends Equatable {
+  final int id;
+  final int purchaseId;
+  final String returnNumber;
+  final String? supplierName;
+  final Decimal totalCents;
+  final int currencyId;
+  final String? reason;
+  final DateTime returnDate;
+  final DateTime createdAt;
+
+  const PurchaseReturnEntity({
+    required this.id,
+    required this.purchaseId,
+    required this.returnNumber,
+    this.supplierName,
+    required this.totalCents,
+    required this.currencyId,
+    this.reason,
+    required this.returnDate,
     required this.createdAt,
   });
 
   @override
   List<Object?> get props => [
-        id,
-        purchaseId,
-        productId,
-        variantId,
-        quantity,
-        unitCostCents,
-        subtotalCents,
-        taxCents,
-        totalCents,
-        createdAt,
+        id, purchaseId, returnNumber, supplierName,
+        totalCents, currencyId, reason, returnDate, createdAt,
       ];
 }
 
+class PurchaseReturnItemEntity extends Equatable {
+  final int id;
+  final int returnId;
+  final int purchaseItemId;
+  final int quantity;
+  final Decimal refundCents;
+  final String? productName;
+  final String? variantSku;
+  final DateTime createdAt;
+
+  const PurchaseReturnItemEntity({
+    required this.id,
+    required this.returnId,
+    required this.purchaseItemId,
+    required this.quantity,
+    required this.refundCents,
+    this.productName,
+    this.variantSku,
+    required this.createdAt,
+  });
+
+  @override
+  List<Object?> get props => [
+        id, returnId, purchaseItemId, quantity,
+        refundCents, productName, variantSku, createdAt,
+      ];
+}

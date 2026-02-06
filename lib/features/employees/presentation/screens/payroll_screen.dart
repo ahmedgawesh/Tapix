@@ -8,6 +8,7 @@ import '../../domain/entities/employee_entity.dart';
 import '../../domain/repositories/employee_repository.dart';
 import '../../domain/services/payroll_calculation_service.dart';
 import '../bloc/payroll_bloc.dart';
+import '../services/payslip_pdf_service.dart';
 import '../widgets/payroll_summary_cards.dart';
 
 class PayrollScreen extends StatelessWidget {
@@ -20,7 +21,7 @@ class PayrollScreen extends StatelessWidget {
         final now = DateTime.now();
         final period = '${now.year}-${now.month.toString().padLeft(2, '0')}';
         return PayrollBloc(sl<EmployeeRepository>())
-          ..add(PayrollInitialized(period: period));
+          ..add(PayrollInitialized(period: period, status: PayrollStatus.draft));
       },
       child: const _PayrollScreenContent(),
     );
@@ -222,6 +223,7 @@ class _PayrollScreenContentState extends State<_PayrollScreenContent>
         periodStart: periodStart,
         periodEnd: periodEnd,
         basicSalaryCents: result.calc.basicSalaryCents,
+        commissionCents: result.calc.commissionCents,
         bonusCents: result.calc.bonusCents,
         overtimeCents: result.calc.overtimeCents,
         deductionCents: result.calc.totalDeductionCents,
@@ -298,79 +300,324 @@ class _PayrollCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final currencyService = sl<CurrencyService>();
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    final cs = sl<CurrencyService>();
+    final bloc = context.read<PayrollBloc>();
 
     final statusColor = _getStatusColor(payroll.status);
+    final statusIcon = _getStatusIcon(payroll.status);
+    final employeeName = bloc.employeeNames[payroll.employeeId] ?? '#${payroll.employeeId}';
+
+    final basicCents = payroll.basicSalaryCents.toBigInt().toInt();
+    final commCents = payroll.commissionCents.toBigInt().toInt();
+    final bonusCents = payroll.bonusCents.toBigInt().toInt();
+    final overtimeCents = payroll.overtimeCents.toBigInt().toInt();
+    final deductionCents = payroll.deductionCents.toBigInt().toInt();
+    final netCents = payroll.netPayCents.toBigInt().toInt();
+    final grossCents = basicCents + commCents + bonusCents + overtimeCents;
 
     return Card(
-      margin: const EdgeInsets.only(bottom: 8),
+      margin: const EdgeInsets.only(bottom: 10),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.4),
+        ),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Header: Employee name + Status badge
             Row(
               children: [
-                Expanded(
+                CircleAvatar(
+                  radius: 18,
+                  backgroundColor: colorScheme.primary.withValues(alpha: 0.12),
                   child: Text(
-                    'Employee #${payroll.employeeId}',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
+                    employeeName.isNotEmpty ? employeeName[0].toUpperCase() : '?',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      color: colorScheme.primary,
+                      fontWeight: FontWeight.bold,
                     ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        employeeName,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Text(
+                        '${payroll.periodStart.day}/${payroll.periodStart.month} – ${payroll.periodEnd.day}/${payroll.periodEnd.month}/${payroll.periodEnd.year}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                   decoration: BoxDecoration(
-                    color: statusColor.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    _getStatusLabel(payroll.status),
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: statusColor,
-                      fontWeight: FontWeight.w600,
+                    color: statusColor.withValues(alpha: isDark ? 0.2 : 0.1),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: statusColor.withValues(alpha: 0.4),
                     ),
                   ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(statusIcon, size: 13, color: statusColor),
+                      const SizedBox(width: 4),
+                      Text(
+                        _getStatusLabel(payroll.status),
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: statusColor,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                _PayrollItem(
-                  label: 'employees.basic_salary'.tr(),
-                  value: currencyService.format(payroll.basicSalaryCents.toBigInt().toInt()),
-                ),
-                const SizedBox(width: 16),
-                _PayrollItem(
-                  label: 'employees.commission'.tr(),
-                  value: currencyService.format(payroll.commissionCents.toBigInt().toInt()),
-                ),
-              ],
+            const SizedBox(height: 14),
+
+            // Salary breakdown grid
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? colorScheme.surfaceContainerHighest.withValues(alpha: 0.3)
+                    : colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      _BreakdownItem(
+                        icon: Icons.account_balance_wallet_outlined,
+                        iconColor: Colors.blue,
+                        label: 'employees.basic_salary'.tr(),
+                        value: cs.format(basicCents),
+                      ),
+                      _BreakdownItem(
+                        icon: Icons.trending_up_outlined,
+                        iconColor: Colors.teal,
+                        label: 'employees.commission'.tr(),
+                        value: cs.format(commCents),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      _BreakdownItem(
+                        icon: Icons.card_giftcard_outlined,
+                        iconColor: Colors.purple,
+                        label: 'employees.bonus'.tr(),
+                        value: cs.format(bonusCents),
+                      ),
+                      _BreakdownItem(
+                        icon: Icons.more_time_outlined,
+                        iconColor: Colors.indigo,
+                        label: 'employees.overtime_pay'.tr(),
+                        value: cs.format(overtimeCents),
+                      ),
+                    ],
+                  ),
+                  const Divider(height: 16),
+                  Row(
+                    children: [
+                      _BreakdownItem(
+                        icon: Icons.account_balance_outlined,
+                        iconColor: Colors.blue,
+                        label: 'employees.gross_pay'.tr(),
+                        value: cs.format(grossCents),
+                        isBold: true,
+                      ),
+                      _BreakdownItem(
+                        icon: Icons.trending_down_outlined,
+                        iconColor: Colors.red,
+                        label: 'employees.deductions'.tr(),
+                        value: '- ${cs.format(deductionCents)}',
+                        valueColor: Colors.red,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
+
+            // Net pay highlight
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: isDark
+                      ? [Colors.green.shade900.withValues(alpha: 0.3), Colors.green.shade800.withValues(alpha: 0.15)]
+                      : [Colors.green.shade50, Colors.green.shade100.withValues(alpha: 0.5)],
+                ),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: Colors.green.withValues(alpha: 0.3),
+                ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.payments_outlined, size: 20, color: Colors.green.shade600),
+                      const SizedBox(width: 8),
+                      Text(
+                        'employees.net_pay'.tr(),
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? Colors.green.shade300 : Colors.green.shade700,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Text(
+                    cs.format(netCents),
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.green.shade300 : Colors.green.shade700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+
+            // Action buttons row
             Row(
               children: [
-                _PayrollItem(
-                  label: 'employees.deductions'.tr(),
-                  value: '-${currencyService.format(payroll.deductionCents.toBigInt().toInt())}',
-                  valueColor: Colors.red,
+                // Status actions
+                if (payroll.status == 'draft') ...[
+                  _ActionButton(
+                    icon: Icons.play_arrow_outlined,
+                    label: 'employees.payroll_process'.tr(),
+                    color: Colors.purple,
+                    onTap: () {
+                      bloc.add(PayrollStatusUpdateRequested(
+                        id: payroll.id,
+                        status: PayrollStatus.processed,
+                      ));
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                ] else if (payroll.status == 'processed') ...[
+                  _ActionButton(
+                    icon: Icons.check_circle_outlined,
+                    label: 'employees.payroll_mark_paid'.tr(),
+                    color: Colors.green,
+                    onTap: () {
+                      bloc.add(PayrollStatusUpdateRequested(
+                        id: payroll.id,
+                        status: PayrollStatus.paid,
+                      ));
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                // PDF Export
+                _ActionButton(
+                  icon: Icons.picture_as_pdf_outlined,
+                  label: 'employees.export_payslip'.tr(),
+                  color: Colors.red.shade400,
+                  onTap: () => _exportPayslip(context, payroll),
                 ),
-                const SizedBox(width: 16),
-                _PayrollItem(
-                  label: 'employees.net_pay'.tr(),
-                  value: currencyService.format(payroll.netPayCents.toBigInt().toInt()),
-                  valueColor: Colors.green,
-                  isBold: true,
-                ),
+                const Spacer(),
+                // Delete (only for draft)
+                if (payroll.status == 'draft')
+                  IconButton(
+                    icon: Icon(Icons.delete_outline, size: 20, color: colorScheme.error),
+                    onPressed: () {
+                      _confirmDelete(context, payroll, bloc);
+                    },
+                    tooltip: 'common.delete'.tr(),
+                    visualDensity: VisualDensity.compact,
+                  ),
               ],
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Future<void> _exportPayslip(BuildContext context, Payroll payroll) async {
+    final repository = sl<EmployeeRepository>();
+    final employee = await repository.getEmployee(payroll.employeeId);
+    if (employee == null || !context.mounted) return;
+
+    final period = '${payroll.periodStart.year}-${payroll.periodStart.month.toString().padLeft(2, '0')}';
+
+    final counts = await repository.getEmployeeAttendanceCounts(
+      payroll.employeeId,
+      payroll.periodStart,
+      payroll.periodEnd,
+    );
+
+    final leaveRequests = await repository.watchEmployeeLeaveRequests(
+      payroll.employeeId,
+    ).first;
+
+    final totalCommission = await repository.getTotalCommissionCents(
+      payroll.employeeId,
+      period,
+    );
+
+    if (!context.mounted) return;
+
+    await PayslipPdfService.generateAndPrint(
+      context: context,
+      employee: employee,
+      period: period,
+      attendanceCounts: counts,
+      payroll: payroll,
+      totalCommissionCents: totalCommission,
+      leaveRequests: leaveRequests,
+    );
+  }
+
+  void _confirmDelete(BuildContext context, Payroll payroll, PayrollBloc bloc) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('employees.delete_payroll_title'.tr()),
+        content: Text('employees.delete_payroll_confirm'.tr()),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('common.cancel'.tr()),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              bloc.add(PayrollDeleteRequested(payroll.id));
+            },
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: Text('common.delete'.tr()),
+          ),
+        ],
       ),
     );
   }
@@ -392,6 +639,23 @@ class _PayrollCard extends StatelessWidget {
     }
   }
 
+  IconData _getStatusIcon(String status) {
+    switch (status) {
+      case 'draft':
+        return Icons.edit_note_outlined;
+      case 'pending':
+        return Icons.hourglass_empty_outlined;
+      case 'approved':
+        return Icons.thumb_up_outlined;
+      case 'processed':
+        return Icons.sync_outlined;
+      case 'paid':
+        return Icons.check_circle_outlined;
+      default:
+        return Icons.help_outline;
+    }
+  }
+
   String _getStatusLabel(String status) {
     switch (status) {
       case 'draft':
@@ -410,13 +674,17 @@ class _PayrollCard extends StatelessWidget {
   }
 }
 
-class _PayrollItem extends StatelessWidget {
+class _BreakdownItem extends StatelessWidget {
+  final IconData icon;
+  final Color iconColor;
   final String label;
   final String value;
   final Color? valueColor;
   final bool isBold;
 
-  const _PayrollItem({
+  const _BreakdownItem({
+    required this.icon,
+    required this.iconColor,
     required this.label,
     required this.value,
     this.valueColor,
@@ -426,27 +694,82 @@ class _PayrollItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
 
     return Expanded(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Text(
-            label,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: colorScheme.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            value,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: valueColor,
-              fontWeight: isBold ? FontWeight.bold : null,
+          Icon(icon, size: 14, color: iconColor),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    fontSize: 10,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  value,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontWeight: isBold ? FontWeight.bold : FontWeight.w500,
+                    color: valueColor,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ActionButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _ActionButton({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Material(
+      color: color.withValues(alpha: isDark ? 0.15 : 0.08),
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 15, color: color),
+              const SizedBox(width: 4),
+              Text(
+                label,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: color,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -631,6 +954,12 @@ class _CreatePayrollDialogState extends State<_CreatePayrollDialog> {
       periodEnd,
     );
 
+    // Fetch commission for this period
+    final commissionCents = await repository.getTotalCommissionCents(
+      _selectedEmployee!.id,
+      widget.period,
+    );
+
     final bonus = (double.tryParse(_bonusController.text) ?? 0) * 100;
     final overtime = (double.tryParse(_overtimeController.text) ?? 0) * 100;
 
@@ -638,6 +967,7 @@ class _CreatePayrollDialogState extends State<_CreatePayrollDialog> {
       _calculation = PayrollCalculationService.calculate(
         employee: _selectedEmployee!,
         attendanceCounts: counts,
+        commissionCents: commissionCents,
         bonusCents: bonus.round(),
         overtimeCents: overtime.round(),
       );
@@ -781,6 +1111,8 @@ class _CreatePayrollDialogState extends State<_CreatePayrollDialog> {
 
                               _calcRow(context, 'employees.basic_salary'.tr(),
                                   cs.format(_calculation!.basicSalaryCents)),
+                              _calcRow(context, 'employees.commission'.tr(),
+                                  cs.format(_calculation!.commissionCents)),
                               _calcRow(context, 'employees.bonus'.tr(),
                                   cs.format(_calculation!.bonusCents)),
                               _calcRow(context, 'employees.overtime_pay'.tr(),

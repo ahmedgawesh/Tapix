@@ -1,20 +1,34 @@
 import '../../../../core/database/app_database.dart' as db;
-import '../../../../core/database/daos/purchase_dao.dart';
+import '../../../../core/database/daos/purchase_dao.dart' hide PurchaseDashboardStats;
 import '../../domain/entities/purchase_entity.dart';
+import '../../domain/repositories/purchase_repository.dart';
 import '../models/purchase_model.dart';
 
 abstract class PurchaseLocalDatasource {
+  // Purchases
   Stream<List<PurchaseEntity>> watchAllPurchases();
   Stream<List<PurchaseEntity>> watchPurchasesByStatus(String status);
   Stream<List<PurchaseEntity>> watchPurchasesBySupplier(int supplierId);
+  Stream<List<PurchaseEntity>> searchPurchases(String query);
   Future<PurchaseEntity?> getPurchaseById(int id);
   Future<List<PurchaseItemEntity>> getPurchaseItems(int purchaseId);
   Stream<List<PurchaseItemEntity>> watchPurchaseItems(int purchaseId);
   Future<String> generatePurchaseNumber();
   Future<int> createPurchase(db.PurchasesCompanion purchase, List<db.PurchaseItemsCompanion> items);
   Future<void> postPurchase(int purchaseId);
+  Future<void> voidPurchase(int purchaseId);
   Future<int> deletePurchase(int purchaseId);
   Future<bool> updatePurchaseStatus(int purchaseId, String status);
+  Stream<PurchaseDashboardStats> watchDashboardStats();
+
+  // Returns
+  Stream<List<PurchaseReturnEntity>> watchAllPurchaseReturns();
+  Stream<List<PurchaseReturnEntity>> watchPurchaseReturnsByPurchase(int purchaseId);
+  Future<PurchaseReturnEntity?> getPurchaseReturnById(int id);
+  Stream<List<PurchaseReturnItemEntity>> watchPurchaseReturnItems(int returnId);
+  Future<String> generateReturnNumber();
+  Future<int> createPurchaseReturn(db.PurchaseReturnsCompanion returnData, List<db.PurchaseReturnItemsCompanion> items);
+  Future<void> postPurchaseReturn(int returnId);
 }
 
 class PurchaseLocalDatasourceImpl implements PurchaseLocalDatasource {
@@ -22,9 +36,13 @@ class PurchaseLocalDatasourceImpl implements PurchaseLocalDatasource {
 
   PurchaseLocalDatasourceImpl(this._dao);
 
+  // ==================== PURCHASES ====================
+
   @override
   Stream<List<PurchaseEntity>> watchAllPurchases() {
-    return _dao.watchAllPurchases().map((rows) => rows.map(PurchaseModel.fromDrift).toList());
+    return _dao.watchAllPurchasesWithSupplier().map(
+      (rows) => rows.map(PurchaseModel.fromDriftWithSupplier).toList(),
+    );
   }
 
   @override
@@ -42,9 +60,16 @@ class PurchaseLocalDatasourceImpl implements PurchaseLocalDatasource {
   }
 
   @override
+  Stream<List<PurchaseEntity>> searchPurchases(String query) {
+    return _dao
+        .searchPurchases(query)
+        .map((rows) => rows.map(PurchaseModel.fromDriftWithSupplier).toList());
+  }
+
+  @override
   Future<PurchaseEntity?> getPurchaseById(int id) async {
-    final p = await _dao.getPurchaseById(id);
-    return p == null ? null : PurchaseModel.fromDrift(p);
+    final pws = await _dao.getPurchaseWithSupplierById(id);
+    return pws == null ? null : PurchaseModel.fromDriftWithSupplier(pws);
   }
 
   @override
@@ -56,8 +81,8 @@ class PurchaseLocalDatasourceImpl implements PurchaseLocalDatasource {
   @override
   Stream<List<PurchaseItemEntity>> watchPurchaseItems(int purchaseId) {
     return _dao
-        .watchPurchaseItems(purchaseId)
-        .map((items) => items.map(PurchaseItemModel.fromDrift).toList());
+        .watchPurchaseItemsWithDetails(purchaseId)
+        .map((items) => items.map(PurchaseItemModel.fromDriftWithDetails).toList());
   }
 
   @override
@@ -76,6 +101,11 @@ class PurchaseLocalDatasourceImpl implements PurchaseLocalDatasource {
   }
 
   @override
+  Future<void> voidPurchase(int purchaseId) {
+    return _dao.voidPurchase(purchaseId);
+  }
+
+  @override
   Future<int> deletePurchase(int purchaseId) {
     return _dao.deletePurchase(purchaseId);
   }
@@ -84,5 +114,66 @@ class PurchaseLocalDatasourceImpl implements PurchaseLocalDatasource {
   Future<bool> updatePurchaseStatus(int purchaseId, String status) {
     return _dao.updatePurchaseStatus(purchaseId, status);
   }
-}
 
+  @override
+  Stream<PurchaseDashboardStats> watchDashboardStats() {
+    return _dao.watchDashboardStats().map((stats) => PurchaseDashboardStats(
+          totalCount: stats.pendingCount + stats.draftCount,
+          draftCount: stats.draftCount,
+          postedCount: stats.pendingCount,
+          totalPayableCents: stats.totalPayableCents,
+          returnsCount: stats.overdueCount,
+        ));
+  }
+
+  // ==================== RETURNS ====================
+
+  @override
+  Stream<List<PurchaseReturnEntity>> watchAllPurchaseReturns() {
+    return _dao
+        .watchAllPurchaseReturns()
+        .map((rows) => rows.map(PurchaseReturnModel.fromDrift).toList());
+  }
+
+  @override
+  Stream<List<PurchaseReturnEntity>> watchPurchaseReturnsByPurchase(int purchaseId) {
+    // Filter from all returns by purchaseId
+    return _dao.watchAllPurchaseReturns().map(
+      (rows) => rows
+          .where((r) => r.purchaseId == purchaseId)
+          .map(PurchaseReturnModel.fromDrift)
+          .toList(),
+    );
+  }
+
+  @override
+  Future<PurchaseReturnEntity?> getPurchaseReturnById(int id) async {
+    final r = await _dao.getPurchaseReturnById(id);
+    return r == null ? null : PurchaseReturnModel.fromDrift(r);
+  }
+
+  @override
+  Stream<List<PurchaseReturnItemEntity>> watchPurchaseReturnItems(int returnId) {
+    return _dao
+        .watchPurchaseReturnItems(returnId)
+        .map((items) => items.map(PurchaseReturnItemModel.fromDrift).toList());
+  }
+
+  @override
+  Future<String> generateReturnNumber() {
+    return _dao.generateReturnNumber();
+  }
+
+  @override
+  Future<int> createPurchaseReturn(
+    db.PurchaseReturnsCompanion returnData,
+    List<db.PurchaseReturnItemsCompanion> items,
+  ) {
+    return _dao.createPurchaseReturn(returnData, items);
+  }
+
+  @override
+  Future<void> postPurchaseReturn(int returnId) {
+    return _dao.postPurchaseReturn(returnId);
+  }
+}

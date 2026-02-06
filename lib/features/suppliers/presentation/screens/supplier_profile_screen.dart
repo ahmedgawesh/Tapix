@@ -2,6 +2,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons/lucide_icons.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/services/currency_service.dart';
@@ -61,7 +62,7 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
               title: Text(supplier.name),
               actions: [
                 IconButton(
-                  icon: const Icon(Icons.edit_outlined),
+                  icon: const Icon(LucideIcons.pencil),
                   onPressed: () => context.push('/suppliers/${widget.supplierId}/edit'),
                 ),
                 PopupMenuButton<String>(
@@ -82,8 +83,8 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
                         children: [
                           Icon(
                             supplier.isActive
-                                ? Icons.block_outlined
-                                : Icons.check_circle_outline,
+                                ? LucideIcons.circleOff
+                                : LucideIcons.checkCircle,
                           ),
                           const SizedBox(width: 8),
                           Text(
@@ -98,7 +99,7 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
                       value: 'delete',
                       child: Row(
                         children: [
-                          Icon(Icons.delete_outline, color: colorScheme.error),
+                          Icon(LucideIcons.trash2, color: colorScheme.error),
                           const SizedBox(width: 8),
                           Text(
                             'suppliers.delete'.tr(),
@@ -119,9 +120,8 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
                 child: ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
-                    _ProfileHeaderCard(supplier: supplier),
-                    const SizedBox(height: 16),
-                    _BalanceCard(
+                    _ProfileHeaderCard(
+                      supplier: supplier,
                       balanceCents: balanceCents,
                       currencyService: currencyService,
                     ),
@@ -223,7 +223,7 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
               controller: amountController,
               decoration: InputDecoration(
                 labelText: 'suppliers.payment_amount'.tr(),
-                prefixIcon: const Icon(Icons.payment),
+                prefixIcon: const Icon(LucideIcons.banknote),
               ),
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               autofocus: true,
@@ -239,7 +239,7 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
               decoration: InputDecoration(
                 labelText: 'suppliers.description'.tr(),
                 hintText: 'suppliers.payment_description_hint'.tr(),
-                prefixIcon: const Icon(Icons.notes),
+                prefixIcon: const Icon(LucideIcons.fileText),
               ),
             ),
           ],
@@ -299,34 +299,54 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
 
 class _ProfileHeaderCard extends StatelessWidget {
   final Supplier supplier;
+  final int balanceCents;
+  final CurrencyService currencyService;
 
-  const _ProfileHeaderCard({required this.supplier});
+  const _ProfileHeaderCard({
+    required this.supplier,
+    required this.balanceCents,
+    required this.currencyService,
+  });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    final isPayable = balanceCents > 0;
 
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(
-          color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: isDark
+              ? [
+                  colorScheme.primaryContainer.withValues(alpha: 0.3),
+                  colorScheme.surfaceContainerHighest,
+                ]
+              : [
+                  colorScheme.primaryContainer.withValues(alpha: 0.4),
+                  colorScheme.surface,
+                ],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.3),
         ),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(24),
         child: Column(
           children: [
             // Avatar
             CircleAvatar(
               radius: 40,
-              backgroundColor: colorScheme.primaryContainer,
+              backgroundColor: colorScheme.primary.withValues(alpha: 0.15),
               child: Text(
                 supplier.name.isNotEmpty ? supplier.name[0].toUpperCase() : '?',
                 style: theme.textTheme.headlineLarge?.copyWith(
-                  color: colorScheme.onPrimaryContainer,
+                  color: colorScheme.primary,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -341,129 +361,45 @@ class _ProfileHeaderCard extends StatelessWidget {
               ),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 20),
 
-            // Status badge
+            // Balance section inside the header card
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
               decoration: BoxDecoration(
-                color: supplier.isActive
-                    ? Colors.green.withValues(alpha: 0.1)
-                    : Colors.grey.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: supplier.isActive
-                      ? Colors.green.withValues(alpha: 0.3)
-                      : Colors.grey.withValues(alpha: 0.3),
-                ),
+                color: isDark
+                    ? colorScheme.surface.withValues(alpha: 0.5)
+                    : colorScheme.surface.withValues(alpha: 0.8),
+                borderRadius: BorderRadius.circular(14),
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
+              child: Column(
                 children: [
-                  Icon(
-                    supplier.isActive ? Icons.check_circle_outline : Icons.block_outlined,
-                    size: 16,
-                    color: supplier.isActive ? Colors.green : Colors.grey,
-                  ),
-                  const SizedBox(width: 4),
                   Text(
-                    supplier.isActive
-                        ? 'suppliers.status_active'.tr()
-                        : 'suppliers.status_inactive'.tr(),
+                    'suppliers.current_balance'.tr(),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    currencyService.format(balanceCents),
+                    style: theme.textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: isPayable
+                          ? (isDark ? Colors.amber.shade300 : Colors.amber.shade700)
+                          : Colors.green,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    isPayable
+                        ? 'suppliers.balance_payable'.tr()
+                        : 'suppliers.balance_credit'.tr(),
                     style: theme.textTheme.bodySmall?.copyWith(
-                      color: supplier.isActive ? Colors.green : Colors.grey,
-                      fontWeight: FontWeight.w600,
+                      color: colorScheme.onSurfaceVariant,
                     ),
                   ),
                 ],
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Contact Info
-            if (supplier.phone != null || supplier.email != null)
-              Wrap(
-                spacing: 16,
-                runSpacing: 8,
-                alignment: WrapAlignment.center,
-                children: [
-                  if (supplier.phone != null)
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.phone_outlined, size: 16, color: colorScheme.outline),
-                        const SizedBox(width: 4),
-                        Text(supplier.phone!, style: theme.textTheme.bodyMedium),
-                      ],
-                    ),
-                  if (supplier.email != null)
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.email_outlined, size: 16, color: colorScheme.outline),
-                        const SizedBox(width: 4),
-                        Text(supplier.email!, style: theme.textTheme.bodyMedium),
-                      ],
-                    ),
-                ],
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _BalanceCard extends StatelessWidget {
-  final int balanceCents;
-  final CurrencyService currencyService;
-
-  const _BalanceCard({
-    required this.balanceCents,
-    required this.currencyService,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isPayable = balanceCents > 0;
-
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(
-          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
-        ),
-      ),
-      color: isPayable
-          ? Colors.red.withValues(alpha: 0.05)
-          : Colors.green.withValues(alpha: 0.05),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            Text(
-              'suppliers.current_balance'.tr(),
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.outline,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              currencyService.format(balanceCents),
-              style: theme.textTheme.headlineMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: isPayable ? Colors.red : Colors.green,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              isPayable
-                  ? 'suppliers.balance_payable'.tr()
-                  : 'suppliers.balance_credit'.tr(),
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: isPayable ? Colors.red : Colors.green,
               ),
             ),
           ],
@@ -489,25 +425,25 @@ class _QuickActionsSection extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final paymentBtn = _QuickActionButton(
-      icon: Icons.payment,
+      icon: LucideIcons.banknote,
       label: 'suppliers.payment'.tr(),
-      color: isDark ? Colors.blue.shade700 : Colors.blue.shade600,
+      color: isDark ? Colors.blue.shade300 : Colors.blue.shade600,
       backgroundColor: isDark ? Colors.blue.shade900.withValues(alpha: 0.3) : Colors.blue.shade50,
       onTap: onPaymentPressed,
     );
 
     final purchaseBtn = _QuickActionButton(
-      icon: Icons.shopping_cart_outlined,
+      icon: LucideIcons.shoppingCart,
       label: 'suppliers.new_purchase'.tr(),
-      color: isDark ? Colors.orange.shade700 : Colors.orange.shade600,
+      color: isDark ? Colors.orange.shade300 : Colors.orange.shade600,
       backgroundColor: isDark ? Colors.orange.shade900.withValues(alpha: 0.3) : Colors.orange.shade50,
       onTap: onPurchasePressed,
     );
 
     final returnBtn = _QuickActionButton(
-      icon: Icons.assignment_return_outlined,
+      icon: LucideIcons.arrowLeftRight,
       label: 'suppliers.return_items'.tr(),
-      color: isDark ? Colors.green.shade700 : Colors.green.shade600,
+      color: isDark ? Colors.green.shade300 : Colors.green.shade600,
       backgroundColor: isDark ? Colors.green.shade900.withValues(alpha: 0.3) : Colors.green.shade50,
       onTap: () {},
     );
@@ -632,19 +568,22 @@ class _ContactInformationSection extends StatelessWidget {
             const SizedBox(height: 12),
             if (supplier.email != null)
               _ContactRow(
-                icon: Icons.email_outlined,
+                icon: LucideIcons.mail,
+                iconColor: Colors.blue,
                 label: 'suppliers.email'.tr(),
                 value: supplier.email!,
               ),
             if (supplier.phone != null)
               _ContactRow(
-                icon: Icons.phone_outlined,
+                icon: LucideIcons.phone,
+                iconColor: Colors.green,
                 label: 'suppliers.phone'.tr(),
                 value: supplier.phone!,
               ),
             if (supplier.address != null)
               _ContactRow(
-                icon: Icons.location_on_outlined,
+                icon: LucideIcons.mapPin,
+                iconColor: Colors.orange,
                 label: 'suppliers.address'.tr(),
                 value: supplier.address!,
               ),
@@ -657,11 +596,13 @@ class _ContactInformationSection extends StatelessWidget {
 
 class _ContactRow extends StatelessWidget {
   final IconData icon;
+  final Color? iconColor;
   final String label;
   final String value;
 
   const _ContactRow({
     required this.icon,
+    this.iconColor,
     required this.label,
     required this.value,
   });
@@ -674,7 +615,7 @@ class _ContactRow extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
         children: [
-          Icon(icon, size: 20, color: theme.colorScheme.outline),
+          Icon(icon, size: 20, color: iconColor ?? theme.colorScheme.outline),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -752,7 +693,7 @@ class _RecentTransactionsSection extends StatelessWidget {
                       child: Column(
                         children: [
                           Icon(
-                            Icons.receipt_long_outlined,
+                            LucideIcons.fileText,
                             size: 48,
                             color: theme.colorScheme.outline.withValues(alpha: 0.5),
                           ),
@@ -800,19 +741,19 @@ class _TransactionTile extends StatelessWidget {
     Color color;
     switch (transaction.transactionType) {
       case 'payment':
-        icon = Icons.payment;
+        icon = LucideIcons.banknote;
         color = Colors.blue;
         break;
       case 'purchase':
-        icon = Icons.shopping_cart_outlined;
+        icon = LucideIcons.shoppingCart;
         color = Colors.orange;
         break;
       case 'return':
-        icon = Icons.assignment_return_outlined;
+        icon = LucideIcons.arrowLeftRight;
         color = Colors.green;
         break;
       default:
-        icon = Icons.receipt_outlined;
+        icon = LucideIcons.fileText;
         color = theme.colorScheme.outline;
     }
 

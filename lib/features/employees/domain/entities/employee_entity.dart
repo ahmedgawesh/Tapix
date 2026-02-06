@@ -853,6 +853,10 @@ class PayrollSummary {
   final int totalDeductionsCents;
   final int totalNetCents;
   final int employeeCount;
+  final int paidCount;
+  final int unpaidCount;
+  final int totalPaidCents;
+  final int totalUnpaidCents;
 
   const PayrollSummary({
     required this.period,
@@ -860,6 +864,10 @@ class PayrollSummary {
     this.totalDeductionsCents = 0,
     this.totalNetCents = 0,
     this.employeeCount = 0,
+    this.paidCount = 0,
+    this.unpaidCount = 0,
+    this.totalPaidCents = 0,
+    this.totalUnpaidCents = 0,
   });
 
   double get totalGrossAmount => totalGrossCents / 100;

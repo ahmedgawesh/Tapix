@@ -215,22 +215,22 @@ class _EmployeesScreenContentState extends State<_EmployeesScreenContent> {
                     runSpacing: 8,
                     children: [
                       ActionChip(
-                        avatar: const Icon(Icons.person_add_outlined, size: 18),
+                        avatar: Icon(Icons.person_add_outlined, size: 18, color: Colors.blue.shade400),
                         label: Text('employees.add_employee'.tr()),
                         onPressed: () => context.push('/employees/create'),
                       ),
                       ActionChip(
-                        avatar: const Icon(Icons.access_time_outlined, size: 18),
+                        avatar: Icon(Icons.access_time_outlined, size: 18, color: Colors.amber.shade600),
                         label: Text('employees.attendance'.tr()),
                         onPressed: () => context.push('/employees/attendance'),
                       ),
                       ActionChip(
-                        avatar: const Icon(Icons.payments_outlined, size: 18),
+                        avatar: Icon(Icons.payments_outlined, size: 18, color: Colors.green.shade500),
                         label: Text('employees.payroll'.tr()),
                         onPressed: () => context.push('/employees/payroll'),
                       ),
                       ActionChip(
-                        avatar: const Icon(Icons.event_note_outlined, size: 18),
+                        avatar: Icon(Icons.event_note_outlined, size: 18, color: Colors.purple.shade400),
                         label: Text('employees.leave_requests'.tr()),
                         onPressed: () => context.push('/employees/leave-requests'),
                       ),

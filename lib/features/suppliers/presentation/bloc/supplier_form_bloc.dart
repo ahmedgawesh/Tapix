@@ -278,6 +278,7 @@ class SupplierFormBloc extends Bloc<SupplierFormEvent, SupplierFormState> {
             email: Value(currentState.email.isEmpty ? null : currentState.email),
             phone: Value(currentState.phone.isEmpty ? null : currentState.phone),
             address: Value(currentState.address.isEmpty ? null : currentState.address),
+            balanceCents: balanceCents,
             updatedAt: DateTime.now(),
           );
           await _repository.updateSupplier(updatedSupplier);
@@ -313,7 +314,7 @@ class SupplierFormBloc extends Bloc<SupplierFormEvent, SupplierFormState> {
     try {
       final value = double.parse(balance.replaceAll(',', '.'));
       final cents = (value * 100).round();
-      return Decimal.parse((cents / 100).toStringAsFixed(2));
+      return Decimal.fromInt(cents);
     } catch (_) {
       return Decimal.zero;
     }

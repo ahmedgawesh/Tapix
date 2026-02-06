@@ -26,6 +26,8 @@ import '../../features/products/presentation/bloc/colors_bloc.dart';
 import '../../features/products/domain/entities/product_entity.dart';
 import '../../features/purchases/presentation/screens/purchase_list_screen.dart';
 import '../../features/purchases/presentation/screens/purchase_form_screen.dart';
+import '../../features/purchases/presentation/screens/purchase_detail_screen.dart';
+import '../../features/purchases/presentation/screens/purchase_returns_screen.dart';
 import '../../features/customers/presentation/screens/customer_hub_screen.dart';
 import '../../features/customers/presentation/screens/customer_form_screen.dart';
 import '../../features/customers/presentation/screens/customer_profile_screen.dart';
@@ -369,11 +371,25 @@ class AppRouter {
             builder: (context, state) => const PurchaseFormScreen(),
           ),
           GoRoute(
+            path: 'returns',
+            builder: (context, state) => const PurchaseReturnsScreen(),
+          ),
+          GoRoute(
             path: ':id',
             builder: (context, state) {
               final id = int.tryParse(state.pathParameters['id'] ?? '');
-              return PurchaseFormScreen(purchaseId: id);
+              if (id == null) return const PurchaseListScreen();
+              return PurchaseDetailScreen(purchaseId: id);
             },
+            routes: [
+              GoRoute(
+                path: 'edit',
+                builder: (context, state) {
+                  final id = int.tryParse(state.pathParameters['id'] ?? '');
+                  return PurchaseFormScreen(purchaseId: id);
+                },
+              ),
+            ],
           ),
         ],
       ),

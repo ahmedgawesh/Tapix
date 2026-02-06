@@ -8,11 +8,12 @@ import 'package:decimal/decimal.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../../../core/database/app_database.dart' show Supplier;
 import '../../../products/domain/entities/product_entity.dart';
 import '../../../products/domain/entities/product_variant_entity.dart';
 import '../../../products/presentation/bloc/products_bloc.dart';
 import '../../../products/presentation/bloc/product_variants_bloc.dart';
-import '../../../barcode/domain/usecases/get_invoice_print_data.dart';
+import '../../../suppliers/domain/repositories/supplier_repository.dart';
 import '../bloc/purchase_form_bloc.dart';
 
 class PurchaseFormScreen extends StatelessWidget {
@@ -38,8 +39,7 @@ class _PurchaseFormView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    final colorScheme = Theme.of(context).colorScheme;
     final currencyService = context.read<CurrencyService>();
 
     return BlocConsumer<PurchaseFormBloc, PurchaseFormState>(
@@ -63,7 +63,7 @@ class _PurchaseFormView extends StatelessWidget {
         return Scaffold(
           appBar: AppBar(
             leading: IconButton(
-              icon: const Icon(Icons.arrow_back),
+              icon: const Icon(LucideIcons.arrowLeft),
               onPressed: () {
                 if (context.canPop()) {
                   context.pop();
@@ -71,18 +71,11 @@ class _PurchaseFormView extends StatelessWidget {
                   context.go('/purchases');
                 }
               },
-              tooltip: 'common.back'.tr(),
             ),
             title: Text(state.purchaseId == null
                 ? 'purchases.new'.tr()
                 : 'purchases.edit'.tr()),
             actions: [
-              if (state.items.isNotEmpty && state.purchaseId != null)
-                IconButton(
-                  icon: const Icon(LucideIcons.printer),
-                  tooltip: 'purchases.print_labels'.tr(),
-                  onPressed: () => _printLabelsFromPurchase(context, state),
-                ),
               if (state.purchaseId != null)
                 IconButton(
                   icon: const Icon(LucideIcons.checkCircle),
@@ -99,11 +92,18 @@ class _PurchaseFormView extends StatelessWidget {
                 child: ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
+                    _buildSupplierSection(context, state),
+                    const SizedBox(height: 12),
                     _buildDateSection(context, state),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 12),
                     _buildItemsSection(context, state, currencyService),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 12),
+                    _buildDiscountSection(context, state, currencyService),
+                    const SizedBox(height: 12),
+                    _buildNotesSection(context, state),
+                    const SizedBox(height: 12),
                     _buildTotalsSection(context, state, currencyService),
+                    const SizedBox(height: 80),
                   ],
                 ),
               ),
@@ -115,6 +115,46 @@ class _PurchaseFormView extends StatelessWidget {
     );
   }
 
+  // ─── Supplier Section ───
+  Widget _buildSupplierSection(BuildContext context, PurchaseFormState state) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Icon(LucideIcons.truck, color: colorScheme.primary),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('purchases.supplier'.tr(),
+                      style: theme.textTheme.labelMedium),
+                  Text(
+                    state.supplierName ?? 'purchases.select_supplier'.tr(),
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: state.supplierName != null
+                          ? null
+                          : colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            IconButton(
+              icon: const Icon(LucideIcons.chevronDown),
+              onPressed: () => _showSupplierPicker(context),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ─── Date Section ───
   Widget _buildDateSection(BuildContext context, PurchaseFormState state) {
     final theme = Theme.of(context);
 
@@ -129,14 +169,10 @@ class _PurchaseFormView extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'purchases.date'.tr(),
-                    style: theme.textTheme.labelMedium,
-                  ),
-                  Text(
-                    DateFormat.yMMMd().format(state.purchaseDate),
-                    style: theme.textTheme.titleMedium,
-                  ),
+                  Text('purchases.date'.tr(),
+                      style: theme.textTheme.labelMedium),
+                  Text(DateFormat.yMMMd().format(state.purchaseDate),
+                      style: theme.textTheme.titleMedium),
                 ],
               ),
             ),
@@ -160,6 +196,7 @@ class _PurchaseFormView extends StatelessWidget {
     );
   }
 
+  // ─── Items Section ───
   Widget _buildItemsSection(
     BuildContext context,
     PurchaseFormState state,
@@ -178,12 +215,9 @@ class _PurchaseFormView extends StatelessWidget {
               children: [
                 Icon(LucideIcons.package, color: colorScheme.primary),
                 const SizedBox(width: 8),
-                Text(
-                  'purchases.items'.tr(),
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+                Text('purchases.items'.tr(),
+                    style: theme.textTheme.titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w600)),
                 const Spacer(),
                 FilledButton.icon(
                   onPressed: () => _showAddItemDialog(context),
@@ -199,18 +233,14 @@ class _PurchaseFormView extends StatelessWidget {
                 alignment: Alignment.center,
                 child: Column(
                   children: [
-                    Icon(
-                      LucideIcons.packageOpen,
-                      size: 48,
-                      color: colorScheme.onSurface.withValues(alpha: 0.3),
-                    ),
+                    Icon(LucideIcons.packageOpen,
+                        size: 48,
+                        color: colorScheme.onSurface.withValues(alpha: 0.3)),
                     const SizedBox(height: 8),
-                    Text(
-                      'purchases.no_items'.tr(),
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: colorScheme.onSurface.withValues(alpha: 0.7),
-                      ),
-                    ),
+                    Text('purchases.no_items'.tr(),
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                            color: colorScheme.onSurface
+                                .withValues(alpha: 0.7))),
                   ],
                 ),
               )
@@ -219,7 +249,7 @@ class _PurchaseFormView extends StatelessWidget {
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: state.items.length,
-                separatorBuilder: (context, index) => const Divider(),
+                separatorBuilder: (_, i) => const Divider(),
                 itemBuilder: (context, index) {
                   final item = state.items[index];
                   return _PurchaseItemTile(
@@ -230,7 +260,8 @@ class _PurchaseFormView extends StatelessWidget {
                         .add(PurchaseLineItemRemoved(item.tempId)),
                     onQuantityChanged: (qty) => context
                         .read<PurchaseFormBloc>()
-                        .add(PurchaseLineItemUpdated(tempId: item.tempId, quantity: qty)),
+                        .add(PurchaseLineItemUpdated(
+                            tempId: item.tempId, quantity: qty)),
                   );
                 },
               ),
@@ -240,6 +271,92 @@ class _PurchaseFormView extends StatelessWidget {
     );
   }
 
+  // ─── Invoice Discount Section ───
+  Widget _buildDiscountSection(
+    BuildContext context,
+    PurchaseFormState state,
+    CurrencyService currencyService,
+  ) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Icon(LucideIcons.percent, color: colorScheme.tertiary),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('purchases.invoice_discount'.tr(),
+                      style: theme.textTheme.labelMedium),
+                  if (state.invoiceDiscountCents > Decimal.zero)
+                    Text(
+                      currencyService.format(
+                          state.invoiceDiscountCents.toBigInt().toInt()),
+                      style: theme.textTheme.titleMedium?.copyWith(
+                          color: colorScheme.tertiary),
+                    )
+                  else
+                    Text('purchases.no_discount'.tr(),
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                            color: colorScheme.onSurfaceVariant)),
+                ],
+              ),
+            ),
+            IconButton(
+              icon: const Icon(LucideIcons.edit),
+              onPressed: () => _showDiscountDialog(context, state),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ─── Notes Section ───
+  Widget _buildNotesSection(BuildContext context, PurchaseFormState state) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(LucideIcons.stickyNote, color: colorScheme.primary),
+                const SizedBox(width: 8),
+                Text('purchases.notes'.tr(),
+                    style: theme.textTheme.titleSmall
+                        ?.copyWith(fontWeight: FontWeight.w600)),
+              ],
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              decoration: InputDecoration(
+                hintText: 'purchases.notes_hint'.tr(),
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8)),
+                isDense: true,
+              ),
+              maxLines: 2,
+              onChanged: (value) => context
+                  .read<PurchaseFormBloc>()
+                  .add(PurchaseNotesChanged(value)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ─── Totals Section ───
   Widget _buildTotalsSection(
     BuildContext context,
     PurchaseFormState state,
@@ -253,39 +370,27 @@ class _PurchaseFormView extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('purchases.subtotal'.tr()),
-                Text(currencyService.format(state.subtotalCents.toBigInt().toInt())),
-              ],
-            ),
+            _totalRow(context, 'purchases.subtotal'.tr(),
+                currencyService.format(state.subtotalCents.toBigInt().toInt())),
+            if (state.totalDiscountCents > Decimal.zero) ...[
+              const SizedBox(height: 8),
+              _totalRow(
+                context,
+                'purchases.discount'.tr(),
+                '- ${currencyService.format(state.totalDiscountCents.toBigInt().toInt())}',
+                valueColor: colorScheme.tertiary,
+              ),
+            ],
             const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('purchases.tax'.tr()),
-                Text(currencyService.format(state.taxCents.toBigInt().toInt())),
-              ],
-            ),
+            _totalRow(context, 'purchases.tax'.tr(),
+                currencyService.format(state.taxCents.toBigInt().toInt())),
             const Divider(height: 24),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'purchases.total'.tr(),
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                Text(
-                  currencyService.format(state.totalCents.toBigInt().toInt()),
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: colorScheme.primary,
-                  ),
-                ),
-              ],
+            _totalRow(
+              context,
+              'purchases.total'.tr(),
+              currencyService.format(state.totalCents.toBigInt().toInt()),
+              isBold: true,
+              valueColor: colorScheme.primary,
             ),
           ],
         ),
@@ -293,6 +398,24 @@ class _PurchaseFormView extends StatelessWidget {
     );
   }
 
+  Widget _totalRow(BuildContext context, String label, String value,
+      {bool isBold = false, Color? valueColor}) {
+    final theme = Theme.of(context);
+    final style = isBold
+        ? theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)
+        : theme.textTheme.bodyMedium;
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label, style: style),
+        Text(value,
+            style: style?.copyWith(
+                color: valueColor, fontWeight: isBold ? FontWeight.bold : null)),
+      ],
+    );
+  }
+
+  // ─── Bottom Bar ───
   Widget _buildBottomBar(
     BuildContext context,
     PurchaseFormState state,
@@ -324,9 +447,10 @@ class _PurchaseFormView extends StatelessWidget {
                   ),
                   Text(
                     currencyService.format(state.totalCents.toBigInt().toInt()),
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleLarge
+                        ?.copyWith(fontWeight: FontWeight.bold),
                   ),
                 ],
               ),
@@ -334,7 +458,9 @@ class _PurchaseFormView extends StatelessWidget {
             FilledButton(
               onPressed: state.isSubmitting || state.items.isEmpty
                   ? null
-                  : () => context.read<PurchaseFormBloc>().add(const PurchaseFormSubmitted()),
+                  : () => context
+                      .read<PurchaseFormBloc>()
+                      .add(const PurchaseFormSubmitted()),
               child: state.isSubmitting
                   ? const SizedBox(
                       width: 20,
@@ -349,36 +475,69 @@ class _PurchaseFormView extends StatelessWidget {
     );
   }
 
-  void _printLabelsFromPurchase(BuildContext context, PurchaseFormState state) async {
-    if (state.purchaseId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('purchases.save_before_printing'.tr()),
-          backgroundColor: Theme.of(context).colorScheme.error,
-        ),
-      );
-      return;
-    }
+  // ─── Dialogs ───
 
-    try {
-      final invoiceData = await sl<GetInvoicePrintData>().forPurchase(state.purchaseId!);
+  void _showSupplierPicker(BuildContext context) async {
+    final suppliers = await sl<SupplierRepository>().searchSuppliers('');
+    if (!context.mounted) return;
 
-      // Navigate to barcode design screen with invoice data
-      if (context.mounted) {
-        context.push('/products/barcode-design', extra: {
-          'invoiceData': invoiceData,
-        });
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('purchases.error_loading_invoice'.tr()),
-            backgroundColor: Theme.of(context).colorScheme.error,
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetCtx) => _SupplierPickerSheet(
+        suppliers: suppliers,
+        onSelected: (supplier) {
+          context.read<PurchaseFormBloc>().add(
+                PurchaseSupplierChanged(supplier.id,
+                    supplierName: supplier.name),
+              );
+          Navigator.pop(sheetCtx);
+        },
+      ),
+    );
+  }
+
+  void _showDiscountDialog(
+      BuildContext context, PurchaseFormState state) {
+    final controller = TextEditingController(
+      text: state.invoiceDiscountCents > Decimal.zero
+          ? (state.invoiceDiscountCents.toBigInt().toInt() / 100)
+              .toStringAsFixed(2)
+          : '',
+    );
+
+    showDialog<void>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        title: Text('purchases.invoice_discount'.tr()),
+        content: TextField(
+          controller: controller,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: InputDecoration(
+            labelText: 'purchases.discount_amount'.tr(),
+            border: const OutlineInputBorder(),
           ),
-        );
-      }
-    }
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx),
+            child: Text('common.cancel'.tr()),
+          ),
+          FilledButton(
+            onPressed: () {
+              final value = double.tryParse(controller.text) ?? 0;
+              final cents = (value * 100).round();
+              context.read<PurchaseFormBloc>().add(
+                    PurchaseInvoiceDiscountChanged(Decimal.fromInt(cents)),
+                  );
+              Navigator.pop(dialogCtx);
+            },
+            child: Text('common.apply'.tr()),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showAddItemDialog(BuildContext context) {
@@ -403,6 +562,111 @@ class _PurchaseFormView extends StatelessWidget {
   }
 }
 
+// ─── Supplier Picker Sheet ───
+class _SupplierPickerSheet extends StatefulWidget {
+  final List<Supplier> suppliers;
+  final ValueChanged<Supplier> onSelected;
+
+  const _SupplierPickerSheet({
+    required this.suppliers,
+    required this.onSelected,
+  });
+
+  @override
+  State<_SupplierPickerSheet> createState() => _SupplierPickerSheetState();
+}
+
+class _SupplierPickerSheetState extends State<_SupplierPickerSheet> {
+  final _searchController = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final query = _searchController.text.toLowerCase();
+    final filtered = widget.suppliers.where((s) {
+      if (query.isEmpty) return true;
+      return s.name.toLowerCase().contains(query) ||
+          (s.phone?.toLowerCase().contains(query) ?? false);
+    }).toList();
+
+    return DraggableScrollableSheet(
+      initialChildSize: 0.6,
+      minChildSize: 0.4,
+      maxChildSize: 0.9,
+      expand: false,
+      builder: (context, scrollController) => Container(
+        decoration: BoxDecoration(
+          color: colorScheme.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+        ),
+        child: Column(
+          children: [
+            Container(
+              margin: const EdgeInsets.symmetric(vertical: 8),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: TextField(
+                controller: _searchController,
+                decoration: InputDecoration(
+                  hintText: 'suppliers.search_hint'.tr(),
+                  prefixIcon: const Icon(LucideIcons.search),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+                onChanged: (_) => setState(() {}),
+              ),
+            ),
+            Expanded(
+              child: filtered.isEmpty
+                  ? Center(
+                      child: Text('suppliers.empty'.tr(),
+                          style: Theme.of(context).textTheme.bodyMedium))
+                  : ListView.builder(
+                      controller: scrollController,
+                      itemCount: filtered.length,
+                      itemBuilder: (context, index) {
+                        final supplier = filtered[index];
+                        return ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: colorScheme.primaryContainer,
+                            child: Text(
+                              supplier.name.isNotEmpty
+                                  ? supplier.name[0].toUpperCase()
+                                  : '?',
+                              style: TextStyle(
+                                  color: colorScheme.onPrimaryContainer),
+                            ),
+                          ),
+                          title: Text(supplier.name),
+                          subtitle: supplier.phone != null
+                              ? Text(supplier.phone!)
+                              : null,
+                          onTap: () => widget.onSelected(supplier),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Purchase Item Tile ───
 class _PurchaseItemTile extends StatelessWidget {
   final PurchaseLineItem item;
   final CurrencyService currencyService;
@@ -430,19 +694,34 @@ class _PurchaseItemTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  item.displayName,
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+                Text(item.displayName,
+                    style: theme.textTheme.titleSmall
+                        ?.copyWith(fontWeight: FontWeight.w600)),
                 const SizedBox(height: 4),
                 Text(
                   '${currencyService.format(item.unitCostCents.toBigInt().toInt())} × ${item.quantity}',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                  ),
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: colorScheme.onSurfaceVariant),
                 ),
+                if (item.discountCents > Decimal.zero)
+                  Text(
+                    '${'purchases.discount'.tr()}: -${currencyService.format(item.discountCents.toBigInt().toInt())}',
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: colorScheme.tertiary),
+                  ),
+                if (item.expiryDate != null)
+                  Row(
+                    children: [
+                      const Icon(LucideIcons.alertTriangle,
+                          size: 12, color: Colors.orange),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${'purchases.expiry'.tr()}: ${DateFormat.yMMMd().format(item.expiryDate!)}',
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(color: Colors.orange),
+                      ),
+                    ],
+                  ),
               ],
             ),
           ),
@@ -455,20 +734,20 @@ class _PurchaseItemTile extends StatelessWidget {
                     ? () => onQuantityChanged(item.quantity - 1)
                     : null,
               ),
-              Text(
-                '${item.quantity}',
-                style: theme.textTheme.titleSmall,
-              ),
+              Text('${item.quantity}', style: theme.textTheme.titleSmall),
               IconButton(
                 icon: const Icon(LucideIcons.plus, size: 18),
                 onPressed: () => onQuantityChanged(item.quantity + 1),
               ),
             ],
           ),
-          Text(
-            currencyService.format(item.totalCents.toBigInt().toInt()),
-            style: theme.textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.w600,
+          SizedBox(
+            width: 70,
+            child: Text(
+              currencyService.format(item.totalCents.toBigInt().toInt()),
+              style: theme.textTheme.titleSmall
+                  ?.copyWith(fontWeight: FontWeight.w600),
+              textAlign: TextAlign.end,
             ),
           ),
           IconButton(
@@ -481,8 +760,11 @@ class _PurchaseItemTile extends StatelessWidget {
   }
 }
 
+// ─── Add Item Sheet ───
 class _AddItemSheet extends StatefulWidget {
-  final void Function(Product product, ProductVariant? variant, int quantity, Decimal unitCost) onItemAdded;
+  final void Function(
+      Product product, ProductVariant? variant, int quantity, Decimal unitCost)
+      onItemAdded;
 
   const _AddItemSheet({required this.onItemAdded});
 
@@ -503,8 +785,7 @@ class _AddItemSheetState extends State<_AddItemSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    final colorScheme = Theme.of(context).colorScheme;
 
     return DraggableScrollableSheet(
       initialChildSize: 0.7,
@@ -515,7 +796,8 @@ class _AddItemSheetState extends State<_AddItemSheet> {
         return Container(
           decoration: BoxDecoration(
             color: colorScheme.surface,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+            borderRadius:
+                const BorderRadius.vertical(top: Radius.circular(16)),
           ),
           child: Column(
             children: [
@@ -536,8 +818,7 @@ class _AddItemSheetState extends State<_AddItemSheet> {
                     hintText: 'purchases.search_product'.tr(),
                     prefixIcon: const Icon(LucideIcons.search),
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                        borderRadius: BorderRadius.circular(12)),
                   ),
                   onChanged: (_) => setState(() {}),
                 ),
@@ -576,17 +857,25 @@ class _AddItemSheetState extends State<_AddItemSheet> {
               (p.barcode?.toLowerCase().contains(query) ?? false);
         }).toList();
 
+        if (filtered.isEmpty) {
+          return Center(
+            child: Text('purchases.no_products_found'.tr(),
+                style: Theme.of(context).textTheme.bodyMedium),
+          );
+        }
+
         return ListView.builder(
           controller: scrollController,
           itemCount: filtered.length,
           itemBuilder: (context, index) {
             final product = filtered[index];
             return ListTile(
-              leading: Icon(
-                product.hasVariants ? LucideIcons.layers : LucideIcons.package,
-              ),
+              leading: Icon(product.hasVariants
+                  ? LucideIcons.layers
+                  : LucideIcons.package),
               title: Text(product.name),
-              subtitle: product.sku != null ? Text('SKU: ${product.sku}') : null,
+              subtitle:
+                  product.sku != null ? Text('SKU: ${product.sku}') : null,
               trailing: product.hasVariants
                   ? const Icon(LucideIcons.chevronRight)
                   : null,
@@ -595,11 +884,7 @@ class _AddItemSheetState extends State<_AddItemSheet> {
                   setState(() => _selectedProduct = product);
                 } else {
                   widget.onItemAdded(
-                    product,
-                    null,
-                    _quantity,
-                    product.costCents,
-                  );
+                      product, null, _quantity, product.costCents);
                 }
               },
             );
@@ -611,6 +896,7 @@ class _AddItemSheetState extends State<_AddItemSheet> {
 
   Widget _buildVariantSelection() {
     final theme = Theme.of(context);
+    final currencyService = sl<CurrencyService>();
 
     return BlocProvider(
       create: (context) => sl<ProductVariantsBloc>()
@@ -620,21 +906,17 @@ class _AddItemSheetState extends State<_AddItemSheet> {
           ListTile(
             leading: IconButton(
               icon: const Icon(LucideIcons.arrowLeft),
-              onPressed: () => setState(() {
-                _selectedProduct = null;
-              }),
+              onPressed: () => setState(() => _selectedProduct = null),
             ),
-            title: Text(
-              _selectedProduct!.name,
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
-            ),
+            title: Text(_selectedProduct!.name,
+                style: theme.textTheme.titleMedium
+                    ?.copyWith(fontWeight: FontWeight.w600)),
             subtitle: Text('purchases.select_variant'.tr()),
           ),
           const Divider(),
           Expanded(
-            child: BlocBuilder<ProductVariantsBloc, RealtimeState<List<ProductVariant>>>(
+            child: BlocBuilder<ProductVariantsBloc,
+                RealtimeState<List<ProductVariant>>>(
               builder: (context, state) {
                 List<ProductVariant>? variants;
                 if (state is RealtimeSuccess<List<ProductVariant>>) {
@@ -653,14 +935,12 @@ class _AddItemSheetState extends State<_AddItemSheet> {
                     final variant = variants![index];
                     return ListTile(
                       title: Text(variant.sku ?? 'Variant ${variant.id}'),
-                      subtitle: Text('Stock: ${variant.stockQuantity}'),
+                      subtitle: Text(
+                          '${'purchases.stock'.tr()}: ${variant.stockQuantity} | ${'purchases.cost'.tr()}: ${currencyService.format(variant.costCents.toBigInt().toInt())}'),
+                      trailing: const Icon(LucideIcons.plus),
                       onTap: () {
-                        widget.onItemAdded(
-                          _selectedProduct!,
-                          variant,
-                          _quantity,
-                          variant.costCents,
-                        );
+                        widget.onItemAdded(_selectedProduct!, variant,
+                            _quantity, variant.costCents);
                       },
                     );
                   },

@@ -2,6 +2,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons/lucide_icons.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../domain/repositories/supplier_repository.dart';
 import '../bloc/supplier_form_bloc.dart';
@@ -158,7 +159,7 @@ class _SupplierFormContentState extends State<_SupplierFormContent> {
                     decoration: InputDecoration(
                       labelText: 'suppliers.name'.tr(),
                       hintText: 'suppliers.name_hint'.tr(),
-                      prefixIcon: Icon(Icons.business_outlined, color: theme.colorScheme.primary),
+                      prefixIcon: Icon(LucideIcons.building2, color: theme.colorScheme.primary),
                       errorText: formState.errors['name']?.tr(),
                       filled: true,
                       border: OutlineInputBorder(
@@ -182,7 +183,7 @@ class _SupplierFormContentState extends State<_SupplierFormContent> {
                     decoration: InputDecoration(
                       labelText: 'suppliers.email'.tr(),
                       hintText: 'suppliers.email_hint'.tr(),
-                      prefixIcon: Icon(Icons.email_outlined, color: theme.colorScheme.primary),
+                      prefixIcon: Icon(LucideIcons.mail, color: theme.colorScheme.primary),
                       errorText: formState.errors['email']?.tr(),
                       filled: true,
                       border: OutlineInputBorder(
@@ -203,7 +204,7 @@ class _SupplierFormContentState extends State<_SupplierFormContent> {
                     decoration: InputDecoration(
                       labelText: 'suppliers.phone'.tr(),
                       hintText: 'suppliers.phone_hint'.tr(),
-                      prefixIcon: Icon(Icons.phone_outlined, color: theme.colorScheme.primary),
+                      prefixIcon: Icon(LucideIcons.phone, color: theme.colorScheme.primary),
                       filled: true,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -223,7 +224,7 @@ class _SupplierFormContentState extends State<_SupplierFormContent> {
                     decoration: InputDecoration(
                       labelText: 'suppliers.address'.tr(),
                       hintText: 'suppliers.address_hint'.tr(),
-                      prefixIcon: Icon(Icons.location_on_outlined, color: theme.colorScheme.primary),
+                      prefixIcon: Icon(LucideIcons.mapPin, color: theme.colorScheme.primary),
                       filled: true,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -237,36 +238,36 @@ class _SupplierFormContentState extends State<_SupplierFormContent> {
                   ),
                   const SizedBox(height: 24),
 
-                  // Financial Information Section (only for new supplier)
-                  if (!isEditing) ...[
-                    _SectionHeader(title: 'suppliers.financial_info'.tr()),
-                    const SizedBox(height: 8),
+                  // Financial Information Section
+                  _SectionHeader(title: 'suppliers.financial_info'.tr()),
+                  const SizedBox(height: 8),
 
-                    // Opening Balance Field
-                    TextFormField(
-                      controller: _balanceController,
-                      decoration: InputDecoration(
-                        labelText: 'suppliers.opening_balance'.tr(),
-                        hintText: 'suppliers.opening_balance_hint'.tr(),
-                        prefixIcon: Icon(Icons.account_balance_wallet_outlined, color: theme.colorScheme.primary),
-                        filled: true,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        helperText: 'suppliers.opening_balance_helper'.tr(),
+                  // Opening Balance Field
+                  TextFormField(
+                    controller: _balanceController,
+                    decoration: InputDecoration(
+                      labelText: isEditing
+                          ? 'suppliers.current_balance'.tr()
+                          : 'suppliers.opening_balance'.tr(),
+                      hintText: 'suppliers.opening_balance_hint'.tr(),
+                      prefixIcon: Icon(LucideIcons.wallet, color: theme.colorScheme.primary),
+                      filled: true,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      textInputAction: TextInputAction.done,
-                      onTap: () {
-                        if (_balanceController.text == '0.00' || _balanceController.text.isEmpty) {
-                          _balanceController.clear();
-                        }
-                      },
-                      onChanged: (value) => context.read<SupplierFormBloc>().add(
-                            SupplierFormBalanceChanged(value),
-                          ),
+                      helperText: 'suppliers.opening_balance_helper'.tr(),
                     ),
-                  ],
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    textInputAction: TextInputAction.done,
+                    onTap: () {
+                      if (_balanceController.text == '0.00' || _balanceController.text.isEmpty) {
+                        _balanceController.clear();
+                      }
+                    },
+                    onChanged: (value) => context.read<SupplierFormBloc>().add(
+                          SupplierFormBalanceChanged(value),
+                        ),
+                  ),
                 ],
               ),
             ),

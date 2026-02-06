@@ -57,6 +57,7 @@ import '../../features/purchases/data/repositories/purchase_repository_impl.dart
 import '../../features/purchases/domain/repositories/purchase_repository.dart';
 import '../../features/purchases/presentation/bloc/purchases_bloc.dart';
 import '../../features/purchases/presentation/bloc/purchase_form_bloc.dart';
+import '../../features/purchases/presentation/bloc/purchase_returns_bloc.dart';
 import '../../features/customers/domain/repositories/customer_repository.dart';
 import '../../features/customers/domain/repositories/loyalty_repository.dart';
 import '../../features/customers/data/datasources/customer_local_datasource.dart';
@@ -230,6 +231,7 @@ Future<void> init() async {
   // Purchases Blocs
   sl.registerFactory(() => PurchasesBloc(sl<PurchaseRepository>()));
   sl.registerFactory(() => PurchaseFormBloc(sl<PurchaseRepository>()));
+  sl.registerFactory(() => PurchaseReturnsBloc(sl<PurchaseRepository>()));
 
   // Customers Blocs
   sl.registerFactory(() => CustomersBloc(sl<CustomerRepository>()));

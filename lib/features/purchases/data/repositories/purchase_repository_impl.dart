@@ -10,6 +10,8 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
 
   PurchaseRepositoryImpl(this._datasource);
 
+  // ==================== PURCHASES ====================
+
   @override
   Stream<List<PurchaseEntity>> watchAllPurchases() {
     return _datasource.watchAllPurchases();
@@ -23,6 +25,11 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
   @override
   Stream<List<PurchaseEntity>> watchPurchasesBySupplier(int supplierId) {
     return _datasource.watchPurchasesBySupplier(supplierId);
+  }
+
+  @override
+  Stream<List<PurchaseEntity>> searchPurchases(String query) {
+    return _datasource.searchPurchases(query);
   }
 
   @override
@@ -50,9 +57,11 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
     required int supplierId,
     required int currencyId,
     required Decimal subtotalCents,
+    required Decimal discountCents,
     required Decimal taxCents,
     required Decimal totalCents,
     required List<PurchaseItemInput> items,
+    String? notes,
     DateTime? purchaseDate,
   }) async {
     final purchaseNumber = await generatePurchaseNumber();
@@ -64,7 +73,7 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
       subtotalCents: Value(subtotalCents),
       taxCents: Value(taxCents),
       totalCents: Value(totalCents),
-      status: const Value('pending'),
+      status: const Value('draft'),
       purchaseDate: Value(purchaseDate ?? DateTime.now()),
     );
 
@@ -87,6 +96,11 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
   }
 
   @override
+  Future<void> voidPurchase(int purchaseId) {
+    return _datasource.voidPurchase(purchaseId);
+  }
+
+  @override
   Future<int> deletePurchase(int purchaseId) {
     return _datasource.deletePurchase(purchaseId);
   }
@@ -94,5 +108,76 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
   @override
   Future<bool> updatePurchaseStatus(int purchaseId, String status) {
     return _datasource.updatePurchaseStatus(purchaseId, status);
+  }
+
+  @override
+  Stream<PurchaseDashboardStats> watchDashboardStats() {
+    return _datasource.watchDashboardStats();
+  }
+
+  // ==================== RETURNS ====================
+
+  @override
+  Stream<List<PurchaseReturnEntity>> watchAllPurchaseReturns() {
+    return _datasource.watchAllPurchaseReturns();
+  }
+
+  @override
+  Stream<List<PurchaseReturnEntity>> watchPurchaseReturnsByPurchase(int purchaseId) {
+    return _datasource.watchPurchaseReturnsByPurchase(purchaseId);
+  }
+
+  @override
+  Future<PurchaseReturnEntity?> getPurchaseReturnById(int id) {
+    return _datasource.getPurchaseReturnById(id);
+  }
+
+  @override
+  Stream<List<PurchaseReturnItemEntity>> watchPurchaseReturnItems(int returnId) {
+    return _datasource.watchPurchaseReturnItems(returnId);
+  }
+
+  @override
+  Future<String> generateReturnNumber() {
+    return _datasource.generateReturnNumber();
+  }
+
+  @override
+  Future<int> createPurchaseReturn({
+    required int purchaseId,
+    required int currencyId,
+    required Decimal totalCents,
+    required List<PurchaseReturnItemInput> items,
+    String? reason,
+    DateTime? returnDate,
+  }) async {
+    final returnNumber = await generateReturnNumber();
+
+    final returnData = db.PurchaseReturnsCompanion(
+      purchaseId: Value(purchaseId),
+      returnNumber: Value(returnNumber),
+      totalCents: Value(totalCents),
+      currencyId: Value(currencyId),
+      reason: Value(reason),
+      returnDate: Value(returnDate ?? DateTime.now()),
+    );
+
+    final itemCompanions = items.map((item) => db.PurchaseReturnItemsCompanion(
+          purchaseItemId: Value(item.purchaseItemId),
+          quantity: Value(item.quantity),
+          refundCents: Value(item.refundCents),
+        )).toList();
+
+    final returnId = await _datasource.createPurchaseReturn(returnData, itemCompanions);
+
+    // Auto-post the return (update stock)
+    await _datasource.postPurchaseReturn(returnId);
+
+    return returnId;
+  }
+
+  @override
+  Future<void> postPurchaseReturn(int returnId) {
+    return _datasource.postPurchaseReturn(returnId);
   }
 }

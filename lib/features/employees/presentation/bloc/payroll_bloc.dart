@@ -152,9 +152,14 @@ class PayrollBloc extends Bloc<PayrollEvent, PayrollState> {
       isLoading: true,
     ));
 
-    // Load available periods
-    final periods = await _repository.getPayrollPeriods();
-    emit(state.copyWith(availablePeriods: periods));
+    // Load available periods (safe – empty table returns [])
+    try {
+      final periods = await _repository.getPayrollPeriods();
+      emit(state.copyWith(availablePeriods: periods));
+    } catch (_) {
+      // Table may be empty; continue with empty list
+      emit(state.copyWith(availablePeriods: const []));
+    }
 
     await _subscribeToPayrolls(emit);
   }
@@ -189,6 +194,10 @@ class PayrollBloc extends Bloc<PayrollEvent, PayrollState> {
         var totalGross = Decimal.zero;
         var totalDeductions = Decimal.zero;
         var totalNet = Decimal.zero;
+        var totalPaid = Decimal.zero;
+        var totalUnpaid = Decimal.zero;
+        int paidCount = 0;
+        int unpaidCount = 0;
 
         for (final p in payrolls) {
           totalGross += p.basicSalaryCents +
@@ -197,7 +206,19 @@ class PayrollBloc extends Bloc<PayrollEvent, PayrollState> {
               p.overtimeCents;
           totalDeductions += p.deductionCents;
           totalNet += p.netPayCents;
+
+          if (p.status == 'paid') {
+            paidCount++;
+            totalPaid += p.netPayCents;
+          } else {
+            unpaidCount++;
+            totalUnpaid += p.netPayCents;
+          }
         }
+
+        // Collect unique employee IDs to fetch names
+        final employeeIds = payrolls.map((p) => p.employeeId).toSet();
+        _loadEmployeeNames(employeeIds);
 
         return state.copyWith(
           payrolls: payrolls,
@@ -207,6 +228,10 @@ class PayrollBloc extends Bloc<PayrollEvent, PayrollState> {
             totalDeductionsCents: totalDeductions.toBigInt().toInt(),
             totalNetCents: totalNet.toBigInt().toInt(),
             employeeCount: payrolls.length,
+            paidCount: paidCount,
+            unpaidCount: unpaidCount,
+            totalPaidCents: totalPaid.toBigInt().toInt(),
+            totalUnpaidCents: totalUnpaid.toBigInt().toInt(),
           ),
           isLoading: false,
           error: null,
@@ -219,6 +244,21 @@ class PayrollBloc extends Bloc<PayrollEvent, PayrollState> {
         );
       },
     );
+  }
+
+  /// Cache of employee names keyed by ID
+  final Map<int, String> _employeeNames = {};
+  Map<int, String> get employeeNames => _employeeNames;
+
+  Future<void> _loadEmployeeNames(Set<int> ids) async {
+    for (final id in ids) {
+      if (!_employeeNames.containsKey(id)) {
+        final emp = await _repository.getEmployee(id);
+        if (emp != null) {
+          _employeeNames[id] = emp.name;
+        }
+      }
+    }
   }
 
   Future<void> _onCreateRequested(
