@@ -1,14 +1,20 @@
 import 'package:decimal/decimal.dart';
 import 'package:drift/drift.dart';
 import '../../../../core/database/app_database.dart';
+import '../../../../core/services/audit_log_service.dart';
+import '../../../auth/data/services/session_service.dart';
 import '../../domain/repositories/customer_repository.dart';
 import '../datasources/customer_local_datasource.dart';
 
 /// Implementation of CustomerRepository
 class CustomerRepositoryImpl implements CustomerRepository {
   final CustomerLocalDatasource _datasource;
+  final AuditLogService _auditService;
+  final SessionService _sessionService;
 
-  CustomerRepositoryImpl(this._datasource);
+  CustomerRepositoryImpl(this._datasource, this._auditService, this._sessionService);
+
+  Future<int?> _currentUserId() => _sessionService.getCurrentUserId();
 
   @override
   Stream<List<Customer>> watchAllCustomers({bool? isActive}) {
@@ -88,8 +94,24 @@ class CustomerRepositoryImpl implements CustomerRepository {
   }
 
   @override
-  Future<void> updateCustomerBalance(int customerId, int newBalanceCents) {
-    return _datasource.updateCustomerBalance(customerId, newBalanceCents);
+  Future<void> updateCustomerBalance(int customerId, int newBalanceCents) async {
+    final existing = await _datasource.getCustomer(customerId);
+    final oldBalance = existing?.balanceCents.toBigInt().toInt();
+
+    await _datasource.updateCustomerBalance(customerId, newBalanceCents);
+
+    await _auditService.log(
+      entityType: 'customer',
+      entityId: customerId,
+      action: 'balance_change',
+      oldValue: oldBalance == null ? null : {'balanceCents': oldBalance},
+      newValue: {
+        'balanceCents': newBalanceCents,
+        'changeCents': oldBalance == null ? null : (newBalanceCents - oldBalance),
+        'reason': 'customer_balance_update',
+      },
+      userId: await _currentUserId(),
+    );
   }
 
   @override

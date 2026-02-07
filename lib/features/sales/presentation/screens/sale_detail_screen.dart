@@ -1,0 +1,867 @@
+import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:lucide_icons/lucide_icons.dart';
+import 'package:easy_localization/easy_localization.dart';
+import 'package:decimal/decimal.dart';
+
+import '../../../../core/di/injection_container.dart';
+import '../../../../core/services/currency_service.dart';
+import '../../domain/entities/sale_entity.dart';
+import '../../domain/repositories/sale_repository.dart';
+
+class SaleDetailScreen extends StatefulWidget {
+  final int saleId;
+
+  const SaleDetailScreen({super.key, required this.saleId});
+
+  @override
+  State<SaleDetailScreen> createState() => _SaleDetailScreenState();
+}
+
+class _SaleDetailScreenState extends State<SaleDetailScreen> {
+  SaleEntity? _sale;
+  List<SaleItemEntity> _items = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSale();
+  }
+
+  Future<void> _loadSale() async {
+    final repo = sl<SaleRepository>();
+    final sale = await repo.getSaleById(widget.saleId);
+    final items = await repo.getSaleItems(widget.saleId);
+    if (mounted) {
+      setState(() {
+        _sale = sale;
+        _items = items;
+        _loading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final cs = sl<CurrencyService>();
+
+    if (_loading) {
+      return Scaffold(
+        appBar: AppBar(title: Text('sales.title'.tr())),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_sale == null) {
+      return Scaffold(
+        appBar: AppBar(title: Text('sales.title'.tr())),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(LucideIcons.alertCircle, size: 64, color: colorScheme.error),
+              const SizedBox(height: 16),
+              Text('sales.not_found'.tr(), style: theme.textTheme.titleLarge),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final sale = _sale!;
+
+    return Scaffold(
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(LucideIcons.arrowLeft),
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/sales');
+            }
+          },
+        ),
+        title: Text(sale.invoiceNumber),
+        actions: _buildActions(sale, colorScheme),
+      ),
+      body: RefreshIndicator(
+        onRefresh: _loadSale,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final isWide = constraints.maxWidth > 900;
+            if (isWide) {
+              return _buildWideLayout(context, sale, cs);
+            }
+            return _buildNarrowLayout(context, sale, cs);
+          },
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _buildActions(SaleEntity sale, ColorScheme colorScheme) {
+    final actions = <Widget>[];
+
+    if (sale.isCompleted) {
+      actions.add(
+        FilledButton.tonalIcon(
+          onPressed: () => context.push('/sales/returns/new?saleId=${sale.id}'),
+          icon: const Icon(LucideIcons.undo2, size: 16),
+          label: Text('sales.create_return'.tr()),
+        ),
+      );
+      actions.add(const SizedBox(width: 4));
+      actions.add(
+        PopupMenuButton<String>(
+          icon: const Icon(LucideIcons.moreVertical),
+          onSelected: (v) => _handleAction(v, context),
+          itemBuilder: (_) => [
+            PopupMenuItem(
+              value: 'void',
+              child: ListTile(
+                leading: Icon(LucideIcons.ban, color: colorScheme.error),
+                title: Text('sales.void_sale'.tr(),
+                    style: TextStyle(color: colorScheme.error)),
+                dense: true, contentPadding: EdgeInsets.zero,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return actions;
+  }
+
+  Future<void> _handleAction(String action, BuildContext context) async {
+    final repo = sl<SaleRepository>();
+    switch (action) {
+      case 'void':
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Text('sales.void_confirm_title'.tr()),
+            content: Text('sales.void_confirm_message'.tr()),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: Text('common.cancel'.tr()),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                style: FilledButton.styleFrom(
+                  backgroundColor: Theme.of(ctx).colorScheme.error,
+                ),
+                child: Text('sales.void_sale'.tr()),
+              ),
+            ],
+          ),
+        );
+        if (confirmed == true) {
+          await repo.voidSale(widget.saleId);
+          await _loadSale();
+        }
+        break;
+    }
+  }
+
+  Widget _buildWideLayout(BuildContext context, SaleEntity sale, CurrencyService cs) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 380,
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              _buildStatusTimeline(context, sale),
+              const SizedBox(height: 16),
+              _buildInfoCard(context, sale, cs),
+              const SizedBox(height: 16),
+              _buildTotalsCard(context, sale, cs),
+              if (sale.notes != null && sale.notes!.isNotEmpty) ...[                const SizedBox(height: 16),
+                _buildNotesCard(context, sale),
+              ],
+            ],
+          ),
+        ),
+        const VerticalDivider(width: 1),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              _buildItemsCard(context, cs),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildNarrowLayout(BuildContext context, SaleEntity sale, CurrencyService cs) {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        _buildStatusTimeline(context, sale),
+        const SizedBox(height: 16),
+        _buildInfoCard(context, sale, cs),
+        const SizedBox(height: 16),
+        _buildItemsCard(context, cs),
+        const SizedBox(height: 16),
+        _buildTotalsCard(context, sale, cs),
+        if (sale.notes != null && sale.notes!.isNotEmpty) ...[          const SizedBox(height: 16),
+          _buildNotesCard(context, sale),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildStatusTimeline(BuildContext context, SaleEntity sale) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+
+    final steps = <_TimelineStep>[
+      _TimelineStep(
+        label: 'sales.status_completed'.tr(),
+        icon: LucideIcons.checkCircle,
+        isActive: sale.isCompleted || sale.isVoided,
+        isCompleted: sale.isCompleted,
+      ),
+    ];
+
+    if (sale.isVoided) {
+      steps.add(_TimelineStep(
+        label: 'sales.status_voided'.tr(),
+        icon: LucideIcons.ban,
+        isActive: true,
+        isCompleted: false,
+        isError: true,
+      ));
+    }
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.5)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        child: Row(
+          children: [
+            for (int i = 0; i < steps.length; i++) ...[
+              _buildTimelineNode(theme, steps[i]),
+              if (i < steps.length - 1)
+                Expanded(
+                  child: Container(
+                    height: 2,
+                    margin: const EdgeInsets.only(bottom: 18),
+                    decoration: BoxDecoration(
+                      color: cs.outlineVariant.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(1),
+                    ),
+                  ),
+                ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTimelineNode(ThemeData theme, _TimelineStep step) {
+    final cs = theme.colorScheme;
+    Color color;
+    if (step.isError) {
+      color = cs.error;
+    } else if (step.isCompleted) {
+      color = Colors.green;
+    } else if (step.isActive) {
+      color = cs.primary;
+    } else {
+      color = cs.outlineVariant;
+    }
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 40, height: 40,
+          decoration: BoxDecoration(
+            gradient: (step.isCompleted || step.isActive)
+                ? LinearGradient(
+                    colors: [color, color.withValues(alpha: 0.7)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  )
+                : null,
+            color: (step.isCompleted || step.isActive) ? null : cs.surfaceContainerHighest,
+            shape: BoxShape.circle,
+            boxShadow: (step.isCompleted || step.isActive)
+                ? [BoxShadow(color: color.withValues(alpha: 0.3), blurRadius: 8, offset: const Offset(0, 2))]
+                : null,
+          ),
+          child: Icon(step.icon, size: 18,
+              color: (step.isCompleted || step.isActive) ? Colors.white : cs.onSurfaceVariant),
+        ),
+        const SizedBox(height: 6),
+        Text(step.label,
+            style: theme.textTheme.labelSmall?.copyWith(
+                color: (step.isCompleted || step.isActive) ? color : cs.onSurfaceVariant,
+                fontWeight: FontWeight.w600),
+            textAlign: TextAlign.center),
+      ],
+    );
+  }
+
+  Widget _buildInfoCard(BuildContext context, SaleEntity sale, CurrencyService cs) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final customerInitial = sale.customerName != null &&
+            sale.customerName!.isNotEmpty
+        ? sale.customerName![0].toUpperCase()
+        : '?';
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 44, height: 44,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [colorScheme.primary, colorScheme.primary.withValues(alpha: 0.7)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(customerInitial,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                          color: Colors.white, fontWeight: FontWeight.bold)),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('sales.customer'.tr(),
+                          style: theme.textTheme.labelSmall?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                              letterSpacing: 0.5)),
+                      Text(sale.customerName ?? 'sales.walk_in'.tr(),
+                          style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            Divider(height: 24, color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
+            _detailRow(theme, LucideIcons.hash, 'sales.invoice_number'.tr(),
+                sale.invoiceNumber),
+            const SizedBox(height: 10),
+            _detailRow(theme, LucideIcons.calendar, 'sales.date'.tr(),
+                DateFormat.yMMMd().format(sale.saleDate)),
+            if (sale.dueDate != null) ...[              const SizedBox(height: 10),
+              _detailRow(theme, LucideIcons.calendarClock, 'sales.due_date'.tr(),
+                  DateFormat.yMMMd().format(sale.dueDate!),
+                  valueColor: sale.isOverdue ? colorScheme.error : null),
+            ],
+            const SizedBox(height: 10),
+            _detailRow(theme, LucideIcons.creditCard, 'sales.payment_method'.tr(),
+                sale.paymentMethod),
+            const SizedBox(height: 10),
+            _detailRow(theme, LucideIcons.clock, 'sales.created_at'.tr(),
+                DateFormat.yMMMd().add_jm().format(sale.createdAt)),
+            if (sale.isOverdue) ...[              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: colorScheme.error.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: colorScheme.error.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(LucideIcons.alertTriangle, size: 16, color: colorScheme.error),
+                    const SizedBox(width: 8),
+                    Text('sales.overdue'.tr(),
+                        style: theme.textTheme.labelMedium?.copyWith(
+                            color: colorScheme.error, fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _detailRow(ThemeData theme, IconData icon, String label, String value,
+      {Color? valueColor}) {
+    final cs = theme.colorScheme;
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: cs.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Icon(icon, size: 14, color: cs.onSurfaceVariant),
+        ),
+        const SizedBox(width: 10),
+        Text(label, style: theme.textTheme.bodySmall?.copyWith(
+            color: cs.onSurfaceVariant)),
+        const Spacer(),
+        Flexible(
+          child: Text(value,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w500, color: valueColor),
+              textAlign: TextAlign.end, overflow: TextOverflow.ellipsis),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildItemsCard(BuildContext context, CurrencyService cs) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(7),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [colorScheme.primary, colorScheme.primary.withValues(alpha: 0.7)],
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(LucideIcons.shoppingCart, size: 16, color: Colors.white),
+                ),
+                const SizedBox(width: 10),
+                Text('sales.items'.tr(),
+                    style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600)),
+                if (_items.isNotEmpty) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: colorScheme.primaryContainer,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text('${_items.length}',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                            color: colorScheme.onPrimaryContainer,
+                            fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          if (_items.isEmpty)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  children: [
+                    Icon(LucideIcons.packageOpen, size: 40,
+                        color: colorScheme.onSurface.withValues(alpha: 0.15)),
+                    const SizedBox(height: 8),
+                    Text('sales.no_items'.tr(),
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                            color: colorScheme.onSurfaceVariant)),
+                  ],
+                ),
+              ),
+            )
+          else ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                border: Border(
+                  top: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.3)),
+                  bottom: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.3)),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const SizedBox(width: 32),
+                  Expanded(
+                    flex: 3,
+                    child: Text('sales.product_col'.tr(),
+                        style: theme.textTheme.labelSmall?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.5)),
+                  ),
+                  SizedBox(
+                    width: 50,
+                    child: Text('sales.qty_col'.tr(),
+                        style: theme.textTheme.labelSmall?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.5),
+                        textAlign: TextAlign.center),
+                  ),
+                  Expanded(
+                    flex: 2,
+                    child: Text('sales.total'.tr(),
+                        style: theme.textTheme.labelSmall?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.5),
+                        textAlign: TextAlign.end),
+                  ),
+                ],
+              ),
+            ),
+            ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _items.length,
+              itemBuilder: (context, index) {
+                final item = _items[index];
+                final isEven = index % 2 == 0;
+
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  color: isEven
+                      ? Colors.transparent
+                      : colorScheme.surfaceContainerHighest.withValues(alpha: 0.2),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 26, height: 26,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: colorScheme.primaryContainer.withValues(alpha: 0.6),
+                          borderRadius: BorderRadius.circular(7),
+                        ),
+                        child: Text(
+                          '${index + 1}',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: colorScheme.onPrimaryContainer,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        flex: 3,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              item.productName ?? 'Product #${item.productId}',
+                              style: theme.textTheme.bodyMedium
+                                  ?.copyWith(fontWeight: FontWeight.w500),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            if (item.variantSku != null)
+                              Container(
+                                margin: const EdgeInsets.only(top: 2),
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: colorScheme.tertiaryContainer.withValues(alpha: 0.4),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  item.variantSku!,
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: colorScheme.onTertiaryContainer,
+                                    fontSize: 10,
+                                  ),
+                                ),
+                              ),
+                            Text(
+                              cs.format(item.unitPriceCents.toBigInt().toInt()),
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: colorScheme.onSurfaceVariant,
+                                fontSize: 11,
+                              ),
+                            ),
+                            if (item.discountCents > Decimal.zero)
+                              Text(
+                                '-${cs.format(item.discountCents.toBigInt().toInt())}',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: colorScheme.tertiary,
+                                  fontSize: 11,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      SizedBox(
+                        width: 50,
+                        child: Text(
+                          '${item.quantity}',
+                          style: theme.textTheme.bodyMedium
+                              ?.copyWith(fontWeight: FontWeight.w600),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                      Expanded(
+                        flex: 2,
+                        child: Text(
+                          cs.format(item.totalCents.toBigInt().toInt()),
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                            color: colorScheme.primary,
+                          ),
+                          textAlign: TextAlign.end,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTotalsCard(BuildContext context, SaleEntity sale, CurrencyService cs) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+      ),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+            child: Column(
+              children: [
+                _totalRow(theme, 'sales.subtotal'.tr(),
+                    cs.format(sale.subtotalCents.toBigInt().toInt())),
+                if (sale.discountCents > Decimal.zero) ...[
+                  const SizedBox(height: 8),
+                  _totalRow(theme, 'sales.discount'.tr(),
+                      '-${cs.format(sale.discountCents.toBigInt().toInt())}',
+                      valueColor: colorScheme.tertiary),
+                ],
+                if (sale.taxCents > Decimal.zero) ...[
+                  const SizedBox(height: 8),
+                  _totalRow(theme, 'sales.tax'.tr(),
+                      cs.format(sale.taxCents.toBigInt().toInt())),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color: colorScheme.primary.withValues(alpha: 0.06),
+              border: Border(
+                top: BorderSide(color: colorScheme.primary.withValues(alpha: 0.2)),
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('sales.total'.tr(),
+                    style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold)),
+                Text(
+                  cs.format(sale.totalCents.toBigInt().toInt()),
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.primary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Payment tracking section
+          if (sale.totalCents > Decimal.zero)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: sale.isFullyPaid
+                    ? Colors.green.withValues(alpha: 0.06)
+                    : sale.isOverdue
+                        ? colorScheme.error.withValues(alpha: 0.06)
+                        : colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                borderRadius: const BorderRadius.only(
+                  bottomLeft: Radius.circular(14),
+                  bottomRight: Radius.circular(14),
+                ),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            sale.isFullyPaid ? LucideIcons.checkCircle : LucideIcons.wallet,
+                            size: 14,
+                            color: sale.isFullyPaid ? Colors.green : colorScheme.onSurfaceVariant,
+                          ),
+                          const SizedBox(width: 6),
+                          Text('sales.paid'.tr(),
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                  color: sale.isFullyPaid ? Colors.green : colorScheme.onSurfaceVariant)),
+                        ],
+                      ),
+                      Text(
+                        cs.format(sale.paidAmountCents.toBigInt().toInt()),
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: sale.isFullyPaid ? Colors.green : null),
+                      ),
+                    ],
+                  ),
+                  if (!sale.isFullyPaid) ...[                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(LucideIcons.arrowRight, size: 14,
+                                color: sale.isOverdue ? colorScheme.error : colorScheme.onSurfaceVariant),
+                            const SizedBox(width: 6),
+                            Text('sales.remaining'.tr(),
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                    color: sale.isOverdue ? colorScheme.error : colorScheme.onSurfaceVariant)),
+                          ],
+                        ),
+                        Text(
+                          cs.format(sale.remainingCents.toBigInt().toInt()),
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color: sale.isOverdue ? colorScheme.error : null),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNotesCard(BuildContext context, SaleEntity sale) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.5)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(LucideIcons.stickyNote, size: 16, color: Colors.amber.shade700),
+                ),
+                const SizedBox(width: 10),
+                Text('sales.notes'.tr(),
+                    style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600)),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: cs.surfaceContainerHighest.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(sale.notes!,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                      color: cs.onSurface, height: 1.4)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _totalRow(ThemeData theme, String label, String value, {Color? valueColor}) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label, style: theme.textTheme.bodyMedium?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant)),
+        Text(value, style: theme.textTheme.bodyMedium?.copyWith(
+            fontWeight: FontWeight.w600, color: valueColor)),
+      ],
+    );
+  }
+}
+
+class _TimelineStep {
+  final String label;
+  final IconData icon;
+  final bool isActive;
+  final bool isCompleted;
+  final bool isError;
+
+  const _TimelineStep({
+    required this.label,
+    required this.icon,
+    this.isActive = false,
+    this.isCompleted = false,
+    this.isError = false,
+  });
+}

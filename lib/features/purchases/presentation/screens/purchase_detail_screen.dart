@@ -420,16 +420,49 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
             const SizedBox(height: 10),
             _detailRow(theme, LucideIcons.calendar, 'purchases.date'.tr(),
                 DateFormat.yMMMd().format(purchase.purchaseDate)),
+            if (purchase.dueDate != null) ...[              const SizedBox(height: 10),
+              _detailRow(theme, LucideIcons.calendarClock, 'purchases.due_date'.tr(),
+                  DateFormat.yMMMd().format(purchase.dueDate!),
+                  valueColor: purchase.isOverdue ? colorScheme.error : null),
+            ],
+            if (purchase.paymentMethod != null && purchase.paymentMethod!.isNotEmpty) ...[              const SizedBox(height: 10),
+              _detailRow(theme, LucideIcons.creditCard, 'purchases.payment_method'.tr(),
+                  purchase.paymentMethod!),
+            ],
+            if (purchase.supplierInvoiceRef != null && purchase.supplierInvoiceRef!.isNotEmpty) ...[              const SizedBox(height: 10),
+              _detailRow(theme, LucideIcons.fileText, 'purchases.supplier_ref'.tr(),
+                  purchase.supplierInvoiceRef!),
+            ],
             const SizedBox(height: 10),
             _detailRow(theme, LucideIcons.clock, 'purchases.created_at'.tr(),
                 DateFormat.yMMMd().add_jm().format(purchase.createdAt)),
+            if (purchase.isOverdue) ...[              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: colorScheme.error.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: colorScheme.error.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(LucideIcons.alertTriangle, size: 16, color: colorScheme.error),
+                    const SizedBox(width: 8),
+                    Text('purchases.overdue'.tr(),
+                        style: theme.textTheme.labelMedium?.copyWith(
+                            color: colorScheme.error, fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ),
+            ],
           ],
         ),
       ),
     );
   }
 
-  Widget _detailRow(ThemeData theme, IconData icon, String label, String value) {
+  Widget _detailRow(ThemeData theme, IconData icon, String label, String value,
+      {Color? valueColor}) {
     final cs = theme.colorScheme;
     return Row(
       children: [
@@ -447,7 +480,8 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
         const Spacer(),
         Flexible(
           child: Text(value,
-              style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
+              style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w500, color: valueColor),
               textAlign: TextAlign.end, overflow: TextOverflow.ellipsis),
         ),
       ],
@@ -809,10 +843,6 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             decoration: BoxDecoration(
               color: colorScheme.primary.withValues(alpha: 0.06),
-              borderRadius: const BorderRadius.only(
-                bottomLeft: Radius.circular(14),
-                bottomRight: Radius.circular(14),
-              ),
               border: Border(
                 top: BorderSide(color: colorScheme.primary.withValues(alpha: 0.2)),
               ),
@@ -832,6 +862,75 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
               ],
             ),
           ),
+          // Payment tracking section
+          if (purchase.totalCents > Decimal.zero)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: purchase.isFullyPaid
+                    ? Colors.green.withValues(alpha: 0.06)
+                    : purchase.isOverdue
+                        ? colorScheme.error.withValues(alpha: 0.06)
+                        : colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                borderRadius: const BorderRadius.only(
+                  bottomLeft: Radius.circular(14),
+                  bottomRight: Radius.circular(14),
+                ),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            purchase.isFullyPaid ? LucideIcons.checkCircle : LucideIcons.wallet,
+                            size: 14,
+                            color: purchase.isFullyPaid ? Colors.green : colorScheme.onSurfaceVariant,
+                          ),
+                          const SizedBox(width: 6),
+                          Text('purchases.paid'.tr(),
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                  color: purchase.isFullyPaid ? Colors.green : colorScheme.onSurfaceVariant)),
+                        ],
+                      ),
+                      Text(
+                        cs.format(purchase.paidAmountCents.toBigInt().toInt()),
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: purchase.isFullyPaid ? Colors.green : null),
+                      ),
+                    ],
+                  ),
+                  if (!purchase.isFullyPaid) ...[                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(LucideIcons.arrowRight, size: 14,
+                                color: purchase.isOverdue ? colorScheme.error : colorScheme.onSurfaceVariant),
+                            const SizedBox(width: 6),
+                            Text('purchases.remaining'.tr(),
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                    color: purchase.isOverdue ? colorScheme.error : colorScheme.onSurfaceVariant)),
+                          ],
+                        ),
+                        Text(
+                          cs.format(purchase.remainingCents.toBigInt().toInt()),
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color: purchase.isOverdue ? colorScheme.error : null),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
         ],
       ),
     );
@@ -1058,6 +1157,7 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
           );
           _loadPurchase();
         } catch (e) {
+          debugPrint('[PurchaseDetailScreen] postPurchase failed: $e');
           if (!mounted) return;
           messenger.showSnackBar(
             SnackBar(content: Text(e.toString()),
@@ -1097,10 +1197,23 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
             );
             _loadPurchase();
           } catch (e) {
+            debugPrint('[PurchaseDetailScreen] voidPurchase failed: $e');
             if (!mounted) return;
-            messenger.showSnackBar(
-              SnackBar(content: Text(e.toString()),
-                  backgroundColor: errorColor, behavior: SnackBarBehavior.floating),
+            final errorMsg = e.toString().replaceFirst('Exception: ', '');
+            if (!context.mounted) return;
+            showDialog<void>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                icon: Icon(LucideIcons.alertTriangle, color: errorColor, size: 32),
+                title: Text('purchases.void_failed_title'.tr()),
+                content: Text(errorMsg),
+                actions: [
+                  FilledButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: Text('common.ok'.tr()),
+                  ),
+                ],
+              ),
             );
           }
         }

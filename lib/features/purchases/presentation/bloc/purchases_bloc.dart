@@ -104,7 +104,8 @@ class PurchasesBloc extends RealtimeBloc<PurchasesHubData, PurchasesEvent> {
         purchases: purchases,
         stats: _latestStats ?? const PurchaseDashboardStats(
           totalCount: 0, draftCount: 0, postedCount: 0,
-          totalPayableCents: 0, returnsCount: 0,
+          totalPayableCents: 0, totalPaidCents: 0,
+          overdueCount: 0, returnsCount: 0,
         ),
         searchQuery: _searchQuery,
         statusFilter: _statusFilter,

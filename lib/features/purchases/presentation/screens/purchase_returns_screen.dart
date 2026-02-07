@@ -335,11 +335,11 @@ class _ReturnTile extends StatelessWidget {
           child: IntrinsicHeight(
             child: Row(
               children: [
-                // Red accent bar
+                // Status accent bar
                 Container(
                   width: 4,
                   decoration: BoxDecoration(
-                    color: cs.error,
+                    color: returnEntity.status == 'voided' ? cs.outlineVariant : cs.error,
                     borderRadius: const BorderRadiusDirectional.only(
                       topStart: Radius.circular(14),
                       bottomStart: Radius.circular(14),
@@ -419,10 +419,40 @@ class _ReturnTile extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 8),
-                        Text(
-                          currencyService.format(returnEntity.totalCents.toBigInt().toInt()),
-                          style: theme.textTheme.titleSmall?.copyWith(
-                              color: cs.error, fontWeight: FontWeight.bold),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              currencyService.format(returnEntity.totalCents.toBigInt().toInt()),
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                  color: cs.error, fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(height: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: returnEntity.status == 'voided'
+                                    ? cs.error.withValues(alpha: 0.1)
+                                    : Colors.green.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: returnEntity.status == 'voided'
+                                      ? cs.error.withValues(alpha: 0.3)
+                                      : Colors.green.withValues(alpha: 0.3),
+                                ),
+                              ),
+                              child: Text(
+                                returnEntity.status == 'voided'
+                                    ? 'purchases.status_voided'.tr()
+                                    : 'purchases.status_posted'.tr(),
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: returnEntity.status == 'voided' ? cs.error : Colors.green,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 9,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),

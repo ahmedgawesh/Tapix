@@ -17,6 +17,10 @@ mixin _$PurchaseDaoMixin on DatabaseAccessor<AppDatabase> {
   $PurchaseReturnsTable get purchaseReturns => attachedDatabase.purchaseReturns;
   $PurchaseReturnItemsTable get purchaseReturnItems =>
       attachedDatabase.purchaseReturnItems;
+  $PurchasePaymentsTable get purchasePayments =>
+      attachedDatabase.purchasePayments;
+  $SupplierTransactionsTable get supplierTransactions =>
+      attachedDatabase.supplierTransactions;
   PurchaseDaoManager get managers => PurchaseDaoManager(this);
 }
 
@@ -56,5 +60,15 @@ class PurchaseDaoManager {
       $$PurchaseReturnItemsTableTableManager(
         _db.attachedDatabase,
         _db.purchaseReturnItems,
+      );
+  $$PurchasePaymentsTableTableManager get purchasePayments =>
+      $$PurchasePaymentsTableTableManager(
+        _db.attachedDatabase,
+        _db.purchasePayments,
+      );
+  $$SupplierTransactionsTableTableManager get supplierTransactions =>
+      $$SupplierTransactionsTableTableManager(
+        _db.attachedDatabase,
+        _db.supplierTransactions,
       );
 }

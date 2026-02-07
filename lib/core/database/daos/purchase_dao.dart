@@ -1,3 +1,4 @@
+import 'package:decimal/decimal.dart';
 import 'package:drift/drift.dart';
 import '../app_database.dart';
 import '../tables/transactions.dart';
@@ -29,20 +30,26 @@ class PurchaseItemWithDetails {
 
 /// Dashboard stats for purchases
 class PurchaseDashboardStats {
-  final int pendingCount;
+  final int totalCount;
   final int draftCount;
+  final int postedCount;
   final int totalPayableCents;
+  final int totalPaidCents;
   final int overdueCount;
+  final int returnsCount;
 
   PurchaseDashboardStats({
-    required this.pendingCount,
+    required this.totalCount,
     required this.draftCount,
+    required this.postedCount,
     required this.totalPayableCents,
+    required this.totalPaidCents,
     required this.overdueCount,
+    required this.returnsCount,
   });
 }
 
-@DriftAccessor(tables: [Purchases, PurchaseItems, PurchaseReturns, PurchaseReturnItems, Suppliers, Products, ProductVariants])
+@DriftAccessor(tables: [Purchases, PurchaseItems, PurchaseReturns, PurchaseReturnItems, PurchasePayments, Suppliers, SupplierTransactions, Products, ProductVariants])
 class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin {
   PurchaseDao(super.db);
 
@@ -233,17 +240,34 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
           );
 
           // Update cost based on strategy
-          if (costStrategy == 'last_cost') {
+          final newCostCents = item.unitCostCents.toBigInt().toInt();
+          final now = DateTime.now().toIso8601String();
+          if (costStrategy == 'weighted_average') {
+            // Weighted average: (oldCost * oldQty + newCost * newQty) / (oldQty + newQty)
+            final variantRow = await customSelect(
+              'SELECT cost_cents, stock_quantity FROM product_variants WHERE id = ?',
+              variables: [Variable.withInt(variantId)],
+            ).getSingleOrNull();
+            if (variantRow != null) {
+              final oldCost = variantRow.read<int>('cost_cents');
+              // stock_quantity was already incremented above, so subtract to get old qty
+              final currentStock = variantRow.read<int>('stock_quantity');
+              final oldQty = currentStock - item.quantity;
+              if (oldQty + item.quantity > 0) {
+                final avgCost = ((oldCost * oldQty) + (newCostCents * item.quantity)) ~/ (oldQty + item.quantity);
+                await customStatement(
+                  'UPDATE product_variants SET cost_cents = ?, updated_at = ? WHERE id = ?',
+                  [avgCost, now, variantId],
+                );
+              }
+            }
+          } else {
+            // last_cost (default)
             await customStatement(
               'UPDATE product_variants SET cost_cents = ?, updated_at = ? WHERE id = ?',
-              [item.unitCostCents.toBigInt().toInt(), DateTime.now().toIso8601String(), variantId],
+              [newCostCents, now, variantId],
             );
           }
-          // TODO: Implement weighted average cost strategy
-
-          // Update quantity received
-          await (update(purchaseItems)..where((i) => i.id.equals(item.id)))
-              .write(const PurchaseItemsCompanion());
         }
       }
 
@@ -253,6 +277,7 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
   }
 
   /// Void purchase - reverse stock changes if posted
+  /// Validates that reversing stock won't result in negative quantities.
   Future<void> voidPurchase(int purchaseId, {int? userId}) {
     return transaction(() async {
       final purchase = await getPurchaseById(purchaseId);
@@ -263,12 +288,27 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
         throw Exception('Purchase already voided');
       }
 
-      // If posted, reverse stock changes
+      // If posted, reverse stock changes with negative-stock guard
       if (purchase.status == 'posted') {
         final items = await getPurchaseItems(purchaseId);
         for (final item in items) {
           final variantId = item.variantId;
           if (variantId != null) {
+            // Check current stock before deducting
+            final variantRow = await customSelect(
+              'SELECT stock_quantity FROM product_variants WHERE id = ?',
+              variables: [Variable.withInt(variantId)],
+            ).getSingleOrNull();
+            if (variantRow != null) {
+              final currentStock = variantRow.read<int>('stock_quantity');
+              if (currentStock < item.quantity) {
+                throw Exception(
+                  'Cannot void: variant #$variantId stock ($currentStock) '
+                  'is less than purchased quantity (${item.quantity}). '
+                  'Some items may have been sold or returned.',
+                );
+              }
+            }
             await customStatement(
               'UPDATE product_variants SET stock_quantity = stock_quantity - ?, updated_at = ? WHERE id = ?',
               [item.quantity, DateTime.now().toIso8601String(), variantId],
@@ -330,28 +370,44 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
 
   /// Get dashboard stats
   Future<PurchaseDashboardStats> getDashboardStats() async {
-    final draftCount = await (select(purchases)
-          ..where((p) => p.status.equals('draft')))
-        .get()
-        .then((list) => list.length);
+    final allPurchases = await select(purchases).get();
 
-    final pendingCount = await (select(purchases)
-          ..where((p) => p.status.equals('posted')))
-        .get()
-        .then((list) => list.length);
+    final draftCount = allPurchases.where((p) => p.status == 'draft' || p.status == 'pending').length;
+    final postedCount = allPurchases.where((p) => p.status == 'posted').length;
+    final totalCount = allPurchases.where((p) => p.status != 'voided').length;
 
-    // Calculate total payable from posted purchases
-    final postedPurchases = await (select(purchases)
-          ..where((p) => p.status.equals('posted')))
-        .get();
-    final totalPayable = postedPurchases.fold<int>(
-        0, (sum, p) => sum + p.totalCents.toBigInt().toInt());
+    // Calculate total payable (total - paid) from non-voided purchases
+    int totalPayable = 0;
+    int totalPaid = 0;
+    int overdueCount = 0;
+    final now = DateTime.now();
+
+    for (final p in allPurchases) {
+      if (p.status == 'voided') continue;
+      final total = p.totalCents.toBigInt().toInt();
+      final paid = p.paidAmountCents.toBigInt().toInt();
+      totalPayable += total;
+      totalPaid += paid;
+
+      // Overdue: posted, not fully paid, past due date
+      if (p.status == 'posted' && paid < total && p.dueDate != null) {
+        if (p.dueDate!.isBefore(now)) {
+          overdueCount++;
+        }
+      }
+    }
+
+    // Returns count
+    final returnsCount = await (select(purchaseReturns)).get().then((l) => l.length);
 
     return PurchaseDashboardStats(
-      pendingCount: pendingCount,
+      totalCount: totalCount,
       draftCount: draftCount,
-      totalPayableCents: totalPayable,
-      overdueCount: 0, // TODO: Implement overdue calculation based on expected date
+      postedCount: postedCount,
+      totalPayableCents: totalPayable - totalPaid,
+      totalPaidCents: totalPaid,
+      overdueCount: overdueCount,
+      returnsCount: returnsCount,
     );
   }
 
@@ -437,29 +493,113 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
     });
   }
 
-  /// Post purchase return - update variant stock
+  /// Post purchase return - update variant stock based on disposition
+  /// Validates that return quantities don't exceed available (purchased - already returned).
   Future<void> postPurchaseReturn(int returnId, {int? userId}) {
     return transaction(() async {
       final returnData = await getPurchaseReturnById(returnId);
       if (returnData == null) {
         throw Exception('Return not found');
       }
+      if (returnData.status == 'posted') {
+        throw Exception('Return already posted');
+      }
 
-      final query = select(purchaseReturnItems).join([
+      // Validate return quantities don't exceed available
+      final returnItemsQuery = select(purchaseReturnItems).join([
         innerJoin(purchaseItems, purchaseItems.id.equalsExp(purchaseReturnItems.purchaseItemId)),
       ])
         ..where(purchaseReturnItems.returnId.equals(returnId));
 
-      final items = await query.get();
-      for (final row in items) {
+      final returnItemRows = await returnItemsQuery.get();
+      for (final row in returnItemRows) {
         final returnItem = row.readTable(purchaseReturnItems);
         final purchaseItem = row.readTable(purchaseItems);
-        final variantId = purchaseItem.variantId;
-        if (variantId == null) continue;
-        await customStatement(
-          'UPDATE product_variants SET stock_quantity = stock_quantity - ?, updated_at = ? WHERE id = ?',
-          [returnItem.quantity, DateTime.now().toIso8601String(), variantId],
+
+        // Check total already returned for this purchase item (excluding voided returns)
+        final alreadyReturned = await getReturnedQuantity(purchaseItem.id);
+        // Subtract this return's own quantity since it's not yet posted
+        final previouslyReturned = alreadyReturned - returnItem.quantity;
+        final maxReturnable = purchaseItem.quantity - previouslyReturned;
+
+        if (returnItem.quantity > maxReturnable) {
+          throw Exception(
+            'Cannot return ${returnItem.quantity} units of item #${purchaseItem.id}. '
+            'Only $maxReturnable available (purchased: ${purchaseItem.quantity}, '
+            'already returned: $previouslyReturned).',
+          );
+        }
+      }
+
+      // Only deduct stock for restock/refund dispositions (not write_off/repair)
+      final shouldDeductStock = returnData.dispositionType == 'restock' ||
+          returnData.dispositionType == 'refund' ||
+          returnData.dispositionType == 'replace';
+
+      if (shouldDeductStock) {
+        for (final row in returnItemRows) {
+          final returnItem = row.readTable(purchaseReturnItems);
+          final purchaseItem = row.readTable(purchaseItems);
+          final variantId = purchaseItem.variantId;
+          if (variantId == null) continue;
+
+          // Guard against negative stock
+          final variantRow = await customSelect(
+            'SELECT stock_quantity FROM product_variants WHERE id = ?',
+            variables: [Variable.withInt(variantId)],
+          ).getSingleOrNull();
+          if (variantRow != null) {
+            final currentStock = variantRow.read<int>('stock_quantity');
+            if (currentStock < returnItem.quantity) {
+              throw Exception(
+                'Cannot return: variant #$variantId stock ($currentStock) '
+                'is less than return quantity (${returnItem.quantity}).',
+              );
+            }
+          }
+
+          await customStatement(
+            'UPDATE product_variants SET stock_quantity = stock_quantity - ?, updated_at = ? WHERE id = ?',
+            [returnItem.quantity, DateTime.now().toIso8601String(), variantId],
+          );
+        }
+      }
+
+      // Update return status to posted
+      await (update(purchaseReturns)..where((r) => r.id.equals(returnId)))
+          .write(const PurchaseReturnsCompanion(status: Value('posted')));
+
+      // Create supplier credit note transaction and adjust balance
+      final purchase = await getPurchaseById(returnData.purchaseId);
+      if (purchase != null) {
+        final refundCents = returnData.totalCents.toBigInt().toInt();
+
+        // Record supplier transaction (credit note)
+        await into(supplierTransactions).insert(
+          SupplierTransactionsCompanion.insert(
+            supplierId: purchase.supplierId,
+            transactionType: 'credit_note',
+            amountCents: Decimal.fromInt(-refundCents),
+            currencyId: purchase.currencyId,
+            description: Value('Purchase return ${returnData.returnNumber}'),
+            referenceId: Value(returnId),
+            referenceType: const Value('purchase_return'),
+          ),
         );
+
+        // Decrease supplier balance (they owe us)
+        final supplier = await (select(suppliers)
+              ..where((s) => s.id.equals(purchase.supplierId)))
+            .getSingleOrNull();
+        if (supplier != null) {
+          final oldBalance = supplier.balanceCents.toBigInt().toInt();
+          final newBalance = oldBalance - refundCents;
+          await (update(suppliers)..where((s) => s.id.equals(purchase.supplierId)))
+              .write(SuppliersCompanion(
+                balanceCents: Value(Decimal.fromInt(newBalance)),
+                updatedAt: Value(DateTime.now()),
+              ));
+        }
       }
     });
   }
@@ -467,5 +607,151 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
   /// Watch purchase return items
   Stream<List<PurchaseReturnItem>> watchPurchaseReturnItems(int returnId) {
     return (select(purchaseReturnItems)..where((i) => i.returnId.equals(returnId))).watch();
+  }
+
+  /// Void a purchase return
+  Future<void> voidPurchaseReturn(int returnId) {
+    return transaction(() async {
+      final returnData = await getPurchaseReturnById(returnId);
+      if (returnData == null) throw Exception('Return not found');
+      if (returnData.status == 'voided') throw Exception('Return already voided');
+
+      // If posted, reverse stock changes
+      if (returnData.status == 'posted') {
+        final shouldReverseStock = returnData.dispositionType == 'restock' ||
+            returnData.dispositionType == 'refund' ||
+            returnData.dispositionType == 'replace';
+
+        if (shouldReverseStock) {
+          final query = select(purchaseReturnItems).join([
+            innerJoin(purchaseItems, purchaseItems.id.equalsExp(purchaseReturnItems.purchaseItemId)),
+          ])
+            ..where(purchaseReturnItems.returnId.equals(returnId));
+
+          final items = await query.get();
+          for (final row in items) {
+            final returnItem = row.readTable(purchaseReturnItems);
+            final purchaseItem = row.readTable(purchaseItems);
+            final variantId = purchaseItem.variantId;
+            if (variantId == null) continue;
+            await customStatement(
+              'UPDATE product_variants SET stock_quantity = stock_quantity + ?, updated_at = ? WHERE id = ?',
+              [returnItem.quantity, DateTime.now().toIso8601String(), variantId],
+            );
+          }
+        }
+      }
+
+      // Reverse supplier credit note if return was posted
+      if (returnData.status == 'posted') {
+        final purchase = await getPurchaseById(returnData.purchaseId);
+        if (purchase != null) {
+          final refundCents = returnData.totalCents.toBigInt().toInt();
+
+          // Record reversal transaction
+          await into(supplierTransactions).insert(
+            SupplierTransactionsCompanion.insert(
+              supplierId: purchase.supplierId,
+              transactionType: 'credit_note_reversal',
+              amountCents: Decimal.fromInt(refundCents),
+              currencyId: purchase.currencyId,
+              description: Value('Voided purchase return ${returnData.returnNumber}'),
+              referenceId: Value(returnId),
+              referenceType: const Value('purchase_return'),
+            ),
+          );
+
+          // Restore supplier balance
+          final supplier = await (select(suppliers)
+                ..where((s) => s.id.equals(purchase.supplierId)))
+              .getSingleOrNull();
+          if (supplier != null) {
+            final oldBalance = supplier.balanceCents.toBigInt().toInt();
+            final newBalance = oldBalance + refundCents;
+            await (update(suppliers)..where((s) => s.id.equals(purchase.supplierId)))
+                .write(SuppliersCompanion(
+                  balanceCents: Value(Decimal.fromInt(newBalance)),
+                  updatedAt: Value(DateTime.now()),
+                ));
+          }
+        }
+      }
+
+      await (update(purchaseReturns)..where((r) => r.id.equals(returnId)))
+          .write(const PurchaseReturnsCompanion(status: Value('voided')));
+    });
+  }
+
+  // ==================== PURCHASE PAYMENTS ====================
+
+  /// Watch all payments for a purchase
+  Stream<List<PurchasePayment>> watchPurchasePayments(int purchaseId) {
+    return (select(purchasePayments)
+          ..where((p) => p.purchaseId.equals(purchaseId))
+          ..orderBy([(p) => OrderingTerm.desc(p.paymentDate)]))
+        .watch();
+  }
+
+  /// Get all payments for a purchase
+  Future<List<PurchasePayment>> getPurchasePayments(int purchaseId) {
+    return (select(purchasePayments)
+          ..where((p) => p.purchaseId.equals(purchaseId))
+          ..orderBy([(p) => OrderingTerm.desc(p.paymentDate)]))
+        .get();
+  }
+
+  /// Record a payment for a purchase and update paid_amount_cents
+  Future<int> recordPayment(PurchasePaymentsCompanion payment) {
+    return transaction(() async {
+      final paymentId = await into(purchasePayments).insert(payment);
+
+      // Recalculate total paid
+      final payments = await getPurchasePayments(payment.purchaseId.value);
+      final totalPaid = payments.fold<int>(
+        0, (sum, p) => sum + p.amountCents.toBigInt().toInt(),
+      );
+
+      await (update(purchases)..where((p) => p.id.equals(payment.purchaseId.value)))
+          .write(PurchasesCompanion(
+            paidAmountCents: Value(Decimal.fromInt(totalPaid)),
+            updatedAt: Value(DateTime.now()),
+          ));
+
+      return paymentId;
+    });
+  }
+
+  /// Delete a payment and recalculate paid_amount_cents
+  Future<void> deletePayment(int paymentId) {
+    return transaction(() async {
+      final payment = await (select(purchasePayments)..where((p) => p.id.equals(paymentId))).getSingleOrNull();
+      if (payment == null) return;
+
+      await (delete(purchasePayments)..where((p) => p.id.equals(paymentId))).go();
+
+      // Recalculate total paid
+      final remaining = await getPurchasePayments(payment.purchaseId);
+      final totalPaid = remaining.fold<int>(
+        0, (sum, p) => sum + p.amountCents.toBigInt().toInt(),
+      );
+
+      await (update(purchases)..where((p) => p.id.equals(payment.purchaseId)))
+          .write(PurchasesCompanion(
+            paidAmountCents: Value(Decimal.fromInt(totalPaid)),
+            updatedAt: Value(DateTime.now()),
+          ));
+    });
+  }
+
+  /// Get total already returned quantity for a specific purchase item
+  Future<int> getReturnedQuantity(int purchaseItemId) async {
+    final rows = await customSelect(
+      'SELECT COALESCE(SUM(pri.quantity), 0) as total '
+      'FROM purchase_return_items pri '
+      'JOIN purchase_returns pr ON pr.id = pri.return_id '
+      'WHERE pri.purchase_item_id = ? AND pr.status != ?',
+      variables: [Variable.withInt(purchaseItemId), const Variable('voided')],
+    ).get();
+    return rows.isEmpty ? 0 : rows.first.read<int>('total');
   }
 }

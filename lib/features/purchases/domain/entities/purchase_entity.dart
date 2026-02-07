@@ -10,10 +10,14 @@ class PurchaseEntity extends Equatable {
   final Decimal discountCents;
   final Decimal taxCents;
   final Decimal totalCents;
+  final Decimal paidAmountCents;
   final int currencyId;
   final String status;
+  final String? paymentMethod;
+  final String? supplierInvoiceRef;
   final String? notes;
   final DateTime purchaseDate;
+  final DateTime? dueDate;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -26,23 +30,42 @@ class PurchaseEntity extends Equatable {
     Decimal? discountCents,
     required this.taxCents,
     required this.totalCents,
+    Decimal? paidAmountCents,
     required this.currencyId,
     required this.status,
+    this.paymentMethod,
+    this.supplierInvoiceRef,
     this.notes,
     required this.purchaseDate,
+    this.dueDate,
     required this.createdAt,
     required this.updatedAt,
-  }) : discountCents = discountCents ?? Decimal.zero;
+  }) : discountCents = discountCents ?? Decimal.zero,
+       paidAmountCents = paidAmountCents ?? Decimal.zero;
 
   bool get isDraft => status == 'draft' || status == 'pending';
   bool get isPosted => status == 'posted';
   bool get isVoided => status == 'voided';
 
+  Decimal get remainingCents {
+    final r = totalCents - paidAmountCents;
+    return r < Decimal.zero ? Decimal.zero : r;
+  }
+
+  bool get isFullyPaid => paidAmountCents >= totalCents;
+
+  bool get isOverdue {
+    if (dueDate == null || isFullyPaid || isVoided) return false;
+    return DateTime.now().isAfter(dueDate!);
+  }
+
   @override
   List<Object?> get props => [
         id, purchaseNumber, supplierId, supplierName,
         subtotalCents, discountCents, taxCents, totalCents,
-        currencyId, status, notes, purchaseDate, createdAt, updatedAt,
+        paidAmountCents, currencyId, status, paymentMethod,
+        supplierInvoiceRef, notes, purchaseDate, dueDate,
+        createdAt, updatedAt,
       ];
 }
 
@@ -94,6 +117,8 @@ class PurchaseReturnEntity extends Equatable {
   final String? supplierName;
   final Decimal totalCents;
   final int currencyId;
+  final String status;
+  final String dispositionType;
   final String? reason;
   final DateTime returnDate;
   final DateTime createdAt;
@@ -105,15 +130,22 @@ class PurchaseReturnEntity extends Equatable {
     this.supplierName,
     required this.totalCents,
     required this.currencyId,
+    this.status = 'draft',
+    this.dispositionType = 'restock',
     this.reason,
     required this.returnDate,
     required this.createdAt,
   });
 
+  bool get isDraft => status == 'draft';
+  bool get isPosted => status == 'posted';
+  bool get isVoided => status == 'voided';
+
   @override
   List<Object?> get props => [
         id, purchaseId, returnNumber, supplierName,
-        totalCents, currencyId, reason, returnDate, createdAt,
+        totalCents, currencyId, status, dispositionType,
+        reason, returnDate, createdAt,
       ];
 }
 
@@ -123,6 +155,7 @@ class PurchaseReturnItemEntity extends Equatable {
   final int purchaseItemId;
   final int quantity;
   final Decimal refundCents;
+  final String? reason;
   final String? productName;
   final String? variantSku;
   final DateTime createdAt;
@@ -133,6 +166,7 @@ class PurchaseReturnItemEntity extends Equatable {
     required this.purchaseItemId,
     required this.quantity,
     required this.refundCents,
+    this.reason,
     this.productName,
     this.variantSku,
     required this.createdAt,
@@ -141,6 +175,36 @@ class PurchaseReturnItemEntity extends Equatable {
   @override
   List<Object?> get props => [
         id, returnId, purchaseItemId, quantity,
-        refundCents, productName, variantSku, createdAt,
+        refundCents, reason, productName, variantSku, createdAt,
+      ];
+}
+
+class PurchasePaymentEntity extends Equatable {
+  final int id;
+  final int purchaseId;
+  final Decimal amountCents;
+  final int currencyId;
+  final String paymentMethod;
+  final String? reference;
+  final String? notes;
+  final DateTime paymentDate;
+  final DateTime createdAt;
+
+  const PurchasePaymentEntity({
+    required this.id,
+    required this.purchaseId,
+    required this.amountCents,
+    required this.currencyId,
+    required this.paymentMethod,
+    this.reference,
+    this.notes,
+    required this.paymentDate,
+    required this.createdAt,
+  });
+
+  @override
+  List<Object?> get props => [
+        id, purchaseId, amountCents, currencyId,
+        paymentMethod, reference, notes, paymentDate, createdAt,
       ];
 }

@@ -386,8 +386,8 @@ class _ProfileHeaderCard extends StatelessWidget {
                     style: theme.textTheme.headlineMedium?.copyWith(
                       fontWeight: FontWeight.bold,
                       color: isPayable
-                          ? (isDark ? Colors.amber.shade300 : Colors.amber.shade700)
-                          : Colors.green,
+                          ? (isDark ? const Color(0xFF90CAF9) : colorScheme.primary)
+                          : (isDark ? const Color(0xFFEF9A9A) : colorScheme.error),
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -423,29 +423,36 @@ class _QuickActionsSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colorScheme = Theme.of(context).colorScheme;
 
     final paymentBtn = _QuickActionButton(
       icon: LucideIcons.banknote,
       label: 'suppliers.payment'.tr(),
-      color: isDark ? Colors.blue.shade300 : Colors.blue.shade600,
-      backgroundColor: isDark ? Colors.blue.shade900.withValues(alpha: 0.3) : Colors.blue.shade50,
+      color: isDark ? const Color(0xFF90CAF9) : colorScheme.primary,
+      backgroundColor: isDark
+          ? colorScheme.primaryContainer.withValues(alpha: 0.22)
+          : colorScheme.primaryContainer.withValues(alpha: 0.45),
       onTap: onPaymentPressed,
     );
 
     final purchaseBtn = _QuickActionButton(
       icon: LucideIcons.shoppingCart,
       label: 'suppliers.new_purchase'.tr(),
-      color: isDark ? Colors.orange.shade300 : Colors.orange.shade600,
-      backgroundColor: isDark ? Colors.orange.shade900.withValues(alpha: 0.3) : Colors.orange.shade50,
+      color: isDark ? const Color(0xFFFFCC80) : colorScheme.secondary,
+      backgroundColor: isDark
+          ? colorScheme.secondaryContainer.withValues(alpha: 0.22)
+          : colorScheme.secondaryContainer.withValues(alpha: 0.45),
       onTap: onPurchasePressed,
     );
 
     final returnBtn = _QuickActionButton(
-      icon: LucideIcons.arrowLeftRight,
+      icon: LucideIcons.undo2,
       label: 'suppliers.return_items'.tr(),
-      color: isDark ? Colors.green.shade300 : Colors.green.shade600,
-      backgroundColor: isDark ? Colors.green.shade900.withValues(alpha: 0.3) : Colors.green.shade50,
-      onTap: () {},
+      color: isDark ? const Color(0xFF80CBC4) : colorScheme.tertiary,
+      backgroundColor: isDark
+          ? colorScheme.tertiaryContainer.withValues(alpha: 0.22)
+          : colorScheme.tertiaryContainer.withValues(alpha: 0.45),
+      onTap: () => context.push('/purchases/returns'),
     );
 
     return LayoutBuilder(
@@ -503,7 +510,12 @@ class _QuickActionButton extends StatelessWidget {
 
     return Material(
       color: backgroundColor,
-      borderRadius: BorderRadius.circular(12),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.35),
+        ),
+      ),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),

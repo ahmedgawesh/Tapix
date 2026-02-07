@@ -12,8 +12,10 @@ import '../database/daos/size_dao.dart';
 import '../database/daos/settings_dao.dart';
 import '../database/daos/barcode_template_dao.dart';
 import '../database/daos/purchase_dao.dart';
+import '../database/daos/sale_dao.dart';
 import '../services/currency_service.dart';
 import '../services/localization_service.dart';
+import '../services/audit_log_service.dart';
 import '../services/theme_service.dart';
 import '../../features/auth/auth.dart';
 import '../../features/products/domain/repositories/product_repository.dart';
@@ -60,6 +62,13 @@ import '../../features/purchases/presentation/bloc/purchases_bloc.dart';
 import '../../features/purchases/presentation/bloc/purchase_form_bloc.dart';
 import '../../features/purchases/presentation/bloc/purchase_returns_bloc.dart';
 import '../../features/purchases/presentation/bloc/purchase_return_form_bloc.dart';
+import '../../features/sales/data/datasources/sale_local_datasource.dart';
+import '../../features/sales/data/repositories/sale_repository_impl.dart';
+import '../../features/sales/domain/repositories/sale_repository.dart';
+import '../../features/sales/presentation/bloc/sales_bloc.dart';
+import '../../features/sales/presentation/bloc/sale_form_bloc.dart';
+import '../../features/sales/presentation/bloc/sale_returns_bloc.dart';
+import '../../features/sales/presentation/bloc/sale_return_form_bloc.dart';
 import '../../features/customers/domain/repositories/customer_repository.dart';
 import '../../features/customers/domain/repositories/loyalty_repository.dart';
 import '../../features/customers/data/datasources/customer_local_datasource.dart';
@@ -105,6 +114,7 @@ Future<void> init() async {
   sl.registerLazySingleton(() => SettingsDao(sl()));
   sl.registerLazySingleton(() => BarcodeTemplateDao(sl()));
   sl.registerLazySingleton(() => PurchaseDao(sl()));
+  sl.registerLazySingleton(() => SaleDao(sl()));
   sl.registerLazySingleton(() => CustomerDao(sl()));
   sl.registerLazySingleton(() => EmployeeDao(sl()));
   sl.registerLazySingleton(() => SupplierDao(sl()));
@@ -131,6 +141,7 @@ Future<void> init() async {
   sl.registerLazySingleton(() => ThemeService(sl()));
   sl.registerLazySingleton(() => LocalizationService(sl()));
   sl.registerLazySingleton(() => CurrencyService(sl()));
+  sl.registerLazySingleton(() => AuditLogService(sl<AppDatabase>()));
 
   // Datasources
   sl.registerLazySingleton<ProductLocalDatasource>(
@@ -162,7 +173,15 @@ Future<void> init() async {
     () => PurchaseLocalDatasourceImpl(sl<PurchaseDao>()),
   );
   sl.registerLazySingleton<PurchaseRepository>(
-    () => PurchaseRepositoryImpl(sl<PurchaseLocalDatasource>()),
+    () => PurchaseRepositoryImpl(sl<PurchaseLocalDatasource>(), sl<AuditLogService>(), sl<SessionService>()),
+  );
+
+  // Sales
+  sl.registerLazySingleton<SaleLocalDatasource>(
+    () => SaleLocalDatasourceImpl(sl<SaleDao>()),
+  );
+  sl.registerLazySingleton<SaleRepository>(
+    () => SaleRepositoryImpl(sl<SaleLocalDatasource>(), sl<SaleDao>()),
   );
 
   // Customers
@@ -170,7 +189,11 @@ Future<void> init() async {
     () => CustomerLocalDatasourceImpl(sl<CustomerDao>()),
   );
   sl.registerLazySingleton<CustomerRepository>(
-    () => CustomerRepositoryImpl(sl<CustomerLocalDatasource>()),
+    () => CustomerRepositoryImpl(
+      sl<CustomerLocalDatasource>(),
+      sl<AuditLogService>(),
+      sl<SessionService>(),
+    ),
   );
   sl.registerLazySingleton<LoyaltyRepository>(
     () => LoyaltyRepositoryImpl(sl<AppDatabase>()),
@@ -245,6 +268,12 @@ Future<void> init() async {
   sl.registerFactory(() => PurchaseFormBloc(sl<PurchaseRepository>(), sl<ProductVariantRepository>()));
   sl.registerFactory(() => PurchaseReturnsBloc(sl<PurchaseRepository>()));
   sl.registerFactory(() => PurchaseReturnFormBloc(sl<PurchaseRepository>()));
+
+  // Sales Blocs
+  sl.registerFactory(() => SalesBloc(sl<SaleRepository>()));
+  sl.registerFactory(() => SaleFormBloc(sl<SaleRepository>(), sl<ProductVariantRepository>()));
+  sl.registerFactory(() => SaleReturnsBloc(sl<SaleRepository>()));
+  sl.registerFactory(() => SaleReturnFormBloc(sl<SaleRepository>()));
 
   // Customers Blocs
   sl.registerFactory(() => CustomersBloc(sl<CustomerRepository>()));

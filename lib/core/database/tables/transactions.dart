@@ -15,10 +15,13 @@ class Sales extends Table {
   IntColumn get taxCents => integer().map(const MoneyConverter())();
   IntColumn get discountCents => integer().map(const MoneyConverter()).withDefault(const Constant(0))();
   IntColumn get totalCents => integer().map(const MoneyConverter())();
+  IntColumn get paidAmountCents => integer().map(const MoneyConverter()).withDefault(const Constant(0))();
   IntColumn get currencyId => integer().references(Currencies, #id, onDelete: KeyAction.restrict)();
   TextColumn get paymentMethod => text()();
   TextColumn get status => text().withDefault(const Constant('completed'))();
+  TextColumn get notes => text().nullable()();
   DateTimeColumn get saleDate => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get dueDate => dateTime().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
 }
@@ -55,6 +58,10 @@ class SaleReturns extends Table {
   TextColumn get returnNumber => text().unique()();
   IntColumn get totalCents => integer().map(const MoneyConverter())();
   IntColumn get currencyId => integer().references(Currencies, #id, onDelete: KeyAction.restrict)();
+  /// draft, posted, voided
+  TextColumn get status => text().withDefault(const Constant('draft'))();
+  /// restock, write_off, exchange, store_credit, refund
+  TextColumn get dispositionType => text().withDefault(const Constant('restock'))();
   TextColumn get reason => text().nullable()();
   DateTimeColumn get returnDate => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
@@ -67,6 +74,22 @@ class SaleReturnItems extends Table {
   IntColumn get saleItemId => integer().references(SaleItems, #id, onDelete: KeyAction.restrict)();
   IntColumn get quantity => integer()();
   IntColumn get refundCents => integer().map(const MoneyConverter())();
+  /// wrong_size, defective, wrong_item, changed_mind, other
+  TextColumn get reason => text().nullable()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+}
+
+@DataClassName('SalePayment')
+class SalePayments extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get saleId => integer().references(Sales, #id, onDelete: KeyAction.cascade)();
+  IntColumn get amountCents => integer().map(const MoneyConverter())();
+  IntColumn get currencyId => integer().references(Currencies, #id, onDelete: KeyAction.restrict)();
+  /// cash, card, bank_transfer, mobile, credit
+  TextColumn get paymentMethod => text()();
+  TextColumn get reference => text().nullable()();
+  TextColumn get notes => text().nullable()();
+  DateTimeColumn get paymentDate => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 }
 
@@ -76,11 +99,17 @@ class Purchases extends Table {
   TextColumn get purchaseNumber => text().unique()();
   IntColumn get supplierId => integer().references(Suppliers, #id, onDelete: KeyAction.restrict)();
   IntColumn get subtotalCents => integer().map(const MoneyConverter())();
+  IntColumn get discountCents => integer().map(const MoneyConverter()).withDefault(const Constant(0))();
   IntColumn get taxCents => integer().map(const MoneyConverter())();
   IntColumn get totalCents => integer().map(const MoneyConverter())();
+  IntColumn get paidAmountCents => integer().map(const MoneyConverter()).withDefault(const Constant(0))();
   IntColumn get currencyId => integer().references(Currencies, #id, onDelete: KeyAction.restrict)();
-  TextColumn get status => text().withDefault(const Constant('pending'))();
+  TextColumn get status => text().withDefault(const Constant('draft'))();
+  TextColumn get paymentMethod => text().nullable()();
+  TextColumn get supplierInvoiceRef => text().nullable()();
+  TextColumn get notes => text().nullable()();
   DateTimeColumn get purchaseDate => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get dueDate => dateTime().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
 }
@@ -106,6 +135,10 @@ class PurchaseReturns extends Table {
   TextColumn get returnNumber => text().unique()();
   IntColumn get totalCents => integer().map(const MoneyConverter())();
   IntColumn get currencyId => integer().references(Currencies, #id, onDelete: KeyAction.restrict)();
+  /// draft, posted, voided
+  TextColumn get status => text().withDefault(const Constant('draft'))();
+  /// restock, write_off, repair, replace, refund
+  TextColumn get dispositionType => text().withDefault(const Constant('restock'))();
   TextColumn get reason => text().nullable()();
   DateTimeColumn get returnDate => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
@@ -118,5 +151,21 @@ class PurchaseReturnItems extends Table {
   IntColumn get purchaseItemId => integer().references(PurchaseItems, #id, onDelete: KeyAction.restrict)();
   IntColumn get quantity => integer()();
   IntColumn get refundCents => integer().map(const MoneyConverter())();
+  /// damaged, wrong_item, quality, overstock, other
+  TextColumn get reason => text().nullable()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+}
+
+@DataClassName('PurchasePayment')
+class PurchasePayments extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get purchaseId => integer().references(Purchases, #id, onDelete: KeyAction.cascade)();
+  IntColumn get amountCents => integer().map(const MoneyConverter())();
+  IntColumn get currencyId => integer().references(Currencies, #id, onDelete: KeyAction.restrict)();
+  /// cash, card, cheque, bank_transfer
+  TextColumn get paymentMethod => text()();
+  TextColumn get reference => text().nullable()();
+  TextColumn get notes => text().nullable()();
+  DateTimeColumn get paymentDate => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 }

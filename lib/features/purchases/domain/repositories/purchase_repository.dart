@@ -37,8 +37,11 @@ abstract class PurchaseRepository {
     required Decimal taxCents,
     required Decimal totalCents,
     required List<PurchaseItemInput> items,
+    String? paymentMethod,
+    String? supplierInvoiceRef,
     String? notes,
     DateTime? purchaseDate,
+    DateTime? dueDate,
   });
 
   /// Update an existing purchase and replace its items
@@ -51,8 +54,11 @@ abstract class PurchaseRepository {
     required Decimal taxCents,
     required Decimal totalCents,
     required List<PurchaseItemInput> items,
+    String? paymentMethod,
+    String? supplierInvoiceRef,
     String? notes,
     DateTime? purchaseDate,
+    DateTime? dueDate,
   });
 
   /// Post purchase (update variant stocks and costs)
@@ -96,12 +102,41 @@ abstract class PurchaseRepository {
     required int currencyId,
     required Decimal totalCents,
     required List<PurchaseReturnItemInput> items,
+    String dispositionType = 'restock',
     String? reason,
     DateTime? returnDate,
   });
 
   /// Post purchase return (update variant stock)
   Future<void> postPurchaseReturn(int returnId);
+
+  /// Void purchase return (reverse stock if posted)
+  Future<void> voidPurchaseReturn(int returnId);
+
+  // ==================== PURCHASE PAYMENTS ====================
+
+  /// Watch payments for a purchase
+  Stream<List<PurchasePaymentEntity>> watchPurchasePayments(int purchaseId);
+
+  /// Get payments for a purchase
+  Future<List<PurchasePaymentEntity>> getPurchasePayments(int purchaseId);
+
+  /// Record a payment
+  Future<int> recordPayment({
+    required int purchaseId,
+    required int currencyId,
+    required Decimal amountCents,
+    required String paymentMethod,
+    String? reference,
+    String? notes,
+    DateTime? paymentDate,
+  });
+
+  /// Delete a payment
+  Future<void> deletePayment(int paymentId);
+
+  /// Get total already returned quantity for a purchase item
+  Future<int> getReturnedQuantity(int purchaseItemId);
 }
 
 /// Input for creating/updating a purchase item
@@ -134,11 +169,13 @@ class PurchaseReturnItemInput {
   final int purchaseItemId;
   final int quantity;
   final Decimal refundCents;
+  final String? reason;
 
   const PurchaseReturnItemInput({
     required this.purchaseItemId,
     required this.quantity,
     required this.refundCents,
+    this.reason,
   });
 }
 
@@ -148,6 +185,8 @@ class PurchaseDashboardStats {
   final int draftCount;
   final int postedCount;
   final int totalPayableCents;
+  final int totalPaidCents;
+  final int overdueCount;
   final int returnsCount;
 
   const PurchaseDashboardStats({
@@ -155,6 +194,8 @@ class PurchaseDashboardStats {
     required this.draftCount,
     required this.postedCount,
     required this.totalPayableCents,
+    this.totalPaidCents = 0,
+    this.overdueCount = 0,
     required this.returnsCount,
   });
 }

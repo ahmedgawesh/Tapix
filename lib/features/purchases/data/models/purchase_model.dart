@@ -12,10 +12,14 @@ class PurchaseModel extends PurchaseEntity {
     super.discountCents,
     required super.taxCents,
     required super.totalCents,
+    super.paidAmountCents,
     required super.currencyId,
     required super.status,
+    super.paymentMethod,
+    super.supplierInvoiceRef,
     super.notes,
     required super.purchaseDate,
+    super.dueDate,
     required super.createdAt,
     required super.updatedAt,
   });
@@ -26,11 +30,17 @@ class PurchaseModel extends PurchaseEntity {
       purchaseNumber: purchase.purchaseNumber,
       supplierId: purchase.supplierId,
       subtotalCents: purchase.subtotalCents,
+      discountCents: purchase.discountCents,
       taxCents: purchase.taxCents,
       totalCents: purchase.totalCents,
+      paidAmountCents: purchase.paidAmountCents,
       currencyId: purchase.currencyId,
       status: purchase.status,
+      paymentMethod: purchase.paymentMethod,
+      supplierInvoiceRef: purchase.supplierInvoiceRef,
+      notes: purchase.notes,
       purchaseDate: purchase.purchaseDate,
+      dueDate: purchase.dueDate,
       createdAt: purchase.createdAt,
       updatedAt: purchase.updatedAt,
     );
@@ -43,11 +53,17 @@ class PurchaseModel extends PurchaseEntity {
       supplierId: pws.purchase.supplierId,
       supplierName: pws.supplier.name,
       subtotalCents: pws.purchase.subtotalCents,
+      discountCents: pws.purchase.discountCents,
       taxCents: pws.purchase.taxCents,
       totalCents: pws.purchase.totalCents,
+      paidAmountCents: pws.purchase.paidAmountCents,
       currencyId: pws.purchase.currencyId,
       status: pws.purchase.status,
+      paymentMethod: pws.purchase.paymentMethod,
+      supplierInvoiceRef: pws.purchase.supplierInvoiceRef,
+      notes: pws.purchase.notes,
       purchaseDate: pws.purchase.purchaseDate,
+      dueDate: pws.purchase.dueDate,
       createdAt: pws.purchase.createdAt,
       updatedAt: pws.purchase.updatedAt,
     );
@@ -113,6 +129,8 @@ class PurchaseReturnModel extends PurchaseReturnEntity {
     super.supplierName,
     required super.totalCents,
     required super.currencyId,
+    super.status,
+    super.dispositionType,
     super.reason,
     required super.returnDate,
     required super.createdAt,
@@ -125,6 +143,8 @@ class PurchaseReturnModel extends PurchaseReturnEntity {
       returnNumber: r.returnNumber,
       totalCents: r.totalCents,
       currencyId: r.currencyId,
+      status: r.status,
+      dispositionType: r.dispositionType,
       reason: r.reason,
       returnDate: r.returnDate,
       createdAt: r.createdAt,
@@ -139,6 +159,7 @@ class PurchaseReturnItemModel extends PurchaseReturnItemEntity {
     required super.purchaseItemId,
     required super.quantity,
     required super.refundCents,
+    super.reason,
     super.productName,
     super.variantSku,
     required super.createdAt,
@@ -151,7 +172,36 @@ class PurchaseReturnItemModel extends PurchaseReturnItemEntity {
       purchaseItemId: item.purchaseItemId,
       quantity: item.quantity,
       refundCents: item.refundCents,
+      reason: item.reason,
       createdAt: item.createdAt,
+    );
+  }
+}
+
+class PurchasePaymentModel extends PurchasePaymentEntity {
+  const PurchasePaymentModel({
+    required super.id,
+    required super.purchaseId,
+    required super.amountCents,
+    required super.currencyId,
+    required super.paymentMethod,
+    super.reference,
+    super.notes,
+    required super.paymentDate,
+    required super.createdAt,
+  });
+
+  factory PurchasePaymentModel.fromDrift(db.PurchasePayment p) {
+    return PurchasePaymentModel(
+      id: p.id,
+      purchaseId: p.purchaseId,
+      amountCents: p.amountCents,
+      currencyId: p.currencyId,
+      paymentMethod: p.paymentMethod,
+      reference: p.reference,
+      notes: p.notes,
+      paymentDate: p.paymentDate,
+      createdAt: p.createdAt,
     );
   }
 }

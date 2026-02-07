@@ -24,6 +24,7 @@ import '../../features/products/presentation/screens/variants_screen.dart';
 import '../../features/products/presentation/bloc/categories_bloc.dart';
 import '../../features/products/presentation/bloc/colors_bloc.dart';
 import '../../features/products/domain/entities/product_entity.dart';
+import '../../features/auth/presentation/screens/audit_log_screen.dart';
 import '../../features/purchases/presentation/screens/purchase_list_screen.dart';
 import '../../features/purchases/presentation/screens/purchase_form_screen.dart';
 import '../../features/purchases/presentation/screens/purchase_detail_screen.dart';
@@ -33,6 +34,11 @@ import '../../features/customers/presentation/screens/customer_hub_screen.dart';
 import '../../features/customers/presentation/screens/customer_form_screen.dart';
 import '../../features/customers/presentation/screens/customer_profile_screen.dart';
 import '../../features/customers/presentation/screens/receive_payment_screen.dart';
+import '../../features/sales/presentation/screens/sale_list_screen.dart';
+import '../../features/sales/presentation/screens/sale_form_screen.dart';
+import '../../features/sales/presentation/screens/sale_detail_screen.dart';
+import '../../features/sales/presentation/screens/sale_returns_screen.dart';
+import '../../features/sales/presentation/screens/sale_return_form_screen.dart';
 import '../../features/barcode/presentation/screens/barcode_scanner_screen.dart';
 import '../../features/barcode/presentation/screens/barcode_label_designer_screen.dart';
 import '../../features/barcode/presentation/screens/barcode_design_screen.dart';
@@ -299,7 +305,45 @@ class AppRouter {
       ),
       GoRoute(
         path: '/sales',
-        builder: (context, state) => const PlaceholderScreen(title: 'Sales'),
+        builder: (context, state) => const SaleListScreen(),
+        routes: [
+          GoRoute(
+            path: 'new',
+            builder: (context, state) => const SaleFormScreen(),
+          ),
+          GoRoute(
+            path: 'returns',
+            builder: (context, state) => const SaleReturnsScreen(),
+            routes: [
+              GoRoute(
+                path: 'new',
+                builder: (context, state) {
+                  final saleId = int.tryParse(
+                      state.uri.queryParameters['saleId'] ?? '');
+                  if (saleId == null) return const SaleReturnsScreen();
+                  return SaleReturnFormScreen(saleId: saleId);
+                },
+              ),
+            ],
+          ),
+          GoRoute(
+            path: ':id',
+            builder: (context, state) {
+              final id = int.tryParse(state.pathParameters['id'] ?? '');
+              if (id == null) return const SaleListScreen();
+              return SaleDetailScreen(saleId: id);
+            },
+            routes: [
+              GoRoute(
+                path: 'edit',
+                builder: (context, state) {
+                  final id = int.tryParse(state.pathParameters['id'] ?? '');
+                  return SaleFormScreen(saleId: id);
+                },
+              ),
+            ],
+          ),
+        ],
       ),
       GoRoute(
         path: '/customers',
@@ -523,7 +567,7 @@ class AppRouter {
       ),
       GoRoute(
         path: '/audit',
-        builder: (context, state) => const PlaceholderScreen(title: 'Audit Logs'),
+        builder: (context, state) => const AuditLogScreen(),
       ),
       GoRoute(
         path: '/access-denied',

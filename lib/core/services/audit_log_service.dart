@@ -17,7 +17,7 @@ class AuditLogService {
     required String action,
     Object? oldValue,
     Object? newValue,
-    required int userId,
+    int? userId,
   }) async {
     return await _db.into(_db.auditLogs).insert(
       AuditLogsCompanion.insert(
@@ -29,7 +29,7 @@ class AuditLogService {
           'new': newValue,
           'timestamp': DateTime.now().toIso8601String(),
         },
-        userId: Value(userId),
+        userId: userId == null ? const Value.absent() : Value(userId),
       ),
     );
   }
@@ -39,7 +39,7 @@ class AuditLogService {
     required String entityType,
     required int entityId,
     required String reason,
-    required int userId,
+    int? userId,
   }) async {
     // Log to void_logs table
     await _db.into(_db.voidLogs).insert(
@@ -47,7 +47,7 @@ class AuditLogService {
         targetTable: entityType,
         recordId: entityId,
         reason: reason,
-        voidedBy: Value(userId),
+        voidedBy: userId == null ? const Value.absent() : Value(userId),
       ),
     );
 

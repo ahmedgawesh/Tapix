@@ -74,6 +74,11 @@ class _UsersScreenContentState extends State<_UsersScreenContent> {
             onPressed: () => context.push('/users/roles'),
             tooltip: 'users.roles_permissions'.tr(),
           ),
+          IconButton(
+            icon: const Icon(Icons.history_outlined),
+            onPressed: () => context.push('/audit'),
+            tooltip: 'users.audit_logs'.tr(),
+          ),
         ],
       ),
       body: SafeArea(

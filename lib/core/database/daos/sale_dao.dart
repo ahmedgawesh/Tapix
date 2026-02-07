@@ -1,3 +1,4 @@
+import 'package:decimal/decimal.dart';
 import 'package:drift/drift.dart';
 import '../app_database.dart';
 import '../tables/transactions.dart';
@@ -50,7 +51,7 @@ class SaleDashboardStats {
   });
 }
 
-@DriftAccessor(tables: [Sales, SaleItems, SaleTaxBands, SaleReturns, SaleReturnItems, Customers, Products, ProductVariants])
+@DriftAccessor(tables: [Sales, SaleItems, SaleTaxBands, SaleReturns, SaleReturnItems, SalePayments, Customers, Products, ProductVariants])
 class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
   SaleDao(super.db);
 
@@ -374,29 +375,145 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
     });
   }
 
-  /// Post sale return - restore variant stock
+  /// Post sale return - restore variant stock based on disposition
   Future<void> postSaleReturn(int returnId) {
     return transaction(() async {
       final returnData = await getSaleReturnById(returnId);
       if (returnData == null) throw Exception('Return not found');
+      if (returnData.status == 'posted') throw Exception('Return already posted');
 
-      final query = select(saleReturnItems).join([
-        innerJoin(saleItems, saleItems.id.equalsExp(saleReturnItems.saleItemId)),
-      ])
-        ..where(saleReturnItems.returnId.equals(returnId));
+      final shouldRestoreStock = returnData.dispositionType == 'restock' ||
+          returnData.dispositionType == 'refund' ||
+          returnData.dispositionType == 'exchange';
 
-      final items = await query.get();
-      for (final row in items) {
-        final returnItem = row.readTable(saleReturnItems);
-        final saleItem = row.readTable(saleItems);
-        final variantId = saleItem.variantId;
-        if (variantId == null) continue;
-        await customStatement(
-          'UPDATE product_variants SET stock_quantity = stock_quantity + ?, updated_at = ? WHERE id = ?',
-          [returnItem.quantity, DateTime.now().toIso8601String(), variantId],
-        );
+      if (shouldRestoreStock) {
+        final query = select(saleReturnItems).join([
+          innerJoin(saleItems, saleItems.id.equalsExp(saleReturnItems.saleItemId)),
+        ])
+          ..where(saleReturnItems.returnId.equals(returnId));
+
+        final items = await query.get();
+        for (final row in items) {
+          final returnItem = row.readTable(saleReturnItems);
+          final saleItem = row.readTable(saleItems);
+          final variantId = saleItem.variantId;
+          if (variantId == null) continue;
+          await customStatement(
+            'UPDATE product_variants SET stock_quantity = stock_quantity + ?, updated_at = ? WHERE id = ?',
+            [returnItem.quantity, DateTime.now().toIso8601String(), variantId],
+          );
+        }
       }
+
+      // Update return status to posted
+      await (update(saleReturns)..where((r) => r.id.equals(returnId)))
+          .write(const SaleReturnsCompanion(status: Value('posted')));
     });
+  }
+
+  /// Void a sale return
+  Future<void> voidSaleReturn(int returnId) {
+    return transaction(() async {
+      final returnData = await getSaleReturnById(returnId);
+      if (returnData == null) throw Exception('Return not found');
+      if (returnData.status == 'voided') throw Exception('Return already voided');
+
+      // If posted, reverse stock changes
+      if (returnData.status == 'posted') {
+        final shouldReverseStock = returnData.dispositionType == 'restock' ||
+            returnData.dispositionType == 'refund' ||
+            returnData.dispositionType == 'exchange';
+
+        if (shouldReverseStock) {
+          final query = select(saleReturnItems).join([
+            innerJoin(saleItems, saleItems.id.equalsExp(saleReturnItems.saleItemId)),
+          ])
+            ..where(saleReturnItems.returnId.equals(returnId));
+
+          final items = await query.get();
+          for (final row in items) {
+            final returnItem = row.readTable(saleReturnItems);
+            final saleItem = row.readTable(saleItems);
+            final variantId = saleItem.variantId;
+            if (variantId == null) continue;
+            await customStatement(
+              'UPDATE product_variants SET stock_quantity = stock_quantity - ?, updated_at = ? WHERE id = ?',
+              [returnItem.quantity, DateTime.now().toIso8601String(), variantId],
+            );
+          }
+        }
+      }
+
+      await (update(saleReturns)..where((r) => r.id.equals(returnId)))
+          .write(const SaleReturnsCompanion(status: Value('voided')));
+    });
+  }
+
+  // ==================== SALE PAYMENTS ====================
+
+  /// Watch all payments for a sale
+  Stream<List<SalePayment>> watchSalePayments(int saleId) {
+    return (select(salePayments)
+          ..where((p) => p.saleId.equals(saleId))
+          ..orderBy([(p) => OrderingTerm.desc(p.paymentDate)]))
+        .watch();
+  }
+
+  /// Get payments for a sale
+  Future<List<SalePayment>> getSalePayments(int saleId) {
+    return (select(salePayments)
+          ..where((p) => p.saleId.equals(saleId))
+          ..orderBy([(p) => OrderingTerm.desc(p.paymentDate)]))
+        .get();
+  }
+
+  /// Record a payment and update paid_amount_cents on the sale
+  Future<int> recordPayment(SalePaymentsCompanion payment) {
+    return transaction(() async {
+      final paymentId = await into(salePayments).insert(payment);
+
+      // Recalculate total paid
+      final allPayments = await getSalePayments(payment.saleId.value);
+      final totalPaid = allPayments.fold<int>(
+          0, (sum, p) => sum + p.amountCents.toBigInt().toInt());
+
+      await (update(sales)..where((s) => s.id.equals(payment.saleId.value)))
+          .write(SalesCompanion(
+            paidAmountCents: Value(Decimal.fromInt(totalPaid)),
+            updatedAt: Value(DateTime.now()),
+          ));
+
+      return paymentId;
+    });
+  }
+
+  /// Delete a payment and recalculate paid_amount_cents
+  Future<void> deletePayment(int paymentId) {
+    return transaction(() async {
+      final payment = await (select(salePayments)..where((p) => p.id.equals(paymentId))).getSingleOrNull();
+      if (payment == null) return;
+
+      await (delete(salePayments)..where((p) => p.id.equals(paymentId))).go();
+
+      final remaining = await getSalePayments(payment.saleId);
+      final totalPaid = remaining.fold<int>(
+          0, (sum, p) => sum + p.amountCents.toBigInt().toInt());
+
+      await (update(sales)..where((s) => s.id.equals(payment.saleId)))
+          .write(SalesCompanion(
+            paidAmountCents: Value(Decimal.fromInt(totalPaid)),
+            updatedAt: Value(DateTime.now()),
+          ));
+    });
+  }
+
+  /// Get total returned quantity for a specific sale item
+  Future<int> getReturnedQuantity(int saleItemId) async {
+    final result = await customSelect(
+      'SELECT COALESCE(SUM(quantity), 0) as total FROM sale_return_items WHERE sale_item_id = ?',
+      variables: [Variable.withInt(saleItemId)],
+    ).getSingle();
+    return result.read<int>('total');
   }
 
   // ==================== DASHBOARD STATS ====================
@@ -436,5 +553,10 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
   /// Watch dashboard stats
   Stream<SaleDashboardStats> watchDashboardStats() {
     return watchAllSales().asyncMap((_) => getDashboardStats());
+  }
+
+  /// Watch sale return items
+  Stream<List<SaleReturnItem>> watchSaleReturnItemsList(int returnId) {
+    return (select(saleReturnItems)..where((i) => i.returnId.equals(returnId))).watch();
   }
 }

@@ -31,6 +31,16 @@ abstract class PurchaseLocalDatasource {
   Future<String> generateReturnNumber();
   Future<int> createPurchaseReturn(db.PurchaseReturnsCompanion returnData, List<db.PurchaseReturnItemsCompanion> items);
   Future<void> postPurchaseReturn(int returnId);
+  Future<void> voidPurchaseReturn(int returnId);
+
+  // Payments
+  Stream<List<PurchasePaymentEntity>> watchPurchasePayments(int purchaseId);
+  Future<List<PurchasePaymentEntity>> getPurchasePayments(int purchaseId);
+  Future<int> recordPayment(db.PurchasePaymentsCompanion payment);
+  Future<void> deletePayment(int paymentId);
+
+  // Returned quantity tracking
+  Future<int> getReturnedQuantity(int purchaseItemId);
 }
 
 class PurchaseLocalDatasourceImpl implements PurchaseLocalDatasource {
@@ -129,11 +139,13 @@ class PurchaseLocalDatasourceImpl implements PurchaseLocalDatasource {
   @override
   Stream<PurchaseDashboardStats> watchDashboardStats() {
     return _dao.watchDashboardStats().map((stats) => PurchaseDashboardStats(
-          totalCount: stats.pendingCount + stats.draftCount,
+          totalCount: stats.totalCount,
           draftCount: stats.draftCount,
-          postedCount: stats.pendingCount,
+          postedCount: stats.postedCount,
           totalPayableCents: stats.totalPayableCents,
-          returnsCount: stats.overdueCount,
+          totalPaidCents: stats.totalPaidCents,
+          overdueCount: stats.overdueCount,
+          returnsCount: stats.returnsCount,
         ));
   }
 
@@ -195,5 +207,40 @@ class PurchaseLocalDatasourceImpl implements PurchaseLocalDatasource {
   @override
   Future<void> postPurchaseReturn(int returnId) {
     return _dao.postPurchaseReturn(returnId);
+  }
+
+  @override
+  Future<void> voidPurchaseReturn(int returnId) {
+    return _dao.voidPurchaseReturn(returnId);
+  }
+
+  // ==================== PAYMENTS ====================
+
+  @override
+  Stream<List<PurchasePaymentEntity>> watchPurchasePayments(int purchaseId) {
+    return _dao
+        .watchPurchasePayments(purchaseId)
+        .map((rows) => rows.map(PurchasePaymentModel.fromDrift).toList());
+  }
+
+  @override
+  Future<List<PurchasePaymentEntity>> getPurchasePayments(int purchaseId) async {
+    final payments = await _dao.getPurchasePayments(purchaseId);
+    return payments.map(PurchasePaymentModel.fromDrift).toList();
+  }
+
+  @override
+  Future<int> recordPayment(db.PurchasePaymentsCompanion payment) {
+    return _dao.recordPayment(payment);
+  }
+
+  @override
+  Future<void> deletePayment(int paymentId) {
+    return _dao.deletePayment(paymentId);
+  }
+
+  @override
+  Future<int> getReturnedQuantity(int purchaseItemId) {
+    return _dao.getReturnedQuantity(purchaseItemId);
   }
 }

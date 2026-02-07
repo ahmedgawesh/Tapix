@@ -96,6 +96,8 @@ class _ReturnFormView extends StatelessWidget {
             children: [
               _buildPurchaseInfoCard(context, state, cs),
               const SizedBox(height: 12),
+              _buildDispositionCard(context, state),
+              const SizedBox(height: 12),
               _buildReasonCard(context, state),
               const SizedBox(height: 12),
               _buildFinancialImpactCard(context, state, cs),
@@ -133,6 +135,8 @@ class _ReturnFormView extends StatelessWidget {
               _buildPurchaseInfoCard(context, state, cs),
               const SizedBox(height: 12),
               _buildItemsSelectionCard(context, state, cs),
+              const SizedBox(height: 12),
+              _buildDispositionCard(context, state),
               const SizedBox(height: 12),
               _buildReasonCard(context, state),
               const SizedBox(height: 12),
@@ -366,11 +370,16 @@ class _ReturnFormView extends StatelessWidget {
                       .toList();
                   final isSelected = returnItem.isNotEmpty;
 
+                  final alreadyReturned = state.alreadyReturnedQty[item.id] ?? 0;
+                  final maxReturnable = state.maxReturnableQty(item.id, item.quantity);
+
                   return _ReturnItemTile(
                     item: item,
                     returnItem: isSelected ? returnItem.first : null,
                     isSelected: isSelected,
                     currencyService: cs,
+                    maxReturnableQty: maxReturnable,
+                    alreadyReturnedQty: alreadyReturned,
                     onToggle: () => context
                         .read<PurchaseReturnFormBloc>()
                         .add(ReturnItemToggled(item)),
@@ -380,6 +389,76 @@ class _ReturnFormView extends StatelessWidget {
                   );
                 },
               ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // DISPOSITION TYPE CARD
+  // ═══════════════════════════════════════════════════════
+  Widget _buildDispositionCard(BuildContext context, PurchaseReturnFormState state) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+
+    const dispositions = [
+      ('restock', LucideIcons.package),
+      ('write_off', LucideIcons.trash2),
+      ('repair', LucideIcons.wrench),
+      ('replace', LucideIcons.repeat),
+      ('refund', LucideIcons.banknote),
+    ];
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.5)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: cs.primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(LucideIcons.settings2, size: 16, color: cs.primary),
+                ),
+                const SizedBox(width: 10),
+                Text('purchases.disposition_type'.tr(),
+                    style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600)),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: dispositions.map((d) {
+                final isSelected = state.dispositionType == d.$1;
+                return ChoiceChip(
+                  avatar: Icon(d.$2, size: 16,
+                      color: isSelected ? cs.onPrimary : cs.onSurfaceVariant),
+                  label: Text('purchases.disposition_${d.$1}'.tr()),
+                  selected: isSelected,
+                  selectedColor: cs.primary,
+                  labelStyle: TextStyle(
+                    color: isSelected ? cs.onPrimary : cs.onSurface,
+                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                  ),
+                  onSelected: (_) => context
+                      .read<PurchaseReturnFormBloc>()
+                      .add(ReturnDispositionChanged(d.$1)),
+                );
+              }).toList(),
+            ),
           ],
         ),
       ),
@@ -636,6 +715,8 @@ class _ReturnItemTile extends StatelessWidget {
   final CurrencyService currencyService;
   final VoidCallback onToggle;
   final ValueChanged<int> onQuantityChanged;
+  final int maxReturnableQty;
+  final int alreadyReturnedQty;
 
   const _ReturnItemTile({
     required this.item,
@@ -644,6 +725,8 @@ class _ReturnItemTile extends StatelessWidget {
     required this.currencyService,
     required this.onToggle,
     required this.onQuantityChanged,
+    required this.maxReturnableQty,
+    this.alreadyReturnedQty = 0,
   });
 
   @override
@@ -678,6 +761,15 @@ class _ReturnItemTile extends StatelessWidget {
                       style: theme.textTheme.bodySmall?.copyWith(
                           color: cs.onSurfaceVariant),
                     ),
+                    if (alreadyReturnedQty > 0)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          '${'purchases.already_returned'.tr()}: $alreadyReturnedQty / ${item.quantity}',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                              color: Colors.orange, fontSize: 11),
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -724,14 +816,14 @@ class _ReturnItemTile extends StatelessWidget {
                         ),
                         InkWell(
                           borderRadius: BorderRadius.circular(8),
-                          onTap: returnItem!.returnQuantity < item.quantity
+                          onTap: returnItem!.returnQuantity < maxReturnableQty
                               ? () => onQuantityChanged(
                                   returnItem!.returnQuantity + 1)
                               : null,
                           child: Padding(
                             padding: const EdgeInsets.all(6),
                             child: Icon(LucideIcons.plus, size: 14,
-                                color: returnItem!.returnQuantity < item.quantity
+                                color: returnItem!.returnQuantity < maxReturnableQty
                                     ? cs.onSurface
                                     : cs.onSurface.withValues(alpha: 0.3)),
                           ),
@@ -741,7 +833,7 @@ class _ReturnItemTile extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    '/ ${item.quantity}',
+                    '/ $maxReturnableQty',
                     style: theme.textTheme.bodySmall?.copyWith(
                         color: cs.onSurfaceVariant),
                   ),

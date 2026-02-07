@@ -1703,6 +1703,770 @@ If you're unsure about any pattern:
 
 ---
 
+## 🛒 Sales & Purchases Module (Recent Implementation)
+
+> **NOTE**: This section documents the recent Sales/POS and Purchases enhancements that mirror each other. Both modules follow the same patterns for consistency.
+
+### Database Schema (Drift)
+
+#### Sales Table (v10016)
+
+```dart
+class Sales extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get invoiceNumber => text().unique()();
+  IntColumn get customerId => integer().nullable().references(Customers, #id)();
+  IntColumn get employeeId => integer().nullable().references(Employees, #id)();
+  IntColumn get subtotalCents => integer().map(const MoneyConverter())();
+  IntColumn get taxCents => integer().map(const MoneyConverter())();
+  IntColumn get discountCents => integer().map(const MoneyConverter()).withDefault(const Constant(0))();
+  IntColumn get totalCents => integer().map(const MoneyConverter())();
+  IntColumn get paidAmountCents => integer().map(const MoneyConverter()).withDefault(const Constant(0))();
+  IntColumn get currencyId => integer().references(Currencies, #id)();
+  TextColumn get paymentMethod => text()();
+  TextColumn get status => text().withDefault(const Constant('draft'))();
+  TextColumn get notes => text().nullable()();
+  DateTimeColumn get saleDate => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get dueDate => dateTime().nullable()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+}
+```
+
+#### Purchases Table (v10015)
+
+```dart
+class Purchases extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get purchaseNumber => text().unique()();
+  IntColumn get supplierId => integer().references(Suppliers, #id)();
+  IntColumn get subtotalCents => integer().map(const MoneyConverter())();
+  IntColumn get taxCents => integer().map(const MoneyConverter())();
+  IntColumn get discountCents => integer().map(const MoneyConverter()).withDefault(const Constant(0))();
+  IntColumn get totalCents => integer().map(const MoneyConverter())();
+  IntColumn get paidAmountCents => integer().map(const MoneyConverter()).withDefault(const Constant(0))();
+  IntColumn get currencyId => integer().references(Currencies, #id)();
+  TextColumn get status => text().withDefault(const Constant('draft'))();
+  TextColumn get paymentMethod => text().nullable()();
+  TextColumn get supplierInvoiceRef => text().nullable()();
+  TextColumn get notes => text().nullable()();
+  DateTimeColumn get purchaseDate => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get dueDate => dateTime().nullable()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+}
+```
+
+#### Sale Returns Table (with Status & Disposition)
+
+```dart
+class SaleReturns extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get saleId => integer().references(Sales, #id, onDelete: KeyAction.restrict)();
+  TextColumn get returnNumber => text().unique()();
+  IntColumn get totalCents => integer().map(const MoneyConverter())();
+  IntColumn get currencyId => integer().references(Currencies, #id)();
+  TextColumn get reason => text().nullable()();
+  TextColumn get status => text().withDefault(const Constant('draft'))(); // draft/posted/voided
+  TextColumn get dispositionType => text().withDefault(const Constant('restock'))(); // restock/exchange/store_credit/refund/write_off
+  DateTimeColumn get returnDate => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+}
+```
+
+#### Sale Return Items Table (with Per-Item Reason)
+
+```dart
+class SaleReturnItems extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get returnId => integer().references(SaleReturns, #id, onDelete: KeyAction.cascade)();
+  IntColumn get saleItemId => integer().references(SaleItems, #id, onDelete: KeyAction.restrict)();
+  IntColumn get quantity => integer()();
+  IntColumn get refundCents => integer().map(const MoneyConverter())();
+  TextColumn get reason => text().nullable()(); // Per-item reason (damaged/wrong_item/quality/overstock/other)
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+}
+```
+
+#### Payments Tables (Multi-Payment Tracking)
+
+Both Sales and Purchases support partial payments:
+
+```dart
+// SalePayments table
+class SalePayments extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get saleId => integer().references(Sales, #id, onDelete: KeyAction.cascade)();
+  IntColumn get amountCents => integer().map(const MoneyConverter())();
+  DateTimeColumn get paymentDate => dateTime()();
+  TextColumn get paymentMethod => text()();
+  TextColumn get notes => text().nullable()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+}
+
+// PurchasePayments table (mirrors SalePayments)
+class PurchasePayments extends Table { ... }
+```
+
+### Domain Entities
+
+#### SaleEntity (with Computed Properties)
+
+```dart
+class SaleEntity extends Equatable {
+  // ... fields
+  
+  // Computed payment status
+  Decimal get remainingCents => totalCents - paidAmountCents;
+  bool get isFullyPaid => paidAmountCents >= totalCents;
+  bool get isOverdue => dueDate != null && !isFullyPaid && DateTime.now().isAfter(dueDate!);
+  
+  // Status helpers
+  bool get isDraft => status == 'draft';
+  bool get isCompleted => status == 'completed';
+  bool get isVoided => status == 'voided';
+}
+```
+
+### UI Patterns for Detail Screens
+
+Both Sales and Purchases detail screens share identical UI patterns:
+
+#### Payment Tracking Section (in Totals Card)
+
+```dart
+// Shows paid/remaining amounts with color coding
+if (sale.totalCents > Decimal.zero)
+  Container(
+    decoration: BoxDecoration(
+      color: sale.isFullyPaid
+          ? Colors.green.withValues(alpha: 0.06)
+          : sale.isOverdue
+              ? colorScheme.error.withValues(alpha: 0.06)
+              : colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+    ),
+    child: Column(
+      children: [
+        // Paid row with checkmark icon (green when fully paid)
+        Row(...),
+        // Remaining row (red when overdue)
+        if (!sale.isFullyPaid) Row(...),
+      ],
+    ),
+  );
+```
+
+#### Overdue Badge Pattern
+
+```dart
+if (sale.isOverdue)
+  Container(
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+    decoration: BoxDecoration(
+      color: colorScheme.error.withValues(alpha: 0.08),
+      borderRadius: BorderRadius.circular(8),
+      border: Border.all(color: colorScheme.error.withValues(alpha: 0.3)),
+    ),
+    child: Row(
+      children: [
+        Icon(LucideIcons.alertTriangle, size: 16, color: colorScheme.error),
+        const SizedBox(width: 8),
+        Text('sales.overdue'.tr(), ...),
+      ],
+    ),
+  );
+```
+
+#### Notes Card Pattern
+
+```dart
+// Only shows when notes exist
+if (sale.notes != null && sale.notes!.isNotEmpty)
+  Card(
+    child: Column(
+      children: [
+        // Header with sticky note icon
+        Row(...),
+        // Notes text in container
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: cs.surfaceContainerHighest.withValues(alpha: 0.3),
+          ),
+          child: Text(sale.notes!, ...),
+        ),
+      ],
+    ),
+  );
+```
+
+### UI Patterns for Return Forms
+
+Both Sale Returns and Purchase Returns share identical form patterns:
+
+#### Disposition Type Selector
+
+```dart
+const dispositions = [
+  ('restock', LucideIcons.package),      // Return to stock
+  ('exchange', LucideIcons.repeat),      // Exchange for another item
+  ('store_credit', LucideIcons.wallet),  // Store credit
+  ('refund', LucideIcons.banknote),      // Cash refund
+  ('write_off', LucideIcons.trash2),     // Damaged/unsellable
+];
+
+Wrap(
+  spacing: 8,
+  runSpacing: 8,
+  children: dispositions.map((d) {
+    final isSelected = state.dispositionType == d.$1;
+    return ChoiceChip(
+      avatar: Icon(d.$2, size: 16),
+      label: Text('sales.disposition_${d.$1}'.tr()),
+      selected: isSelected,
+      onSelected: (_) => context
+          .read<SaleReturnFormBloc>()
+          .add(SaleReturnDispositionChanged(d.$1)),
+    );
+  }).toList(),
+);
+```
+
+#### Per-Item Reason Input
+
+When an item is selected for return, a reason text field appears below the quantity selector:
+
+```dart
+if (isSelected && returnItem.isNotEmpty) ...[
+  const SizedBox(height: 8),
+  Padding(
+    padding: const EdgeInsets.only(left: 48),
+    child: TextField(
+      decoration: InputDecoration(
+        hintText: 'sales.item_reason_hint'.tr(),
+        isDense: true,
+      ),
+      onChanged: (v) => context
+          .read<SaleReturnFormBloc>()
+          .add(SaleReturnItemReasonChanged(item.id, v)),
+    ),
+  ),
+];
+```
+
+#### Financial Impact Card
+
+Shows items returned count and customer refund amount before submission:
+
+```dart
+Card(
+  child: Column(
+    children: [
+      // Items returned row (+N items, green)
+      Row(children: [Icon(LucideIcons.package), ..., Text('+N items')]),
+      // Customer refund row (amount, red)
+      Row(children: [Icon(LucideIcons.coins), ..., Text(refundAmount)]),
+      // Total refund (highlighted)
+      Container(
+        decoration: BoxDecoration(
+          color: colorScheme.error.withValues(alpha: 0.06),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('sales.total_refund'.tr()),
+            Text(totalRefundAmount, style: boldRedStyle),
+          ],
+        ),
+      ),
+    ],
+  ),
+);
+```
+
+### Repository Methods
+
+#### SaleRepository (new methods)
+
+```dart
+abstract class SaleRepository {
+  // Create sale with new fields
+  Future<int> createSale({
+    required int customerId,
+    required int employeeId,
+    required int currencyId,
+    required Decimal subtotalCents,
+    required Decimal discountCents,
+    required Decimal taxCents,
+    required Decimal totalCents,
+    required String paymentMethod,
+    required List<SaleItemInput> items,
+    String? notes,
+    DateTime? saleDate,
+    DateTime? dueDate,
+  });
+
+  // Payment tracking
+  Future<void> recordPayment({
+    required int saleId,
+    required Decimal amountCents,
+    required String paymentMethod,
+    String? notes,
+  });
+  Stream<List<SalePaymentEntity>> watchSalePayments(int saleId);
+  
+  // Returns with disposition and per-item reasons
+  Future<int> createSaleReturn({
+    required int saleId,
+    required String reason,
+    required String dispositionType,
+    required List<SaleReturnItemInput> items,
+  });
+  Future<void> voidSaleReturn(int returnId);
+  
+  // Track already returned quantities
+  Future<int> getReturnedQuantity(int saleItemId);
+}
+```
+
+### Key Localization Keys
+
+**Sales Module:**
+- `sales.due_date` - Due date label
+- `sales.overdue` - Overdue badge text
+- `sales.paid` - Paid amount label
+- `sales.remaining` - Remaining amount label
+- `sales.notes` - Notes section title
+- `sales.disposition_type` - Disposition selector title
+- `sales.disposition_restock` / `_exchange` / `_store_credit` / `_refund` / `_write_off`
+- `sales.item_reason_hint` - Per-item reason placeholder
+- `sales.financial_impact` - Financial impact card title
+- `sales.process_return` - Submit button
+
+**Purchases Module:**
+- `purchases.due_date`, `purchases.payment_method`, `purchases.supplier_ref`
+- `purchases.paid`, `purchases.remaining`, `purchases.overdue`
+- `purchases.disposition_type`, `purchases.disposition_restock` / `_write_off` / `_repair` / `_replace` / `_refund`
+
+### Critical Implementation Notes
+
+1. **Monetary Values**: ALL stored as `INTEGER cents`, mapped to `Decimal` in domain layer via `MoneyConverter`
+
+2. **Status Flow**:
+   - Sales: `draft` → `completed` / `voided`
+   - SaleReturns: `draft` → `posted` / `voided`
+
+3. **Stock Adjustments**:
+   - `restock`: Increase stock by returned quantity
+   - `exchange`: No stock change (swap items)
+   - `write_off`: No stock change (damaged)
+   - `refund`/`store_credit`: Decrease stock if already restocked
+
+4. **Overdue Calculation**:
+   ```dart
+   bool get isOverdue => dueDate != null && 
+                         !isFullyPaid && 
+                         DateTime.now().isAfter(dueDate!);
+   ```
+
+5. **Responsive Layout**:
+   - Detail screens use `LayoutBuilder` for wide/narrow layouts
+   - Wide: 380px info panel + expandable items area
+   - Narrow: Stacked vertical layout
+
+6. **Color Coding**:
+   - Green: Fully paid, items returned
+   - Red: Overdue, remaining amount, refund amounts
+   - Amber: Notes section
+
+### File Locations
+
+**Sales:**
+- `lib/core/database/tables/transactions.dart` - Sales/SaleReturns/SaleReturnItems tables
+- `lib/core/database/daos/sale_dao.dart` - CRUD + void/return methods
+- `lib/features/sales/domain/entities/sale_entity.dart` - Entities with computed properties
+- `lib/features/sales/data/models/sale_model.dart` - SaleModel/SaleReturnModel/SalePaymentModel
+- `lib/features/sales/presentation/screens/sale_detail_screen.dart` - Detail with payment tracking
+- `lib/features/sales/presentation/screens/sale_return_form_screen.dart` - Return with disposition selector
+- `lib/features/sales/presentation/bloc/sale_form_bloc.dart` - Form state with dueDate/notes
+- `lib/features/sales/presentation/bloc/sale_return_form_bloc.dart` - Return with dispositionType
+
+**Purchases:**
+- `lib/core/database/tables/transactions.dart` - Purchases/PurchaseReturns tables
+- `lib/core/database/daos/purchase_dao.dart` - CRUD + payment/return methods
+- `lib/features/purchases/domain/entities/purchase_entity.dart` - Entities
+- `lib/features/purchases/data/models/purchase_model.dart` - Models
+- `lib/features/purchases/presentation/screens/purchase_detail_screen.dart` - Detail screen
+- `lib/features/purchases/presentation/screens/purchase_return_form_screen.dart` - Return form
+- `lib/features/purchases/presentation/bloc/purchase_form_bloc.dart` - Form bloc
+- `lib/features/purchases/presentation/bloc/purchase_return_form_bloc.dart` - Return bloc
+
+---
+
 **Last Updated**: 2026-02-8 
+**Version**: 1.0.0  
+**Status**: ACTIVE - Follow strictly for all implementations
+
+---
+
+## 📦 PURCHASE MANAGEMENT SYSTEM (ENHANCED)
+
+> **Last Enhanced**: 2026-02-07 (Schema v10017)
+> 
+> **Key Improvements**: Audit Trail Integration, Purchase-Specific Permissions, Validation Guards, Supplier Credit Notes
+
+### Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         PURCHASE FLOW                                         │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                               │
+│  Purchase Form → Create Draft → Save (Audit: create) → Post (Audit: post)   │
+│                                     ↓                                         │
+│                              Stock Updated                                    │
+│                              Supplier Balance + Payable                       │
+│                                     ↓                                         │
+│                    Payment Recorded (Audit: payment)                        │
+│                                     ↓                                         │
+│                    Return Created (Audit: create_and_post)                   │
+│                              ↓              ↓                                   │
+│                    Stock Reversed      Supplier Credit Note                   │
+│                              ↓              ↓                                 │
+│                         Supplier Balance Decreased                            │
+│                                                                               │
+│  VOID Operations:                                                           │
+│  - Purchase Void: Stock Reversed (if safe), Audit: void                     │
+│  - Return Void: Stock Restored, Credit Note Reversed, Balance Restored        │
+│                                                                               │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 1. Audit Trail Integration
+
+**What Changed:** All purchase operations now log to `AuditLogs` table via `AuditLogService`.
+
+**Operations Logged:**
+| Operation | Action | Data Logged |
+|-----------|--------|-------------|
+| Create Purchase | `create` | purchaseNumber, supplierId, totalCents, itemCount |
+| Update Purchase | `update` | supplierId, totalCents, itemCount |
+| Post Purchase | `post` | status: 'posted' |
+| Void Purchase | `void` | reason (via VoidLogs too) |
+| Delete Purchase | `delete` | purchaseId (data gone after) |
+| Create Return | `create_and_post` | purchaseId, returnNumber, totalCents, dispositionType |
+| Post Return | `post` | status: 'posted' |
+| Void Return | `void` | reason (via VoidLogs too) |
+| Record Payment | `create` | purchaseId, amountCents, paymentMethod |
+| Delete Payment | `delete` | paymentId |
+
+**Files Modified:**
+- `lib/core/di/injection_container.dart` - Registered `AuditLogService`
+- `lib/features/purchases/data/repositories/purchase_repository_impl.dart` - Integrated audit logging
+
+### 2. Purchase-Specific Permissions (Schema v10017)
+
+**New Permission Strings:**
+```dart
+// View permissions
+'purchases.view'           // View purchase list and details
+
+// Create/Edit permissions
+'purchases.create'         // Create new purchases
+'purchases.edit'           // Edit draft purchases
+'purchases.delete'         // Delete draft purchases
+
+// Workflow permissions
+'purchases.post'           // Post purchases (update stock)
+'purchases.void'           // Void posted purchases
+'purchases.approve'        // Approve purchases (future workflow)
+
+// Return/Payment permissions
+'purchases.returns'        // Create purchase returns
+'purchases.payments'       // Record payments on purchases
+```
+
+**Role Assignments:**
+| Role | Permissions |
+|------|-------------|
+| admin | ALL purchase permissions |
+| manager | view, create, edit, post, approve, returns, payments |
+| staff | view only |
+| cashier | view only |
+| salesperson | view only |
+
+**Migration:** Existing databases upgraded via `_updateRolesWithPurchasePermissions()` in schema v10017.
+
+### 3. Validation Guards
+
+**Purchase Void Validation:**
+```dart
+// BEFORE voiding, check if stock can be reversed
+// Throws: "Cannot void: variant #X stock (Y) is less than purchased quantity (Z). 
+//          Some items may have been sold or returned."
+```
+
+**Return Quantity Validation:**
+```dart
+// BEFORE posting return, validate:
+// maxReturnable = purchasedQuantity - alreadyReturned
+// Throws: "Cannot return X units of item #Y. Only Z available 
+//          (purchased: A, already returned: B)."
+```
+
+**Negative Stock Guard:**
+```dart
+// Stock operations guarded against negative:
+// - postPurchase: increases stock (always safe)
+// - voidPurchase: checks current stock >= purchased quantity
+// - postPurchaseReturn: checks current stock >= return quantity
+// - voidPurchaseReturn: restores stock (always safe)
+```
+
+**Files Modified:**
+- `lib/core/database/daos/purchase_dao.dart` - Added validation in `voidPurchase()` and `postPurchaseReturn()`
+
+### 4. Supplier Credit Note System
+
+**When Purchase Return Posted:**
+1. **Stock Update:** Decrease stock (if restock/refund/replace disposition)
+2. **Credit Note Transaction:** Created in `supplier_transactions` table
+   - `transactionType`: 'credit_note'
+   - `amountCents`: -refundAmount (negative = supplier owes us)
+   - `referenceId`: returnId
+   - `referenceType`: 'purchase_return'
+3. **Supplier Balance:** Decreased by refund amount
+
+**When Purchase Return Voided:**
+1. **Stock Reversal:** Restore stock (if was restock/refund/replace)
+2. **Reversal Transaction:** Created in `supplier_transactions` table
+   - `transactionType`: 'credit_note_reversal'
+   - `amountCents`: +refundAmount (positive = restore balance)
+   - `referenceId`: returnId
+   - `referenceType`: 'purchase_return'
+3. **Supplier Balance:** Restored by refund amount
+
+**Accounting Impact:**
+```
+Purchase Return Posted:
+  Supplier Balance ↓ (they owe us more)
+  Inventory ↓ (items removed)
+  
+Purchase Return Voided:
+  Supplier Balance ↑ (restore what we owed)
+  Inventory ↑ (items restored)
+```
+
+**Files Modified:**
+- `lib/core/database/daos/purchase_dao.dart` - Added `SupplierTransactions` to accessor, integrated credit note logic
+
+### 5. Database Schema Changes
+
+**Schema Version:** 10017
+
+**Migration 10016 → 10017:**
+```dart
+// _updateRolesWithPurchasePermissions()
+// Adds purchase permissions to existing roles if not already present
+```
+
+**No New Tables** - Used existing:
+- `audit_logs` - Already existed, now being populated
+- `void_logs` - Already existed, now being populated for void operations
+- `supplier_transactions` - Already existed, now receiving credit_note entries
+
+### 6. File Reference
+
+**Core Infrastructure:**
+- `lib/core/services/audit_log_service.dart` - Audit logging service
+- `lib/core/di/injection_container.dart` - DI registration for AuditLogService + PurchaseRepository
+
+**Data Layer:**
+- `lib/core/database/daos/purchase_dao.dart` - DAO with validation + credit notes
+- `lib/core/database/app_database.dart` - Schema v10017, role permission migration
+
+**Repository Layer:**
+- `lib/features/purchases/data/repositories/purchase_repository_impl.dart` - Audit integration
+
+**Domain Layer:**
+- `lib/features/purchases/domain/entities/purchase_entity.dart` - Entities (unchanged)
+- `lib/features/purchases/domain/repositories/purchase_repository.dart` - Interface (unchanged)
+
+**Presentation Layer:**
+- `lib/features/purchases/presentation/screens/purchase_list_screen.dart` - List screen
+- `lib/features/purchases/presentation/screens/purchase_form_screen.dart` - Create/Edit form
+- `lib/features/purchases/presentation/screens/purchase_detail_screen.dart` - Detail with actions
+- `lib/features/purchases/presentation/screens/purchase_return_form_screen.dart` - Return form
+- `lib/features/purchases/presentation/screens/purchase_returns_screen.dart` - Returns list
+
+**Bloc Layer:**
+- `lib/features/purchases/presentation/bloc/purchases_bloc.dart` - List bloc
+- `lib/features/purchases/presentation/bloc/purchase_form_bloc.dart` - Form bloc
+- `lib/features/purchases/presentation/bloc/purchase_returns_bloc.dart` - Returns list bloc
+- `lib/features/purchases/presentation/bloc/purchase_return_form_bloc.dart` - Return form bloc
+
+### 7. Key Calculations
+
+**Money Handling (Integer Cents):**
+```dart
+// All monetary values stored as INTEGER cents
+final int totalCents = purchase.totalCents.toBigInt().toInt();
+final String formatted = currencyService.format(totalCents);
+```
+
+**Return Quantity Available:**
+```dart
+final alreadyReturned = await dao.getReturnedQuantity(purchaseItemId);
+final maxReturnable = purchaseItem.quantity - alreadyReturned;
+```
+
+**Supplier Balance Update:**
+```dart
+// Return posted: decrease supplier balance (they owe us)
+newBalance = oldBalance - refundCents;
+
+// Return voided: restore supplier balance
+newBalance = oldBalance + refundCents;
+```
+
+### 8. Future Enhancements (Not Implemented)
+
+**Planned but Deferred:**
+- **Multi-Branch Support:** `branch_id` on all transaction tables
+- **Purchase Orders:** Separate PO → GRN → Invoice three-way matching
+- **Multi-Currency:** Exchange rates, base currency normalization
+- **Approval Workflows:** Multi-step approval before posting
+- **Landed Cost:** Freight/insurance/duty allocation to items
+- **Supplier Price Lists:** Negotiated pricing with effective dates
+
+**Reason for Deferral:** These require broader architectural changes across the entire app (sales, products, employees, etc.) and are too risky to implement in a single session.
+
+---
+
+---
+
+## 🔍 Audit Log System
+
+### Overview
+
+The Audit Log system provides a **complete, immutable trail** of every change to financial and operational data. It is critical for accounting integrity, compliance, and debugging.
+
+### Database Tables
+
+| Table | Purpose | Key Columns |
+|-------|---------|-------------|
+| `audit_logs` | General action log | `id`, `target_table`, `record_id`, `action`, `changes` (JSON), `user_id` (nullable FK → users), `created_at` |
+| `void_logs` | Void-specific log | `id`, `target_table`, `record_id`, `reason`, `voided_by` (nullable FK → users), `voided_at` |
+
+- Both tables have **nullable** user FK columns — `null` means "system action" (e.g. migration, seed).
+- `changes` column stores a JSON map with `old`, `new`, and `timestamp` keys.
+
+### AuditLogService (`lib/core/services/audit_log_service.dart`)
+
+Singleton registered in DI. Provides:
+
+| Method | Purpose |
+|--------|---------|
+| `log(entityType, entityId, action, oldValue?, newValue?, userId?)` | General audit entry |
+| `logVoid(entityType, entityId, reason, userId?)` | Void entry (writes to both `void_logs` AND `audit_logs`) |
+| `logBalanceChange(...)` | Balance change with old/new cents |
+| `logPriceChange(...)` | Price change with old/new cents |
+| `logStockAdjustment(...)` | Stock adjustment with old/new qty |
+| `watchAuditLogs(fromDate?, toDate?, entityType?, action?)` | **Reactive stream** for UI |
+| `watchVoidLogs(fromDate?, toDate?, entityType?)` | Reactive stream for void logs |
+
+### How userId Is Wired
+
+Repositories that perform auditable actions receive `SessionService` via DI and call `_sessionService.getCurrentUserId()` before each audit log call. This ensures the **real logged-in user** is recorded.
+
+```dart
+// Pattern used in PurchaseRepositoryImpl:
+class PurchaseRepositoryImpl implements PurchaseRepository {
+  final AuditLogService _auditService;
+  final SessionService _sessionService;
+
+  Future<int?> _currentUserId() => _sessionService.getCurrentUserId();
+
+  // Then in each method:
+  await _auditService.log(
+    entityType: 'purchase',
+    entityId: id,
+    action: 'create',
+    newValue: {...},
+    userId: await _currentUserId(),
+  );
+}
+```
+
+**When adding audit logging to NEW features**, follow this same pattern:
+1. Inject `SessionService` into the repository implementation.
+2. Add `Future<int?> _currentUserId() => _sessionService.getCurrentUserId();`
+3. Pass `userId: await _currentUserId()` to every `_auditService.log()` / `_auditService.logVoid()` call.
+4. Register the `SessionService` dependency in `injection_container.dart`.
+
+### Audit Log UI
+
+**Route:** `/audit` (accessible from Users & Permissions screen AppBar button)  
+**Permission:** `view_audit_logs` — Owner only by default.
+
+**Architecture:**
+- `AuditLogBloc` extends `RealtimeBloc<AuditLogViewModel, AuditLogEvent>`
+- Subscribes to `AuditLogService.watchAuditLogs()` for **real-time updates**
+- Client-side filtering by entity type, action, and free-text search
+- Loads user names from DB for display
+
+**Screen Features:**
+- Search bar (searches entity type, action, record ID, user name)
+- Filter chips for entity type (Purchase, Sale, Product, etc.) with color coding
+- Filter chips for action (Create, Update, Delete, Post, Void, etc.) with color coding
+- Stats bar showing filtered/total count
+- Log tiles with action icon, badges, user, relative time
+- Detail bottom sheet with full JSON changes view
+
+**Color Coding:**
+| Entity Type | Color | Action | Color |
+|-------------|-------|--------|-------|
+| Purchase/Return/Payment | `primary` | Create | Green |
+| Sale/Return | Green | Update | Blue |
+| Product | Orange | Delete | Error (red) |
+| Customer | Purple | Post | Teal |
+| Supplier | Teal | Void | Error (red) |
+
+### Localization
+
+All audit keys live under the `"audit"` namespace in `en.json`, `ar.json`, `fr.json`:
+- `audit.title`, `audit.search_hint`, `audit.filter_entity`, `audit.filter_action`
+- `audit.entity_*` — entity type labels
+- `audit.action_*` — action labels
+- `audit.just_now`, `audit.minutes_ago`, `audit.hours_ago`, `audit.days_ago` — relative time
+- `audit.detail_title`, `audit.entity`, `audit.record_id`, `audit.changes` — detail sheet
+
+### Key File References
+
+| File | Purpose |
+|------|---------|
+| `lib/core/services/audit_log_service.dart` | Core service — logging + reactive streams |
+| `lib/core/database/tables/audit.dart` | Drift table definitions (`AuditLogs`, `VoidLogs`) |
+| `lib/features/auth/presentation/bloc/audit_log_bloc.dart` | RealtimeBloc with filters |
+| `lib/features/auth/presentation/screens/audit_log_screen.dart` | Full UI screen |
+| `lib/core/di/injection_container.dart` | DI registration |
+| `lib/core/router/app_router.dart` | Route `/audit` |
+| `lib/core/router/route_permissions.dart` | Owner-only access |
+| `lib/features/auth/domain/entities/permission_constants.dart` | `viewAuditLogs` permission |
+
+### Extending Audit Logging to New Features
+
+When implementing a new feature (e.g. Sales, Expenses, Employees):
+
+1. **Inject** `AuditLogService` + `SessionService` into the repository implementation.
+2. **Log** every create/update/delete/post/void action with appropriate `entityType` and `action`.
+3. **Add entity type label** to `_FilterSection._entityTypeLabel()` and `_entityTypeColor()` in the audit screen.
+4. **Add localization keys** `audit.entity_<new_type>` in all 3 language files.
+5. The UI will **automatically** show the new entity type in filter chips and log tiles.
+
+---
+
+**Last Updated**: 2026-02-08 
 **Version**: 1.0.0  
 **Status**: ACTIVE - Follow strictly for all implementations

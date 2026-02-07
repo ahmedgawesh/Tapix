@@ -7,32 +7,33 @@ import 'package:easy_localization/easy_localization.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/currency_service.dart';
-import '../../domain/entities/purchase_entity.dart';
-import '../bloc/purchases_bloc.dart';
+import '../../domain/entities/sale_entity.dart';
+import '../bloc/sales_bloc.dart';
 
-class PurchaseListScreen extends StatelessWidget {
-  const PurchaseListScreen({super.key});
+class SaleListScreen extends StatelessWidget {
+  const SaleListScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (context) => sl<PurchasesBloc>(),
-      child: const _PurchaseHubView(),
+      create: (context) => sl<SalesBloc>(),
+      child: const _SaleHubView(),
     );
   }
 }
 
-class _PurchaseHubView extends StatefulWidget {
-  const _PurchaseHubView();
+class _SaleHubView extends StatefulWidget {
+  const _SaleHubView();
 
   @override
-  State<_PurchaseHubView> createState() => _PurchaseHubViewState();
+  State<_SaleHubView> createState() => _SaleHubViewState();
 }
 
-class _PurchaseHubViewState extends State<_PurchaseHubView> {
+class _SaleHubViewState extends State<_SaleHubView> {
   final _searchController = TextEditingController();
   String? _selectedStatus;
   DateTimeRange? _dateRange;
+  String? _datePresetLabel;
 
   @override
   void dispose() {
@@ -54,12 +55,12 @@ class _PurchaseHubViewState extends State<_PurchaseHubView> {
             }
           },
         ),
-        title: Text('purchases.title'.tr()),
+        title: Text('sales.title'.tr()),
         actions: [
           IconButton(
             icon: const Icon(LucideIcons.undo2),
-            onPressed: () => context.push('/purchases/returns'),
-            tooltip: 'purchases.returns'.tr(),
+            onPressed: () => context.push('/sales/returns'),
+            tooltip: 'sales.returns'.tr(),
           ),
           IconButton(
             icon: const Icon(LucideIcons.settings),
@@ -69,24 +70,24 @@ class _PurchaseHubViewState extends State<_PurchaseHubView> {
         ],
       ),
       body: SafeArea(
-        child: BlocBuilder<PurchasesBloc, RealtimeState<PurchasesHubData>>(
+        child: BlocBuilder<SalesBloc, RealtimeState<SalesHubData>>(
           builder: (context, state) {
-            if (state is RealtimeLoading<PurchasesHubData> &&
+            if (state is RealtimeLoading<SalesHubData> &&
                 state.previousData == null) {
               return const Center(child: CircularProgressIndicator());
             }
 
-            if (state is RealtimeError<PurchasesHubData> &&
+            if (state is RealtimeError<SalesHubData> &&
                 state.previousData == null) {
               return _buildErrorState(context, state);
             }
 
-            PurchasesHubData? data;
-            if (state is RealtimeSuccess<PurchasesHubData>) {
+            SalesHubData? data;
+            if (state is RealtimeSuccess<SalesHubData>) {
               data = state.data;
-            } else if (state is RealtimeLoading<PurchasesHubData>) {
+            } else if (state is RealtimeLoading<SalesHubData>) {
               data = state.previousData;
-            } else if (state is RealtimeError<PurchasesHubData>) {
+            } else if (state is RealtimeError<SalesHubData>) {
               data = state.previousData;
             }
 
@@ -99,16 +100,16 @@ class _PurchaseHubViewState extends State<_PurchaseHubView> {
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.push('/purchases/new'),
+        onPressed: () => context.push('/sales/new'),
         icon: const Icon(LucideIcons.plus),
-        label: Text('purchases.new'.tr()),
+        label: Text('sales.new'.tr()),
         elevation: 2,
       ),
     );
   }
 
   Widget _buildErrorState(
-      BuildContext context, RealtimeError<PurchasesHubData> state) {
+      BuildContext context, RealtimeError<SalesHubData> state) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -120,7 +121,7 @@ class _PurchaseHubViewState extends State<_PurchaseHubView> {
               style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 8),
           TextButton.icon(
-            onPressed: () => context.read<PurchasesBloc>().refresh(),
+            onPressed: () => context.read<SalesBloc>().refresh(),
             icon: const Icon(LucideIcons.rotateCcw),
             label: Text('common.retry'.tr()),
           ),
@@ -129,13 +130,13 @@ class _PurchaseHubViewState extends State<_PurchaseHubView> {
     );
   }
 
-  Widget _buildContent(BuildContext context, PurchasesHubData data) {
+  Widget _buildContent(BuildContext context, SalesHubData data) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final currencyService = sl<CurrencyService>();
 
     return RefreshIndicator(
-      onRefresh: () async => context.read<PurchasesBloc>().refresh(),
+      onRefresh: () async => context.read<SalesBloc>().refresh(),
       child: CustomScrollView(
         slivers: [
           // ─── Dashboard Stats ───
@@ -147,33 +148,32 @@ class _PurchaseHubViewState extends State<_PurchaseHubView> {
                   final isNarrow = constraints.maxWidth < 700;
                   final cards = [
                     _StatCard(
-                      icon: LucideIcons.shoppingCart,
+                      icon: LucideIcons.receipt,
                       iconColor: colorScheme.primary,
                       gradientColors: [colorScheme.primary, colorScheme.primary.withValues(alpha: 0.7)],
-                      label: 'purchases.total_purchases'.tr(),
-                      value: '${data.stats.totalCount}',
+                      label: 'sales.total_revenue'.tr(),
+                      value: currencyService.format(data.stats.totalSalesCents),
                     ),
                     _StatCard(
-                      icon: LucideIcons.fileEdit,
-                      iconColor: Colors.orange,
-                      gradientColors: [Colors.orange, Colors.orange.shade300],
-                      label: 'purchases.drafts'.tr(),
-                      value: '${data.stats.draftCount}',
+                      icon: LucideIcons.trendingUp,
+                      iconColor: Colors.green,
+                      gradientColors: [Colors.green, Colors.green.shade300],
+                      label: 'sales.today_sales'.tr(),
+                      value: currencyService.format(data.stats.todaySalesCents),
                     ),
                     _StatCard(
                       icon: LucideIcons.checkCircle,
-                      iconColor: Colors.green,
-                      gradientColors: [Colors.green, Colors.green.shade300],
-                      label: 'purchases.posted_count'.tr(),
-                      value: '${data.stats.postedCount}',
+                      iconColor: colorScheme.tertiary,
+                      gradientColors: [colorScheme.tertiary, colorScheme.tertiary.withValues(alpha: 0.7)],
+                      label: 'sales.completed'.tr(),
+                      value: '${data.stats.completedCount}',
                     ),
                     _StatCard(
-                      icon: LucideIcons.wallet,
+                      icon: LucideIcons.shoppingCart,
                       iconColor: colorScheme.secondary,
                       gradientColors: [colorScheme.secondary, colorScheme.secondary.withValues(alpha: 0.7)],
-                      label: 'purchases.total_payables'.tr(),
-                      value: currencyService
-                          .format(data.stats.totalPayableCents),
+                      label: 'sales.total_sales'.tr(),
+                      value: '${data.stats.totalCount}',
                     ),
                   ];
 
@@ -220,7 +220,7 @@ class _PurchaseHubViewState extends State<_PurchaseHubView> {
                     child: TextField(
                       controller: _searchController,
                       decoration: InputDecoration(
-                        hintText: 'purchases.search_hint'.tr(),
+                        hintText: 'sales.search_hint'.tr(),
                         prefixIcon: const Icon(LucideIcons.search, size: 20),
                         suffixIcon: _searchController.text.isNotEmpty
                             ? IconButton(
@@ -229,8 +229,8 @@ class _PurchaseHubViewState extends State<_PurchaseHubView> {
                                   _searchController.clear();
                                   setState(() {});
                                   context
-                                      .read<PurchasesBloc>()
-                                      .add(const PurchasesSearchRequested(''));
+                                      .read<SalesBloc>()
+                                      .add(const SalesSearchRequested(''));
                                 },
                               )
                             : null,
@@ -244,8 +244,8 @@ class _PurchaseHubViewState extends State<_PurchaseHubView> {
                       onChanged: (value) {
                         setState(() {});
                         context
-                            .read<PurchasesBloc>()
-                            .add(PurchasesSearchRequested(value));
+                            .read<SalesBloc>()
+                            .add(SalesSearchRequested(value));
                       },
                     ),
                   ),
@@ -266,13 +266,18 @@ class _PurchaseHubViewState extends State<_PurchaseHubView> {
                   child: Chip(
                     avatar: Icon(LucideIcons.calendar, size: 14, color: colorScheme.primary),
                     label: Text(
-                      '${DateFormat.MMMd().format(_dateRange!.start)} – ${DateFormat.MMMd().format(_dateRange!.end)}',
-                      style: theme.textTheme.labelSmall,
+                      _datePresetLabel ??
+                          '${DateFormat.MMMd().format(_dateRange!.start)} – ${DateFormat.MMMd().format(_dateRange!.end)}',
+                      style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w600),
                     ),
                     deleteIcon: const Icon(LucideIcons.x, size: 14),
-                    onDeleted: () => setState(() => _dateRange = null),
+                    onDeleted: () => setState(() {
+                      _dateRange = null;
+                      _datePresetLabel = null;
+                    }),
                     visualDensity: VisualDensity.compact,
                     side: BorderSide(color: colorScheme.primary.withValues(alpha: 0.3)),
+                    backgroundColor: colorScheme.primaryContainer.withValues(alpha: 0.3),
                   ),
                 ),
               ),
@@ -285,43 +290,43 @@ class _PurchaseHubViewState extends State<_PurchaseHubView> {
               child: Row(
                 children: [
                   Text(
-                    'purchases.all_purchases'.tr(),
+                    'sales.recent_sales'.tr(),
                     style: theme.textTheme.titleSmall
                         ?.copyWith(fontWeight: FontWeight.bold),
                   ),
                   const Spacer(),
                   _FilterChip(
-                    label: 'purchases.filter_all'.tr(),
+                    label: 'sales.filter_all'.tr(),
                     isSelected: _selectedStatus == null,
                     onSelected: () {
                       setState(() => _selectedStatus = null);
                       context
-                          .read<PurchasesBloc>()
-                          .add(const PurchasesStatusFilterChanged(null));
+                          .read<SalesBloc>()
+                          .add(const SalesStatusFilterChanged(null));
                     },
                   ),
                   const SizedBox(width: 4),
                   _FilterChip(
-                    label: 'purchases.filter_draft'.tr(),
-                    isSelected: _selectedStatus == 'draft',
-                    color: Colors.orange,
-                    onSelected: () {
-                      setState(() => _selectedStatus = 'draft');
-                      context
-                          .read<PurchasesBloc>()
-                          .add(const PurchasesStatusFilterChanged('draft'));
-                    },
-                  ),
-                  const SizedBox(width: 4),
-                  _FilterChip(
-                    label: 'purchases.filter_posted'.tr(),
-                    isSelected: _selectedStatus == 'posted',
+                    label: 'sales.filter_completed'.tr(),
+                    isSelected: _selectedStatus == 'completed',
                     color: Colors.green,
                     onSelected: () {
-                      setState(() => _selectedStatus = 'posted');
+                      setState(() => _selectedStatus = 'completed');
                       context
-                          .read<PurchasesBloc>()
-                          .add(const PurchasesStatusFilterChanged('posted'));
+                          .read<SalesBloc>()
+                          .add(const SalesStatusFilterChanged('completed'));
+                    },
+                  ),
+                  const SizedBox(width: 4),
+                  _FilterChip(
+                    label: 'sales.filter_voided'.tr(),
+                    isSelected: _selectedStatus == 'voided',
+                    color: Colors.red,
+                    onSelected: () {
+                      setState(() => _selectedStatus = 'voided');
+                      context
+                          .read<SalesBloc>()
+                          .add(const SalesStatusFilterChanged('voided'));
                     },
                   ),
                 ],
@@ -331,30 +336,28 @@ class _PurchaseHubViewState extends State<_PurchaseHubView> {
 
           const SliverToBoxAdapter(child: SizedBox(height: 4)),
 
-          // ─── Purchase List ───
-          if (data.filteredPurchases.isEmpty)
+          // ─── Sale List ───
+          if (data.filteredSales.isEmpty)
             SliverFillRemaining(child: _buildEmptyState(context))
           else
             SliverList(
               delegate: SliverChildBuilderDelegate(
                 (context, index) {
-                  final purchase = data.filteredPurchases[index];
-                  // Apply date filter client-side
+                  final sale = data.filteredSales[index];
                   if (_dateRange != null) {
-                    if (purchase.purchaseDate.isBefore(_dateRange!.start) ||
-                        purchase.purchaseDate.isAfter(
+                    if (sale.saleDate.isBefore(_dateRange!.start) ||
+                        sale.saleDate.isAfter(
                             _dateRange!.end.add(const Duration(days: 1)))) {
                       return const SizedBox.shrink();
                     }
                   }
-                  return _PurchaseTile(
-                    purchase: purchase,
+                  return _SaleTile(
+                    sale: sale,
                     currencyService: currencyService,
-                    onTap: () =>
-                        context.push('/purchases/${purchase.id}'),
+                    onTap: () => context.push('/sales/${sale.id}'),
                   );
                 },
-                childCount: data.filteredPurchases.length,
+                childCount: data.filteredSales.length,
               ),
             ),
 
@@ -373,23 +376,195 @@ class _PurchaseHubViewState extends State<_PurchaseHubView> {
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        onTap: () async {
-          final range = await showDateRangePicker(
-            context: context,
-            firstDate: DateTime(2020),
-            lastDate: DateTime.now().add(const Duration(days: 30)),
-            initialDateRange: _dateRange,
-          );
-          if (range != null) {
-            setState(() => _dateRange = range);
-          }
-        },
+        onTap: () => _showDateRangeDialog(context),
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Icon(LucideIcons.calendarRange, size: 20,
               color: hasFilter ? cs.onPrimaryContainer : cs.onSurfaceVariant),
         ),
       ),
+    );
+  }
+
+  Future<void> _showDateRangeDialog(BuildContext context) async {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    final presets = <_DatePreset>[
+      _DatePreset(
+        label: 'sales.date_today'.tr(),
+        icon: LucideIcons.calendarCheck,
+        range: DateTimeRange(start: today, end: today),
+      ),
+      _DatePreset(
+        label: 'sales.date_yesterday'.tr(),
+        icon: LucideIcons.calendarMinus,
+        range: DateTimeRange(
+          start: today.subtract(const Duration(days: 1)),
+          end: today.subtract(const Duration(days: 1)),
+        ),
+      ),
+      _DatePreset(
+        label: 'sales.date_this_week'.tr(),
+        icon: LucideIcons.calendar,
+        range: DateTimeRange(
+          start: today.subtract(Duration(days: today.weekday - 1)),
+          end: today,
+        ),
+      ),
+      _DatePreset(
+        label: 'sales.date_this_month'.tr(),
+        icon: LucideIcons.calendarDays,
+        range: DateTimeRange(
+          start: DateTime(now.year, now.month, 1),
+          end: today,
+        ),
+      ),
+      _DatePreset(
+        label: 'sales.date_last_month'.tr(),
+        icon: LucideIcons.calendarClock,
+        range: DateTimeRange(
+          start: DateTime(now.year, now.month - 1, 1),
+          end: DateTime(now.year, now.month, 0),
+        ),
+      ),
+    ];
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 40, height: 4,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: cs.onSurfaceVariant.withValues(alpha: 0.4),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                Row(
+                  children: [
+                    Icon(LucideIcons.calendarRange, size: 20, color: cs.primary),
+                    const SizedBox(width: 8),
+                    Text('sales.date_range'.tr(),
+                        style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold)),
+                    const Spacer(),
+                    if (_dateRange != null)
+                      TextButton.icon(
+                        onPressed: () {
+                          setState(() {
+                            _dateRange = null;
+                            _datePresetLabel = null;
+                          });
+                          Navigator.pop(ctx);
+                        },
+                        icon: const Icon(LucideIcons.x, size: 16),
+                        label: Text('sales.date_clear'.tr()),
+                        style: TextButton.styleFrom(
+                          foregroundColor: cs.error,
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                ...presets.map((preset) {
+                  final isActive = _dateRange != null &&
+                      _dateRange!.start == preset.range.start &&
+                      _dateRange!.end == preset.range.end;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Material(
+                      color: isActive
+                          ? cs.primaryContainer.withValues(alpha: 0.5)
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(12),
+                      child: ListTile(
+                        leading: Container(
+                          width: 38, height: 38,
+                          decoration: BoxDecoration(
+                            color: isActive
+                                ? cs.primary.withValues(alpha: 0.15)
+                                : cs.surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(preset.icon, size: 18,
+                              color: isActive ? cs.primary : cs.onSurfaceVariant),
+                        ),
+                        title: Text(preset.label,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                                fontWeight: isActive ? FontWeight.w600 : FontWeight.normal)),
+                        trailing: isActive
+                            ? Icon(LucideIcons.check, size: 18, color: cs.primary)
+                            : null,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                        dense: true,
+                        onTap: () {
+                          setState(() {
+                            _dateRange = preset.range;
+                            _datePresetLabel = preset.label;
+                          });
+                          Navigator.pop(ctx);
+                        },
+                      ),
+                    ),
+                  );
+                }),
+                const Divider(height: 16),
+                Material(
+                  color: Colors.transparent,
+                  borderRadius: BorderRadius.circular(12),
+                  child: ListTile(
+                    leading: Container(
+                      width: 38, height: 38,
+                      decoration: BoxDecoration(
+                        color: cs.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(LucideIcons.calendarSearch, size: 18,
+                          color: cs.onSurfaceVariant),
+                    ),
+                    title: Text('sales.date_custom'.tr(),
+                        style: theme.textTheme.bodyMedium),
+                    trailing: const Icon(LucideIcons.chevronRight, size: 18),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                    dense: true,
+                    onTap: () async {
+                      Navigator.pop(ctx);
+                      final range = await showDateRangePicker(
+                        context: context,
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime.now().add(const Duration(days: 30)),
+                        initialDateRange: _dateRange,
+                      );
+                      if (range != null) {
+                        setState(() {
+                          _dateRange = range;
+                          _datePresetLabel = null;
+                        });
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -408,26 +583,26 @@ class _PurchaseHubViewState extends State<_PurchaseHubView> {
                 color: cs.primaryContainer.withValues(alpha: 0.3),
                 shape: BoxShape.circle,
               ),
-              child: Icon(LucideIcons.shoppingCart,
+              child: Icon(LucideIcons.receipt,
                   size: 56, color: cs.primary.withValues(alpha: 0.5)),
             ),
             const SizedBox(height: 20),
-            Text('purchases.empty'.tr(),
+            Text('sales.empty'.tr(),
                 style: theme.textTheme.titleLarge?.copyWith(
                     fontWeight: FontWeight.w600),
                 textAlign: TextAlign.center),
             const SizedBox(height: 8),
             Text(
-              'purchases.empty_hint'.tr(),
+              'sales.empty_hint'.tr(),
               style: theme.textTheme.bodyMedium
                   ?.copyWith(color: cs.onSurfaceVariant),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 28),
             FilledButton.icon(
-              onPressed: () => context.push('/purchases/new'),
+              onPressed: () => context.push('/sales/new'),
               icon: const Icon(LucideIcons.plus, size: 18),
-              label: Text('purchases.add_first'.tr()),
+              label: Text('sales.add_first'.tr()),
               style: FilledButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
               ),
@@ -439,7 +614,14 @@ class _PurchaseHubViewState extends State<_PurchaseHubView> {
   }
 }
 
-// ─── Stat Card (Premium) ───
+class _DatePreset {
+  final String label;
+  final IconData icon;
+  final DateTimeRange range;
+  const _DatePreset({required this.label, required this.icon, required this.range});
+}
+
+// ─── Stat Card ───
 class _StatCard extends StatelessWidget {
   final IconData icon;
   final Color iconColor;
@@ -512,7 +694,7 @@ class _StatCard extends StatelessWidget {
   }
 }
 
-// ─── Filter Chip (Enhanced) ───
+// ─── Filter Chip ───
 class _FilterChip extends StatelessWidget {
   final String label;
   final bool isSelected;
@@ -566,57 +748,57 @@ class _FilterChip extends StatelessWidget {
   }
 }
 
-// ─── Purchase Tile (Premium with status accent) ───
-class _PurchaseTile extends StatelessWidget {
-  final PurchaseEntity purchase;
+// ─── Sale Tile ───
+class _SaleTile extends StatelessWidget {
+  final SaleEntity sale;
   final CurrencyService currencyService;
   final VoidCallback onTap;
 
-  const _PurchaseTile({
-    required this.purchase,
+  const _SaleTile({
+    required this.sale,
     required this.currencyService,
     required this.onTap,
   });
 
   Color _statusColor(BuildContext context) {
-    switch (purchase.status) {
-      case 'draft':
-      case 'pending':
-        return Colors.orange;
-      case 'posted':
+    switch (sale.status) {
+      case 'completed':
         return Colors.green;
       case 'voided':
         return Theme.of(context).colorScheme.error;
+      case 'draft':
+      case 'pending':
+        return Colors.orange;
       default:
         return Colors.grey;
     }
   }
 
   IconData _statusIcon() {
-    switch (purchase.status) {
-      case 'draft':
-      case 'pending':
-        return LucideIcons.fileEdit;
-      case 'posted':
+    switch (sale.status) {
+      case 'completed':
         return LucideIcons.checkCircle;
       case 'voided':
         return LucideIcons.ban;
+      case 'draft':
+      case 'pending':
+        return LucideIcons.fileEdit;
       default:
         return LucideIcons.file;
     }
   }
 
   String _statusLabel() {
-    switch (purchase.status) {
+    switch (sale.status) {
+      case 'completed':
+        return 'sales.status_completed'.tr();
+      case 'voided':
+        return 'sales.status_voided'.tr();
       case 'draft':
       case 'pending':
-        return 'purchases.status_draft'.tr();
-      case 'posted':
-        return 'purchases.status_posted'.tr();
-      case 'voided':
-        return 'purchases.status_voided'.tr();
+        return 'sales.status_draft'.tr();
       default:
-        return purchase.status;
+        return sale.status;
     }
   }
 
@@ -625,9 +807,9 @@ class _PurchaseTile extends StatelessWidget {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final statusClr = _statusColor(context);
-    final supplierInitial = purchase.supplierName != null &&
-            purchase.supplierName!.isNotEmpty
-        ? purchase.supplierName![0].toUpperCase()
+    final customerInitial = sale.customerName != null &&
+            sale.customerName!.isNotEmpty
+        ? sale.customerName![0].toUpperCase()
         : '?';
 
     return Padding(
@@ -649,7 +831,6 @@ class _PurchaseTile extends StatelessWidget {
             child: IntrinsicHeight(
               child: Row(
                 children: [
-                  // Status accent bar
                   Container(
                     width: 4,
                     decoration: BoxDecoration(
@@ -660,7 +841,6 @@ class _PurchaseTile extends StatelessWidget {
                       ),
                     ),
                   ),
-                  // Content
                   Expanded(
                     child: Padding(
                       padding: const EdgeInsets.all(14),
@@ -669,7 +849,6 @@ class _PurchaseTile extends StatelessWidget {
                         children: [
                           Row(
                             children: [
-                              // Supplier avatar
                               Container(
                                 width: 38,
                                 height: 38,
@@ -686,7 +865,7 @@ class _PurchaseTile extends StatelessWidget {
                                 ),
                                 alignment: Alignment.center,
                                 child: Text(
-                                  supplierInitial,
+                                  customerInitial,
                                   style: theme.textTheme.titleSmall?.copyWith(
                                     color: cs.onPrimaryContainer,
                                     fontWeight: FontWeight.bold,
@@ -699,22 +878,20 @@ class _PurchaseTile extends StatelessWidget {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      purchase.purchaseNumber,
+                                      sale.invoiceNumber,
                                       style: theme.textTheme.titleSmall
                                           ?.copyWith(fontWeight: FontWeight.w600),
                                     ),
-                                    if (purchase.supplierName != null)
-                                      Text(
-                                        purchase.supplierName!,
-                                        style: theme.textTheme.bodySmall?.copyWith(
-                                            color: cs.onSurfaceVariant),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
+                                    Text(
+                                      sale.customerName ?? 'sales.walk_in'.tr(),
+                                      style: theme.textTheme.bodySmall?.copyWith(
+                                          color: cs.onSurfaceVariant),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
                                   ],
                                 ),
                               ),
-                              // Status badge
                               Container(
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 8, vertical: 4),
@@ -749,39 +926,25 @@ class _PurchaseTile extends StatelessWidget {
                                   size: 13, color: cs.onSurfaceVariant),
                               const SizedBox(width: 4),
                               Text(
-                                DateFormat.yMMMd().format(purchase.purchaseDate),
+                                DateFormat.yMMMd().format(sale.saleDate),
                                 style: theme.textTheme.bodySmall
                                     ?.copyWith(color: cs.onSurfaceVariant),
                               ),
-                              if (purchase.isOverdue) ...[
-                                const SizedBox(width: 8),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: cs.error.withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(6),
-                                    border: Border.all(color: cs.error.withValues(alpha: 0.3)),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(LucideIcons.alertTriangle, size: 10, color: cs.error),
-                                      const SizedBox(width: 3),
-                                      Text('purchases.overdue'.tr(),
-                                          style: theme.textTheme.labelSmall?.copyWith(
-                                              color: cs.error, fontWeight: FontWeight.w600, fontSize: 9)),
-                                    ],
-                                  ),
+                              if (sale.paymentMethod.isNotEmpty) ...[
+                                const SizedBox(width: 12),
+                                Icon(LucideIcons.creditCard,
+                                    size: 13, color: cs.onSurfaceVariant),
+                                const SizedBox(width: 4),
+                                Text(
+                                  sale.paymentMethod,
+                                  style: theme.textTheme.bodySmall
+                                      ?.copyWith(color: cs.onSurfaceVariant),
                                 ),
-                              ],
-                              if (purchase.isPosted && purchase.isFullyPaid) ...[
-                                const SizedBox(width: 8),
-                                const Icon(LucideIcons.checkCircle, size: 13, color: Colors.green),
                               ],
                               const Spacer(),
                               Text(
                                 currencyService
-                                    .format(purchase.totalCents.toBigInt().toInt()),
+                                    .format(sale.totalCents.toBigInt().toInt()),
                                 style: theme.textTheme.titleMedium?.copyWith(
                                   color: cs.primary,
                                   fontWeight: FontWeight.bold,

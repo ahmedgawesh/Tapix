@@ -71,10 +71,12 @@ part 'app_database.g.dart';
     SaleTaxBands,
     SaleReturns,
     SaleReturnItems,
+    SalePayments,
     Purchases,
     PurchaseItems,
     PurchaseReturns,
     PurchaseReturnItems,
+    PurchasePayments,
     Accounts,
     JournalEntries,
     JournalEntryLines,
@@ -280,11 +282,13 @@ FROM product_variants__old
       'products': ['created_at', 'updated_at'],
       'product_variants': ['created_at', 'updated_at'],
       'product_batches': ['expiry_date', 'created_at'],
-      'sales': ['sale_date', 'created_at', 'updated_at'],
+      'sales': ['sale_date', 'due_date', 'created_at', 'updated_at'],
       'sale_items': ['created_at'],
       'sale_returns': ['return_date', 'created_at'],
       'sale_return_items': ['created_at'],
-      'purchases': ['purchase_date', 'expected_delivery_date', 'created_at', 'updated_at'],
+      'sale_payments': ['payment_date', 'created_at'],
+      'purchases': ['purchase_date', 'expected_delivery_date', 'due_date', 'created_at', 'updated_at'],
+      'purchase_payments': ['payment_date', 'created_at'],
       'purchase_items': ['created_at'],
       'purchase_returns': ['return_date', 'created_at'],
       'purchase_return_items': ['created_at'],
@@ -344,7 +348,7 @@ FROM product_variants__old
         // datetime(value, 'unixepoch') converts Unix seconds to 'YYYY-MM-DD HH:MM:SS'
         try {
           await customStatement(
-            "UPDATE $table SET $col = datetime($col, 'unixepoch') WHERE typeof($col) = 'integer'",
+            "UPDATE $table SET $col = datetime($col, 'unixepoch') WHERE $col IS NOT NULL AND typeof($col) = 'integer'",
           );
         } catch (e) {
           debugPrint('Warning: could not convert $table.$col: $e');
@@ -522,11 +526,58 @@ CREATE TABLE IF NOT EXISTS loyalty_settings (
 );
 ''');
 
+    // Purchase enhancements (v10015)
+    await _safeAddColumn('purchases', 'discount_cents', 'INTEGER NOT NULL DEFAULT 0');
+    await _safeAddColumn('purchases', 'paid_amount_cents', 'INTEGER NOT NULL DEFAULT 0');
+    await _safeAddColumn('purchases', 'payment_method', 'TEXT');
+    await _safeAddColumn('purchases', 'supplier_invoice_ref', 'TEXT');
+    await _safeAddColumn('purchases', 'notes', 'TEXT');
+    await _safeAddColumn('purchases', 'due_date', 'TEXT');
+    await _safeAddColumn('purchase_returns', 'status', "TEXT NOT NULL DEFAULT 'draft'");
+    await _safeAddColumn('purchase_returns', 'disposition_type', "TEXT NOT NULL DEFAULT 'restock'");
+    await _safeAddColumn('purchase_return_items', 'reason', 'TEXT');
+
+    await customStatement('''
+CREATE TABLE IF NOT EXISTS purchase_payments (
+  id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+  purchase_id INTEGER NOT NULL REFERENCES purchases(id) ON DELETE CASCADE,
+  amount_cents INTEGER NOT NULL,
+  currency_id INTEGER NOT NULL REFERENCES currencies(id) ON DELETE RESTRICT,
+  payment_method TEXT NOT NULL,
+  reference TEXT,
+  notes TEXT,
+  payment_date TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+''');
+
+    // Sale enhancements (v10016)
+    await _safeAddColumn('sales', 'paid_amount_cents', 'INTEGER NOT NULL DEFAULT 0');
+    await _safeAddColumn('sales', 'notes', 'TEXT');
+    await _safeAddColumn('sales', 'due_date', 'TEXT');
+    await _safeAddColumn('sale_returns', 'status', "TEXT NOT NULL DEFAULT 'draft'");
+    await _safeAddColumn('sale_returns', 'disposition_type', "TEXT NOT NULL DEFAULT 'restock'");
+    await _safeAddColumn('sale_return_items', 'reason', 'TEXT');
+
+    await customStatement('''
+CREATE TABLE IF NOT EXISTS sale_payments (
+  id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+  sale_id INTEGER NOT NULL REFERENCES sales(id) ON DELETE CASCADE,
+  amount_cents INTEGER NOT NULL,
+  currency_id INTEGER NOT NULL REFERENCES currencies(id) ON DELETE RESTRICT,
+  payment_method TEXT NOT NULL,
+  reference TEXT,
+  notes TEXT,
+  payment_date TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+''');
+
     debugPrint('Schema integrity check completed.');
   }
 
   @override
-  int get schemaVersion => 10014;
+  int get schemaVersion => 10017;
 
   @override
   MigrationStrategy get migration {
@@ -668,6 +719,50 @@ CREATE TABLE IF NOT EXISTS loyalty_settings (
           await _convertIntegerTimestampsToText();
         }
 
+        // Migration 10014 -> 10015: Enhanced purchase invoices & returns
+        if (from < 10015) {
+          // Purchases: new columns
+          await _safeAddColumn('purchases', 'discount_cents', 'INTEGER NOT NULL DEFAULT 0');
+          await _safeAddColumn('purchases', 'paid_amount_cents', 'INTEGER NOT NULL DEFAULT 0');
+          await _safeAddColumn('purchases', 'payment_method', 'TEXT');
+          await _safeAddColumn('purchases', 'supplier_invoice_ref', 'TEXT');
+          await _safeAddColumn('purchases', 'notes', 'TEXT');
+          await _safeAddColumn('purchases', 'due_date', 'TEXT');
+
+          // PurchaseReturns: status + disposition
+          await _safeAddColumn('purchase_returns', 'status', "TEXT NOT NULL DEFAULT 'draft'");
+          await _safeAddColumn('purchase_returns', 'disposition_type', "TEXT NOT NULL DEFAULT 'restock'");
+
+          // PurchaseReturnItems: per-item reason
+          await _safeAddColumn('purchase_return_items', 'reason', 'TEXT');
+
+          // PurchasePayments table
+          await m.createTable(purchasePayments);
+        }
+
+        // Migration 10015 -> 10016: Enhanced sales & sale returns
+        if (from < 10016) {
+          // Sales: new columns
+          await _safeAddColumn('sales', 'paid_amount_cents', 'INTEGER NOT NULL DEFAULT 0');
+          await _safeAddColumn('sales', 'notes', 'TEXT');
+          await _safeAddColumn('sales', 'due_date', 'TEXT');
+
+          // SaleReturns: status + disposition
+          await _safeAddColumn('sale_returns', 'status', "TEXT NOT NULL DEFAULT 'draft'");
+          await _safeAddColumn('sale_returns', 'disposition_type', "TEXT NOT NULL DEFAULT 'restock'");
+
+          // SaleReturnItems: per-item reason
+          await _safeAddColumn('sale_return_items', 'reason', 'TEXT');
+
+          // SalePayments table
+          await m.createTable(salePayments);
+        }
+
+        // Migration 10016 -> 10017: Purchase-specific permissions in roles
+        if (from < 10017) {
+          await _updateRolesWithPurchasePermissions();
+        }
+
         await _createIndexes();
         await _seedInitialData();
       },
@@ -733,6 +828,21 @@ CREATE TABLE IF NOT EXISTS loyalty_settings (
     await customStatement('CREATE INDEX IF NOT EXISTS idx_shift_schedules_employee_date ON shift_schedules(employee_id, shift_date)');
     await customStatement('CREATE INDEX IF NOT EXISTS idx_performance_metrics_employee ON performance_metrics(employee_id)');
     await customStatement('CREATE INDEX IF NOT EXISTS idx_performance_metrics_period ON performance_metrics(period_identifier)');
+
+    // Purchase enhancement indexes
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_purchases_status ON purchases(status)');
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_purchases_supplier ON purchases(supplier_id)');
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_purchases_due_date ON purchases(due_date)');
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_purchase_payments_purchase ON purchase_payments(purchase_id)');
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_purchase_returns_purchase ON purchase_returns(purchase_id)');
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_purchase_returns_status ON purchase_returns(status)');
+
+    // Sale enhancement indexes
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_sales_status ON sales(status)');
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_sales_due_date ON sales(due_date)');
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_sale_payments_sale ON sale_payments(sale_id)');
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_sale_returns_sale ON sale_returns(sale_id)');
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_sale_returns_status ON sale_returns(status)');
   }
 
   Future<void> _seedInitialData() async {
@@ -1010,43 +1120,43 @@ CREATE TABLE IF NOT EXISTS loyalty_settings (
       }
     }
 
-    // Admin role - full access
+    // Admin role - full access (includes all purchase permissions)
     await upsertRole(
       name: 'admin',
       nameAr: 'مدير النظام',
       nameFr: 'Administrateur',
       description: 'Full system access with all permissions',
-      permissions: '["employees.view","employees.create","employees.edit","employees.delete","employees.manage_permissions","payroll.view","payroll.create","payroll.approve","payroll.process","attendance.view","attendance.manage","attendance.approve","performance.view","performance.manage","reports.view","reports.export","settings.view","settings.manage","system.admin"]',
+      permissions: '["employees.view","employees.create","employees.edit","employees.delete","employees.manage_permissions","payroll.view","payroll.create","payroll.approve","payroll.process","attendance.view","attendance.manage","attendance.approve","performance.view","performance.manage","reports.view","reports.export","settings.view","settings.manage","system.admin","purchases.view","purchases.create","purchases.edit","purchases.delete","purchases.post","purchases.void","purchases.approve","purchases.returns","purchases.payments"]',
       isSystemRole: true,
     );
 
-    // Manager role - team management
+    // Manager role - team management + purchase management
     await upsertRole(
       name: 'manager',
       nameAr: 'مدير',
       nameFr: 'Gestionnaire',
       description: 'Team management with limited admin access',
-      permissions: '["employees.view","employees.edit","attendance.view","attendance.manage","attendance.approve","performance.view","performance.manage","payroll.view","reports.view","reports.team"]',
+      permissions: '["employees.view","employees.edit","attendance.view","attendance.manage","attendance.approve","performance.view","performance.manage","payroll.view","reports.view","reports.team","purchases.view","purchases.create","purchases.edit","purchases.post","purchases.approve","purchases.returns","purchases.payments"]',
       isSystemRole: true,
     );
 
-    // Staff role - basic access
+    // Staff role - basic access + view purchases
     await upsertRole(
       name: 'staff',
       nameAr: 'موظف',
       nameFr: 'Employé',
       description: 'Basic employee access',
-      permissions: '["profile.view","profile.edit","attendance.view","attendance.self","performance.view","payslip.view"]',
+      permissions: '["profile.view","profile.edit","attendance.view","attendance.self","performance.view","payslip.view","purchases.view"]',
       isSystemRole: true,
     );
 
-    // Cashier role - POS access
+    // Cashier role - POS access + view purchases
     await upsertRole(
       name: 'cashier',
       nameAr: 'كاشير',
       nameFr: 'Caissier',
       description: 'Point of sale and basic operations',
-      permissions: '["profile.view","attendance.view","attendance.self","sales.view","sales.create","products.view","customers.view"]',
+      permissions: '["profile.view","attendance.view","attendance.self","sales.view","sales.create","products.view","customers.view","purchases.view"]',
       isSystemRole: true,
     );
 
@@ -1056,9 +1166,51 @@ CREATE TABLE IF NOT EXISTS loyalty_settings (
       nameAr: 'مندوب مبيعات',
       nameFr: 'Vendeur',
       description: 'Sales operations with commission tracking',
-      permissions: '["profile.view","attendance.view","attendance.self","sales.view","sales.create","products.view","customers.view","customers.create","performance.view","commission.view"]',
+      permissions: '["profile.view","attendance.view","attendance.self","sales.view","sales.create","products.view","customers.view","customers.create","performance.view","commission.view","purchases.view"]',
       isSystemRole: true,
     );
+  }
+
+  /// Update existing roles with purchase-specific permissions (migration 10017)
+  Future<void> _updateRolesWithPurchasePermissions() async {
+    // Permission mappings: role name -> purchase permissions to add
+    const rolePermissions = <String, List<String>>{
+      'admin': [
+        'purchases.view', 'purchases.create', 'purchases.edit',
+        'purchases.delete', 'purchases.post', 'purchases.void',
+        'purchases.approve', 'purchases.returns', 'purchases.payments',
+      ],
+      'manager': [
+        'purchases.view', 'purchases.create', 'purchases.edit',
+        'purchases.post', 'purchases.approve',
+        'purchases.returns', 'purchases.payments',
+      ],
+      'staff': ['purchases.view'],
+      'cashier': ['purchases.view'],
+      'salesperson': ['purchases.view'],
+    };
+
+    for (final entry in rolePermissions.entries) {
+      final roleName = entry.key;
+      final newPerms = entry.value;
+
+      final role = await (select(roles)..where((r) => r.name.equals(roleName))).getSingleOrNull();
+      if (role == null) continue;
+
+      // Parse existing permissions JSON array
+      final existingPerms = role.permissions;
+      // Simple approach: check if purchase permissions already present
+      if (existingPerms.contains('purchases.view')) continue;
+
+      // Build new permissions string by inserting before the closing bracket
+      final newPermsStr = newPerms.map((p) => '"$p"').join(',');
+      final updatedPerms = existingPerms.endsWith(']')
+          ? '${existingPerms.substring(0, existingPerms.length - 1)},$newPermsStr]'
+          : existingPerms;
+
+      await (update(roles)..where((r) => r.name.equals(roleName)))
+          .write(RolesCompanion(permissions: Value(updatedPerms)));
+    }
   }
 
   Future<void> _seedDefaultLoyaltyTiers() async {
