@@ -91,6 +91,41 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
   }
 
   @override
+  Future<bool> updatePurchase({
+    required int purchaseId,
+    required int supplierId,
+    required int currencyId,
+    required Decimal subtotalCents,
+    required Decimal discountCents,
+    required Decimal taxCents,
+    required Decimal totalCents,
+    required List<PurchaseItemInput> items,
+    String? notes,
+    DateTime? purchaseDate,
+  }) async {
+    final purchase = db.PurchasesCompanion(
+      supplierId: Value(supplierId),
+      currencyId: Value(currencyId),
+      subtotalCents: Value(subtotalCents),
+      taxCents: Value(taxCents),
+      totalCents: Value(totalCents),
+      purchaseDate: Value(purchaseDate ?? DateTime.now()),
+    );
+
+    final itemCompanions = items.map((item) => db.PurchaseItemsCompanion(
+          productId: Value(item.productId),
+          variantId: Value(item.variantId),
+          quantity: Value(item.quantity),
+          unitCostCents: Value(item.unitCostCents),
+          subtotalCents: Value(item.subtotalCents),
+          taxCents: Value(item.taxCents),
+          totalCents: Value(item.totalCents),
+        )).toList();
+
+    return _datasource.updatePurchase(purchaseId, purchase, itemCompanions);
+  }
+
+  @override
   Future<void> postPurchase(int purchaseId) {
     return _datasource.postPurchase(purchaseId);
   }

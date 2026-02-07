@@ -232,22 +232,39 @@ class _PurchaseReturnsViewState extends State<_PurchaseReturnsView> {
 
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: colorScheme.errorContainer.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: colorScheme.error.withValues(alpha: 0.2)),
+        color: colorScheme.errorContainer.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: colorScheme.error.withValues(alpha: 0.15)),
       ),
       child: Row(
         children: [
-          Icon(LucideIcons.undo2, size: 16, color: colorScheme.error),
-          const SizedBox(width: 8),
-          Text('${returns.length} ${'purchases.returns'.tr().toLowerCase()}',
-              style: theme.textTheme.labelMedium?.copyWith(
-                  color: colorScheme.onSurfaceVariant)),
+          Container(
+            padding: const EdgeInsets.all(7),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [colorScheme.error, colorScheme.error.withValues(alpha: 0.7)],
+              ),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(LucideIcons.undo2, size: 14, color: Colors.white),
+          ),
+          const SizedBox(width: 10),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('${returns.length} ${'purchases.returns'.tr().toLowerCase()}',
+                  style: theme.textTheme.labelMedium?.copyWith(
+                      color: colorScheme.onSurfaceVariant)),
+              Text('purchases.return_total'.tr(),
+                  style: theme.textTheme.labelSmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7))),
+            ],
+          ),
           const Spacer(),
           Text(cs.format(totalRefund),
-              style: theme.textTheme.titleSmall?.copyWith(
+              style: theme.textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.bold, color: colorScheme.error)),
         ],
       ),
@@ -261,11 +278,19 @@ class _PurchaseReturnsViewState extends State<_PurchaseReturnsView> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(LucideIcons.undo2, size: 64,
-              color: cs.onSurface.withValues(alpha: 0.15)),
-          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: cs.errorContainer.withValues(alpha: 0.15),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(LucideIcons.undo2, size: 48,
+                color: cs.error.withValues(alpha: 0.3)),
+          ),
+          const SizedBox(height: 20),
           Text('purchases.no_returns'.tr(),
               style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
                   color: cs.onSurfaceVariant)),
           const SizedBox(height: 6),
           Text('purchases.no_returns_hint'.tr(),
@@ -291,84 +316,121 @@ class _ReturnTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
+    final supplierInitial = returnEntity.supplierName != null &&
+            returnEntity.supplierName!.isNotEmpty
+        ? returnEntity.supplierName![0].toUpperCase()
+        : '?';
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.5)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: cs.errorContainer.withValues(alpha: 0.3),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(LucideIcons.undo2, size: 20, color: cs.error),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(returnEntity.returnNumber,
-                      style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 2),
-                  Row(
-                    children: [
-                      if (returnEntity.supplierName != null) ...[
-                        Icon(LucideIcons.building2, size: 12,
-                            color: cs.onSurfaceVariant),
-                        const SizedBox(width: 4),
-                        Flexible(
-                          child: Text(returnEntity.supplierName!,
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                  color: cs.onSurfaceVariant),
-                              maxLines: 1, overflow: TextOverflow.ellipsis),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Material(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(14),
+        clipBehavior: Clip.antiAlias,
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
+          ),
+          child: IntrinsicHeight(
+            child: Row(
+              children: [
+                // Red accent bar
+                Container(
+                  width: 4,
+                  decoration: BoxDecoration(
+                    color: cs.error,
+                    borderRadius: const BorderRadiusDirectional.only(
+                      topStart: Radius.circular(14),
+                      bottomStart: Radius.circular(14),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Row(
+                      children: [
+                        // Supplier avatar
+                        Container(
+                          width: 38, height: 38,
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [cs.errorContainer, cs.errorContainer.withValues(alpha: 0.5)],
+                            ),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(supplierInitial,
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                  color: cs.error, fontWeight: FontWeight.bold)),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(returnEntity.returnNumber,
+                                  style: theme.textTheme.titleSmall?.copyWith(
+                                      fontWeight: FontWeight.w600)),
+                              const SizedBox(height: 2),
+                              Row(
+                                children: [
+                                  if (returnEntity.supplierName != null) ...[
+                                    Icon(LucideIcons.building2, size: 11,
+                                        color: cs.onSurfaceVariant),
+                                    const SizedBox(width: 3),
+                                    Flexible(
+                                      child: Text(returnEntity.supplierName!,
+                                          style: theme.textTheme.bodySmall?.copyWith(
+                                              color: cs.onSurfaceVariant, fontSize: 11),
+                                          maxLines: 1, overflow: TextOverflow.ellipsis),
+                                    ),
+                                    const SizedBox(width: 6),
+                                  ],
+                                  Icon(LucideIcons.calendar, size: 11,
+                                      color: cs.onSurfaceVariant),
+                                  const SizedBox(width: 3),
+                                  Text(DateFormat.yMMMd().format(returnEntity.returnDate),
+                                      style: theme.textTheme.bodySmall?.copyWith(
+                                          color: cs.onSurfaceVariant, fontSize: 11)),
+                                ],
+                              ),
+                              if (returnEntity.reason != null &&
+                                  returnEntity.reason!.isNotEmpty) ...[
+                                const SizedBox(height: 3),
+                                Row(
+                                  children: [
+                                    Icon(LucideIcons.messageSquare, size: 11,
+                                        color: cs.onSurfaceVariant),
+                                    const SizedBox(width: 3),
+                                    Expanded(
+                                      child: Text(returnEntity.reason!,
+                                          style: theme.textTheme.bodySmall?.copyWith(
+                                              color: cs.onSurfaceVariant,
+                                              fontStyle: FontStyle.italic,
+                                              fontSize: 11),
+                                          maxLines: 1, overflow: TextOverflow.ellipsis),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ],
+                          ),
                         ),
                         const SizedBox(width: 8),
-                      ],
-                      Icon(LucideIcons.calendar, size: 12,
-                          color: cs.onSurfaceVariant),
-                      const SizedBox(width: 4),
-                      Text(DateFormat.yMMMd().format(returnEntity.returnDate),
-                          style: theme.textTheme.bodySmall?.copyWith(
-                              color: cs.onSurfaceVariant)),
-                    ],
-                  ),
-                  if (returnEntity.reason != null &&
-                      returnEntity.reason!.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Icon(LucideIcons.messageSquare, size: 12,
-                            color: cs.onSurfaceVariant),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(returnEntity.reason!,
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                  color: cs.onSurfaceVariant),
-                              maxLines: 1, overflow: TextOverflow.ellipsis),
+                        Text(
+                          currencyService.format(returnEntity.totalCents.toBigInt().toInt()),
+                          style: theme.textTheme.titleSmall?.copyWith(
+                              color: cs.error, fontWeight: FontWeight.bold),
                         ),
                       ],
                     ),
-                  ],
-                ],
-              ),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 8),
-            Text(
-              currencyService.format(returnEntity.totalCents.toBigInt().toInt()),
-              style: theme.textTheme.titleSmall?.copyWith(
-                  color: cs.error, fontWeight: FontWeight.bold),
-            ),
-          ],
+          ),
         ),
       ),
     );

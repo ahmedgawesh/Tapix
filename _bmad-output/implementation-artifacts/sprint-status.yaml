@@ -119,20 +119,20 @@ development_status:
   epic-5-retrospective: optional
 
   # EPIC-06: Purchase Management
-  epic-6: backlog
-  6-1-purchase-orders: backlog
-  6-2-purchase-returns-processing: backlog
-  6-3-purchases-screen: backlog
-  6-4-purchase-form-screen: backlog
-  6-5-purchase-detail-screen: backlog
-  6-6-product-selection-dialog: backlog
-  6-7-product-edit-dialog: backlog
-  6-8-supplier-payment-dialog: backlog
-  6-9-supplier-refund-dialog: backlog
-  6-10-purchase-barcode-scanner: backlog
-  6-11-purchase-returns-screen: backlog
-  6-12-purchase-return-form-screen: backlog
-  6-13-purchase-return-detail-screen: backlog
+  epic-6: done
+  6-1-purchase-orders: done
+  6-2-purchase-returns-processing: done
+  6-3-purchases-screen: done
+  6-4-purchase-form-screen: done
+  6-5-purchase-detail-screen: done
+  6-6-product-selection-dialog: done
+  6-7-product-edit-dialog: done
+  6-8-supplier-payment-dialog: done
+  6-9-supplier-refund-dialog: done
+  6-10-purchase-barcode-scanner: done
+  6-11-purchase-returns-screen: done
+  6-12-purchase-return-form-screen: done
+  6-13-purchase-return-detail-screen: done
   epic-6-retrospective: optional
 
   # EPIC-07: Finance & Accounting

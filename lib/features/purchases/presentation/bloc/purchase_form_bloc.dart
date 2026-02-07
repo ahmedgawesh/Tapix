@@ -5,11 +5,15 @@ import 'package:equatable/equatable.dart';
 import '../../domain/repositories/purchase_repository.dart';
 import '../../../products/domain/entities/product_entity.dart';
 import '../../../products/domain/entities/product_variant_entity.dart';
+import '../../../products/domain/repositories/product_variant_repository.dart';
 
 // ==================== ENUMS ====================
 
 /// Discount mode: per-item discounts or a single invoice-level discount
 enum DiscountMode { perItem, invoice }
+
+/// Payment method for purchase invoice
+enum PurchasePaymentMethod { cash, credit, card, cheque, purchaseOrder }
 
 // ==================== STATE ====================
 
@@ -25,6 +29,9 @@ class PurchaseFormState extends Equatable {
   final String? notes;
   final DateTime purchaseDate;
   final DateTime? dueDate;
+  final PurchasePaymentMethod paymentMethod;
+  final Decimal taxRatePercent;
+  final Decimal paidAmountCents;
   final bool isSubmitting;
   final String? error;
   final bool isSuccess;
@@ -41,10 +48,15 @@ class PurchaseFormState extends Equatable {
     this.notes,
     required this.purchaseDate,
     this.dueDate,
+    this.paymentMethod = PurchasePaymentMethod.cash,
+    Decimal? taxRatePercent,
+    Decimal? paidAmountCents,
     this.isSubmitting = false,
     this.error,
     this.isSuccess = false,
-  }) : invoiceDiscountCents = invoiceDiscountCents ?? Decimal.zero;
+  }) : invoiceDiscountCents = invoiceDiscountCents ?? Decimal.zero,
+       taxRatePercent = taxRatePercent ?? Decimal.zero,
+       paidAmountCents = paidAmountCents ?? Decimal.zero;
 
   Decimal get subtotalCents => items.fold(
         Decimal.zero,
@@ -63,10 +75,24 @@ class PurchaseFormState extends Equatable {
     return itemDiscountCents;
   }
 
-  Decimal get taxCents => items.fold(
+  Decimal get itemTaxCents => items.fold(
         Decimal.zero,
         (sum, item) => sum + item.taxCents,
       );
+
+  Decimal get taxCents {
+    if (taxRatePercent > Decimal.zero) {
+      final taxable = subtotalCents - totalDiscountCents;
+      final raw = taxable * taxRatePercent / Decimal.fromInt(100);
+      return Decimal.fromBigInt(raw.round());
+    }
+    return itemTaxCents;
+  }
+
+  Decimal get remainingCents {
+    final r = totalCents - paidAmountCents;
+    return r < Decimal.zero ? Decimal.zero : r;
+  }
 
   Decimal get totalCents {
     final net = subtotalCents - totalDiscountCents + taxCents;
@@ -89,6 +115,9 @@ class PurchaseFormState extends Equatable {
     String? notes,
     DateTime? purchaseDate,
     DateTime? dueDate,
+    PurchasePaymentMethod? paymentMethod,
+    Decimal? taxRatePercent,
+    Decimal? paidAmountCents,
     bool? isSubmitting,
     String? error,
     bool? isSuccess,
@@ -106,6 +135,9 @@ class PurchaseFormState extends Equatable {
       notes: notes ?? this.notes,
       purchaseDate: purchaseDate ?? this.purchaseDate,
       dueDate: clearDueDate ? null : (dueDate ?? this.dueDate),
+      paymentMethod: paymentMethod ?? this.paymentMethod,
+      taxRatePercent: taxRatePercent ?? this.taxRatePercent,
+      paidAmountCents: paidAmountCents ?? this.paidAmountCents,
       isSubmitting: isSubmitting ?? this.isSubmitting,
       error: error,
       isSuccess: isSuccess ?? this.isSuccess,
@@ -117,6 +149,7 @@ class PurchaseFormState extends Equatable {
         purchaseId, supplierId, supplierName, currencyId, items,
         discountMode, invoiceDiscountCents, supplierInvoiceRef,
         notes, purchaseDate, dueDate,
+        paymentMethod, taxRatePercent, paidAmountCents,
         isSubmitting, error, isSuccess,
       ];
 }
@@ -131,6 +164,9 @@ class PurchaseLineItem extends Equatable {
   final Decimal discountCents;
   final Decimal taxCents;
   final DateTime? expiryDate;
+  final String? colorName;
+  final String? colorHex;
+  final String? sizeName;
 
   PurchaseLineItem({
     required this.tempId,
@@ -141,6 +177,9 @@ class PurchaseLineItem extends Equatable {
     Decimal? discountCents,
     Decimal? taxCents,
     this.expiryDate,
+    this.colorName,
+    this.colorHex,
+    this.sizeName,
   })  : discountCents = discountCents ?? Decimal.zero,
         taxCents = taxCents ?? Decimal.zero;
 
@@ -149,8 +188,14 @@ class PurchaseLineItem extends Equatable {
   Decimal get totalCents => netCents + taxCents;
 
   String get displayName {
-    if (variant != null && (variant!.colorId != null || variant!.sizeId != null)) {
-      return '${product.name} (${variant!.sku ?? 'Variant ${variant!.id}'})';
+    final parts = <String>[];
+    if (colorName != null) parts.add(colorName!);
+    if (sizeName != null) parts.add(sizeName!);
+    if (parts.isEmpty && variant != null) {
+      parts.add(variant!.sku ?? 'Variant ${variant!.id}');
+    }
+    if (parts.isNotEmpty) {
+      return '${product.name} (${parts.join(' / ')})';
     }
     return product.name;
   }
@@ -165,6 +210,9 @@ class PurchaseLineItem extends Equatable {
     Decimal? taxCents,
     DateTime? expiryDate,
     bool clearExpiry = false,
+    String? colorName,
+    String? colorHex,
+    String? sizeName,
   }) {
     return PurchaseLineItem(
       tempId: tempId ?? this.tempId,
@@ -175,6 +223,9 @@ class PurchaseLineItem extends Equatable {
       discountCents: discountCents ?? this.discountCents,
       taxCents: taxCents ?? this.taxCents,
       expiryDate: clearExpiry ? null : (expiryDate ?? this.expiryDate),
+      colorName: colorName ?? this.colorName,
+      colorHex: colorHex ?? this.colorHex,
+      sizeName: sizeName ?? this.sizeName,
     );
   }
 
@@ -182,6 +233,7 @@ class PurchaseLineItem extends Equatable {
   List<Object?> get props => [
         tempId, product, variant, quantity,
         unitCostCents, discountCents, taxCents, expiryDate,
+        colorName, colorHex, sizeName,
       ];
 }
 
@@ -319,13 +371,43 @@ class PurchaseFormPosted extends PurchaseFormEvent {
   const PurchaseFormPosted();
 }
 
+class PurchasePaymentMethodChanged extends PurchaseFormEvent {
+  final PurchasePaymentMethod method;
+  const PurchasePaymentMethodChanged(this.method);
+
+  @override
+  List<Object?> get props => [method];
+}
+
+class PurchaseTaxRateChanged extends PurchaseFormEvent {
+  final Decimal taxRatePercent;
+  const PurchaseTaxRateChanged(this.taxRatePercent);
+
+  @override
+  List<Object?> get props => [taxRatePercent];
+}
+
+class PurchasePaidAmountChanged extends PurchaseFormEvent {
+  final Decimal paidAmountCents;
+  const PurchasePaidAmountChanged(this.paidAmountCents);
+
+  @override
+  List<Object?> get props => [paidAmountCents];
+}
+
 // ==================== BLOC ====================
 
 class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
   final PurchaseRepository _repository;
+  final ProductVariantRepository _variantRepository;
   int _lineCounter = 0;
 
-  PurchaseFormBloc(this._repository)
+  // Cached color/size lookup maps
+  Map<int, String> _colorNames = {};
+  Map<int, String?> _colorHexes = {};
+  Map<int, String> _sizeNames = {};
+
+  PurchaseFormBloc(this._repository, this._variantRepository)
       : super(PurchaseFormState(
           currencyId: 1,
           purchaseDate: DateTime.now(),
@@ -343,21 +425,130 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
     on<PurchaseLineItemRemoved>(_onLineItemRemoved);
     on<PurchaseFormSubmitted>(_onSubmitted);
     on<PurchaseFormPosted>(_onPosted);
+    on<PurchasePaymentMethodChanged>(_onPaymentMethodChanged);
+    on<PurchaseTaxRateChanged>(_onTaxRateChanged);
+    on<PurchasePaidAmountChanged>(_onPaidAmountChanged);
   }
+
+  Future<void> _loadColorSizeLookups() async {
+    if (_colorNames.isNotEmpty) return;
+    try {
+      final colors = await _variantRepository.getAllColors();
+      _colorNames = {for (final c in colors) c.id: c.name};
+      _colorHexes = {for (final c in colors) c.id: c.hexCode};
+      final sizes = await _variantRepository.getAllSizes();
+      _sizeNames = {for (final s in sizes) s.id: s.name};
+    } catch (_) {}
+  }
+
+  String? _resolveColorName(int? colorId) => colorId != null ? _colorNames[colorId] : null;
+  String? _resolveColorHex(int? colorId) => colorId != null ? _colorHexes[colorId] : null;
+  String? _resolveSizeName(int? sizeId) => sizeId != null ? _sizeNames[sizeId] : null;
 
   String _generateTempId() {
     _lineCounter++;
     return 'line_$_lineCounter';
   }
 
-  void _onInitialized(
+  Future<void> _onInitialized(
     PurchaseFormInitialized event,
     Emitter<PurchaseFormState> emit,
-  ) {
+  ) async {
+    await _loadColorSizeLookups();
+
     emit(state.copyWith(
       purchaseId: event.purchaseId,
       currencyId: event.currencyId,
     ));
+
+    if (event.purchaseId == null) {
+      return;
+    }
+
+    try {
+      final purchase = await _repository.getPurchaseById(event.purchaseId!);
+      if (purchase == null) {
+        emit(state.copyWith(error: 'purchases.not_found'));
+        return;
+      }
+
+      final items = await _repository.getPurchaseItems(event.purchaseId!);
+      _lineCounter = items.length;
+
+      // Fetch real variant data for color/size resolution
+      final variantFutures = <int, Future<ProductVariant?>>{};
+      for (final i in items) {
+        if (i.variantId != null && !variantFutures.containsKey(i.variantId)) {
+          variantFutures[i.variantId!] = _variantRepository.getVariantById(i.variantId!);
+        }
+      }
+      final resolvedVariants = <int, ProductVariant?>{};
+      for (final entry in variantFutures.entries) {
+        resolvedVariants[entry.key] = await entry.value;
+      }
+
+      final mappedItems = items.map((i) {
+        final product = Product(
+          id: i.productId,
+          name: i.productName ?? 'Product #${i.productId}',
+          costCents: i.unitCostCents,
+          priceCents: Decimal.zero,
+          stockQuantity: 0,
+          minQuantity: 0,
+          hasVariants: i.variantId != null,
+          isTaxable: false,
+          taxRateBps: 0,
+          isActive: true,
+          trackInventory: true,
+        );
+
+        final realVariant = i.variantId != null ? resolvedVariants[i.variantId!] : null;
+        final variant = realVariant ?? (i.variantId == null
+            ? null
+            : ProductVariant(
+                id: i.variantId!,
+                productId: i.productId,
+                sku: i.variantSku,
+                barcode: null,
+                colorId: null,
+                sizeId: null,
+                costCents: i.unitCostCents,
+                priceCents: Decimal.zero,
+                wholesalePriceCents: null,
+                priceAdjustmentCents: Decimal.zero,
+                stockQuantity: 0,
+                isActive: true,
+              ));
+
+        return PurchaseLineItem(
+          tempId: _generateTempId(),
+          product: product,
+          variant: variant,
+          quantity: i.quantity,
+          unitCostCents: i.unitCostCents,
+          discountCents: i.discountCents,
+          taxCents: i.taxCents,
+          expiryDate: i.expiryDate,
+          colorName: _resolveColorName(variant?.colorId),
+          colorHex: _resolveColorHex(variant?.colorId),
+          sizeName: _resolveSizeName(variant?.sizeId),
+        );
+      }).toList();
+
+      emit(state.copyWith(
+        purchaseId: purchase.id,
+        supplierId: purchase.supplierId,
+        supplierName: purchase.supplierName,
+        currencyId: purchase.currencyId,
+        purchaseDate: purchase.purchaseDate,
+        notes: purchase.notes,
+        items: mappedItems,
+        discountMode: DiscountMode.perItem,
+        invoiceDiscountCents: Decimal.zero,
+      ));
+    } catch (e) {
+      emit(state.copyWith(error: e.toString()));
+    }
   }
 
   void _onSupplierChanged(
@@ -431,6 +622,9 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
       unitCostCents: event.unitCostCents,
       discountCents: event.discountCents,
       expiryDate: event.expiryDate,
+      colorName: _resolveColorName(event.variant?.colorId),
+      colorHex: _resolveColorHex(event.variant?.colorId),
+      sizeName: _resolveSizeName(event.variant?.sizeId),
     );
     emit(state.copyWith(items: [...state.items, newItem]));
   }
@@ -490,29 +684,74 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
             expiryDate: item.expiryDate,
           )).toList();
 
-      final purchaseId = await _repository.createPurchase(
-        supplierId: state.supplierId!,
-        currencyId: state.currencyId,
-        subtotalCents: state.subtotalCents,
-        discountCents: state.totalDiscountCents,
-        taxCents: state.taxCents,
-        totalCents: state.totalCents,
-        items: items,
-        notes: state.notes,
-        purchaseDate: state.purchaseDate,
-      );
+      if (state.purchaseId == null) {
+        final purchaseId = await _repository.createPurchase(
+          supplierId: state.supplierId!,
+          currencyId: state.currencyId,
+          subtotalCents: state.subtotalCents,
+          discountCents: state.totalDiscountCents,
+          taxCents: state.taxCents,
+          totalCents: state.totalCents,
+          items: items,
+          notes: state.notes,
+          purchaseDate: state.purchaseDate,
+        );
 
-      emit(state.copyWith(
-        purchaseId: purchaseId,
-        isSubmitting: false,
-        isSuccess: true,
-      ));
+        emit(state.copyWith(
+          purchaseId: purchaseId,
+          isSubmitting: false,
+          isSuccess: true,
+        ));
+      } else {
+        final ok = await _repository.updatePurchase(
+          purchaseId: state.purchaseId!,
+          supplierId: state.supplierId!,
+          currencyId: state.currencyId,
+          subtotalCents: state.subtotalCents,
+          discountCents: state.totalDiscountCents,
+          taxCents: state.taxCents,
+          totalCents: state.totalCents,
+          items: items,
+          notes: state.notes,
+          purchaseDate: state.purchaseDate,
+        );
+
+        if (!ok) {
+          throw Exception('Failed to update purchase');
+        }
+
+        emit(state.copyWith(
+          isSubmitting: false,
+          isSuccess: true,
+        ));
+      }
     } catch (e) {
       emit(state.copyWith(
         isSubmitting: false,
         error: e.toString(),
       ));
     }
+  }
+
+  void _onPaymentMethodChanged(
+    PurchasePaymentMethodChanged event,
+    Emitter<PurchaseFormState> emit,
+  ) {
+    emit(state.copyWith(paymentMethod: event.method));
+  }
+
+  void _onTaxRateChanged(
+    PurchaseTaxRateChanged event,
+    Emitter<PurchaseFormState> emit,
+  ) {
+    emit(state.copyWith(taxRatePercent: event.taxRatePercent));
+  }
+
+  void _onPaidAmountChanged(
+    PurchasePaidAmountChanged event,
+    Emitter<PurchaseFormState> emit,
+  ) {
+    emit(state.copyWith(paidAmountCents: event.paidAmountCents));
   }
 
   Future<void> _onPosted(

@@ -240,7 +240,7 @@ Future<void> init() async {
 
   // Purchases Blocs
   sl.registerFactory(() => PurchasesBloc(sl<PurchaseRepository>()));
-  sl.registerFactory(() => PurchaseFormBloc(sl<PurchaseRepository>()));
+  sl.registerFactory(() => PurchaseFormBloc(sl<PurchaseRepository>(), sl<ProductVariantRepository>()));
   sl.registerFactory(() => PurchaseReturnsBloc(sl<PurchaseRepository>()));
   sl.registerFactory(() => PurchaseReturnFormBloc(sl<PurchaseRepository>()));
 

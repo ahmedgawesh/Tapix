@@ -187,41 +187,50 @@ class _PurchaseFormView extends StatelessWidget {
   }
 
   // ═══════════════════════════════════════════════════════
-  // SUPPLIER CARD
+  // SUPPLIER CARD (Premium)
   // ═══════════════════════════════════════════════════════
   Widget _buildSupplierCard(BuildContext context, PurchaseFormState state) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final hasSupplier = state.supplierName != null;
+    final supplierInitial = hasSupplier && state.supplierName!.isNotEmpty
+        ? state.supplierName![0].toUpperCase()
+        : '?';
 
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         side: BorderSide(
           color: hasSupplier ? cs.primary.withValues(alpha: 0.3) : cs.outlineVariant,
         ),
       ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         onTap: () => _showSupplierPicker(context),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(10),
+                width: 44, height: 44,
                 decoration: BoxDecoration(
-                  color: hasSupplier
-                      ? cs.primary.withValues(alpha: 0.1)
-                      : cs.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(10),
+                  gradient: hasSupplier
+                      ? LinearGradient(
+                          colors: [cs.primary, cs.primary.withValues(alpha: 0.7)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        )
+                      : null,
+                  color: hasSupplier ? null : cs.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(
-                  LucideIcons.building2,
-                  color: hasSupplier ? cs.primary : cs.onSurfaceVariant,
-                  size: 22,
-                ),
+                alignment: Alignment.center,
+                child: hasSupplier
+                    ? Text(supplierInitial,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                            color: Colors.white, fontWeight: FontWeight.bold))
+                    : Icon(LucideIcons.building2, color: cs.onSurfaceVariant, size: 22),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -243,7 +252,14 @@ class _PurchaseFormView extends StatelessWidget {
                   ],
                 ),
               ),
-              Icon(LucideIcons.chevronRight, size: 18, color: cs.onSurfaceVariant),
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: cs.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(LucideIcons.chevronRight, size: 16, color: cs.onSurfaceVariant),
+              ),
             ],
           ),
         ),
@@ -252,7 +268,7 @@ class _PurchaseFormView extends StatelessWidget {
   }
 
   // ═══════════════════════════════════════════════════════
-  // DATES CARD (Purchase Date + Due Date)
+  // DATES CARD (Premium)
   // ═══════════════════════════════════════════════════════
   Widget _buildDatesCard(BuildContext context, PurchaseFormState state) {
     final theme = Theme.of(context);
@@ -261,8 +277,8 @@ class _PurchaseFormView extends StatelessWidget {
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: cs.outlineVariant),
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.5)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -284,7 +300,16 @@ class _PurchaseFormView extends StatelessWidget {
               },
               child: Row(
                 children: [
-                  Icon(LucideIcons.calendar, size: 20, color: cs.primary),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [cs.primary, cs.primary.withValues(alpha: 0.7)],
+                      ),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(LucideIcons.calendar, size: 16, color: Colors.white),
+                  ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -299,11 +324,11 @@ class _PurchaseFormView extends StatelessWidget {
                       ],
                     ),
                   ),
-                  Icon(LucideIcons.edit3, size: 16, color: cs.onSurfaceVariant),
+                  Icon(LucideIcons.edit3, size: 14, color: cs.onSurfaceVariant),
                 ],
               ),
             ),
-            const Divider(height: 24),
+            Divider(height: 24, color: cs.outlineVariant.withValues(alpha: 0.3)),
             // Due Date
             InkWell(
               borderRadius: BorderRadius.circular(8),
@@ -320,8 +345,17 @@ class _PurchaseFormView extends StatelessWidget {
               },
               child: Row(
                 children: [
-                  Icon(LucideIcons.calendarClock, size: 20,
-                      color: state.dueDate != null ? cs.tertiary : cs.onSurfaceVariant),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: state.dueDate != null
+                          ? cs.tertiary.withValues(alpha: 0.12)
+                          : cs.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(LucideIcons.calendarClock, size: 16,
+                        color: state.dueDate != null ? cs.tertiary : cs.onSurfaceVariant),
+                  ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -342,7 +376,7 @@ class _PurchaseFormView extends StatelessWidget {
                       ],
                     ),
                   ),
-                  Icon(LucideIcons.edit3, size: 16, color: cs.onSurfaceVariant),
+                  Icon(LucideIcons.edit3, size: 14, color: cs.onSurfaceVariant),
                 ],
               ),
             ),
@@ -353,7 +387,7 @@ class _PurchaseFormView extends StatelessWidget {
   }
 
   // ═══════════════════════════════════════════════════════
-  // SUPPLIER INVOICE REF CARD
+  // SUPPLIER INVOICE REF CARD (Enhanced)
   // ═══════════════════════════════════════════════════════
   Widget _buildRefCard(BuildContext context, PurchaseFormState state) {
     final theme = Theme.of(context);
@@ -362,14 +396,21 @@ class _PurchaseFormView extends StatelessWidget {
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: cs.outlineVariant),
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.5)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Row(
           children: [
-            Icon(LucideIcons.fileText, size: 20, color: cs.primary),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: cs.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(LucideIcons.fileText, size: 16, color: cs.onSurfaceVariant),
+            ),
             const SizedBox(width: 12),
             Expanded(
               child: TextField(
@@ -527,7 +568,7 @@ class _PurchaseFormView extends StatelessWidget {
   }
 
   // ═══════════════════════════════════════════════════════
-  // ITEMS CARD
+  // ITEMS CARD (Premium)
   // ═══════════════════════════════════════════════════════
   Widget _buildItemsCard(BuildContext context, PurchaseFormState state, CurrencyService cs) {
     final theme = Theme.of(context);
@@ -536,8 +577,8 @@ class _PurchaseFormView extends StatelessWidget {
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: colorScheme.outlineVariant),
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -546,8 +587,17 @@ class _PurchaseFormView extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(LucideIcons.shoppingCart, size: 20, color: colorScheme.primary),
-                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.all(7),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [colorScheme.primary, colorScheme.primary.withValues(alpha: 0.7)],
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(LucideIcons.shoppingCart, size: 16, color: Colors.white),
+                ),
+                const SizedBox(width: 10),
                 Text('purchases.items'.tr(),
                     style: theme.textTheme.titleSmall?.copyWith(
                         fontWeight: FontWeight.w600)),
@@ -557,7 +607,7 @@ class _PurchaseFormView extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(
                       color: colorScheme.primaryContainer,
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text('${state.items.length}',
                         style: theme.textTheme.labelSmall?.copyWith(
@@ -580,12 +630,19 @@ class _PurchaseFormView extends StatelessWidget {
             const SizedBox(height: 12),
             if (state.items.isEmpty)
               Container(
-                padding: const EdgeInsets.symmetric(vertical: 40),
+                padding: const EdgeInsets.symmetric(vertical: 36),
                 alignment: Alignment.center,
                 child: Column(
                   children: [
-                    Icon(LucideIcons.packageOpen, size: 48,
-                        color: colorScheme.onSurface.withValues(alpha: 0.2)),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: colorScheme.primaryContainer.withValues(alpha: 0.2),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(LucideIcons.packageOpen, size: 36,
+                          color: colorScheme.primary.withValues(alpha: 0.3)),
+                    ),
                     const SizedBox(height: 12),
                     Text('purchases.no_items'.tr(),
                         style: theme.textTheme.bodyMedium?.copyWith(
@@ -603,7 +660,7 @@ class _PurchaseFormView extends StatelessWidget {
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: state.items.length,
                 separatorBuilder: (_, idx) => Divider(
-                    height: 1, color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                    height: 1, color: colorScheme.outlineVariant.withValues(alpha: 0.3)),
                 itemBuilder: (context, index) {
                   final item = state.items[index];
                   return _PurchaseItemTile(
@@ -629,7 +686,7 @@ class _PurchaseFormView extends StatelessWidget {
   }
 
   // ═══════════════════════════════════════════════════════
-  // TOTALS CARD
+  // TOTALS CARD (Invoice footer style)
   // ═══════════════════════════════════════════════════════
   Widget _buildTotalsCard(BuildContext context, PurchaseFormState state, CurrencyService cs) {
     final theme = Theme.of(context);
@@ -637,51 +694,75 @@ class _PurchaseFormView extends StatelessWidget {
 
     return Card(
       elevation: 0,
-      color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: colorScheme.outlineVariant),
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            _summaryRow(theme, 'purchases.subtotal'.tr(),
-                cs.format(state.subtotalCents.toBigInt().toInt())),
-            if (state.totalDiscountCents > Decimal.zero) ...[
-              const SizedBox(height: 6),
-              _summaryRow(
-                theme,
-                'purchases.discount'.tr(),
-                '- ${cs.format(state.totalDiscountCents.toBigInt().toInt())}',
-                valueColor: colorScheme.tertiary,
-              ),
-            ],
-            const SizedBox(height: 6),
-            _summaryRow(theme, 'purchases.tax'.tr(),
-                cs.format(state.taxCents.toBigInt().toInt())),
-            Divider(height: 24, color: colorScheme.outlineVariant),
-            _summaryRow(
-              theme,
-              'purchases.total'.tr(),
-              cs.format(state.totalCents.toBigInt().toInt()),
-              isBold: true,
-              valueColor: colorScheme.primary,
-              labelStyle: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+            child: Column(
+              children: [
+                _summaryRow(theme, 'purchases.subtotal'.tr(),
+                    cs.format(state.subtotalCents.toBigInt().toInt())),
+                if (state.totalDiscountCents > Decimal.zero) ...[
+                  const SizedBox(height: 8),
+                  _summaryRow(
+                    theme,
+                    'purchases.discount'.tr(),
+                    '- ${cs.format(state.totalDiscountCents.toBigInt().toInt())}',
+                    valueColor: colorScheme.tertiary,
+                  ),
+                ],
+                const SizedBox(height: 8),
+                _summaryRow(theme, 'purchases.tax'.tr(),
+                    cs.format(state.taxCents.toBigInt().toInt())),
+              ],
             ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color: colorScheme.primary.withValues(alpha: 0.06),
+              borderRadius: const BorderRadius.only(
+                bottomLeft: Radius.circular(14),
+                bottomRight: Radius.circular(14),
+              ),
+              border: Border(
+                top: BorderSide(color: colorScheme.primary.withValues(alpha: 0.2)),
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('purchases.total'.tr(),
+                    style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold)),
+                Text(
+                  cs.format(state.totalCents.toBigInt().toInt()),
+                  style: theme.textTheme.titleLarge?.copyWith(
+                      color: colorScheme.primary,
+                      fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _summaryRow(ThemeData theme, String label, String value,
       {bool isBold = false, Color? valueColor, TextStyle? labelStyle}) {
+    final cs = theme.colorScheme;
     final style = labelStyle ?? theme.textTheme.bodyMedium;
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: style),
+        Text(label, style: style?.copyWith(
+            color: isBold ? null : cs.onSurfaceVariant)),
         Text(value,
             style: (isBold ? theme.textTheme.titleMedium : theme.textTheme.bodyMedium)
                 ?.copyWith(
@@ -692,7 +773,7 @@ class _PurchaseFormView extends StatelessWidget {
   }
 
   // ═══════════════════════════════════════════════════════
-  // BOTTOM BAR
+  // BOTTOM BAR (Premium)
   // ═══════════════════════════════════════════════════════
   Widget _buildBottomBar(BuildContext context, PurchaseFormState state, CurrencyService cs) {
     final theme = Theme.of(context);
@@ -702,7 +783,14 @@ class _PurchaseFormView extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: colorScheme.surface,
-        border: Border(top: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5))),
+        border: Border(top: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.3))),
+        boxShadow: [
+          BoxShadow(
+            color: colorScheme.shadow.withValues(alpha: 0.05),
+            blurRadius: 8,
+            offset: const Offset(0, -2),
+          ),
+        ],
       ),
       child: SafeArea(
         child: Row(
@@ -711,11 +799,19 @@ class _PurchaseFormView extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  '${state.totalQuantity} ${'purchases.items_count'.tr()}',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                      color: colorScheme.onSurfaceVariant),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(LucideIcons.shoppingCart, size: 12, color: colorScheme.onSurfaceVariant),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${state.totalQuantity} ${'purchases.items_count'.tr()}',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant),
+                    ),
+                  ],
                 ),
+                const SizedBox(height: 2),
                 Text(
                   cs.format(state.totalCents.toBigInt().toInt()),
                   style: theme.textTheme.titleLarge?.copyWith(
@@ -734,15 +830,13 @@ class _PurchaseFormView extends StatelessWidget {
             FilledButton.icon(
               onPressed: state.isSubmitting || state.items.isEmpty
                   ? null
-                  : () => context
-                      .read<PurchaseFormBloc>()
-                      .add(const PurchaseFormSubmitted()),
+                  : () => _showCheckoutDialog(context, state),
               icon: state.isSubmitting
                   ? const SizedBox(
                       width: 16, height: 16,
                       child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(LucideIcons.save, size: 18),
-              label: Text('purchases.save_draft'.tr()),
+                  : const Icon(LucideIcons.shoppingBag, size: 18),
+              label: Text('purchases.checkout'.tr()),
             ),
           ],
         ),
@@ -965,6 +1059,30 @@ class _PurchaseFormView extends StatelessWidget {
       ),
     );
   }
+
+  void _showCheckoutDialog(BuildContext context, PurchaseFormState state) async {
+    final suppliers = await sl<SupplierRepository>().searchSuppliers('');
+    if (!context.mounted) return;
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetCtx) => BlocProvider.value(
+        value: context.read<PurchaseFormBloc>(),
+        child: _CheckoutSheet(
+          suppliers: suppliers,
+          currencyService: sl<CurrencyService>(),
+          onConfirm: () {
+            Navigator.pop(sheetCtx);
+            context.read<PurchaseFormBloc>().add(const PurchaseFormSubmitted());
+          },
+        ),
+      ),
+    );
+  }
 }
 
 // ─── Supplier Picker Sheet ───
@@ -1093,10 +1211,19 @@ class _PurchaseItemTile extends StatelessWidget {
     required this.onQuantityChanged,
   });
 
+  Color? _parseHexColor(String? hex) {
+    if (hex == null || hex.isEmpty) return null;
+    final h = hex.replaceFirst('#', '');
+    if (h.length == 6) return Color(int.parse('FF$h', radix: 16));
+    if (h.length == 8) return Color(int.parse(h, radix: 16));
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
+    final hasVariantInfo = item.colorName != null || item.sizeName != null || item.variant?.sku != null;
 
     return InkWell(
       onTap: onTap,
@@ -1124,10 +1251,47 @@ class _PurchaseItemTile extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(item.displayName,
+                  Text(item.product.name,
                       style: theme.textTheme.titleSmall?.copyWith(
                           fontWeight: FontWeight.w600),
                       maxLines: 2, overflow: TextOverflow.ellipsis),
+                  if (hasVariantInfo) ...[
+                    const SizedBox(height: 4),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: [
+                        if (item.colorName != null)
+                          _VariantChip(
+                            icon: item.colorHex != null
+                                ? Container(
+                                    width: 10, height: 10,
+                                    decoration: BoxDecoration(
+                                      color: _parseHexColor(item.colorHex) ?? cs.primary,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(color: cs.outline.withValues(alpha: 0.3), width: 0.5),
+                                    ),
+                                  )
+                                : null,
+                            label: item.colorName!,
+                            color: cs.tertiaryContainer,
+                            textColor: cs.onTertiaryContainer,
+                          ),
+                        if (item.sizeName != null)
+                          _VariantChip(
+                            label: item.sizeName!,
+                            color: cs.secondaryContainer,
+                            textColor: cs.onSecondaryContainer,
+                          ),
+                        if (item.variant?.sku != null)
+                          _VariantChip(
+                            label: item.variant!.sku!,
+                            color: cs.surfaceContainerHighest,
+                            textColor: cs.onSurfaceVariant,
+                          ),
+                      ],
+                    ),
+                  ],
                   const SizedBox(height: 2),
                   Text(
                     '${currencyService.format(item.unitCostCents.toBigInt().toInt())} × ${item.quantity}',
@@ -1224,8 +1388,45 @@ class _PurchaseItemTile extends StatelessWidget {
   }
 }
 
+// ─── Variant Chip (compact tag for color/size/sku) ───
+class _VariantChip extends StatelessWidget {
+  final Widget? icon;
+  final String label;
+  final Color color;
+  final Color textColor;
+
+  const _VariantChip({
+    this.icon,
+    required this.label,
+    required this.color,
+    required this.textColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            icon!,
+            const SizedBox(width: 4),
+          ],
+          Text(label, style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: textColor, fontWeight: FontWeight.w500, fontSize: 10)),
+        ],
+      ),
+    );
+  }
+}
+
 // ═══════════════════════════════════════════════════════
-// EDIT ITEM SHEET (Story 6.7 - Product Edit Dialog)
+// EDIT ITEM SHEET (Enhanced - Product Edit Dialog)
 // ═══════════════════════════════════════════════════════
 class _EditItemSheet extends StatefulWidget {
   final PurchaseLineItem item;
@@ -1247,8 +1448,10 @@ class _EditItemSheet extends StatefulWidget {
 class _EditItemSheetState extends State<_EditItemSheet> {
   late final TextEditingController _qtyCtrl;
   late final TextEditingController _costCtrl;
-  late final TextEditingController _discountCtrl;
+  late final TextEditingController _discountPercentCtrl;
+  late final TextEditingController _discountFixedCtrl;
   DateTime? _expiryDate;
+  bool _updatingDiscount = false;
 
   @override
   void initState() {
@@ -1256,18 +1459,495 @@ class _EditItemSheetState extends State<_EditItemSheet> {
     _qtyCtrl = TextEditingController(text: '${widget.item.quantity}');
     _costCtrl = TextEditingController(
         text: (widget.item.unitCostCents.toBigInt().toInt() / 100).toStringAsFixed(2));
-    _discountCtrl = TextEditingController(
-        text: widget.item.discountCents > Decimal.zero
-            ? (widget.item.discountCents.toBigInt().toInt() / 100).toStringAsFixed(2)
+
+    final discCents = widget.item.discountCents.toBigInt().toInt();
+    final subtotalCents = widget.item.unitCostCents.toBigInt().toInt() * widget.item.quantity;
+    _discountFixedCtrl = TextEditingController(
+        text: discCents > 0 ? (discCents / 100).toStringAsFixed(2) : '');
+    _discountPercentCtrl = TextEditingController(
+        text: discCents > 0 && subtotalCents > 0
+            ? ((discCents / subtotalCents) * 100).toStringAsFixed(2)
             : '');
+
     _expiryDate = widget.item.expiryDate;
+
+    _discountPercentCtrl.addListener(_syncFromPercent);
+    _discountFixedCtrl.addListener(_syncFromFixed);
+  }
+
+  int get _currentSubtotalCents {
+    final costVal = double.tryParse(_costCtrl.text) ?? 0;
+    final qty = int.tryParse(_qtyCtrl.text) ?? 1;
+    return (costVal * 100).round() * (qty < 1 ? 1 : qty);
+  }
+
+  void _syncFromPercent() {
+    if (_updatingDiscount) return;
+    _updatingDiscount = true;
+    final pct = double.tryParse(_discountPercentCtrl.text) ?? 0;
+    final sub = _currentSubtotalCents;
+    if (sub > 0 && pct > 0) {
+      final cents = (sub * (pct / 100)).round().clamp(0, sub);
+      _discountFixedCtrl.text = (cents / 100).toStringAsFixed(2);
+    } else {
+      _discountFixedCtrl.text = '';
+    }
+    _updatingDiscount = false;
+  }
+
+  void _syncFromFixed() {
+    if (_updatingDiscount) return;
+    _updatingDiscount = true;
+    final fixedVal = double.tryParse(_discountFixedCtrl.text) ?? 0;
+    final fixedCents = (fixedVal * 100).round();
+    final sub = _currentSubtotalCents;
+    if (sub > 0 && fixedCents > 0) {
+      final pct = (fixedCents / sub) * 100;
+      _discountPercentCtrl.text = pct.toStringAsFixed(2);
+    } else {
+      _discountPercentCtrl.text = '';
+    }
+    _updatingDiscount = false;
   }
 
   @override
   void dispose() {
     _qtyCtrl.dispose();
     _costCtrl.dispose();
-    _discountCtrl.dispose();
+    _discountPercentCtrl.dispose();
+    _discountFixedCtrl.dispose();
+    super.dispose();
+  }
+
+  Color? _parseHexColor(String? hex) {
+    if (hex == null || hex.isEmpty) return null;
+    final h = hex.replaceFirst('#', '');
+    if (h.length == 6) return Color(int.parse('FF$h', radix: 16));
+    if (h.length == 8) return Color(int.parse(h, radix: 16));
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final item = widget.item;
+    final oldCostCents = item.product.costCents.toBigInt().toInt();
+    final sellPriceCents = item.variant?.priceCents.toBigInt().toInt() ?? item.product.priceCents.toBigInt().toInt();
+    final currentStock = item.variant?.stockQuantity ?? item.product.stockQuantity;
+
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: DraggableScrollableSheet(
+        initialChildSize: 0.75,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        expand: false,
+        builder: (context, scrollController) => Container(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Handle
+              Center(
+                child: Container(
+                  width: 40, height: 4,
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    color: cs.onSurfaceVariant.withValues(alpha: 0.4),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              // Title with variant info
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [cs.primary, cs.primary.withValues(alpha: 0.7)],
+                      ),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(LucideIcons.edit3, size: 18, color: Colors.white),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(item.product.name,
+                            style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w600),
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                        if (item.colorName != null || item.sizeName != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Wrap(
+                              spacing: 6,
+                              children: [
+                                if (item.colorName != null)
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Container(
+                                        width: 10, height: 10,
+                                        decoration: BoxDecoration(
+                                          color: _parseHexColor(item.colorHex) ?? cs.tertiary,
+                                          shape: BoxShape.circle,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(item.colorName!,
+                                          style: theme.textTheme.bodySmall?.copyWith(
+                                              color: cs.onSurfaceVariant)),
+                                    ],
+                                  ),
+                                if (item.sizeName != null)
+                                  Text(item.sizeName!,
+                                      style: theme.textTheme.bodySmall?.copyWith(
+                                          color: cs.onSurfaceVariant)),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              // Scrollable content
+              Expanded(
+                child: ListView(
+                  controller: scrollController,
+                  children: [
+                    // ── Info Row: Current Stock + Old Cost + Sell Price ──
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: _InfoCell(
+                              icon: LucideIcons.warehouse,
+                              label: 'purchases.current_stock'.tr(),
+                              value: '$currentStock',
+                              iconColor: cs.primary,
+                            ),
+                          ),
+                          Container(width: 1, height: 36, color: cs.outlineVariant.withValues(alpha: 0.3)),
+                          Expanded(
+                            child: _InfoCell(
+                              icon: LucideIcons.history,
+                              label: 'purchases.old_cost'.tr(),
+                              value: widget.currencyService.format(oldCostCents),
+                              iconColor: cs.onSurfaceVariant,
+                            ),
+                          ),
+                          Container(width: 1, height: 36, color: cs.outlineVariant.withValues(alpha: 0.3)),
+                          Expanded(
+                            child: _InfoCell(
+                              icon: LucideIcons.tag,
+                              label: 'purchases.sell_price'.tr(),
+                              value: widget.currencyService.format(sellPriceCents),
+                              iconColor: cs.tertiary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    // ── Quantity + New Cost ──
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _qtyCtrl,
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                            decoration: InputDecoration(
+                              labelText: 'purchases.quantity'.tr(),
+                              border: const OutlineInputBorder(),
+                              prefixIcon: const Icon(LucideIcons.hash, size: 18),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextField(
+                            controller: _costCtrl,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
+                            decoration: InputDecoration(
+                              labelText: 'purchases.new_cost'.tr(),
+                              border: const OutlineInputBorder(),
+                              prefixIcon: const Icon(LucideIcons.coins, size: 18),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    // ── Discount (% and fixed, auto-sync) ──
+                    if (widget.discountMode == DiscountMode.perItem) ...[
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _discountPercentCtrl,
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
+                              decoration: InputDecoration(
+                                labelText: 'purchases.discount_percent'.tr(),
+                                border: const OutlineInputBorder(),
+                                prefixIcon: const Icon(LucideIcons.percent, size: 18),
+                                suffixText: '%',
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: TextField(
+                              controller: _discountFixedCtrl,
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
+                              decoration: InputDecoration(
+                                labelText: 'purchases.discount_fixed'.tr(),
+                                border: const OutlineInputBorder(),
+                                prefixIcon: const Icon(LucideIcons.coins, size: 18),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                    // ── Expiry Date ──
+                    const SizedBox(height: 16),
+                    InkWell(
+                      borderRadius: BorderRadius.circular(8),
+                      onTap: () async {
+                        final date = await showDatePicker(
+                          context: context,
+                          initialDate: _expiryDate ?? DateTime.now().add(const Duration(days: 180)),
+                          firstDate: DateTime.now(),
+                          lastDate: DateTime.now().add(const Duration(days: 3650)),
+                        );
+                        if (date != null) {
+                          setState(() => _expiryDate = date);
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: cs.outline),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(LucideIcons.calendarClock, size: 18,
+                                color: _expiryDate != null ? Colors.orange : cs.onSurfaceVariant),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                _expiryDate != null
+                                    ? '${'purchases.expiry'.tr()}: ${DateFormat.yMMMd().format(_expiryDate!)}'
+                                    : 'purchases.set_expiry'.tr(),
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                    color: _expiryDate != null ? null : cs.onSurfaceVariant),
+                              ),
+                            ),
+                            if (_expiryDate != null)
+                              InkWell(
+                                onTap: () => setState(() => _expiryDate = null),
+                                child: Icon(LucideIcons.x, size: 16, color: cs.onSurfaceVariant),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              // ── Actions ──
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: Text('common.cancel'.tr()),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton.icon(
+                      icon: const Icon(LucideIcons.check, size: 18),
+                      label: Text('common.save'.tr()),
+                      onPressed: () {
+                        final qty = int.tryParse(_qtyCtrl.text) ?? 1;
+                        final costVal = double.tryParse(_costCtrl.text) ?? 0;
+                        final costCents = Decimal.fromInt((costVal * 100).round());
+                        Decimal? discountCents;
+                        if (widget.discountMode == DiscountMode.perItem) {
+                          final discVal = double.tryParse(_discountFixedCtrl.text) ?? 0;
+                          discountCents = Decimal.fromInt((discVal * 100).round());
+                        }
+                        widget.onSave(
+                          qty < 1 ? 1 : qty,
+                          costCents,
+                          discountCents,
+                          _expiryDate,
+                          _expiryDate == null && widget.item.expiryDate != null,
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Info Cell (for edit dialog info row) ───
+class _InfoCell extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color iconColor;
+
+  const _InfoCell({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.iconColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      children: [
+        Icon(icon, size: 16, color: iconColor),
+        const SizedBox(height: 4),
+        Text(label, style: theme.textTheme.labelSmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant, fontSize: 9)),
+        const SizedBox(height: 2),
+        Text(value, style: theme.textTheme.labelMedium?.copyWith(
+            fontWeight: FontWeight.w600)),
+      ],
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// CHECKOUT SHEET (Pre-save dialog)
+// ═══════════════════════════════════════════════════════
+class _CheckoutSheet extends StatefulWidget {
+  final List<Supplier> suppliers;
+  final CurrencyService currencyService;
+  final VoidCallback onConfirm;
+
+  const _CheckoutSheet({
+    required this.suppliers,
+    required this.currencyService,
+    required this.onConfirm,
+  });
+
+  @override
+  State<_CheckoutSheet> createState() => _CheckoutSheetState();
+}
+
+class _CheckoutSheetState extends State<_CheckoutSheet> {
+  late final TextEditingController _taxCtrl;
+  late final TextEditingController _paidCtrl;
+  late final TextEditingController _notesCtrl;
+  late final TextEditingController _discountPercentCtrl;
+  late final TextEditingController _discountFixedCtrl;
+  bool _updatingDiscount = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final state = context.read<PurchaseFormBloc>().state;
+    _taxCtrl = TextEditingController(
+        text: state.taxRatePercent > Decimal.zero
+            ? state.taxRatePercent.toString()
+            : '');
+    _paidCtrl = TextEditingController(
+        text: state.paidAmountCents > Decimal.zero
+            ? (state.paidAmountCents.toBigInt().toInt() / 100).toStringAsFixed(2)
+            : '');
+    _notesCtrl = TextEditingController(text: state.notes ?? '');
+
+    final discCents = state.invoiceDiscountCents.toBigInt().toInt();
+    final subtotalCents = state.subtotalCents.toBigInt().toInt();
+    _discountFixedCtrl = TextEditingController(
+        text: discCents > 0 ? (discCents / 100).toStringAsFixed(2) : '');
+    _discountPercentCtrl = TextEditingController(
+        text: discCents > 0 && subtotalCents > 0
+            ? ((discCents / subtotalCents) * 100).toStringAsFixed(2)
+            : '');
+
+    _discountPercentCtrl.addListener(_syncDiscountFromPercent);
+    _discountFixedCtrl.addListener(_syncDiscountFromFixed);
+  }
+
+  void _syncDiscountFromPercent() {
+    if (_updatingDiscount) return;
+    _updatingDiscount = true;
+    final pct = double.tryParse(_discountPercentCtrl.text) ?? 0;
+    final sub = context.read<PurchaseFormBloc>().state.subtotalCents.toBigInt().toInt();
+    if (sub > 0 && pct > 0) {
+      final cents = (sub * (pct / 100)).round().clamp(0, sub);
+      _discountFixedCtrl.text = (cents / 100).toStringAsFixed(2);
+    } else {
+      _discountFixedCtrl.text = '';
+    }
+    _applyInvoiceDiscount();
+    _updatingDiscount = false;
+  }
+
+  void _syncDiscountFromFixed() {
+    if (_updatingDiscount) return;
+    _updatingDiscount = true;
+    final fixedVal = double.tryParse(_discountFixedCtrl.text) ?? 0;
+    final fixedCents = (fixedVal * 100).round();
+    final sub = context.read<PurchaseFormBloc>().state.subtotalCents.toBigInt().toInt();
+    if (sub > 0 && fixedCents > 0) {
+      final pct = (fixedCents / sub) * 100;
+      _discountPercentCtrl.text = pct.toStringAsFixed(2);
+    } else {
+      _discountPercentCtrl.text = '';
+    }
+    _applyInvoiceDiscount();
+    _updatingDiscount = false;
+  }
+
+  void _applyInvoiceDiscount() {
+    final fixedVal = double.tryParse(_discountFixedCtrl.text) ?? 0;
+    final cents = (fixedVal * 100).round();
+    context.read<PurchaseFormBloc>().add(
+          PurchaseInvoiceDiscountChanged(Decimal.fromInt(cents)),
+        );
+  }
+
+  @override
+  void dispose() {
+    _taxCtrl.dispose();
+    _paidCtrl.dispose();
+    _notesCtrl.dispose();
+    _discountPercentCtrl.dispose();
+    _discountFixedCtrl.dispose();
     super.dispose();
   }
 
@@ -1276,167 +1956,424 @@ class _EditItemSheetState extends State<_EditItemSheet> {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
 
-    return Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
-      ),
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
+    return BlocBuilder<PurchaseFormBloc, PurchaseFormState>(
+      builder: (context, state) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.85,
+          minChildSize: 0.5,
+          maxChildSize: 0.95,
+          expand: false,
+          builder: (context, scrollController) => Container(
+            decoration: BoxDecoration(
+              color: cs.surface,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: Column(
+              children: [
+                // Handle + Title
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                  child: Column(
+                    children: [
+                      Center(
+                        child: Container(
+                          width: 40, height: 4,
+                          margin: const EdgeInsets.only(bottom: 12),
+                          decoration: BoxDecoration(
+                            color: cs.onSurfaceVariant.withValues(alpha: 0.4),
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      ),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [cs.primary, cs.primary.withValues(alpha: 0.7)],
+                              ),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(LucideIcons.shoppingBag, size: 20, color: Colors.white),
+                          ),
+                          const SizedBox(width: 10),
+                          Text('purchases.checkout_title'.tr(),
+                              style: theme.textTheme.titleLarge?.copyWith(
+                                  fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.3)),
+                // Scrollable content
+                Expanded(
+                  child: ListView(
+                    controller: scrollController,
+                    padding: const EdgeInsets.all(20),
+                    children: [
+                      // ── Supplier Selection ──
+                      _buildCheckoutSection(
+                        theme: theme,
+                        cs: cs,
+                        icon: LucideIcons.building2,
+                        title: 'purchases.supplier'.tr(),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(10),
+                          onTap: () => _showSupplierPickerInCheckout(context),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                            decoration: BoxDecoration(
+                              border: Border.all(color: cs.outlineVariant),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Row(
+                              children: [
+                                if (state.supplierName != null) ...[
+                                  CircleAvatar(
+                                    radius: 16,
+                                    backgroundColor: cs.primaryContainer,
+                                    child: Text(
+                                      state.supplierName![0].toUpperCase(),
+                                      style: TextStyle(
+                                          color: cs.onPrimaryContainer,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 14),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                ],
+                                Expanded(
+                                  child: Text(
+                                    state.supplierName ?? 'purchases.select_supplier'.tr(),
+                                    style: theme.textTheme.bodyLarge?.copyWith(
+                                      fontWeight: state.supplierName != null ? FontWeight.w500 : FontWeight.normal,
+                                      color: state.supplierName != null ? null : cs.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ),
+                                Icon(LucideIcons.chevronDown, size: 18, color: cs.onSurfaceVariant),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      // ── Payment Method ──
+                      _buildCheckoutSection(
+                        theme: theme,
+                        cs: cs,
+                        icon: LucideIcons.wallet,
+                        title: 'purchases.payment_method'.tr(),
+                        child: Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: PurchasePaymentMethod.values.map((method) {
+                            final isSelected = state.paymentMethod == method;
+                            return ChoiceChip(
+                              label: Text(_paymentMethodLabel(method)),
+                              selected: isSelected,
+                              onSelected: (_) => context
+                                  .read<PurchaseFormBloc>()
+                                  .add(PurchasePaymentMethodChanged(method)),
+                              avatar: Icon(_paymentMethodIcon(method), size: 16),
+                              selectedColor: cs.primaryContainer,
+                              showCheckmark: false,
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      // ── Tax Rate ──
+                      _buildCheckoutSection(
+                        theme: theme,
+                        cs: cs,
+                        icon: LucideIcons.percent,
+                        title: 'purchases.tax_rate'.tr(),
+                        child: TextField(
+                          controller: _taxCtrl,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
+                          decoration: const InputDecoration(
+                            border: OutlineInputBorder(),
+                            suffixText: '%',
+                            hintText: '0',
+                            isDense: true,
+                          ),
+                          onChanged: (v) {
+                            final pct = double.tryParse(v) ?? 0;
+                            context.read<PurchaseFormBloc>().add(
+                                  PurchaseTaxRateChanged(Decimal.parse(pct.toStringAsFixed(2))),
+                                );
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      // ── Invoice Discount (% and fixed) ──
+                      if (state.discountMode == DiscountMode.invoice)
+                        ...[
+                          _buildCheckoutSection(
+                            theme: theme,
+                            cs: cs,
+                            icon: LucideIcons.tag,
+                            title: 'purchases.invoice_discount'.tr(),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: TextField(
+                                    controller: _discountPercentCtrl,
+                                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                    inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
+                                    decoration: InputDecoration(
+                                      labelText: 'purchases.discount_percent'.tr(),
+                                      border: const OutlineInputBorder(),
+                                      suffixText: '%',
+                                      isDense: true,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: TextField(
+                                    controller: _discountFixedCtrl,
+                                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                    inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
+                                    decoration: InputDecoration(
+                                      labelText: 'purchases.discount_fixed'.tr(),
+                                      border: const OutlineInputBorder(),
+                                      isDense: true,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                        ],
+                      // ── Paid Amount ──
+                      _buildCheckoutSection(
+                        theme: theme,
+                        cs: cs,
+                        icon: LucideIcons.banknote,
+                        title: 'purchases.paid_amount'.tr(),
+                        child: TextField(
+                          controller: _paidCtrl,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
+                          decoration: const InputDecoration(
+                            border: OutlineInputBorder(),
+                            hintText: '0.00',
+                            isDense: true,
+                          ),
+                          onChanged: (v) {
+                            final val = double.tryParse(v) ?? 0;
+                            context.read<PurchaseFormBloc>().add(
+                                  PurchasePaidAmountChanged(Decimal.fromInt((val * 100).round())),
+                                );
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      // ── Notes ──
+                      _buildCheckoutSection(
+                        theme: theme,
+                        cs: cs,
+                        icon: LucideIcons.stickyNote,
+                        title: 'purchases.notes'.tr(),
+                        child: TextField(
+                          controller: _notesCtrl,
+                          maxLines: 2,
+                          decoration: InputDecoration(
+                            hintText: 'purchases.notes_hint'.tr(),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            isDense: true,
+                          ),
+                          onChanged: (v) => context
+                              .read<PurchaseFormBloc>()
+                              .add(PurchaseNotesChanged(v)),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      // ── Financial Summary ──
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.3)),
+                        ),
+                        child: Column(
+                          children: [
+                            _checkoutRow(theme, 'purchases.subtotal'.tr(),
+                                widget.currencyService.format(state.subtotalCents.toBigInt().toInt())),
+                            if (state.totalDiscountCents > Decimal.zero) ...[
+                              const SizedBox(height: 8),
+                              _checkoutRow(theme, 'purchases.discount'.tr(),
+                                  '- ${widget.currencyService.format(state.totalDiscountCents.toBigInt().toInt())}',
+                                  valueColor: cs.tertiary),
+                            ],
+                            if (state.taxCents > Decimal.zero) ...[
+                              const SizedBox(height: 8),
+                              _checkoutRow(theme, 'purchases.tax'.tr(),
+                                  widget.currencyService.format(state.taxCents.toBigInt().toInt())),
+                            ],
+                            Divider(height: 20, color: cs.outlineVariant.withValues(alpha: 0.5)),
+                            _checkoutRow(theme, 'purchases.total'.tr(),
+                                widget.currencyService.format(state.totalCents.toBigInt().toInt()),
+                                isBold: true, valueColor: cs.primary),
+                            if (state.paidAmountCents > Decimal.zero) ...[
+                              const SizedBox(height: 8),
+                              _checkoutRow(theme, 'purchases.paid_amount'.tr(),
+                                  widget.currencyService.format(state.paidAmountCents.toBigInt().toInt()),
+                                  valueColor: Colors.green),
+                              const SizedBox(height: 4),
+                              _checkoutRow(theme, 'purchases.remaining'.tr(),
+                                  widget.currencyService.format(state.remainingCents.toBigInt().toInt()),
+                                  isBold: true,
+                                  valueColor: state.remainingCents > Decimal.zero ? cs.error : Colors.green),
+                            ],
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 80),
+                    ],
+                  ),
+                ),
+                // ── Bottom Actions ──
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: cs.surface,
+                    border: Border(top: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.3))),
+                    boxShadow: [
+                      BoxShadow(
+                        color: cs.shadow.withValues(alpha: 0.05),
+                        blurRadius: 8,
+                        offset: const Offset(0, -2),
+                      ),
+                    ],
+                  ),
+                  child: SafeArea(
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: Text('common.cancel'.tr()),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          flex: 2,
+                          child: FilledButton.icon(
+                            onPressed: state.supplierId == null
+                                ? null
+                                : widget.onConfirm,
+                            icon: const Icon(LucideIcons.check, size: 18),
+                            label: Text('purchases.confirm_save'.tr()),
+                            style: FilledButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildCheckoutSection({
+    required ThemeData theme,
+    required ColorScheme cs,
+    required IconData icon,
+    required String title,
+    required Widget child,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
           children: [
-            // Handle
-            Center(
-              child: Container(
-                width: 40, height: 4,
-                margin: const EdgeInsets.only(bottom: 16),
-                decoration: BoxDecoration(
-                  color: cs.onSurfaceVariant.withValues(alpha: 0.4),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            // Title
-            Row(
-              children: [
-                Icon(LucideIcons.edit3, size: 20, color: cs.primary),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(widget.item.displayName,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600),
-                      maxLines: 1, overflow: TextOverflow.ellipsis),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            // Quantity + Cost row
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _qtyCtrl,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    decoration: InputDecoration(
-                      labelText: 'purchases.quantity'.tr(),
-                      border: const OutlineInputBorder(),
-                      prefixIcon: const Icon(LucideIcons.hash, size: 18),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    controller: _costCtrl,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
-                    decoration: InputDecoration(
-                      labelText: 'purchases.unit_cost'.tr(),
-                      border: const OutlineInputBorder(),
-                      prefixIcon: const Icon(LucideIcons.coins, size: 18),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            // Discount (only if per-item mode)
-            if (widget.discountMode == DiscountMode.perItem) ...[
-              const SizedBox(height: 12),
-              TextField(
-                controller: _discountCtrl,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
-                decoration: InputDecoration(
-                  labelText: 'purchases.item_discount'.tr(),
-                  border: const OutlineInputBorder(),
-                  prefixIcon: const Icon(LucideIcons.percent, size: 18),
-                ),
-              ),
-            ],
-            // Expiry date
-            const SizedBox(height: 12),
-            InkWell(
-              borderRadius: BorderRadius.circular(8),
-              onTap: () async {
-                final date = await showDatePicker(
-                  context: context,
-                  initialDate: _expiryDate ?? DateTime.now().add(const Duration(days: 180)),
-                  firstDate: DateTime.now(),
-                  lastDate: DateTime.now().add(const Duration(days: 3650)),
-                );
-                if (date != null) {
-                  setState(() => _expiryDate = date);
-                }
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                decoration: BoxDecoration(
-                  border: Border.all(color: cs.outline),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Row(
-                  children: [
-                    Icon(LucideIcons.calendarClock, size: 18,
-                        color: _expiryDate != null ? Colors.orange : cs.onSurfaceVariant),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        _expiryDate != null
-                            ? '${'purchases.expiry'.tr()}: ${DateFormat.yMMMd().format(_expiryDate!)}'
-                            : 'purchases.set_expiry'.tr(),
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                            color: _expiryDate != null ? null : cs.onSurfaceVariant),
-                      ),
-                    ),
-                    if (_expiryDate != null)
-                      InkWell(
-                        onTap: () => setState(() => _expiryDate = null),
-                        child: Icon(LucideIcons.x, size: 16, color: cs.onSurfaceVariant),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-            // Actions
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: Text('common.cancel'.tr()),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: FilledButton.icon(
-                    icon: const Icon(LucideIcons.check, size: 18),
-                    label: Text('common.save'.tr()),
-                    onPressed: () {
-                      final qty = int.tryParse(_qtyCtrl.text) ?? 1;
-                      final costVal = double.tryParse(_costCtrl.text) ?? 0;
-                      final costCents = Decimal.fromInt((costVal * 100).round());
-                      Decimal? discountCents;
-                      if (widget.discountMode == DiscountMode.perItem) {
-                        final discVal = double.tryParse(_discountCtrl.text) ?? 0;
-                        discountCents = Decimal.fromInt((discVal * 100).round());
-                      }
-                      widget.onSave(
-                        qty < 1 ? 1 : qty,
-                        costCents,
-                        discountCents,
-                        _expiryDate,
-                        _expiryDate == null && widget.item.expiryDate != null,
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
+            Icon(icon, size: 16, color: cs.primary),
+            const SizedBox(width: 8),
+            Text(title, style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w600)),
           ],
         ),
+        const SizedBox(height: 8),
+        child,
+      ],
+    );
+  }
+
+  Widget _checkoutRow(ThemeData theme, String label, String value,
+      {bool isBold = false, Color? valueColor}) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label, style: (isBold ? theme.textTheme.titleSmall : theme.textTheme.bodyMedium)
+            ?.copyWith(color: isBold ? null : theme.colorScheme.onSurfaceVariant)),
+        Text(value, style: (isBold ? theme.textTheme.titleMedium : theme.textTheme.bodyMedium)
+            ?.copyWith(
+                color: valueColor,
+                fontWeight: isBold ? FontWeight.bold : FontWeight.w500)),
+      ],
+    );
+  }
+
+  String _paymentMethodLabel(PurchasePaymentMethod method) {
+    switch (method) {
+      case PurchasePaymentMethod.cash:
+        return 'purchases.payment_cash'.tr();
+      case PurchasePaymentMethod.credit:
+        return 'purchases.payment_credit'.tr();
+      case PurchasePaymentMethod.card:
+        return 'purchases.payment_card'.tr();
+      case PurchasePaymentMethod.cheque:
+        return 'purchases.payment_cheque'.tr();
+      case PurchasePaymentMethod.purchaseOrder:
+        return 'purchases.payment_po'.tr();
+    }
+  }
+
+  IconData _paymentMethodIcon(PurchasePaymentMethod method) {
+    switch (method) {
+      case PurchasePaymentMethod.cash:
+        return LucideIcons.banknote;
+      case PurchasePaymentMethod.credit:
+        return LucideIcons.clock;
+      case PurchasePaymentMethod.card:
+        return LucideIcons.creditCard;
+      case PurchasePaymentMethod.cheque:
+        return LucideIcons.fileText;
+      case PurchasePaymentMethod.purchaseOrder:
+        return LucideIcons.clipboardList;
+    }
+  }
+
+  void _showSupplierPickerInCheckout(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetCtx) => _SupplierPickerSheet(
+        suppliers: widget.suppliers,
+        onSelected: (supplier) {
+          context.read<PurchaseFormBloc>().add(
+                PurchaseSupplierChanged(supplier.id, supplierName: supplier.name),
+              );
+          Navigator.pop(sheetCtx);
+        },
       ),
     );
   }

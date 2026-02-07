@@ -242,7 +242,7 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
   }
 
   // ═══════════════════════════════════════════════════════
-  // STATUS TIMELINE
+  // STATUS TIMELINE (Premium)
   // ═══════════════════════════════════════════════════════
   Widget _buildStatusTimeline(BuildContext context, PurchaseEntity purchase) {
     final theme = Theme.of(context);
@@ -276,11 +276,11 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: cs.outlineVariant),
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.5)),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         child: Row(
           children: [
             for (int i = 0; i < steps.length; i++) ...[
@@ -289,10 +289,16 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
                 Expanded(
                   child: Container(
                     height: 2,
-                    margin: const EdgeInsets.symmetric(horizontal: 4),
-                    color: steps[i].isCompleted
-                        ? Colors.green
-                        : cs.outlineVariant,
+                    margin: const EdgeInsets.only(bottom: 18),
+                    decoration: BoxDecoration(
+                      gradient: steps[i].isCompleted
+                          ? const LinearGradient(colors: [Colors.green, Colors.green])
+                          : LinearGradient(colors: [
+                              cs.outlineVariant.withValues(alpha: 0.5),
+                              cs.outlineVariant.withValues(alpha: 0.3),
+                            ]),
+                      borderRadius: BorderRadius.circular(1),
+                    ),
                   ),
                 ),
             ],
@@ -319,62 +325,101 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          width: 36, height: 36,
+          width: 40, height: 40,
           decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.15),
+            gradient: (step.isCompleted || step.isActive)
+                ? LinearGradient(
+                    colors: [color, color.withValues(alpha: 0.7)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  )
+                : null,
+            color: (step.isCompleted || step.isActive) ? null : cs.surfaceContainerHighest,
             shape: BoxShape.circle,
-            border: Border.all(color: color, width: 2),
+            boxShadow: (step.isCompleted || step.isActive)
+                ? [BoxShadow(color: color.withValues(alpha: 0.3), blurRadius: 8, offset: const Offset(0, 2))]
+                : null,
           ),
-          child: Icon(step.icon, size: 16, color: color),
+          child: Icon(step.icon, size: 18,
+              color: (step.isCompleted || step.isActive) ? Colors.white : cs.onSurfaceVariant),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 6),
         Text(step.label,
             style: theme.textTheme.labelSmall?.copyWith(
-                color: color, fontWeight: FontWeight.w600),
+                color: (step.isCompleted || step.isActive) ? color : cs.onSurfaceVariant,
+                fontWeight: FontWeight.w600),
             textAlign: TextAlign.center),
       ],
     );
   }
 
   // ═══════════════════════════════════════════════════════
-  // INFO CARD
+  // INFO CARD (Invoice-style header)
   // ═══════════════════════════════════════════════════════
   Widget _buildInfoCard(BuildContext context, PurchaseEntity purchase, CurrencyService cs) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final supplierInitial = purchase.supplierName != null &&
+            purchase.supplierName!.isNotEmpty
+        ? purchase.supplierName![0].toUpperCase()
+        : '?';
 
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: colorScheme.outlineVariant),
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Icon(LucideIcons.info, size: 20, color: colorScheme.primary),
-                const SizedBox(width: 8),
-                Text('purchases.details'.tr(),
-                    style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w600)),
-              ],
-            ),
-            const SizedBox(height: 12),
+            // Supplier section
+            if (purchase.supplierName != null) ...[
+              Row(
+                children: [
+                  Container(
+                    width: 44, height: 44,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [colorScheme.primary, colorScheme.primary.withValues(alpha: 0.7)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(supplierInitial,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                            color: Colors.white, fontWeight: FontWeight.bold)),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('purchases.supplier'.tr(),
+                            style: theme.textTheme.labelSmall?.copyWith(
+                                color: colorScheme.onSurfaceVariant,
+                                letterSpacing: 0.5)),
+                        Text(purchase.supplierName!,
+                            style: theme.textTheme.titleSmall?.copyWith(
+                                fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              Divider(height: 24, color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
+            ],
+            // Details grid
             _detailRow(theme, LucideIcons.hash, 'purchases.number'.tr(),
                 purchase.purchaseNumber),
-            const SizedBox(height: 8),
-            if (purchase.supplierName != null) ...[
-              _detailRow(theme, LucideIcons.building2, 'purchases.supplier'.tr(),
-                  purchase.supplierName!),
-              const SizedBox(height: 8),
-            ],
+            const SizedBox(height: 10),
             _detailRow(theme, LucideIcons.calendar, 'purchases.date'.tr(),
                 DateFormat.yMMMd().format(purchase.purchaseDate)),
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             _detailRow(theme, LucideIcons.clock, 'purchases.created_at'.tr(),
                 DateFormat.yMMMd().add_jm().format(purchase.createdAt)),
           ],
@@ -384,12 +429,20 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
   }
 
   Widget _detailRow(ThemeData theme, IconData icon, String label, String value) {
+    final cs = theme.colorScheme;
     return Row(
       children: [
-        Icon(icon, size: 16, color: theme.colorScheme.onSurfaceVariant),
-        const SizedBox(width: 8),
+        Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: cs.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Icon(icon, size: 14, color: cs.onSurfaceVariant),
+        ),
+        const SizedBox(width: 10),
         Text(label, style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant)),
+            color: cs.onSurfaceVariant)),
         const Spacer(),
         Flexible(
           child: Text(value,
@@ -401,7 +454,7 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
   }
 
   // ═══════════════════════════════════════════════════════
-  // ITEMS CARD
+  // ITEMS CARD (Professional table-style)
   // ═══════════════════════════════════════════════════════
   Widget _buildItemsCard(BuildContext context, CurrencyService cs) {
     final theme = Theme.of(context);
@@ -410,18 +463,28 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: colorScheme.outlineVariant),
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+            child: Row(
               children: [
-                Icon(LucideIcons.shoppingCart, size: 20, color: colorScheme.primary),
-                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.all(7),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [colorScheme.primary, colorScheme.primary.withValues(alpha: 0.7)],
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(LucideIcons.shoppingCart, size: 16, color: Colors.white),
+                ),
+                const SizedBox(width: 10),
                 Text('purchases.items'.tr(),
                     style: theme.textTheme.titleSmall?.copyWith(
                         fontWeight: FontWeight.w600)),
@@ -431,7 +494,7 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(
                       color: colorScheme.primaryContainer,
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text('${_items.length}',
                         style: theme.textTheme.labelSmall?.copyWith(
@@ -441,102 +504,186 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
                 ],
               ],
             ),
-            const SizedBox(height: 12),
-            if (_items.isEmpty)
-              Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Text('purchases.no_items'.tr(),
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                          color: colorScheme.onSurfaceVariant)),
+          ),
+          const SizedBox(height: 12),
+          if (_items.isEmpty)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  children: [
+                    Icon(LucideIcons.packageOpen, size: 40,
+                        color: colorScheme.onSurface.withValues(alpha: 0.15)),
+                    const SizedBox(height: 8),
+                    Text('purchases.no_items'.tr(),
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                            color: colorScheme.onSurfaceVariant)),
+                  ],
                 ),
-              )
-            else
-              ListView.separated(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: _items.length,
-                separatorBuilder: (_, idx) => Divider(
-                    height: 1, color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
-                itemBuilder: (context, index) {
-                  final item = _items[index];
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          width: 28, height: 28,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: colorScheme.primaryContainer,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text('${index + 1}',
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                  color: colorScheme.onPrimaryContainer,
-                                  fontWeight: FontWeight.bold)),
+              ),
+            )
+          else ...[
+            // Table header
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                border: Border(
+                  top: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.3)),
+                  bottom: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.3)),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const SizedBox(width: 32),
+                  Expanded(
+                    flex: 3,
+                    child: Text('purchases.product_col'.tr(),
+                        style: theme.textTheme.labelSmall?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.5)),
+                  ),
+                  SizedBox(
+                    width: 50,
+                    child: Text('purchases.qty_col'.tr(),
+                        style: theme.textTheme.labelSmall?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.5),
+                        textAlign: TextAlign.center),
+                  ),
+                  Expanded(
+                    flex: 2,
+                    child: Text('purchases.total'.tr(),
+                        style: theme.textTheme.labelSmall?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.5),
+                        textAlign: TextAlign.end),
+                  ),
+                ],
+              ),
+            ),
+            // Items
+            ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _items.length,
+              itemBuilder: (context, index) {
+                final item = _items[index];
+                final isEven = index % 2 == 0;
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  color: isEven ? Colors.transparent : colorScheme.surfaceContainerHighest.withValues(alpha: 0.2),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 26, height: 26,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: colorScheme.primaryContainer.withValues(alpha: 0.6),
+                          borderRadius: BorderRadius.circular(7),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                item.productName ?? 'Product #${item.productId}',
-                                style: theme.textTheme.titleSmall?.copyWith(
-                                    fontWeight: FontWeight.w600),
-                              ),
-                              if (item.variantSku != null)
-                                Text('SKU: ${item.variantSku}',
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                        color: colorScheme.onSurfaceVariant)),
-                              Text(
-                                '${cs.format(item.unitCostCents.toBigInt().toInt())} × ${item.quantity}',
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                    color: colorScheme.onSurfaceVariant),
-                              ),
-                              if (item.discountCents > Decimal.zero)
-                                Text(
-                                  '${'purchases.discount'.tr()}: -${cs.format(item.discountCents.toBigInt().toInt())}',
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                      color: colorScheme.tertiary),
+                        child: Text('${index + 1}',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                                color: colorScheme.onPrimaryContainer,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 11)),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        flex: 3,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              item.productName ?? 'Product #${item.productId}',
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                  fontWeight: FontWeight.w500),
+                              maxLines: 2, overflow: TextOverflow.ellipsis,
+                            ),
+                            if (item.variantSku != null)
+                              Container(
+                                margin: const EdgeInsets.only(top: 2),
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: colorScheme.tertiaryContainer.withValues(alpha: 0.4),
+                                  borderRadius: BorderRadius.circular(4),
                                 ),
-                              if (item.expiryDate != null)
-                                Row(
+                                child: Text(item.variantSku!,
+                                    style: theme.textTheme.labelSmall?.copyWith(
+                                        color: colorScheme.onTertiaryContainer,
+                                        fontSize: 10)),
+                              ),
+                            Text(
+                              cs.format(item.unitCostCents.toBigInt().toInt()),
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                  color: colorScheme.onSurfaceVariant, fontSize: 11),
+                            ),
+                            if (item.discountCents > Decimal.zero)
+                              Text(
+                                '-${cs.format(item.discountCents.toBigInt().toInt())}',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                    color: colorScheme.tertiary, fontSize: 11),
+                              ),
+                            if (item.expiryDate != null)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 2),
+                                child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    const Icon(LucideIcons.clock,
-                                        size: 12, color: Colors.orange),
-                                    const SizedBox(width: 4),
+                                    Icon(LucideIcons.calendarClock, size: 10, color: Colors.orange.shade700),
+                                    const SizedBox(width: 3),
                                     Text(
                                       DateFormat.yMMMd().format(item.expiryDate!),
                                       style: theme.textTheme.bodySmall?.copyWith(
-                                          color: Colors.orange, fontSize: 11),
+                                          color: Colors.orange.shade700, fontSize: 10),
                                     ),
                                   ],
                                 ),
-                            ],
+                              ),
+                          ],
+                        ),
+                      ),
+                      SizedBox(
+                        width: 50,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: colorScheme.surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(6),
                           ),
+                          alignment: Alignment.center,
+                          child: Text('${item.quantity}',
+                              style: theme.textTheme.labelMedium?.copyWith(
+                                  fontWeight: FontWeight.bold)),
                         ),
-                        Text(
+                      ),
+                      Expanded(
+                        flex: 2,
+                        child: Text(
                           cs.format(item.totalCents.toBigInt().toInt()),
-                          style: theme.textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.bold),
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w600),
+                          textAlign: TextAlign.end,
                         ),
-                      ],
-                    ),
-                  );
-                },
-              ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
           ],
-        ),
+          const SizedBox(height: 8),
+        ],
       ),
     );
   }
 
   // ═══════════════════════════════════════════════════════
-  // TOTALS CARD
+  // TOTALS CARD (Invoice footer style)
   // ═══════════════════════════════════════════════════════
   Widget _buildTotalsCard(BuildContext context, PurchaseEntity purchase, CurrencyService cs) {
     final theme = Theme.of(context);
@@ -544,45 +691,86 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
 
     return Card(
       elevation: 0,
-      color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: colorScheme.outlineVariant),
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            _summaryRow(theme, 'purchases.subtotal'.tr(),
-                cs.format(purchase.subtotalCents.toBigInt().toInt())),
-            if (purchase.discountCents > Decimal.zero) ...[
-              const SizedBox(height: 6),
-              _summaryRow(theme, 'purchases.discount'.tr(),
-                  '- ${cs.format(purchase.discountCents.toBigInt().toInt())}',
-                  valueColor: colorScheme.tertiary),
-            ],
-            const SizedBox(height: 6),
-            _summaryRow(theme, 'purchases.tax'.tr(),
-                cs.format(purchase.taxCents.toBigInt().toInt())),
-            Divider(height: 24, color: colorScheme.outlineVariant),
-            _summaryRow(theme, 'purchases.total'.tr(),
-                cs.format(purchase.totalCents.toBigInt().toInt()),
-                isBold: true, valueColor: colorScheme.primary),
-          ],
-        ),
+      child: Column(
+        children: [
+          // Summary rows
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+            child: Column(
+              children: [
+                _summaryRow(theme, 'purchases.subtotal'.tr(),
+                    cs.format(purchase.subtotalCents.toBigInt().toInt())),
+                if (purchase.discountCents > Decimal.zero) ...[
+                  const SizedBox(height: 8),
+                  _summaryRow(theme, 'purchases.discount'.tr(),
+                      '- ${cs.format(purchase.discountCents.toBigInt().toInt())}',
+                      valueColor: colorScheme.tertiary,
+                      icon: LucideIcons.percent),
+                ],
+                const SizedBox(height: 8),
+                _summaryRow(theme, 'purchases.tax'.tr(),
+                    cs.format(purchase.taxCents.toBigInt().toInt())),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          // Grand total
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color: colorScheme.primary.withValues(alpha: 0.06),
+              borderRadius: const BorderRadius.only(
+                bottomLeft: Radius.circular(14),
+                bottomRight: Radius.circular(14),
+              ),
+              border: Border(
+                top: BorderSide(color: colorScheme.primary.withValues(alpha: 0.2)),
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('purchases.total'.tr(),
+                    style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold)),
+                Text(
+                  cs.format(purchase.totalCents.toBigInt().toInt()),
+                  style: theme.textTheme.titleLarge?.copyWith(
+                      color: colorScheme.primary,
+                      fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _summaryRow(ThemeData theme, String label, String value,
-      {bool isBold = false, Color? valueColor}) {
+      {bool isBold = false, Color? valueColor, IconData? icon}) {
+    final cs = theme.colorScheme;
     final style = isBold
         ? theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)
         : theme.textTheme.bodyMedium;
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: style),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[
+              Icon(icon, size: 14, color: valueColor ?? cs.onSurfaceVariant),
+              const SizedBox(width: 6),
+            ],
+            Text(label, style: style?.copyWith(
+                color: isBold ? null : cs.onSurfaceVariant)),
+          ],
+        ),
         Text(value, style: (isBold ? theme.textTheme.titleMedium : theme.textTheme.bodyMedium)
             ?.copyWith(color: valueColor, fontWeight: isBold ? FontWeight.bold : FontWeight.w500)),
       ],
@@ -590,7 +778,7 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
   }
 
   // ═══════════════════════════════════════════════════════
-  // NOTES CARD
+  // NOTES CARD (Enhanced)
   // ═══════════════════════════════════════════════════════
   Widget _buildNotesCard(BuildContext context, PurchaseEntity purchase) {
     final theme = Theme.of(context);
@@ -599,8 +787,8 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: cs.outlineVariant),
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.5)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -609,15 +797,32 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
           children: [
             Row(
               children: [
-                Icon(LucideIcons.stickyNote, size: 20, color: cs.primary),
-                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(LucideIcons.stickyNote, size: 16, color: Colors.amber.shade700),
+                ),
+                const SizedBox(width: 10),
                 Text('purchases.notes'.tr(),
                     style: theme.textTheme.titleSmall?.copyWith(
                         fontWeight: FontWeight.w600)),
               ],
             ),
-            const SizedBox(height: 8),
-            Text(purchase.notes!, style: theme.textTheme.bodyMedium),
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: cs.surfaceContainerHighest.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(purchase.notes!,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                      color: cs.onSurface, height: 1.4)),
+            ),
           ],
         ),
       ),
@@ -625,27 +830,38 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
   }
 
   // ═══════════════════════════════════════════════════════
-  // RETURNS HISTORY CARD
+  // RETURNS HISTORY CARD (Enhanced)
   // ═══════════════════════════════════════════════════════
   Widget _buildReturnsCard(BuildContext context, CurrencyService cs) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final totalRefund = _returns.fold<int>(
+        0, (sum, r) => sum + r.totalCents.toBigInt().toInt());
 
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: colorScheme.error.withValues(alpha: 0.3)),
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: colorScheme.error.withValues(alpha: 0.25)),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+            child: Row(
               children: [
-                Icon(LucideIcons.undo2, size: 20, color: colorScheme.error),
-                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.all(7),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [colorScheme.error, colorScheme.error.withValues(alpha: 0.7)],
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(LucideIcons.undo2, size: 16, color: Colors.white),
+                ),
+                const SizedBox(width: 10),
                 Text('purchases.returns'.tr(),
                     style: theme.textTheme.titleSmall?.copyWith(
                         fontWeight: FontWeight.w600)),
@@ -654,67 +870,84 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
                     color: colorScheme.errorContainer,
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(10),
                   ),
                   child: Text('${_returns.length}',
                       style: theme.textTheme.labelSmall?.copyWith(
                           color: colorScheme.onErrorContainer,
                           fontWeight: FontWeight.bold)),
                 ),
+                const Spacer(),
+                Text(cs.format(totalRefund),
+                    style: theme.textTheme.titleSmall?.copyWith(
+                        color: colorScheme.error, fontWeight: FontWeight.bold)),
               ],
             ),
-            const SizedBox(height: 12),
-            ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: _returns.length,
-              separatorBuilder: (_, idx) => Divider(
-                  height: 1, color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
-              itemBuilder: (context, index) {
-                final ret = _returns[index];
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: colorScheme.errorContainer.withValues(alpha: 0.3),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Icon(LucideIcons.undo2, size: 16, color: colorScheme.error),
+          ),
+          const SizedBox(height: 12),
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _returns.length,
+            separatorBuilder: (_, idx) => Divider(
+                height: 1, indent: 16, endIndent: 16,
+                color: colorScheme.outlineVariant.withValues(alpha: 0.3)),
+            itemBuilder: (context, index) {
+              final ret = _returns[index];
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 36, height: 36,
+                      decoration: BoxDecoration(
+                        color: colorScheme.errorContainer.withValues(alpha: 0.25),
+                        borderRadius: BorderRadius.circular(10),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(ret.returnNumber,
-                                style: theme.textTheme.titleSmall?.copyWith(
-                                    fontWeight: FontWeight.w600)),
-                            Text(DateFormat.yMMMd().format(ret.returnDate),
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                    color: colorScheme.onSurfaceVariant)),
-                            if (ret.reason != null && ret.reason!.isNotEmpty)
-                              Text(ret.reason!,
+                      alignment: Alignment.center,
+                      child: Icon(LucideIcons.undo2, size: 16, color: colorScheme.error),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(ret.returnNumber,
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                  fontWeight: FontWeight.w600)),
+                          Row(
+                            children: [
+                              Icon(LucideIcons.calendar, size: 11,
+                                  color: colorScheme.onSurfaceVariant),
+                              const SizedBox(width: 4),
+                              Text(DateFormat.yMMMd().format(ret.returnDate),
                                   style: theme.textTheme.bodySmall?.copyWith(
-                                      color: colorScheme.onSurfaceVariant),
+                                      color: colorScheme.onSurfaceVariant, fontSize: 11)),
+                            ],
+                          ),
+                          if (ret.reason != null && ret.reason!.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 2),
+                              child: Text(ret.reason!,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                      color: colorScheme.onSurfaceVariant, fontStyle: FontStyle.italic),
                                   maxLines: 1, overflow: TextOverflow.ellipsis),
-                          ],
-                        ),
+                            ),
+                        ],
                       ),
-                      Text(
-                        cs.format(ret.totalCents.toBigInt().toInt()),
-                        style: theme.textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.bold, color: colorScheme.error),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-          ],
-        ),
+                    ),
+                    Text(
+                      cs.format(ret.totalCents.toBigInt().toInt()),
+                      style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.bold, color: colorScheme.error),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 8),
+        ],
       ),
     );
   }

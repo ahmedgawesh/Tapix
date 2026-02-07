@@ -33,6 +33,50 @@ class _SupplierHubContent extends StatefulWidget {
 class _SupplierHubContentState extends State<_SupplierHubContent> {
   final _searchController = TextEditingController();
 
+  Future<void> _showSupplierPicker({
+    required List<Supplier> suppliers,
+  }) async {
+    if (suppliers.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('suppliers.empty'.tr())),
+      );
+      return;
+    }
+
+    final supplierId = await showDialog<int?>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: Text('purchases.select_supplier'.tr()),
+          content: SizedBox(
+            width: 420,
+            child: ListView.separated(
+              shrinkWrap: true,
+              itemCount: suppliers.length,
+              separatorBuilder: (_, _) => const Divider(height: 1),
+              itemBuilder: (context, index) {
+                final supplier = suppliers[index];
+                return ListTile(
+                  title: Text(supplier.name),
+                  onTap: () => Navigator.pop(dialogContext, supplier.id),
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text('common.cancel'.tr()),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (!mounted || supplierId == null) return;
+    context.push('/suppliers/$supplierId');
+  }
+
   @override
   void dispose() {
     _searchController.dispose();
@@ -258,16 +302,14 @@ class _SupplierHubContentState extends State<_SupplierHubContent> {
                   ActionChip(
                     avatar: const Icon(LucideIcons.banknote, size: 18),
                     label: Text('suppliers.make_payment'.tr()),
-                    onPressed: () {
-                      // TODO: Navigate to supplier payment
-                    },
+                    onPressed: () => _showSupplierPicker(
+                      suppliers: data.suppliers,
+                    ),
                   ),
                   ActionChip(
                     avatar: const Icon(LucideIcons.barChart3, size: 18),
                     label: Text('suppliers.view_reports'.tr()),
-                    onPressed: () {
-                      // TODO: Navigate to reports
-                    },
+                    onPressed: () => context.push('/reports'),
                   ),
                 ],
               ),

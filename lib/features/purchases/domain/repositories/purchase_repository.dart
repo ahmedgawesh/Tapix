@@ -41,6 +41,20 @@ abstract class PurchaseRepository {
     DateTime? purchaseDate,
   });
 
+  /// Update an existing purchase and replace its items
+  Future<bool> updatePurchase({
+    required int purchaseId,
+    required int supplierId,
+    required int currencyId,
+    required Decimal subtotalCents,
+    required Decimal discountCents,
+    required Decimal taxCents,
+    required Decimal totalCents,
+    required List<PurchaseItemInput> items,
+    String? notes,
+    DateTime? purchaseDate,
+  });
+
   /// Post purchase (update variant stocks and costs)
   Future<void> postPurchase(int purchaseId);
 

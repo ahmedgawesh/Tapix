@@ -15,6 +15,7 @@ abstract class PurchaseLocalDatasource {
   Stream<List<PurchaseItemEntity>> watchPurchaseItems(int purchaseId);
   Future<String> generatePurchaseNumber();
   Future<int> createPurchase(db.PurchasesCompanion purchase, List<db.PurchaseItemsCompanion> items);
+  Future<bool> updatePurchase(int purchaseId, db.PurchasesCompanion purchase, List<db.PurchaseItemsCompanion> items);
   Future<void> postPurchase(int purchaseId);
   Future<void> voidPurchase(int purchaseId);
   Future<int> deletePurchase(int purchaseId);
@@ -75,8 +76,8 @@ class PurchaseLocalDatasourceImpl implements PurchaseLocalDatasource {
 
   @override
   Future<List<PurchaseItemEntity>> getPurchaseItems(int purchaseId) async {
-    final items = await _dao.getPurchaseItems(purchaseId);
-    return items.map(PurchaseItemModel.fromDrift).toList();
+    final items = await _dao.getPurchaseItemsWithDetails(purchaseId);
+    return items.map(PurchaseItemModel.fromDriftWithDetails).toList();
   }
 
   @override
@@ -94,6 +95,15 @@ class PurchaseLocalDatasourceImpl implements PurchaseLocalDatasource {
   @override
   Future<int> createPurchase(db.PurchasesCompanion purchase, List<db.PurchaseItemsCompanion> items) {
     return _dao.createPurchase(purchase, items);
+  }
+
+  @override
+  Future<bool> updatePurchase(
+    int purchaseId,
+    db.PurchasesCompanion purchase,
+    List<db.PurchaseItemsCompanion> items,
+  ) {
+    return _dao.updatePurchaseWithItems(purchaseId, purchase, items);
   }
 
   @override

@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/di/injection_container.dart';
+import '../../../auth/domain/repositories/auth_repository_interface.dart';
 import '../../domain/entities/employee_entity.dart';
 import '../../domain/repositories/employee_repository.dart';
 import '../bloc/leave_requests_bloc.dart';
@@ -182,22 +183,76 @@ class _LeaveRequestsScreenContentState
     }
   }
 
-  void _approveRequest(LeaveRequest request) {
-    // TODO: Get current user ID from auth
+  Future<void> _approveRequest(LeaveRequest request) async {
+    final currentUser = await sl<AuthRepositoryInterface>().getCurrentUser();
+    if (!mounted) return;
+
+    if (currentUser == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('common.error'.tr())),
+      );
+      return;
+    }
+
     context.read<LeaveRequestsBloc>().add(
           LeaveRequestApproveRequested(
             id: request.id,
-            approvedBy: 1, // Replace with actual user ID
+            approvedBy: currentUser.id,
           ),
         );
   }
 
-  void _rejectRequest(LeaveRequest request) {
-    // TODO: Show rejection reason dialog
+  Future<void> _rejectRequest(LeaveRequest request) async {
+    final currentUser = await sl<AuthRepositoryInterface>().getCurrentUser();
+    if (!mounted) return;
+
+    if (currentUser == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('common.error'.tr())),
+      );
+      return;
+    }
+
+    final reasonController = TextEditingController();
+    final rejectionReason = await showDialog<String?>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: Text('employees.reject'.tr()),
+          content: TextField(
+            controller: reasonController,
+            decoration: InputDecoration(
+              labelText: 'employees.reason'.tr(),
+            ),
+            autofocus: true,
+            maxLines: 3,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text('common.cancel'.tr()),
+            ),
+            FilledButton(
+              onPressed: () {
+                final value = reasonController.text.trim();
+                Navigator.pop(dialogContext, value.isEmpty ? null : value);
+              },
+              child: Text('common.confirm'.tr()),
+            ),
+          ],
+        );
+      },
+    );
+    reasonController.dispose();
+
+    if (!mounted) return;
+    if (rejectionReason == null) return;
+
     context.read<LeaveRequestsBloc>().add(
           LeaveRequestRejectRequested(
             id: request.id,
-            rejectedBy: 1, // Replace with actual user ID
+            rejectedBy: currentUser.id,
+            rejectionReason: rejectionReason,
           ),
         );
   }

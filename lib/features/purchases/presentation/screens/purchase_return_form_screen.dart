@@ -147,19 +147,23 @@ class _ReturnFormView extends StatelessWidget {
   }
 
   // ═══════════════════════════════════════════════════════
-  // PURCHASE INFO CARD
+  // PURCHASE INFO CARD (Premium)
   // ═══════════════════════════════════════════════════════
   Widget _buildPurchaseInfoCard(
       BuildContext context, PurchaseReturnFormState state, CurrencyService cs) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final purchase = state.purchase;
+    final supplierInitial = purchase?.supplierName != null &&
+            purchase!.supplierName!.isNotEmpty
+        ? purchase.supplierName![0].toUpperCase()
+        : '?';
 
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: colorScheme.primary.withValues(alpha: 0.3)),
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: colorScheme.primary.withValues(alpha: 0.25)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -171,10 +175,12 @@ class _ReturnFormView extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: colorScheme.primary.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8),
+                    gradient: LinearGradient(
+                      colors: [colorScheme.primary, colorScheme.primary.withValues(alpha: 0.7)],
+                    ),
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Icon(LucideIcons.fileText, size: 20, color: colorScheme.primary),
+                  child: const Icon(LucideIcons.fileText, size: 18, color: Colors.white),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -183,7 +189,8 @@ class _ReturnFormView extends StatelessWidget {
                     children: [
                       Text('purchases.return_from_purchase'.tr(),
                           style: theme.textTheme.labelSmall?.copyWith(
-                              color: colorScheme.onSurfaceVariant)),
+                              color: colorScheme.onSurfaceVariant,
+                              letterSpacing: 0.5)),
                       Text(purchase?.purchaseNumber ?? '—',
                           style: theme.textTheme.titleSmall?.copyWith(
                               fontWeight: FontWeight.w600)),
@@ -193,13 +200,45 @@ class _ReturnFormView extends StatelessWidget {
               ],
             ),
             if (purchase != null) ...[
-              const Divider(height: 24),
-              _infoRow(theme, 'purchases.supplier'.tr(),
-                  purchase.supplierName ?? '—'),
-              const SizedBox(height: 6),
+              Divider(height: 24, color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
+              if (purchase.supplierName != null) ...[
+                Row(
+                  children: [
+                    Container(
+                      width: 36, height: 36,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [colorScheme.primaryContainer, colorScheme.primaryContainer.withValues(alpha: 0.6)],
+                        ),
+                        borderRadius: BorderRadius.circular(9),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(supplierInitial,
+                          style: theme.textTheme.titleSmall?.copyWith(
+                              color: colorScheme.onPrimaryContainer,
+                              fontWeight: FontWeight.bold)),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('purchases.supplier'.tr(),
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                  color: colorScheme.onSurfaceVariant)),
+                          Text(purchase.supplierName!,
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                  fontWeight: FontWeight.w500)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+              ],
               _infoRow(theme, 'purchases.date'.tr(),
                   DateFormat.yMMMd().format(purchase.purchaseDate)),
-              const SizedBox(height: 6),
+              const SizedBox(height: 8),
               _infoRow(theme, 'purchases.total'.tr(),
                   cs.format(purchase.totalCents.toBigInt().toInt())),
             ],
@@ -210,11 +249,28 @@ class _ReturnFormView extends StatelessWidget {
   }
 
   Widget _infoRow(ThemeData theme, String label, String value) {
+    final cs = theme.colorScheme;
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant)),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(5),
+              decoration: BoxDecoration(
+                color: cs.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(5),
+              ),
+              child: Icon(label.contains('Date') || label.contains('تاريخ')
+                  ? LucideIcons.calendar : LucideIcons.coins,
+                  size: 12, color: cs.onSurfaceVariant),
+            ),
+            const SizedBox(width: 8),
+            Text(label, style: theme.textTheme.bodySmall?.copyWith(
+                color: cs.onSurfaceVariant)),
+          ],
+        ),
         Text(value, style: theme.textTheme.bodyMedium?.copyWith(
             fontWeight: FontWeight.w500)),
       ],
@@ -222,7 +278,7 @@ class _ReturnFormView extends StatelessWidget {
   }
 
   // ═══════════════════════════════════════════════════════
-  // ITEMS SELECTION CARD
+  // ITEMS SELECTION CARD (Premium)
   // ═══════════════════════════════════════════════════════
   Widget _buildItemsSelectionCard(
       BuildContext context, PurchaseReturnFormState state, CurrencyService cs) {
@@ -232,8 +288,8 @@ class _ReturnFormView extends StatelessWidget {
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: colorScheme.outlineVariant),
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -242,8 +298,17 @@ class _ReturnFormView extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(LucideIcons.undo2, size: 20, color: colorScheme.error),
-                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.all(7),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [colorScheme.error, colorScheme.error.withValues(alpha: 0.7)],
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(LucideIcons.undo2, size: 16, color: Colors.white),
+                ),
+                const SizedBox(width: 10),
                 Text('purchases.select_items_to_return'.tr(),
                     style: theme.textTheme.titleSmall?.copyWith(
                         fontWeight: FontWeight.w600)),
@@ -253,7 +318,7 @@ class _ReturnFormView extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(
                       color: colorScheme.errorContainer,
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text('${state.returnItems.length}',
                         style: theme.textTheme.labelSmall?.copyWith(
@@ -270,8 +335,15 @@ class _ReturnFormView extends StatelessWidget {
                 alignment: Alignment.center,
                 child: Column(
                   children: [
-                    Icon(LucideIcons.packageX, size: 48,
-                        color: colorScheme.onSurface.withValues(alpha: 0.2)),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: colorScheme.errorContainer.withValues(alpha: 0.15),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(LucideIcons.packageX, size: 36,
+                          color: colorScheme.error.withValues(alpha: 0.3)),
+                    ),
                     const SizedBox(height: 12),
                     Text('purchases.no_items_to_return'.tr(),
                         style: theme.textTheme.bodyMedium?.copyWith(
@@ -315,7 +387,7 @@ class _ReturnFormView extends StatelessWidget {
   }
 
   // ═══════════════════════════════════════════════════════
-  // REASON CARD
+  // REASON CARD (Enhanced)
   // ═══════════════════════════════════════════════════════
   Widget _buildReasonCard(BuildContext context, PurchaseReturnFormState state) {
     final theme = Theme.of(context);
@@ -324,8 +396,8 @@ class _ReturnFormView extends StatelessWidget {
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: cs.outlineVariant),
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.5)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -334,18 +406,28 @@ class _ReturnFormView extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(LucideIcons.messageSquare, size: 20, color: cs.primary),
-                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(LucideIcons.messageSquare, size: 16, color: Colors.amber.shade700),
+                ),
+                const SizedBox(width: 10),
                 Text('purchases.return_reason'.tr(),
                     style: theme.textTheme.titleSmall?.copyWith(
                         fontWeight: FontWeight.w600)),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             TextField(
               decoration: InputDecoration(
                 hintText: 'purchases.return_reason_hint'.tr(),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.5)),
+                ),
                 isDense: true,
               ),
               maxLines: 3,
@@ -360,7 +442,7 @@ class _ReturnFormView extends StatelessWidget {
   }
 
   // ═══════════════════════════════════════════════════════
-  // FINANCIAL IMPACT CARD
+  // FINANCIAL IMPACT CARD (Premium)
   // ═══════════════════════════════════════════════════════
   Widget _buildFinancialImpactCard(
       BuildContext context, PurchaseReturnFormState state, CurrencyService cs) {
@@ -369,63 +451,94 @@ class _ReturnFormView extends StatelessWidget {
 
     return Card(
       elevation: 0,
-      color: colorScheme.errorContainer.withValues(alpha: 0.15),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: colorScheme.error.withValues(alpha: 0.3)),
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: colorScheme.error.withValues(alpha: 0.2)),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+            child: Column(
               children: [
-                Icon(LucideIcons.alertCircle, size: 20, color: colorScheme.error),
-                const SizedBox(width: 8),
-                Text('purchases.financial_impact'.tr(),
-                    style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w600)),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: colorScheme.error.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(LucideIcons.alertCircle, size: 16, color: colorScheme.error),
+                    ),
+                    const SizedBox(width: 10),
+                    Text('purchases.financial_impact'.tr(),
+                        style: theme.textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w600)),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                _impactRow(theme, LucideIcons.package,
+                    'purchases.inventory_restored'.tr(),
+                    '+${state.totalReturnQuantity} ${'purchases.items_count'.tr()}',
+                    Colors.green),
+                const SizedBox(height: 10),
+                _impactRow(theme, LucideIcons.coins,
+                    'purchases.supplier_credit'.tr(),
+                    cs.format(state.totalRefundCents.toBigInt().toInt()),
+                    colorScheme.error),
               ],
             ),
-            const SizedBox(height: 12),
-            _impactRow(theme, LucideIcons.package,
-                'purchases.inventory_restored'.tr(),
-                '+${state.totalReturnQuantity} ${'purchases.items_count'.tr()}',
-                Colors.green),
-            const SizedBox(height: 8),
-            _impactRow(theme, LucideIcons.coins,
-                'purchases.supplier_credit'.tr(),
-                cs.format(state.totalRefundCents.toBigInt().toInt()),
-                colorScheme.error),
-            const Divider(height: 24),
-            Row(
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: colorScheme.error.withValues(alpha: 0.06),
+              borderRadius: const BorderRadius.only(
+                bottomLeft: Radius.circular(14),
+                bottomRight: Radius.circular(14),
+              ),
+              border: Border(
+                top: BorderSide(color: colorScheme.error.withValues(alpha: 0.15)),
+              ),
+            ),
+            child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text('purchases.return_total'.tr(),
                     style: theme.textTheme.titleSmall?.copyWith(
                         fontWeight: FontWeight.bold)),
                 Text(cs.format(state.totalRefundCents.toBigInt().toInt()),
-                    style: theme.textTheme.titleMedium?.copyWith(
+                    style: theme.textTheme.titleLarge?.copyWith(
                         fontWeight: FontWeight.bold,
                         color: colorScheme.error)),
               ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _impactRow(ThemeData theme, IconData icon, String label, String value,
       Color valueColor) {
+    final cs = theme.colorScheme;
     return Row(
       children: [
-        Icon(icon, size: 16, color: theme.colorScheme.onSurfaceVariant),
-        const SizedBox(width: 8),
+        Container(
+          padding: const EdgeInsets.all(5),
+          decoration: BoxDecoration(
+            color: valueColor.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Icon(icon, size: 14, color: valueColor),
+        ),
+        const SizedBox(width: 10),
         Expanded(
           child: Text(label, style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant)),
+              color: cs.onSurfaceVariant)),
         ),
         Text(value, style: theme.textTheme.bodyMedium?.copyWith(
             color: valueColor, fontWeight: FontWeight.w600)),
@@ -434,7 +547,7 @@ class _ReturnFormView extends StatelessWidget {
   }
 
   // ═══════════════════════════════════════════════════════
-  // BOTTOM BAR
+  // BOTTOM BAR (Premium)
   // ═══════════════════════════════════════════════════════
   Widget _buildBottomBar(
       BuildContext context, PurchaseReturnFormState state, CurrencyService cs) {
@@ -446,7 +559,14 @@ class _ReturnFormView extends StatelessWidget {
       decoration: BoxDecoration(
         color: colorScheme.surface,
         border: Border(top: BorderSide(
-            color: colorScheme.outlineVariant.withValues(alpha: 0.5))),
+            color: colorScheme.outlineVariant.withValues(alpha: 0.3))),
+        boxShadow: [
+          BoxShadow(
+            color: colorScheme.shadow.withValues(alpha: 0.05),
+            blurRadius: 8,
+            offset: const Offset(0, -2),
+          ),
+        ],
       ),
       child: SafeArea(
         child: Row(
@@ -455,11 +575,19 @@ class _ReturnFormView extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  '${state.totalReturnQuantity} ${'purchases.items_count'.tr()}',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                      color: colorScheme.onSurfaceVariant),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(LucideIcons.undo2, size: 12, color: colorScheme.onSurfaceVariant),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${state.totalReturnQuantity} ${'purchases.items_count'.tr()}',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant),
+                    ),
+                  ],
                 ),
+                const SizedBox(height: 2),
                 Text(
                   cs.format(state.totalRefundCents.toBigInt().toInt()),
                   style: theme.textTheme.titleLarge?.copyWith(

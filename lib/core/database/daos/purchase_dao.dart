@@ -101,6 +101,24 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
     return (select(purchaseItems)..where((i) => i.purchaseId.equals(purchaseId))).get();
   }
 
+  /// Get purchase items with product and variant details
+  Future<List<PurchaseItemWithDetails>> getPurchaseItemsWithDetails(int purchaseId) async {
+    final query = select(purchaseItems).join([
+      innerJoin(products, products.id.equalsExp(purchaseItems.productId)),
+      leftOuterJoin(productVariants, productVariants.id.equalsExp(purchaseItems.variantId)),
+    ])
+      ..where(purchaseItems.purchaseId.equals(purchaseId));
+
+    final rows = await query.get();
+    return rows.map((row) {
+      return PurchaseItemWithDetails(
+        item: row.readTable(purchaseItems),
+        product: row.readTable(products),
+        variant: row.readTableOrNull(productVariants),
+      );
+    }).toList();
+  }
+
   /// Watch purchase items with product and variant details
   Stream<List<PurchaseItemWithDetails>> watchPurchaseItemsWithDetails(int purchaseId) {
     final query = select(purchaseItems).join([
@@ -149,6 +167,27 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
       }
 
       return purchaseId;
+    });
+  }
+
+  /// Update a purchase and replace its items
+  Future<bool> updatePurchaseWithItems(
+    int purchaseId,
+    PurchasesCompanion purchase,
+    List<PurchaseItemsCompanion> items,
+  ) {
+    return transaction(() async {
+      final updated = await updatePurchase(purchaseId, purchase);
+      if (!updated) return false;
+
+      await (delete(purchaseItems)..where((i) => i.purchaseId.equals(purchaseId))).go();
+
+      for (final item in items) {
+        final itemWithPurchaseId = item.copyWith(purchaseId: Value(purchaseId));
+        await into(purchaseItems).insert(itemWithPurchaseId);
+      }
+
+      return true;
     });
   }
 
