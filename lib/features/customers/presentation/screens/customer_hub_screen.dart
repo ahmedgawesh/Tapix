@@ -117,6 +117,7 @@ class _CustomerHubContentState extends State<_CustomerHubContent> {
   Widget _buildContent(BuildContext context, CustomersData data) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     final currencyService = sl<CurrencyService>();
 
     // Calculate metrics
@@ -163,24 +164,27 @@ class _CustomerHubContentState extends State<_CustomerHubContent> {
 
                       final activeCard = _StatCard(
                         icon: Icons.people_outline,
-                        iconColor: colorScheme.primary,
-                        backgroundColor: colorScheme.primaryContainer,
+                        iconColor: isDark ? const Color(0xFF90CAF9) : colorScheme.primary,
+                        backgroundColor: isDark ? const Color(0xFF0B0F14) : colorScheme.primaryContainer,
+                        borderColor: isDark ? const Color(0xFF1E3A5F) : colorScheme.primary.withValues(alpha: 0.2),
                         label: 'customers.active_customers'.tr(),
                         value: activeCount.toString(),
                       );
 
                       final receivablesCard = _StatCard(
                         icon: Icons.account_balance_wallet_outlined,
-                        iconColor: colorScheme.secondary,
-                        backgroundColor: colorScheme.secondaryContainer,
+                        iconColor: isDark ? const Color(0xFFFFB74D) : colorScheme.secondary,
+                        backgroundColor: isDark ? const Color(0xFF0B0F14) : colorScheme.secondaryContainer,
+                        borderColor: isDark ? const Color(0xFF3D2E10) : colorScheme.secondary.withValues(alpha: 0.2),
                         label: 'customers.total_receivables'.tr(),
                         value: currencyService.format(totalBalanceCents),
                       );
 
                       final creditCard = _StatCard(
                         icon: Icons.credit_card_outlined,
-                        iconColor: colorScheme.tertiary,
-                        backgroundColor: colorScheme.tertiaryContainer,
+                        iconColor: isDark ? const Color(0xFF80CBC4) : colorScheme.tertiary,
+                        backgroundColor: isDark ? const Color(0xFF0B0F14) : colorScheme.tertiaryContainer,
+                        borderColor: isDark ? const Color(0xFF1A3330) : colorScheme.tertiary.withValues(alpha: 0.2),
                         label: 'customers.with_credit'.tr(),
                         value: withCreditCount.toString(),
                       );
@@ -239,24 +243,27 @@ class _CustomerHubContentState extends State<_CustomerHubContent> {
                           icon: Icons.person_outline,
                           label: 'customers.segment_retail'.tr(),
                           count: segmentCounts['retail'] ?? 0,
-                          color: colorScheme.primary,
-                          backgroundColor: colorScheme.primaryContainer,
+                          color: isDark ? const Color(0xFF90CAF9) : colorScheme.primary,
+                          backgroundColor: isDark ? const Color(0xFF0B0F14) : colorScheme.primaryContainer,
+                          borderColor: isDark ? const Color(0xFF1E3A5F) : colorScheme.primary.withValues(alpha: 0.2),
                         ),
                         const SizedBox(width: 8),
                         _SegmentChip(
                           icon: Icons.business_outlined,
                           label: 'customers.segment_wholesale'.tr(),
                           count: segmentCounts['wholesale'] ?? 0,
-                          color: colorScheme.secondary,
-                          backgroundColor: colorScheme.secondaryContainer,
+                          color: isDark ? const Color(0xFFFFB74D) : colorScheme.secondary,
+                          backgroundColor: isDark ? const Color(0xFF0B0F14) : colorScheme.secondaryContainer,
+                          borderColor: isDark ? const Color(0xFF3D2E10) : colorScheme.secondary.withValues(alpha: 0.2),
                         ),
                         const SizedBox(width: 8),
                         _SegmentChip(
                           icon: Icons.star_outline,
                           label: 'customers.segment_premium'.tr(),
                           count: segmentCounts['premium'] ?? 0,
-                          color: colorScheme.tertiary,
-                          backgroundColor: colorScheme.tertiaryContainer,
+                          color: isDark ? const Color(0xFFCE93D8) : colorScheme.tertiary,
+                          backgroundColor: isDark ? const Color(0xFF0B0F14) : colorScheme.tertiaryContainer,
+                          borderColor: isDark ? const Color(0xFF3A2440) : colorScheme.tertiary.withValues(alpha: 0.2),
                         ),
                       ],
                     ),
@@ -274,7 +281,7 @@ class _CustomerHubContentState extends State<_CustomerHubContent> {
                 controller: _searchController,
                 decoration: InputDecoration(
                   hintText: 'customers.search_hint'.tr(),
-                  prefixIcon: const Icon(Icons.search),
+                  prefixIcon: Icon(Icons.search, color: isDark ? const Color(0xFF8A97A6) : null),
                   suffixIcon: _searchController.text.isNotEmpty
                       ? IconButton(
                           icon: const Icon(Icons.clear),
@@ -290,6 +297,7 @@ class _CustomerHubContentState extends State<_CustomerHubContent> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   filled: true,
+                  fillColor: isDark ? const Color(0xFF0B0F14) : null,
                 ),
                 onChanged: (value) {
                   context.read<CustomersBloc>().add(
@@ -307,22 +315,47 @@ class _CustomerHubContentState extends State<_CustomerHubContent> {
               child: Wrap(
                 spacing: 8,
                 children: [
-                  ActionChip(
-                    avatar: const Icon(Icons.add, size: 18),
-                    label: Text('customers.add'.tr()),
+                  OutlinedButton.icon(
                     onPressed: () => context.push('/customers/new'),
+                    icon: const Icon(Icons.add, size: 18),
+                    label: Text('customers.add'.tr()),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: isDark ? const Color(0xFF90CAF9) : null,
+                      side: BorderSide(
+                        color: (isDark ? const Color(0xFF1E3A5F) : colorScheme.outlineVariant)
+                            .withValues(alpha: isDark ? 0.9 : 0.8),
+                      ),
+                      backgroundColor: isDark ? const Color(0xFF0B0F14) : null,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    ),
                   ),
-                  ActionChip(
-                    avatar: const Icon(Icons.payment, size: 18),
-                    label: Text('customers.receive_payment'.tr()),
+                  OutlinedButton.icon(
                     onPressed: () => context.push('/customers/receive-payment'),
+                    icon: const Icon(Icons.payment, size: 18),
+                    label: Text('customers.receive_payment'.tr()),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: isDark ? const Color(0xFFFFB74D) : null,
+                      side: BorderSide(
+                        color: (isDark ? const Color(0xFF3D2E10) : colorScheme.outlineVariant)
+                            .withValues(alpha: isDark ? 0.9 : 0.8),
+                      ),
+                      backgroundColor: isDark ? const Color(0xFF0B0F14) : null,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    ),
                   ),
-                  ActionChip(
-                    avatar: const Icon(Icons.analytics_outlined, size: 18),
+                  OutlinedButton.icon(
+                    onPressed: () {},
+                    icon: const Icon(Icons.analytics_outlined, size: 18),
                     label: Text('customers.view_reports'.tr()),
-                    onPressed: () {
-                      // TODO: Navigate to reports
-                    },
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: isDark ? const Color(0xFFB0BEC5) : null,
+                      side: BorderSide(
+                        color: (isDark ? const Color(0xFF253242) : colorScheme.outlineVariant)
+                            .withValues(alpha: isDark ? 0.9 : 0.8),
+                      ),
+                      backgroundColor: isDark ? const Color(0xFF0B0F14) : null,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    ),
                   ),
                 ],
               ),
@@ -417,6 +450,7 @@ class _StatCard extends StatelessWidget {
   final IconData icon;
   final Color iconColor;
   final Color backgroundColor;
+  final Color? borderColor;
   final String label;
   final String value;
 
@@ -424,6 +458,7 @@ class _StatCard extends StatelessWidget {
     required this.icon,
     required this.iconColor,
     required this.backgroundColor,
+    this.borderColor,
     required this.label,
     required this.value,
   });
@@ -437,6 +472,7 @@ class _StatCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: backgroundColor,
         borderRadius: BorderRadius.circular(16),
+        border: borderColor != null ? Border.all(color: borderColor!, width: 1) : null,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -470,6 +506,7 @@ class _SegmentChip extends StatelessWidget {
   final int count;
   final Color color;
   final Color backgroundColor;
+  final Color? borderColor;
 
   const _SegmentChip({
     required this.icon,
@@ -477,6 +514,7 @@ class _SegmentChip extends StatelessWidget {
     required this.count,
     required this.color,
     required this.backgroundColor,
+    this.borderColor,
   });
 
   @override
@@ -488,6 +526,7 @@ class _SegmentChip extends StatelessWidget {
       decoration: BoxDecoration(
         color: backgroundColor,
         borderRadius: BorderRadius.circular(16),
+        border: borderColor != null ? Border.all(color: borderColor!, width: 1) : null,
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

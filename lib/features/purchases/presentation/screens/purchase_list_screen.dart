@@ -56,9 +56,9 @@ class _PurchaseHubViewState extends State<_PurchaseHubView> {
         title: Text('purchases.title'.tr()),
         actions: [
           IconButton(
-            icon: const Icon(LucideIcons.rotateCcw),
-            onPressed: () => context.read<PurchasesBloc>().refresh(),
-            tooltip: 'common.refresh'.tr(),
+            icon: const Icon(LucideIcons.settings),
+            onPressed: () => context.push('/settings'),
+            tooltip: 'settings.title'.tr(),
           ),
         ],
       ),

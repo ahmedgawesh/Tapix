@@ -30,10 +30,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
         ? themeState.data 
         : ThemeMode.system;
     
-    final localeState = context.read<LocalizationBloc>().state;
-    _selectedLocale = (localeState is RealtimeSuccess<Locale>) 
-        ? localeState.data 
-        : const Locale('en');
+    _selectedLocale = context.read<LocalizationBloc>().state.locale;
   }
 
   void _onThemeChanged(ThemeMode theme) {

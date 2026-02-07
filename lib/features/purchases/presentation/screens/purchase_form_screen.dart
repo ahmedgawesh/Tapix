@@ -777,51 +777,142 @@ class _PurchaseFormView extends StatelessWidget {
   }
 
   void _showInvoiceDiscountDialog(BuildContext context, PurchaseFormState state) {
-    final controller = TextEditingController(
-      text: state.invoiceDiscountCents > Decimal.zero
-          ? (state.invoiceDiscountCents.toBigInt().toInt() / 100).toStringAsFixed(2)
-          : '',
-    );
+    final subtotalCents = state.subtotalCents;
+    final subtotalIntCents = subtotalCents.toBigInt().toInt();
+    final initialDiscountCents = state.invoiceDiscountCents.toBigInt().toInt();
+
+    final initialDiscountAmount = initialDiscountCents > 0
+        ? (initialDiscountCents / 100).toStringAsFixed(2)
+        : '';
+    final initialDiscountPercent = (subtotalIntCents > 0 && initialDiscountCents > 0)
+        ? ((initialDiscountCents / subtotalIntCents) * 100).toStringAsFixed(2)
+        : '';
+
+    final amountController = TextEditingController(text: initialDiscountAmount);
+    final percentController = TextEditingController(text: initialDiscountPercent);
 
     showDialog<void>(
       context: context,
-      builder: (dialogCtx) => AlertDialog(
-        title: Row(
-          children: [
-            const Icon(LucideIcons.percent, size: 20),
-            const SizedBox(width: 8),
-            Text('purchases.invoice_discount'.tr()),
+      builder: (dialogCtx) {
+        bool updating = false;
+
+        int clampDiscountCents(int cents) {
+          if (cents < 0) return 0;
+          if (subtotalIntCents <= 0) return 0;
+          return cents > subtotalIntCents ? subtotalIntCents : cents;
+        }
+
+        int amountTextToCents(String text) {
+          final value = double.tryParse(text) ?? 0;
+          return (value * 100).round();
+        }
+
+        double percentTextToPercent(String text) {
+          return double.tryParse(text) ?? 0;
+        }
+
+        void syncFromAmount() {
+          if (updating) return;
+          updating = true;
+          final cents = clampDiscountCents(amountTextToCents(amountController.text));
+
+          if (subtotalIntCents > 0) {
+            final pct = (cents / subtotalIntCents) * 100;
+            percentController.text = cents == 0 ? '' : pct.toStringAsFixed(2);
+          } else {
+            percentController.text = '';
+          }
+          updating = false;
+        }
+
+        void syncFromPercent() {
+          if (updating) return;
+          updating = true;
+          final pct = percentTextToPercent(percentController.text);
+
+          if (subtotalIntCents > 0) {
+            final raw = (subtotalIntCents * (pct / 100));
+            final cents = clampDiscountCents(raw.round());
+            amountController.text = cents == 0 ? '' : (cents / 100).toStringAsFixed(2);
+          } else {
+            amountController.text = '';
+          }
+          updating = false;
+        }
+
+        amountController.addListener(syncFromAmount);
+        percentController.addListener(syncFromPercent);
+
+        return AlertDialog(
+          title: Row(
+            children: [
+              const Icon(LucideIcons.percent, size: 20),
+              const SizedBox(width: 8),
+              Text('purchases.invoice_discount'.tr()),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: percentController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[\d.]')),
+                ],
+                decoration: InputDecoration(
+                  labelText: 'purchases.discount'.tr(),
+                  border: const OutlineInputBorder(),
+                  prefixIcon: const Icon(LucideIcons.percent),
+                  suffixText: '%',
+                ),
+                autofocus: true,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: amountController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[\d.]')),
+                ],
+                decoration: InputDecoration(
+                  labelText: 'purchases.discount_amount'.tr(),
+                  border: const OutlineInputBorder(),
+                  prefixIcon: const Icon(LucideIcons.coins),
+                ),
+              ),
+              if (subtotalIntCents <= 0) ...[
+                const SizedBox(height: 8),
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: Text(
+                    'purchases.no_items'.tr(),
+                    style: Theme.of(dialogCtx).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(dialogCtx).colorScheme.onSurfaceVariant,
+                        ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogCtx),
+              child: Text('common.cancel'.tr()),
+            ),
+            FilledButton(
+              onPressed: () {
+                final cents = clampDiscountCents(amountTextToCents(amountController.text));
+                context.read<PurchaseFormBloc>().add(
+                      PurchaseInvoiceDiscountChanged(Decimal.fromInt(cents)),
+                    );
+                Navigator.pop(dialogCtx);
+              },
+              child: Text('common.apply'.tr()),
+            ),
           ],
-        ),
-        content: TextField(
-          controller: controller,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
-          decoration: InputDecoration(
-            labelText: 'purchases.discount_amount'.tr(),
-            border: const OutlineInputBorder(),
-            prefixIcon: const Icon(LucideIcons.coins),
-          ),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogCtx),
-            child: Text('common.cancel'.tr()),
-          ),
-          FilledButton(
-            onPressed: () {
-              final value = double.tryParse(controller.text) ?? 0;
-              final cents = (value * 100).round();
-              context.read<PurchaseFormBloc>().add(
-                    PurchaseInvoiceDiscountChanged(Decimal.fromInt(cents)),
-                  );
-              Navigator.pop(dialogCtx);
-            },
-            child: Text('common.apply'.tr()),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 

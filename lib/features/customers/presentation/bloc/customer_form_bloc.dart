@@ -310,7 +310,8 @@ class CustomerFormBloc extends Bloc<CustomerFormEvent, CustomerFormState> {
     emit(currentState.copyWith(isSubmitting: true));
 
     try {
-      final balanceCents = _parseBalance(currentState.balance);
+      final desiredBalanceCentsDecimal = _parseBalance(currentState.balance);
+      final desiredBalanceCents = desiredBalanceCentsDecimal.toBigInt().toInt();
 
       if (currentState.isEditing && currentState.customerId != null) {
         // Update existing customer
@@ -326,6 +327,20 @@ class CustomerFormBloc extends Bloc<CustomerFormEvent, CustomerFormState> {
             updatedAt: DateTime.now(),
           );
           await _repository.updateCustomer(updatedCustomer);
+
+          final currentBalanceCents = existingCustomer.balanceCents.toDouble().round();
+          if (desiredBalanceCents != currentBalanceCents) {
+            final deltaCents = desiredBalanceCents - currentBalanceCents;
+            await _repository.recordTransaction(
+              customerId: existingCustomer.id,
+              transactionType: 'adjustment',
+              amountCents: deltaCents,
+              currencyId: existingCustomer.currencyId,
+              description: null,
+            );
+            await _repository.updateCustomerBalance(existingCustomer.id, desiredBalanceCents);
+          }
+
           emit(CustomerFormSuccess(
             customerId: currentState.customerId!,
             isNew: false,
@@ -339,7 +354,7 @@ class CustomerFormBloc extends Bloc<CustomerFormEvent, CustomerFormState> {
           phone: currentState.phone.isEmpty ? null : currentState.phone,
           address: currentState.address.isEmpty ? null : currentState.address,
           currencyId: currentState.currencyId,
-          initialBalance: balanceCents,
+          initialBalance: desiredBalanceCentsDecimal,
           segment: currentState.segment,
           loyaltyEnabled: currentState.loyaltyEnabled,
         );
@@ -361,7 +376,7 @@ class CustomerFormBloc extends Bloc<CustomerFormEvent, CustomerFormState> {
     try {
       final value = double.parse(balance.replaceAll(',', '.'));
       final cents = (value * 100).round();
-      return Decimal.parse((cents / 100).toStringAsFixed(2));
+      return Decimal.fromInt(cents);
     } catch (_) {
       return Decimal.zero;
     }

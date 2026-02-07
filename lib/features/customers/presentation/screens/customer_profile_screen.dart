@@ -2,6 +2,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import '../../../../core/theme/colors.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/services/currency_service.dart';
@@ -204,13 +205,45 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
               final navigator = Navigator.of(context);
               final scaffoldMessenger = ScaffoldMessenger.of(context);
               final router = GoRouter.of(context);
+              final colorScheme = Theme.of(context).colorScheme;
               navigator.pop();
-              await sl<CustomerRepository>().deleteCustomer(customer.id);
-              if (mounted) {
+              try {
+                await sl<CustomerRepository>().deleteCustomer(customer.id);
+                if (mounted) {
+                  scaffoldMessenger.showSnackBar(
+                    SnackBar(content: Text('customers.deleted_success'.tr())),
+                  );
+                  router.pop();
+                }
+              } catch (e) {
+                if (!context.mounted) return;
+
+                final msg = e.toString();
+                final isFkError = msg.contains('FOREIGN KEY constraint failed');
+
+                if (isFkError) {
+                  showDialog<void>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: Text('customers.delete_blocked_title'.tr()),
+                      content: Text('customers.delete_blocked_message'.tr()),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: Text('common.close'.tr()),
+                        ),
+                      ],
+                    ),
+                  );
+                  return;
+                }
+
                 scaffoldMessenger.showSnackBar(
-                  SnackBar(content: Text('customers.deleted_success'.tr())),
+                  SnackBar(
+                    content: Text(msg),
+                    backgroundColor: colorScheme.error,
+                  ),
                 );
-                router.pop();
               }
             },
             style: FilledButton.styleFrom(
@@ -327,48 +360,62 @@ class _ProfileHeaderCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
 
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(
-          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+    final headerGradient = LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: [
+        (isDark ? AppColors.primaryDark : AppColors.primary).withValues(alpha: 0.95),
+        (isDark ? AppColors.primary : AppColors.primaryContainer).withValues(alpha: 0.85),
+      ],
+    );
+
+    return Container(
+      decoration: BoxDecoration(
+        gradient: headerGradient,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: isDark ? 0.25 : 0.35),
         ),
+        boxShadow: isDark
+            ? null
+            : [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.08),
+                  blurRadius: 18,
+                  offset: const Offset(0, 8),
+                ),
+              ],
       ),
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(22),
         child: Column(
           children: [
-            // Avatar
             CircleAvatar(
-              radius: 40,
-              backgroundColor: colorScheme.primaryContainer,
+              radius: 44,
+              backgroundColor: Colors.white.withValues(alpha: isDark ? 0.18 : 0.22),
               child: Text(
                 customer.name.isNotEmpty ? customer.name[0].toUpperCase() : '?',
                 style: theme.textTheme.headlineLarge?.copyWith(
-                  color: colorScheme.onPrimaryContainer,
+                  color: Colors.white,
                   fontWeight: FontWeight.bold,
                 ),
               ),
             ),
             const SizedBox(height: 16),
-
-            // Name
             Text(
               customer.name,
               style: theme.textTheme.headlineSmall?.copyWith(
                 fontWeight: FontWeight.bold,
+                color: Colors.white,
               ),
+              textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 8),
-
-            // Segment Badge
+            const SizedBox(height: 10),
             _SegmentBadge(segment: customer.segment),
-            const SizedBox(height: 16),
-
-            // Contact Info
-            if (customer.phone != null || customer.email != null)
+            if (customer.phone != null || customer.email != null) ...[
+              const SizedBox(height: 16),
               Wrap(
                 spacing: 16,
                 runSpacing: 8,
@@ -378,22 +425,41 @@ class _ProfileHeaderCard extends StatelessWidget {
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.phone_outlined, size: 16, color: colorScheme.outline),
-                        const SizedBox(width: 4),
-                        Text(customer.phone!, style: theme.textTheme.bodyMedium),
+                        Icon(
+                          Icons.phone_outlined,
+                          size: 16,
+                          color: Colors.white.withValues(alpha: 0.85),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          customer.phone!,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: Colors.white.withValues(alpha: 0.9),
+                          ),
+                        ),
                       ],
                     ),
                   if (customer.email != null)
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.email_outlined, size: 16, color: colorScheme.outline),
-                        const SizedBox(width: 4),
-                        Text(customer.email!, style: theme.textTheme.bodyMedium),
+                        Icon(
+                          Icons.email_outlined,
+                          size: 16,
+                          color: Colors.white.withValues(alpha: 0.85),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          customer.email!,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: Colors.white.withValues(alpha: 0.9),
+                          ),
+                        ),
                       ],
                     ),
                 ],
               ),
+            ],
           ],
         ),
       ),
@@ -409,6 +475,7 @@ class _SegmentBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     
     Color color;
     IconData icon;
@@ -434,9 +501,9 @@ class _SegmentBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
+        color: (isDark ? Colors.black : Colors.white).withValues(alpha: isDark ? 0.25 : 0.18),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
+        border: Border.all(color: Colors.white.withValues(alpha: isDark ? 0.18 : 0.22)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -446,7 +513,7 @@ class _SegmentBadge extends StatelessWidget {
           Text(
             label,
             style: theme.textTheme.bodySmall?.copyWith(
-              color: color,
+              color: Colors.white.withValues(alpha: 0.95),
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -469,6 +536,12 @@ class _BalanceCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isReceivable = balanceCents > 0;
+    final isDark = theme.brightness == Brightness.dark;
+    final colorScheme = theme.colorScheme;
+
+    final baseCardColor = isDark
+        ? const Color(0xFF0B0F14)
+        : colorScheme.surface;
 
     return Card(
       elevation: 0,
@@ -478,9 +551,7 @@ class _BalanceCard extends StatelessWidget {
           color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
         ),
       ),
-      color: isReceivable
-          ? Colors.red.withValues(alpha: 0.05)
-          : Colors.green.withValues(alpha: 0.05),
+      color: baseCardColor,
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -488,7 +559,9 @@ class _BalanceCard extends StatelessWidget {
             Text(
               'customers.current_balance'.tr(),
               style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.outline,
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.7)
+                    : theme.colorScheme.onSurfaceVariant,
               ),
             ),
             const SizedBox(height: 8),
@@ -496,7 +569,9 @@ class _BalanceCard extends StatelessWidget {
               currencyService.format(balanceCents),
               style: theme.textTheme.headlineMedium?.copyWith(
                 fontWeight: FontWeight.bold,
-                color: isReceivable ? Colors.red : Colors.green,
+                color: isReceivable
+                    ? (isDark ? const Color(0xFF90CAF9) : colorScheme.tertiary)
+                    : (isDark ? const Color(0xFFA5D6A7) : Colors.green),
               ),
             ),
             const SizedBox(height: 4),
@@ -505,7 +580,9 @@ class _BalanceCard extends StatelessWidget {
                   ? 'customers.balance_receivable'.tr()
                   : 'customers.balance_credit'.tr(),
               style: theme.textTheme.bodySmall?.copyWith(
-                color: isReceivable ? Colors.red : Colors.green,
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.65)
+                    : theme.colorScheme.onSurfaceVariant,
               ),
             ),
           ],
@@ -523,6 +600,8 @@ class _LoyaltySection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final colorScheme = theme.colorScheme;
 
     return BlocBuilder<CustomerLoyaltyBloc, RealtimeState<CustomerLoyaltySummary?>>(
       builder: (context, state) {
@@ -543,6 +622,10 @@ class _LoyaltySection extends StatelessWidget {
           final summary = state.data;
           if (summary == null) return const SizedBox.shrink();
 
+          final baseCardColor = isDark
+              ? const Color(0xFF0B0F14)
+              : colorScheme.surface;
+
           return Card(
             elevation: 0,
             shape: RoundedRectangleBorder(
@@ -551,6 +634,7 @@ class _LoyaltySection extends StatelessWidget {
                 color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
               ),
             ),
+            color: baseCardColor,
             child: Padding(
               padding: const EdgeInsets.all(20),
               child: Column(
@@ -559,12 +643,16 @@ class _LoyaltySection extends StatelessWidget {
                   // Header
                   Row(
                     children: [
-                      Icon(Icons.card_giftcard, color: theme.colorScheme.tertiary),
+                      Icon(
+                        Icons.card_giftcard,
+                        color: isDark ? const Color(0xFF90CAF9) : theme.colorScheme.tertiary,
+                      ),
                       const SizedBox(width: 8),
                       Text(
                         'customers.loyalty'.tr(),
                         style: theme.textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.bold,
+                          color: isDark ? Colors.white : null,
                         ),
                       ),
                       const Spacer(),
@@ -594,7 +682,9 @@ class _LoyaltySection extends StatelessWidget {
                         child: Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: theme.colorScheme.primaryContainer,
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.06)
+                                : theme.colorScheme.primaryContainer,
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: _LoyaltyStat(
@@ -609,7 +699,9 @@ class _LoyaltySection extends StatelessWidget {
                         child: Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: theme.colorScheme.secondaryContainer,
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.06)
+                                : theme.colorScheme.secondaryContainer,
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: _LoyaltyStat(
@@ -806,27 +898,32 @@ class _QuickActionsSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
+    final colorScheme = Theme.of(context).colorScheme;
+
     final paymentBtn = _QuickActionButton(
       icon: Icons.payment,
       label: 'customers.payment'.tr(),
-      color: isDark ? Colors.blue.shade700 : Colors.blue.shade600,
-      backgroundColor: isDark ? Colors.blue.shade900.withValues(alpha: 0.3) : Colors.blue.shade50,
+      color: isDark ? const Color(0xFF90CAF9) : colorScheme.primary,
+      backgroundColor: isDark ? const Color(0xFF0D1B2A) : colorScheme.primaryContainer.withValues(alpha: 0.4),
+      borderColor: isDark ? const Color(0xFF1E3A5F) : colorScheme.primary.withValues(alpha: 0.2),
       onTap: onPaymentPressed,
     );
 
     final discountBtn = _QuickActionButton(
       icon: Icons.discount_outlined,
       label: 'customers.discount'.tr(),
-      color: Colors.orange.shade700,
-      backgroundColor: isDark ? Colors.orange.shade900.withValues(alpha: 0.3) : Colors.orange.shade50,
+      color: isDark ? const Color(0xFFFFB74D) : colorScheme.secondary,
+      backgroundColor: isDark ? const Color(0xFF1A1408) : colorScheme.secondaryContainer.withValues(alpha: 0.4),
+      borderColor: isDark ? const Color(0xFF3D2E10) : colorScheme.secondary.withValues(alpha: 0.2),
       onTap: onDiscountPressed,
     );
 
     final returnBtn = _QuickActionButton(
       icon: Icons.assignment_return,
       label: 'customers.return'.tr(),
-      color: isDark ? Colors.green.shade700 : Colors.green.shade600,
-      backgroundColor: isDark ? Colors.green.shade900.withValues(alpha: 0.3) : Colors.green.shade50,
+      color: isDark ? const Color(0xFF80CBC4) : colorScheme.tertiary,
+      backgroundColor: isDark ? const Color(0xFF0B1A18) : colorScheme.tertiaryContainer.withValues(alpha: 0.4),
+      borderColor: isDark ? const Color(0xFF1A3330) : colorScheme.tertiary.withValues(alpha: 0.2),
       onTap: () {},
     );
 
@@ -1011,6 +1108,7 @@ class _LoyaltyToggleCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
 
     return Card(
       elevation: 0,
@@ -1020,14 +1118,16 @@ class _LoyaltyToggleCard extends StatelessWidget {
           color: colorScheme.outlineVariant.withValues(alpha: 0.5),
         ),
       ),
-      color: colorScheme.primaryContainer,
+      color: isDark
+          ? const Color(0xFF0B0F14)
+          : colorScheme.primaryContainer,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Row(
           children: [
             Icon(
               Icons.card_giftcard,
-              color: colorScheme.onPrimaryContainer,
+              color: isDark ? const Color(0xFF90CAF9) : colorScheme.onPrimaryContainer,
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -1038,7 +1138,7 @@ class _LoyaltyToggleCard extends StatelessWidget {
                     'customers.loyalty'.tr(),
                     style: theme.textTheme.titleSmall?.copyWith(
                       fontWeight: FontWeight.bold,
-                      color: colorScheme.onPrimaryContainer,
+                      color: isDark ? Colors.white : colorScheme.onPrimaryContainer,
                     ),
                   ),
                   Text(
@@ -1046,7 +1146,9 @@ class _LoyaltyToggleCard extends StatelessWidget {
                         ? 'customers.loyalty_enabled'.tr()
                         : 'customers.loyalty_disabled'.tr(),
                     style: theme.textTheme.bodySmall?.copyWith(
-                      color: colorScheme.onPrimaryContainer.withValues(alpha: 0.8),
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.7)
+                          : colorScheme.onPrimaryContainer.withValues(alpha: 0.8),
                     ),
                   ),
                 ],
@@ -1162,6 +1264,7 @@ class _QuickActionButton extends StatelessWidget {
   final String label;
   final Color color;
   final Color backgroundColor;
+  final Color? borderColor;
   final VoidCallback onTap;
 
   const _QuickActionButton({
@@ -1169,6 +1272,7 @@ class _QuickActionButton extends StatelessWidget {
     required this.label,
     required this.color,
     required this.backgroundColor,
+    this.borderColor,
     required this.onTap,
   });
 
@@ -1178,7 +1282,10 @@ class _QuickActionButton extends StatelessWidget {
       height: 80,
       decoration: BoxDecoration(
         color: backgroundColor,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
+        border: borderColor != null
+            ? Border.all(color: borderColor!, width: 1)
+            : null,
       ),
       child: InkWell(
         onTap: onTap,

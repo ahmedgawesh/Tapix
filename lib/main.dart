@@ -94,42 +94,25 @@ class _TapixAppState extends State<TapixApp> {
           BlocProvider(create: (_) => di.sl<CompanyBloc>()),
           BlocProvider.value(value: authBloc),
         ],
-        child: BlocListener<LocalizationBloc, RealtimeState<Locale>>(
-          listener: (context, state) {
-            if (state is RealtimeSuccess<Locale>) {
-              context.setLocale(state.data);
-            }
-          },
-          child: BlocBuilder<ThemeBloc, RealtimeState<ThemeMode>>(
-            builder: (context, themeState) {
-              return BlocBuilder<LocalizationBloc, RealtimeState<Locale>>(
-                builder: (context, localeState) {
-                  final themeMode =
-                      (themeState is RealtimeSuccess<ThemeMode>)
-                          ? themeState.data
-                          : ThemeMode.system;
-                  
-                  final locale =
-                      (localeState is RealtimeSuccess<Locale>)
-                          ? localeState.data
-                          : context.locale;
+        child: BlocBuilder<ThemeBloc, RealtimeState<ThemeMode>>(
+          builder: (context, themeState) {
+            final themeMode =
+                (themeState is RealtimeSuccess<ThemeMode>)
+                    ? themeState.data
+                    : ThemeMode.system;
 
-                  return MaterialApp.router(
-                    key: ValueKey('app_${locale.languageCode}'),
-                    title: 'Tapix',
-                    debugShowCheckedModeBanner: false,
-                    localizationsDelegates: context.localizationDelegates,
-                    supportedLocales: context.supportedLocales,
-                    locale: locale,
-                    theme: AppTheme.lightTheme,
-                    darkTheme: AppTheme.darkTheme,
-                    themeMode: themeMode,
-                    routerConfig: AppRouter.router,
-                  );
-                },
-              );
-            },
-          ),
+            return MaterialApp.router(
+              title: 'Tapix',
+              debugShowCheckedModeBanner: false,
+              localizationsDelegates: context.localizationDelegates,
+              supportedLocales: context.supportedLocales,
+              locale: context.locale,
+              theme: AppTheme.lightTheme,
+              darkTheme: AppTheme.darkTheme,
+              themeMode: themeMode,
+              routerConfig: AppRouter.router,
+            );
+          },
         ),
       ),
     );

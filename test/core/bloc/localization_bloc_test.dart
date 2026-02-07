@@ -6,7 +6,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
 import 'package:tapix/core/bloc/localization_bloc.dart';
-import 'package:tapix/core/bloc/realtime_bloc.dart';
 import 'package:tapix/core/services/localization_service.dart';
 
 import 'localization_bloc_test.mocks.dart';
@@ -30,47 +29,53 @@ void main() {
   });
 
   group('LocalizationBloc', () {
-    test('initial state is RealtimeSuccess with default locale', () {
+    test('initial state is LocalizationReady with default locale', () {
       final bloc = LocalizationBloc(mockLocalizationService);
-      expect(bloc.state, isA<RealtimeSuccess<Locale>>());
-      expect((bloc.state as RealtimeSuccess<Locale>).data, const Locale('en'));
+      expect(bloc.state, isA<LocalizationReady>());
+      expect(bloc.state.locale, const Locale('en'));
     });
 
-    blocTest<LocalizationBloc, RealtimeState<Locale>>(
-      'emits new locale when stream updates',
+    blocTest<LocalizationBloc, LocalizationState>(
+      'emits new locale when stream updates with different locale',
       build: () => LocalizationBloc(mockLocalizationService),
       act: (bloc) => localeStreamController.add(const Locale('ar')),
       expect: () => [
-        isA<RealtimeSuccess<Locale>>()
-            .having((s) => s.data, 'data', const Locale('ar')),
+        isA<LocalizationReady>()
+            .having((s) => s.locale, 'locale', const Locale('ar')),
       ],
     );
 
-    blocTest<LocalizationBloc, RealtimeState<Locale>>(
-      'calls setLocale on LocaleChanged event',
+    blocTest<LocalizationBloc, LocalizationState>(
+      'emits locale immediately on LocaleChanged and calls setLocale',
       build: () {
         when(mockLocalizationService.setLocale(any)).thenAnswer((_) async {});
         return LocalizationBloc(mockLocalizationService);
       },
       act: (bloc) => bloc.add(const LocaleChanged(Locale('fr'))),
+      expect: () => [
+        isA<LocalizationReady>()
+            .having((s) => s.locale, 'locale', const Locale('fr')),
+      ],
       verify: (_) {
         verify(mockLocalizationService.setLocale(const Locale('fr'))).called(1);
       },
     );
 
-    blocTest<LocalizationBloc, RealtimeState<Locale>>(
-      'optimistic update works correctly',
+    blocTest<LocalizationBloc, LocalizationState>(
+      'ignores stream update with same locale as current',
       build: () {
         when(mockLocalizationService.setLocale(any)).thenAnswer((_) async {});
         return LocalizationBloc(mockLocalizationService);
       },
-      seed: () => RealtimeSuccess(data: const Locale('en')),
-      act: (bloc) => bloc.add(const LocaleChanged(Locale('ar'))),
+      act: (bloc) {
+        // Change to ar, then stream echoes ar — should not emit twice
+        bloc.add(const LocaleChanged(Locale('ar')));
+        localeStreamController.add(const Locale('ar'));
+      },
       expect: () => [
-        isA<RealtimeOptimistic<Locale>>()
-            .having((s) => s.optimisticData, 'optimisticData', const Locale('ar')),
-        isA<RealtimeSuccess<Locale>>()
-            .having((s) => s.data, 'data', const Locale('ar')),
+        isA<LocalizationReady>()
+            .having((s) => s.locale, 'locale', const Locale('ar')),
+        // Stream echo of 'ar' is ignored because it matches current
       ],
     );
   });

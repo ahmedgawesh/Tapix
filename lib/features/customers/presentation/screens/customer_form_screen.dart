@@ -293,31 +293,34 @@ class _CustomerFormContentState extends State<_CustomerFormContent> {
                   const SizedBox(height: 24),
 
                   // Financial Information Section
-                  if (!isEditing) ...[
-                    _SectionHeader(title: 'customers.financial_info'.tr()),
-                    const SizedBox(height: 8),
+                  _SectionHeader(title: 'customers.financial_info'.tr()),
+                  const SizedBox(height: 8),
 
-                    // Opening Balance Field
-                    TextFormField(
-                      controller: _balanceController,
-                      decoration: InputDecoration(
-                        labelText: 'customers.opening_balance'.tr(),
-                        hintText: 'customers.opening_balance_hint'.tr(),
-                        prefixIcon: Icon(Icons.account_balance_wallet_outlined, color: theme.colorScheme.primary),
-                        filled: true,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        helperText: 'customers.opening_balance_helper'.tr(),
+                  // Opening Balance Field
+                  TextFormField(
+                    controller: _balanceController,
+                    readOnly: false,
+                    decoration: InputDecoration(
+                      labelText: isEditing
+                          ? 'customers.current_balance'.tr()
+                          : 'customers.opening_balance'.tr(),
+                      hintText: isEditing ? null : 'customers.opening_balance_hint'.tr(),
+                      prefixIcon: Icon(Icons.account_balance_wallet_outlined, color: theme.colorScheme.primary),
+                      filled: true,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      textInputAction: TextInputAction.done,
-                      onChanged: (value) => context.read<CustomerFormBloc>().add(
-                            CustomerFormBalanceChanged(value),
-                          ),
+                      helperText: isEditing
+                          ? 'customers.balance_edit_helper'.tr()
+                          : 'customers.opening_balance_helper'.tr(),
                     ),
-                    const SizedBox(height: 24),
-                  ],
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    textInputAction: TextInputAction.done,
+                    onChanged: (value) => context.read<CustomerFormBloc>().add(
+                          CustomerFormBalanceChanged(value),
+                        ),
+                  ),
+                  const SizedBox(height: 24),
 
                   // Loyalty Program Section
                   _SectionHeader(title: 'customers.loyalty'.tr()),

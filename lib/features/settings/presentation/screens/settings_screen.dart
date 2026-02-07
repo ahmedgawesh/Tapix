@@ -122,11 +122,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             context: context,
             title: 'settings.language'.tr(),
             icon: LucideIcons.languages,
-            child: BlocBuilder<LocalizationBloc, RealtimeState<Locale>>(
+            child: BlocBuilder<LocalizationBloc, LocalizationState>(
               builder: (context, state) {
-                final currentLocale = state is RealtimeSuccess<Locale>
-                    ? state.data
-                    : context.locale;
+                final currentLocale = state.locale;
 
                 return Column(
                   children: [
@@ -137,6 +135,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       currentLocale: currentLocale,
                       onTap: () {
                         context.read<LocalizationBloc>().add(const LocaleChanged(Locale('en')));
+                        context.setLocale(const Locale('en'));
                       },
                     ),
                     _buildLanguageTile(
@@ -146,6 +145,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       currentLocale: currentLocale,
                       onTap: () {
                         context.read<LocalizationBloc>().add(const LocaleChanged(Locale('ar')));
+                        context.setLocale(const Locale('ar'));
                       },
                     ),
                     _buildLanguageTile(
@@ -155,6 +155,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       currentLocale: currentLocale,
                       onTap: () {
                         context.read<LocalizationBloc>().add(const LocaleChanged(Locale('fr')));
+                        context.setLocale(const Locale('fr'));
                       },
                     ),
                   ],
