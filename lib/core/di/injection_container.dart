@@ -204,7 +204,11 @@ Future<void> init() async {
     () => SupplierLocalDatasourceImpl(sl<SupplierDao>()),
   );
   sl.registerLazySingleton<SupplierRepository>(
-    () => SupplierRepositoryImpl(sl<SupplierLocalDatasource>()),
+    () => SupplierRepositoryImpl(
+      sl<SupplierLocalDatasource>(),
+      sl<AuditLogService>(),
+      sl<SessionService>(),
+    ),
   );
 
   // Employees

@@ -2470,3 +2470,407 @@ When implementing a new feature (e.g. Sales, Expenses, Employees):
 **Last Updated**: 2026-02-08 
 **Version**: 1.0.0  
 **Status**: ACTIVE - Follow strictly for all implementations
+
+---
+
+## 🏪 Suppliers Module - Seasonal Discount Feature
+
+> **Last Enhanced**: 2026-02-07 (Schema v10018)
+> 
+> **Feature**: Seasonal Discount Dialog with Period-Based Net Purchases Calculation
+
+### Overview
+
+The **Seasonal Discount** feature allows applying discounts to suppliers based on their **net purchases** (purchases minus returns) within a selected period. This is typically used for:
+- End-of-season settlements with suppliers
+- Volume-based discounts
+- Promotional allowances
+- Year-end reconciliations
+
+### Access Point
+
+**Location**: `SupplierProfileScreen` - Quick Actions section  
+**Replaces**: The "New Purchase" button (changed to "Add Discount" with `LucideIcons.percent` icon)
+
+```dart
+// Quick action button in supplier profile
+OutlinedButton.icon(
+  onPressed: () => _showSeasonalDiscountDialog(context, supplier, profileBloc),
+  icon: const Icon(LucideIcons.percent),
+  label: Text('suppliers.add_discount'.tr()),
+)
+```
+
+### Discount Base Calculation (Accounting-Excellent Accuracy)
+
+The discount is calculated on **Net Posted Purchases Subtotal** (before tax, after returns):
+
+```
+Base = Posted Purchases Subtotal - Posted Returns Subtotal
+
+Where:
+- Posted Purchases Subtotal = SUM(purchases.subtotal_cents)
+  WHERE status = 'posted' AND purchase_date IN [period]
+  
+- Posted Returns Subtotal = SUM(purchase_returns.subtotal_cents)
+  WHERE status = 'posted' AND return_date IN [period]
+  
+Both amounts are PRE-TAX (subtotal only, excluding tax)
+```
+
+**Implementation** (`SupplierProfileScreen`):
+
+```dart
+Future<int> _getNetPostedPurchasesSubtotalCents({
+  required int supplierId,
+  required DateTime start,
+  required DateTime end,
+}) async {
+  final db = sl<AppDatabase>();
+
+  // Get posted purchases subtotal in period
+  final purchasesRow = await db.customSelect(
+    'SELECT COALESCE(SUM(p.subtotal_cents), 0) AS total '
+    'FROM purchases p '
+    'WHERE p.supplier_id = ? AND p.status = ? '
+    'AND p.purchase_date >= ? AND p.purchase_date <= ?',
+    variables: [Variable.withInt(supplierId), 'posted', start, end],
+  ).getSingle();
+
+  // Get posted returns subtotal in period (from stored subtotal_cents)
+  final returnsRow = await db.customSelect(
+    'SELECT COALESCE(SUM(pr.subtotal_cents), 0) AS total '
+    'FROM purchase_returns pr '
+    'JOIN purchases p ON p.id = pr.purchase_id '
+    'WHERE p.supplier_id = ? AND pr.status = ? '
+    'AND pr.return_date >= ? AND pr.return_date <= ?',
+    variables: [Variable.withInt(supplierId), 'posted', start, end],
+  ).getSingle();
+
+  final purchasesSubtotal = purchasesRow.read<int>('total');
+  final returnsSubtotal = returnsRow.read<int>('total');
+  final net = purchasesSubtotal - returnsSubtotal;
+  return net < 0 ? 0 : net; // Never negative
+}
+```
+
+### Database Schema Enhancement (v10018)
+
+**Problem**: Original `purchase_returns` table only had `total_cents` (tax-inclusive). For accurate pre-tax calculations, we added:
+
+```dart
+// In PurchaseReturns table (transactions.dart)
+class PurchaseReturns extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get purchaseId => integer().references(Purchases, #id)();
+  TextColumn get returnNumber => text().unique()();
+  IntColumn get totalCents => integer().map(const MoneyConverter())();
+  // NEW: Accounting-excellent fields (Schema v10018)
+  IntColumn get subtotalCents => integer().map(const MoneyConverter()).withDefault(const Constant(0))();
+  IntColumn get taxCents => integer().map(const MoneyConverter()).withDefault(const Constant(0))();
+  // ... other fields
+}
+```
+
+**Migration** (`app_database.dart`):
+
+```dart
+// Schema version bumped to 10018
+@override
+int get schemaVersion => 10018;
+
+// In onUpgrade:
+if (from < 10018) {
+  await _safeAddColumn('purchase_returns', 'subtotal_cents', 'INTEGER NOT NULL DEFAULT 0');
+  await _safeAddColumn('purchase_returns', 'tax_cents', 'INTEGER NOT NULL DEFAULT 0');
+}
+```
+
+**Calculation on Return Creation** (`PurchaseDao`):
+
+```dart
+Future<void> updatePurchaseReturnTotals(int returnId) async {
+  final totalsRow = await customSelect(
+    'SELECT '
+    '  COALESCE(SUM((pi.subtotal_cents * pri.quantity) / pi.quantity), 0) AS subtotal, '
+    '  COALESCE(SUM((pi.tax_cents * pri.quantity) / pi.quantity), 0) AS tax '
+    'FROM purchase_return_items pri '
+    'JOIN purchase_items pi ON pi.id = pri.purchase_item_id '
+    'WHERE pri.return_id = ?',
+    variables: [Variable.withInt(returnId)],
+  ).getSingle();
+
+  final subtotalCents = totalsRow.read<int>('subtotal');
+  final taxCents = totalsRow.read<int>('tax');
+
+  await customStatement(
+    'UPDATE purchase_returns '
+    'SET subtotal_cents = ?, tax_cents = ? '
+    'WHERE id = ?',
+    [subtotalCents, taxCents, returnId],
+  );
+}
+```
+
+### UI Dialog Features
+
+**Period Selection** (SegmentedButton with 3 options):
+
+```dart
+SegmentedButton<String>(
+  segments: [
+    ButtonSegment(
+      value: 'month',
+      label: Text('suppliers.period_this_month'.tr()),
+      icon: const Icon(LucideIcons.calendarDays),
+    ),
+    ButtonSegment(
+      value: 'last30',
+      label: Text('suppliers.period_last_30_days'.tr()),
+      icon: const Icon(LucideIcons.calendarClock),
+    ),
+    ButtonSegment(
+      value: 'custom',
+      label: Text('suppliers.period_custom'.tr()),
+      icon: const Icon(LucideIcons.calendarRange),
+    ),
+  ],
+  selected: {periodMode},
+  onSelectionChanged: (v) {
+    setState(() {
+      periodMode = v.first;
+      final n = DateTime.now();
+      if (periodMode == 'month') {
+        startDate = DateTime(n.year, n.month, 1);
+        endDate = n;
+      } else if (periodMode == 'last30') {
+        startDate = n.subtract(const Duration(days: 30));
+        endDate = n;
+      }
+      reloadBase(); // Recalculate base amount
+    });
+  },
+)
+```
+
+**Custom Date Range** (appears when 'custom' selected):
+
+```dart
+Row(
+  children: [
+    Expanded(
+      child: OutlinedButton.icon(
+        onPressed: () async {
+          final picked = await showDatePicker(
+            context: dialogContext,
+            initialDate: startDate,
+            firstDate: DateTime(2000),
+            lastDate: DateTime(2100),
+          );
+          if (picked != null) {
+            setState(() {
+              startDate = DateTime(picked.year, picked.month, picked.day);
+              if (startDate.isAfter(endDate)) endDate = startDate;
+              reloadBase();
+            });
+          }
+        },
+        icon: const Icon(LucideIcons.calendar),
+        label: Text('suppliers.start_date'.tr()),
+      ),
+    ),
+    const SizedBox(width: 12),
+    Expanded(
+      child: OutlinedButton.icon(
+        onPressed: () async { /* Similar for endDate */ },
+        icon: const Icon(LucideIcons.calendar),
+        label: Text('suppliers.end_date'.tr()),
+      ),
+    ),
+  ],
+)
+```
+
+**Discount Type Selection** (Fixed vs Percentage):
+
+```dart
+SegmentedButton<String>(
+  segments: [
+    ButtonSegment(
+      value: 'fixed',
+      label: Text('suppliers.discount_fixed'.tr()),
+      icon: const Icon(LucideIcons.badgeDollarSign),
+    ),
+    ButtonSegment(
+      value: 'percent',
+      label: Text('suppliers.discount_percent'.tr()),
+      icon: const Icon(LucideIcons.percent),
+    ),
+  ],
+  selected: {selectedMode},
+  onSelectionChanged: (v) {
+    setState(() {
+      selectedMode = v.first;
+      if (selectedMode == 'percent') {
+        updateFromAmount(baseCents);
+      } else {
+        updateFromPercent(baseCents);
+      }
+    });
+  },
+)
+```
+
+**Two-Way Calculation** (Amount ↔ Percentage):
+
+```dart
+void updateFromPercent(int baseCents) {
+  if (baseCents == 0) return;
+  final percent = double.tryParse(percentController.text) ?? 0;
+  final amount = (baseCents * percent / 100) / 100; // Convert to dollars
+  amountController.text = amount.toStringAsFixed(2);
+}
+
+void updateFromAmount(int baseCents) {
+  if (baseCents == 0) return;
+  final amount = double.tryParse(amountController.text) ?? 0;
+  final percent = (amount * 100 / (baseCents / 100)); // Calculate percent
+  percentController.text = percent.toStringAsFixed(2);
+}
+```
+
+### Accounting Treatment
+
+When discount is recorded:
+
+1. **Supplier Transaction Created** (`supplier_transactions` table):
+   ```dart
+   await sl<SupplierRepository>().recordTransaction(
+     supplierId: supplier.id,
+     transactionType: 'discount',
+     amountCents: -amountCents, // Negative = we owe supplier less
+     currencyId: supplier.currencyId,
+     description: descriptionController.text.isEmpty
+         ? 'suppliers.seasonal_discount'.tr()
+         : descriptionController.text,
+   );
+   ```
+
+2. **Supplier Balance Updated**:
+   ```dart
+   final currentBalance = supplier.balanceCents.toDouble().round();
+   await sl<SupplierRepository>().updateSupplierBalance(
+     supplier.id,
+     currentBalance - amountCents, // Decrease balance by discount amount
+   );
+   ```
+
+3. **Audit Log Entry** (via `AuditLogService`):
+   - Entity Type: `supplier`
+   - Action: `discount`
+   - Old Value: Previous balance
+   - New Value: New balance after discount
+   - User ID: Current logged-in user (via `SessionService`)
+
+### Localization Keys
+
+**English (en.json)**:
+```json
+"suppliers": {
+  "seasonal_discount": "Seasonal Discount",
+  "seasonal_discount_title": "Record Seasonal Discount",
+  "seasonal_discount_hint": "e.g., Seasonal promotion, Year-end allowance",
+  "seasonal_discount_recorded": "Seasonal discount recorded successfully",
+  "discount_fixed": "Fixed amount",
+  "discount_percent": "Percent",
+  "discount_base_hint": "Base: {0}",
+  "discount_base_zero": "No posted purchases found in the selected period",
+  "period_this_month": "This month",
+  "period_last_30_days": "Last 30 days",
+  "period_custom": "Custom",
+  "start_date": "Start",
+  "end_date": "End",
+  "record_discount": "Record Discount"
+}
+```
+
+**Arabic (ar.json)**:
+```json
+"suppliers": {
+  "seasonal_discount": "خصم موسمي",
+  "seasonal_discount_title": "تسجيل خصم موسمي",
+  "discount_fixed": "مبلغ ثابت",
+  "discount_percent": "نسبة مئوية",
+  "discount_base_hint": "الأساس: {0}",
+  "discount_base_zero": "لا توجد مشتريات مُرحّلة في الفترة المحددة",
+  "period_this_month": "هذا الشهر",
+  "period_last_30_days": "آخر 30 يوم",
+  "period_custom": "مخصص",
+  "start_date": "من",
+  "end_date": "إلى"
+}
+```
+
+**French (fr.json)**:
+```json
+"suppliers": {
+  "seasonal_discount": "Remise saisonnière",
+  "seasonal_discount_title": "Enregistrer une remise saisonnière",
+  "discount_fixed": "Montant fixe",
+  "discount_percent": "Pourcentage",
+  "discount_base_hint": "Base : {0}",
+  "discount_base_zero": "Aucun achat validé trouvé sur la période sélectionnée",
+  "period_this_month": "Ce mois-ci",
+  "period_last_30_days": "30 derniers jours",
+  "period_custom": "Personnalisé",
+  "start_date": "Début",
+  "end_date": "Fin"
+}
+```
+
+### Key Files Reference
+
+| File | Purpose |
+|------|---------|
+| `lib/features/suppliers/presentation/screens/supplier_profile_screen.dart` | Seasonal discount dialog UI and base calculation |
+| `lib/core/database/app_database.dart` | Schema v10018 with `subtotal_cents`/`tax_cents` columns |
+| `lib/core/database/daos/purchase_dao.dart` | `updatePurchaseReturnTotals()` method |
+| `lib/core/database/tables/transactions.dart` | `PurchaseReturns` table definition |
+| `lib/features/purchases/data/datasources/purchase_local_datasource.dart` | Exposes `updatePurchaseReturnTotals` |
+| `lib/features/purchases/data/repositories/purchase_repository_impl.dart` | Calls `updatePurchaseReturnTotals` on return creation |
+| `lib/features/suppliers/data/repositories/supplier_repository_impl.dart` | Records discount transaction + balance update |
+| `assets/translations/en.json` / `ar.json` / `fr.json` | Localization keys |
+
+### Validation & Error Handling
+
+1. **Zero Base Check**: If no posted purchases in selected period:
+   ```dart
+   if (baseCents <= 0) {
+     scaffoldMessenger.showSnackBar(
+       SnackBar(content: Text('suppliers.discount_base_zero'.tr())),
+     );
+     return;
+   }
+   ```
+
+2. **Invalid Amount**: Discount must be > 0
+
+3. **Date Validation**: Start date cannot be after end date (auto-corrected)
+
+### Summary
+
+The Seasonal Discount feature provides **accounting-excellent accuracy** by:
+- Using pre-tax subtotals for both purchases and returns
+- Storing calculated subtotal/tax in database (not deriving on-the-fly)
+- Supporting flexible period selection (month/30-days/custom)
+- Enabling two-way calculation (amount ↔ percentage)
+- Recording proper supplier transactions with audit trail
+- Supporting all 3 languages (EN/AR/FR) with RTL
+
+This ensures accurate supplier settlements and maintains accounting integrity across the system.
+
+---
+
+**Last Updated**: 2026-02-08 
+**Version**: 1.0.0  
+**Status**: ACTIVE - Follow strictly for all implementations

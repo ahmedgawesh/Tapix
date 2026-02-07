@@ -296,6 +296,9 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
 
     final returnId = await _datasource.createPurchaseReturn(returnData, itemCompanions);
 
+    // Persist accounting-accurate totals for the return (pre-tax subtotal + tax).
+    await _datasource.updatePurchaseReturnTotals(returnId);
+
     // Auto-post the return (update stock)
     await _datasource.postPurchaseReturn(returnId);
 

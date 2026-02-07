@@ -444,6 +444,28 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
 
   // ==================== PURCHASE RETURNS ====================
 
+  Future<void> updatePurchaseReturnTotals(int returnId) async {
+    final totalsRow = await customSelect(
+      'SELECT '
+      '  COALESCE(SUM((pi.subtotal_cents * pri.quantity) / pi.quantity), 0) AS subtotal, '
+      '  COALESCE(SUM((pi.tax_cents * pri.quantity) / pi.quantity), 0) AS tax '
+      'FROM purchase_return_items pri '
+      'JOIN purchase_items pi ON pi.id = pri.purchase_item_id '
+      'WHERE pri.return_id = ?',
+      variables: [Variable.withInt(returnId)],
+    ).getSingle();
+
+    final subtotalCents = totalsRow.read<int>('subtotal');
+    final taxCents = totalsRow.read<int>('tax');
+
+    await customStatement(
+      'UPDATE purchase_returns '
+      'SET subtotal_cents = ?, tax_cents = ? '
+      'WHERE id = ?',
+      [subtotalCents, taxCents, returnId],
+    );
+  }
+
   /// Watch all purchase returns
   Stream<List<PurchaseReturn>> watchAllPurchaseReturns() {
     return (select(purchaseReturns)

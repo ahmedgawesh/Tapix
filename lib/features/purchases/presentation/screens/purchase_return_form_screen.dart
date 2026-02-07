@@ -27,6 +27,41 @@ class PurchaseReturnFormScreen extends StatelessWidget {
 class _ReturnFormView extends StatelessWidget {
   const _ReturnFormView();
 
+  Future<bool> _onWillPop(BuildContext context) async {
+    final state = context.read<PurchaseReturnFormBloc>().state;
+    if (!state.hasUnsavedChanges) return true;
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('purchases.unsaved_changes_title'.tr()),
+        content: Text('purchases.unsaved_changes_message'.tr()),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('purchases.discard'.tr()),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('purchases.stay'.tr()),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
+  }
+
+  void _navigateBack(BuildContext context) async {
+    final shouldPop = await _onWillPop(context);
+    if (shouldPop && context.mounted) {
+      if (context.canPop()) {
+        context.pop();
+      } else {
+        context.go('/purchases');
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = sl<CurrencyService>();
@@ -35,13 +70,7 @@ class _ReturnFormView extends StatelessWidget {
     return BlocConsumer<PurchaseReturnFormBloc, PurchaseReturnFormState>(
       listener: (context, state) {
         if (state.isSuccess) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('purchases.return_saved'.tr()),
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-          context.pop();
+          _showReturnSavedDialog(context);
         }
         if (state.error != null) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -54,31 +83,192 @@ class _ReturnFormView extends StatelessWidget {
         }
       },
       builder: (context, state) {
-        return Scaffold(
-          appBar: AppBar(
-            leading: IconButton(
-              icon: const Icon(LucideIcons.arrowLeft),
-              onPressed: () {
-                if (context.canPop()) {
-                  context.pop();
-                } else {
-                  context.go('/purchases');
-                }
+        return PopScope(
+          canPop: !state.hasUnsavedChanges,
+          onPopInvokedWithResult: (didPop, _) async {
+            if (didPop) return;
+            _navigateBack(context);
+          },
+          child: Scaffold(
+            endDrawer: _buildSideDrawer(context, state),
+            appBar: AppBar(
+              leading: IconButton(
+                icon: const Icon(LucideIcons.arrowLeft),
+                onPressed: () => _navigateBack(context),
+              ),
+              title: Text('purchases.create_return'.tr()),
+              actions: [
+                Builder(
+                  builder: (ctx) => IconButton(
+                    icon: const Icon(LucideIcons.menu),
+                    tooltip: 'purchases.menu'.tr(),
+                    onPressed: () => Scaffold.of(ctx).openEndDrawer(),
+                  ),
+                ),
+              ],
+            ),
+            body: state.isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : LayoutBuilder(
+                    builder: (context, constraints) {
+                      final isWide = constraints.maxWidth > 900;
+                      if (isWide) {
+                        return _buildWideLayout(context, state, cs);
+                      }
+                      return _buildNarrowLayout(context, state, cs);
+                    },
+                  ),
+          ),
+        );
+      },
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // SIDE DRAWER MENU
+  // ═══════════════════════════════════════════════════════
+  Widget _buildSideDrawer(BuildContext context, PurchaseReturnFormState state) {
+    final theme = Theme.of(context);
+    final csColor = theme.colorScheme;
+
+    return Drawer(
+      child: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Text('purchases.menu'.tr(),
+                  style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold)),
+            ),
+            const Divider(),
+            ListTile(
+              leading: Icon(LucideIcons.printer, color: csColor.primary),
+              title: Text('purchases.reprint_invoice'.tr()),
+              onTap: () {
+                Navigator.pop(context);
+                _showReprintDialog(context);
               },
             ),
-            title: Text('purchases.create_return'.tr()),
-          ),
-          body: state.isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : LayoutBuilder(
-                  builder: (context, constraints) {
-                    final isWide = constraints.maxWidth > 900;
-                    if (isWide) {
-                      return _buildWideLayout(context, state, cs);
-                    }
-                    return _buildNarrowLayout(context, state, cs);
-                  },
+            if (state.purchaseId != null)
+              ListTile(
+                leading: Icon(LucideIcons.fileText, color: csColor.primary),
+                title: Text('purchases.details'.tr()),
+                onTap: () {
+                  Navigator.pop(context);
+                  context.push('/purchases/${state.purchaseId}');
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // REPRINT DIALOG
+  // ═══════════════════════════════════════════════════════
+  void _showReprintDialog(BuildContext context) {
+    final controller = TextEditingController(text: '0');
+
+    showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        final theme = Theme.of(ctx);
+        return AlertDialog(
+          title: Text('purchases.reprint_invoice_title'.tr()),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('purchases.enter_invoice_number'.tr(),
+                  style: theme.textTheme.bodyMedium),
+              const SizedBox(height: 12),
+              TextField(
+                controller: controller,
+                keyboardType: TextInputType.number,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  border: UnderlineInputBorder(),
                 ),
+                style: theme.textTheme.titleLarge,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text('common.cancel'.tr()),
+            ),
+            FilledButton(
+              onPressed: () {
+                final invoiceNum = controller.text.trim();
+                Navigator.pop(ctx);
+                if (invoiceNum.isNotEmpty && invoiceNum != '0') {
+                  final id = int.tryParse(invoiceNum);
+                  if (id != null) {
+                    context.push('/purchases/$id');
+                  }
+                }
+              },
+              child: Text('purchases.continue_btn'.tr()),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // RETURN SAVED DIALOG
+  // ═══════════════════════════════════════════════════════
+  void _showReturnSavedDialog(BuildContext context) {
+    final theme = Theme.of(context);
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return AlertDialog(
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.green.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(LucideIcons.checkCircle2, size: 48, color: Colors.green),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'purchases.return_saved'.tr(),
+                style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+          actionsAlignment: MainAxisAlignment.center,
+          actions: [
+            TextButton.icon(
+              icon: const Icon(LucideIcons.printer, size: 18),
+              label: Text('purchases.print_invoice'.tr()),
+              onPressed: () {
+                Navigator.pop(ctx);
+                context.pop();
+              },
+            ),
+            FilledButton.icon(
+              icon: const Icon(LucideIcons.checkCircle, size: 18),
+              label: Text('purchases.finish'.tr()),
+              onPressed: () {
+                Navigator.pop(ctx);
+                context.pop();
+              },
+            ),
+          ],
         );
       },
     );

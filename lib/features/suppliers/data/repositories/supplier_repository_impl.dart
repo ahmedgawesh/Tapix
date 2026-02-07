@@ -1,14 +1,20 @@
 import 'package:decimal/decimal.dart';
 import 'package:drift/drift.dart';
 import '../../../../core/database/app_database.dart';
+import '../../../../core/services/audit_log_service.dart';
+import '../../../auth/data/services/session_service.dart';
 import '../../domain/repositories/supplier_repository.dart';
 import '../datasources/supplier_local_datasource.dart';
 
 /// Implementation of SupplierRepository
 class SupplierRepositoryImpl implements SupplierRepository {
   final SupplierLocalDatasource _datasource;
+  final AuditLogService _auditService;
+  final SessionService _sessionService;
 
-  SupplierRepositoryImpl(this._datasource);
+  SupplierRepositoryImpl(this._datasource, this._auditService, this._sessionService);
+
+  Future<int?> _currentUserId() => _sessionService.getCurrentUserId();
 
   @override
   Stream<List<Supplier>> watchAllSuppliers({bool? isActive}) {
@@ -84,8 +90,24 @@ class SupplierRepositoryImpl implements SupplierRepository {
   }
 
   @override
-  Future<void> updateSupplierBalance(int supplierId, int newBalanceCents) {
-    return _datasource.updateSupplierBalance(supplierId, newBalanceCents);
+  Future<void> updateSupplierBalance(int supplierId, int newBalanceCents) async {
+    final existing = await _datasource.getSupplier(supplierId);
+    final oldBalance = existing?.balanceCents.toBigInt().toInt();
+
+    await _datasource.updateSupplierBalance(supplierId, newBalanceCents);
+
+    await _auditService.log(
+      entityType: 'supplier',
+      entityId: supplierId,
+      action: 'balance_change',
+      oldValue: oldBalance == null ? null : {'balanceCents': oldBalance},
+      newValue: {
+        'balanceCents': newBalanceCents,
+        'changeCents': oldBalance == null ? null : (newBalanceCents - oldBalance),
+        'reason': 'supplier_balance_update',
+      },
+      userId: await _currentUserId(),
+    );
   }
 
   @override

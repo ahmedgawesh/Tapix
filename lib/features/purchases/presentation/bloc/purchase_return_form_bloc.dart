@@ -59,6 +59,7 @@ class PurchaseReturnFormState extends Equatable {
   final bool isSubmitting;
   final String? error;
   final bool isSuccess;
+  final bool hasUnsavedChanges;
 
   const PurchaseReturnFormState({
     this.purchaseId,
@@ -73,6 +74,7 @@ class PurchaseReturnFormState extends Equatable {
     this.isSubmitting = false,
     this.error,
     this.isSuccess = false,
+    this.hasUnsavedChanges = false,
   });
 
   /// Max returnable quantity for a given purchase item
@@ -103,6 +105,7 @@ class PurchaseReturnFormState extends Equatable {
     bool? isSubmitting,
     String? error,
     bool? isSuccess,
+    bool? hasUnsavedChanges,
   }) {
     return PurchaseReturnFormState(
       purchaseId: purchaseId ?? this.purchaseId,
@@ -117,6 +120,7 @@ class PurchaseReturnFormState extends Equatable {
       isSubmitting: isSubmitting ?? this.isSubmitting,
       error: error,
       isSuccess: isSuccess ?? this.isSuccess,
+      hasUnsavedChanges: hasUnsavedChanges ?? this.hasUnsavedChanges,
     );
   }
 
@@ -124,7 +128,7 @@ class PurchaseReturnFormState extends Equatable {
   List<Object?> get props => [
         purchaseId, purchase, availableItems, returnItems,
         alreadyReturnedQty, reason, dispositionType, currencyId,
-        isLoading, isSubmitting, error, isSuccess,
+        isLoading, isSubmitting, error, isSuccess, hasUnsavedChanges,
       ];
 }
 
@@ -258,7 +262,7 @@ class PurchaseReturnFormBloc
       final updated = state.returnItems
           .where((r) => r.originalItem.id != event.item.id)
           .toList();
-      emit(state.copyWith(returnItems: updated));
+      emit(state.copyWith(returnItems: updated, hasUnsavedChanges: true));
     } else {
       // Add item with max returnable quantity
       final maxQty = state.maxReturnableQty(event.item.id, event.item.quantity);
@@ -271,7 +275,7 @@ class PurchaseReturnFormBloc
         returnQuantity: maxQty,
         refundCents: Decimal.fromInt(refundInt),
       );
-      emit(state.copyWith(returnItems: [...state.returnItems, newItem]));
+      emit(state.copyWith(returnItems: [...state.returnItems, newItem], hasUnsavedChanges: true));
     }
   }
 
@@ -295,7 +299,7 @@ class PurchaseReturnFormBloc
       }
       return item;
     }).toList();
-    emit(state.copyWith(returnItems: updated));
+    emit(state.copyWith(returnItems: updated, hasUnsavedChanges: true));
   }
 
   void _onItemReasonChanged(
@@ -360,7 +364,7 @@ class PurchaseReturnFormBloc
         returnDate: DateTime.now(),
       );
 
-      emit(state.copyWith(isSubmitting: false, isSuccess: true));
+      emit(state.copyWith(isSubmitting: false, isSuccess: true, hasUnsavedChanges: false));
     } catch (e) {
       emit(state.copyWith(isSubmitting: false, error: e.toString()));
     }

@@ -19,6 +19,7 @@ enum PurchasePaymentMethod { cash, credit, card, cheque, purchaseOrder }
 
 class PurchaseFormState extends Equatable {
   final int? purchaseId;
+  final String? purchaseNumber;
   final int? supplierId;
   final String? supplierName;
   final int currencyId;
@@ -35,9 +36,11 @@ class PurchaseFormState extends Equatable {
   final bool isSubmitting;
   final String? error;
   final bool isSuccess;
+  final bool hasUnsavedChanges;
 
   PurchaseFormState({
     this.purchaseId,
+    this.purchaseNumber,
     this.supplierId,
     this.supplierName,
     required this.currencyId,
@@ -54,6 +57,7 @@ class PurchaseFormState extends Equatable {
     this.isSubmitting = false,
     this.error,
     this.isSuccess = false,
+    this.hasUnsavedChanges = false,
   }) : invoiceDiscountCents = invoiceDiscountCents ?? Decimal.zero,
        taxRatePercent = taxRatePercent ?? Decimal.zero,
        paidAmountCents = paidAmountCents ?? Decimal.zero;
@@ -105,6 +109,7 @@ class PurchaseFormState extends Equatable {
 
   PurchaseFormState copyWith({
     int? purchaseId,
+    String? purchaseNumber,
     int? supplierId,
     String? supplierName,
     int? currencyId,
@@ -122,9 +127,11 @@ class PurchaseFormState extends Equatable {
     String? error,
     bool? isSuccess,
     bool clearDueDate = false,
+    bool? hasUnsavedChanges,
   }) {
     return PurchaseFormState(
       purchaseId: purchaseId ?? this.purchaseId,
+      purchaseNumber: purchaseNumber ?? this.purchaseNumber,
       supplierId: supplierId ?? this.supplierId,
       supplierName: supplierName ?? this.supplierName,
       currencyId: currencyId ?? this.currencyId,
@@ -141,16 +148,17 @@ class PurchaseFormState extends Equatable {
       isSubmitting: isSubmitting ?? this.isSubmitting,
       error: error,
       isSuccess: isSuccess ?? this.isSuccess,
+      hasUnsavedChanges: hasUnsavedChanges ?? this.hasUnsavedChanges,
     );
   }
 
   @override
   List<Object?> get props => [
-        purchaseId, supplierId, supplierName, currencyId, items,
+        purchaseId, purchaseNumber, supplierId, supplierName, currencyId, items,
         discountMode, invoiceDiscountCents, supplierInvoiceRef,
         notes, purchaseDate, dueDate,
         paymentMethod, taxRatePercent, paidAmountCents,
-        isSubmitting, error, isSuccess,
+        isSubmitting, error, isSuccess, hasUnsavedChanges,
       ];
 }
 
@@ -456,14 +464,24 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
   ) async {
     await _loadColorSizeLookups();
 
+    if (event.purchaseId == null) {
+      // New purchase: generate next invoice number
+      try {
+        final nextNumber = await _repository.generatePurchaseNumber();
+        emit(state.copyWith(
+          currencyId: event.currencyId,
+          purchaseNumber: nextNumber,
+        ));
+      } catch (_) {
+        emit(state.copyWith(currencyId: event.currencyId));
+      }
+      return;
+    }
+
     emit(state.copyWith(
       purchaseId: event.purchaseId,
       currencyId: event.currencyId,
     ));
-
-    if (event.purchaseId == null) {
-      return;
-    }
 
     try {
       final purchase = await _repository.getPurchaseById(event.purchaseId!);
@@ -548,6 +566,7 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
 
       emit(state.copyWith(
         purchaseId: purchase.id,
+        purchaseNumber: purchase.purchaseNumber,
         supplierId: purchase.supplierId,
         supplierName: purchase.supplierName,
         currencyId: purchase.currencyId,
@@ -646,7 +665,7 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
       colorHex: _resolveColorHex(resolvedVariant?.colorId),
       sizeName: _resolveSizeName(resolvedVariant?.sizeId),
     );
-    emit(state.copyWith(items: [...state.items, newItem]));
+    emit(state.copyWith(items: [...state.items, newItem], hasUnsavedChanges: true));
   }
 
   void _onLineItemUpdated(
@@ -665,7 +684,7 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
       }
       return item;
     }).toList();
-    emit(state.copyWith(items: updatedItems));
+    emit(state.copyWith(items: updatedItems, hasUnsavedChanges: true));
   }
 
   void _onLineItemRemoved(
@@ -673,7 +692,7 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
     Emitter<PurchaseFormState> emit,
   ) {
     final updatedItems = state.items.where((item) => item.tempId != event.tempId).toList();
-    emit(state.copyWith(items: updatedItems));
+    emit(state.copyWith(items: updatedItems, hasUnsavedChanges: true));
   }
 
   Future<void> _onSubmitted(
@@ -724,6 +743,7 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
           purchaseId: purchaseId,
           isSubmitting: false,
           isSuccess: true,
+          hasUnsavedChanges: false,
         ));
       } else {
         final ok = await _repository.updatePurchase(
@@ -749,6 +769,7 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
         emit(state.copyWith(
           isSubmitting: false,
           isSuccess: true,
+          hasUnsavedChanges: false,
         ));
       }
     } catch (e) {

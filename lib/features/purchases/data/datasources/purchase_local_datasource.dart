@@ -30,6 +30,7 @@ abstract class PurchaseLocalDatasource {
   Stream<List<PurchaseReturnItemEntity>> watchPurchaseReturnItems(int returnId);
   Future<String> generateReturnNumber();
   Future<int> createPurchaseReturn(db.PurchaseReturnsCompanion returnData, List<db.PurchaseReturnItemsCompanion> items);
+  Future<void> updatePurchaseReturnTotals(int returnId);
   Future<void> postPurchaseReturn(int returnId);
   Future<void> voidPurchaseReturn(int returnId);
 
@@ -202,6 +203,11 @@ class PurchaseLocalDatasourceImpl implements PurchaseLocalDatasource {
     List<db.PurchaseReturnItemsCompanion> items,
   ) {
     return _dao.createPurchaseReturn(returnData, items);
+  }
+
+  @override
+  Future<void> updatePurchaseReturnTotals(int returnId) {
+    return _dao.updatePurchaseReturnTotals(returnId);
   }
 
   @override

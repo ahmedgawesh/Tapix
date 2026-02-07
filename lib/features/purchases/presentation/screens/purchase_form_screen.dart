@@ -16,6 +16,9 @@ import '../../../products/domain/repositories/product_color_repository.dart';
 import '../../../products/domain/repositories/product_repository.dart';
 import '../../../products/domain/repositories/size_repository.dart';
 import '../../../products/domain/repositories/product_variant_repository.dart';
+import '../../../products/domain/entities/category_entity.dart';
+import '../../../products/presentation/bloc/categories_bloc.dart';
+import '../../../products/presentation/bloc/categories_event.dart';
 import '../../../products/presentation/bloc/products_bloc.dart';
 import '../../../products/presentation/bloc/product_variants_bloc.dart';
 import '../../../products/presentation/bloc/variant_previews_bloc.dart';
@@ -43,6 +46,41 @@ class PurchaseFormScreen extends StatelessWidget {
 class _PurchaseFormView extends StatelessWidget {
   const _PurchaseFormView();
 
+  Future<bool> _onWillPop(BuildContext context) async {
+    final state = context.read<PurchaseFormBloc>().state;
+    if (!state.hasUnsavedChanges) return true;
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('purchases.unsaved_changes_title'.tr()),
+        content: Text('purchases.unsaved_changes_message'.tr()),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('purchases.discard'.tr()),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('purchases.stay'.tr()),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
+  }
+
+  void _navigateBack(BuildContext context) async {
+    final shouldPop = await _onWillPop(context);
+    if (shouldPop && context.mounted) {
+      if (context.canPop()) {
+        context.pop();
+      } else {
+        context.go('/purchases');
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
@@ -51,13 +89,7 @@ class _PurchaseFormView extends StatelessWidget {
     return BlocConsumer<PurchaseFormBloc, PurchaseFormState>(
       listener: (context, state) {
         if (state.isSuccess) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('purchases.saved_success'.tr()),
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-          context.pop();
+          _showSaveConfirmationDialog(context, state);
         }
         if (state.error != null) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -70,40 +102,49 @@ class _PurchaseFormView extends StatelessWidget {
         }
       },
       builder: (context, state) {
-        return Scaffold(
-          appBar: AppBar(
-            leading: IconButton(
-              icon: const Icon(LucideIcons.arrowLeft),
-              onPressed: () {
-                if (context.canPop()) {
-                  context.pop();
-                } else {
-                  context.go('/purchases');
+        return PopScope(
+          canPop: !state.hasUnsavedChanges,
+          onPopInvokedWithResult: (didPop, _) async {
+            if (didPop) return;
+            _navigateBack(context);
+          },
+          child: Scaffold(
+            endDrawer: _buildSideDrawer(context, state),
+            appBar: AppBar(
+              leading: IconButton(
+                icon: const Icon(LucideIcons.arrowLeft),
+                onPressed: () => _navigateBack(context),
+              ),
+              title: Text(state.purchaseId == null
+                  ? 'purchases.title'.tr()
+                  : 'purchases.edit'.tr()),
+              actions: [
+                if (state.purchaseId != null)
+                  TextButton.icon(
+                    icon: const Icon(LucideIcons.checkCircle, size: 18),
+                    label: Text('purchases.post'.tr()),
+                    onPressed: state.isSubmitting
+                        ? null
+                        : () => context.read<PurchaseFormBloc>().add(const PurchaseFormPosted()),
+                  ),
+                Builder(
+                  builder: (ctx) => IconButton(
+                    icon: const Icon(LucideIcons.menu),
+                    tooltip: 'purchases.menu'.tr(),
+                    onPressed: () => Scaffold.of(ctx).openEndDrawer(),
+                  ),
+                ),
+              ],
+            ),
+            body: LayoutBuilder(
+              builder: (context, constraints) {
+                final isWide = constraints.maxWidth > 900;
+                if (isWide) {
+                  return _buildWideLayout(context, state, currencyService);
                 }
+                return _buildNarrowLayout(context, state, currencyService);
               },
             ),
-            title: Text(state.purchaseId == null
-                ? 'purchases.new'.tr()
-                : 'purchases.edit'.tr()),
-            actions: [
-              if (state.purchaseId != null)
-                TextButton.icon(
-                  icon: const Icon(LucideIcons.checkCircle, size: 18),
-                  label: Text('purchases.post'.tr()),
-                  onPressed: state.isSubmitting
-                      ? null
-                      : () => context.read<PurchaseFormBloc>().add(const PurchaseFormPosted()),
-                ),
-            ],
-          ),
-          body: LayoutBuilder(
-            builder: (context, constraints) {
-              final isWide = constraints.maxWidth > 900;
-              if (isWide) {
-                return _buildWideLayout(context, state, currencyService);
-              }
-              return _buildNarrowLayout(context, state, currencyService);
-            },
           ),
         );
       },
@@ -123,7 +164,9 @@ class _PurchaseFormView extends StatelessWidget {
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              _buildSupplierCard(context, state),
+              _buildInvoiceHeaderCard(context, state),
+              const SizedBox(height: 12),
+              _buildSearchBarWithScan(context),
               const SizedBox(height: 12),
               _buildDatesCard(context, state),
               const SizedBox(height: 12),
@@ -169,11 +212,9 @@ class _PurchaseFormView extends StatelessWidget {
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              _buildSupplierCard(context, state),
+              _buildInvoiceHeaderCard(context, state),
               const SizedBox(height: 12),
-              _buildDatesCard(context, state),
-              const SizedBox(height: 12),
-              _buildRefCard(context, state),
+              _buildSearchBarWithScan(context),
               const SizedBox(height: 12),
               _buildItemsCard(context, state, cs),
               const SizedBox(height: 12),
@@ -192,84 +233,394 @@ class _PurchaseFormView extends StatelessWidget {
   }
 
   // ═══════════════════════════════════════════════════════
-  // SUPPLIER CARD (Premium)
+  // INVOICE HEADER CARD (Invoice # + Date)
   // ═══════════════════════════════════════════════════════
-  Widget _buildSupplierCard(BuildContext context, PurchaseFormState state) {
+  Widget _buildInvoiceHeaderCard(BuildContext context, PurchaseFormState state) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final hasSupplier = state.supplierName != null;
-    final supplierInitial = hasSupplier && state.supplierName!.isNotEmpty
-        ? state.supplierName![0].toUpperCase()
-        : '?';
 
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: cs.primary.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(14),
-        side: BorderSide(
-          color: hasSupplier ? cs.primary.withValues(alpha: 0.3) : cs.outlineVariant,
-        ),
+        border: Border.all(color: cs.primary.withValues(alpha: 0.2)),
       ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: () => _showSupplierPicker(context),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Container(
-                width: 44, height: 44,
-                decoration: BoxDecoration(
-                  gradient: hasSupplier
-                      ? LinearGradient(
-                          colors: [cs.primary, cs.primary.withValues(alpha: 0.7)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        )
-                      : null,
-                  color: hasSupplier ? null : cs.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(12),
+      child: Row(
+        children: [
+          // Invoice Number
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('purchases.invoice_number'.tr(),
+                    style: theme.textTheme.labelSmall?.copyWith(
+                        color: cs.onSurfaceVariant, letterSpacing: 0.5)),
+                const SizedBox(height: 4),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: cs.surface,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: cs.outlineVariant),
+                  ),
+                  child: Text(
+                    state.purchaseNumber ?? '—',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold, color: cs.primary),
+                  ),
                 ),
-                alignment: Alignment.center,
-                child: hasSupplier
-                    ? Text(supplierInitial,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                            color: Colors.white, fontWeight: FontWeight.bold))
-                    : Icon(LucideIcons.building2, color: cs.onSurfaceVariant, size: 22),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('purchases.supplier'.tr(),
-                        style: theme.textTheme.labelSmall?.copyWith(
-                            color: cs.onSurfaceVariant,
-                            letterSpacing: 0.5)),
-                    const SizedBox(height: 2),
-                    Text(
-                      hasSupplier ? state.supplierName! : 'purchases.select_supplier'.tr(),
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: hasSupplier ? FontWeight.w600 : FontWeight.normal,
-                        color: hasSupplier ? null : cs.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: cs.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(LucideIcons.chevronRight, size: 16, color: cs.onSurfaceVariant),
-              ),
-            ],
+              ],
+            ),
           ),
+          const SizedBox(width: 16),
+          // Invoice Date
+          Expanded(
+            child: InkWell(
+              borderRadius: BorderRadius.circular(8),
+              onTap: () async {
+                final date = await showDatePicker(
+                  context: context,
+                  initialDate: state.purchaseDate,
+                  firstDate: DateTime(2020),
+                  lastDate: DateTime.now().add(const Duration(days: 365)),
+                );
+                if (date != null && context.mounted) {
+                  context.read<PurchaseFormBloc>().add(PurchaseDateChanged(date));
+                }
+              },
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('purchases.invoice_date'.tr(),
+                      style: theme.textTheme.labelSmall?.copyWith(
+                          color: cs.onSurfaceVariant, letterSpacing: 0.5)),
+                  const SizedBox(height: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: cs.surface,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: cs.outlineVariant),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(LucideIcons.calendar, size: 14, color: cs.primary),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            DateFormat.yMd().format(state.purchaseDate),
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                                fontWeight: FontWeight.w500),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // SEARCH BAR WITH BARCODE SCAN BUTTON
+  // ═══════════════════════════════════════════════════════
+  Widget _buildSearchBarWithScan(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+
+    return Row(
+      children: [
+        Expanded(
+          child: InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () => _showAddItemSheet(context),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
+              ),
+              child: Row(
+                children: [
+                  Icon(LucideIcons.search, size: 18, color: cs.onSurfaceVariant),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'purchases.search_or_scan'.tr(),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                          color: cs.onSurfaceVariant),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => _openBarcodeScanner(context),
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
+            ),
+            child: Icon(LucideIcons.scanLine, size: 22, color: cs.onSurfaceVariant),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // SIDE DRAWER MENU
+  // ═══════════════════════════════════════════════════════
+  Widget _buildSideDrawer(BuildContext context, PurchaseFormState state) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+
+    return Drawer(
+      child: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Text('purchases.menu'.tr(),
+                  style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold)),
+            ),
+            const Divider(),
+            ListTile(
+              leading: Icon(LucideIcons.plusCircle, color: cs.primary),
+              title: Text('purchases.add_new_product'.tr()),
+              onTap: () {
+                Navigator.pop(context);
+                context.push('/products/add');
+              },
+            ),
+            ListTile(
+              leading: Icon(LucideIcons.printer, color: cs.primary),
+              title: Text('purchases.reprint_invoice'.tr()),
+              onTap: () {
+                Navigator.pop(context);
+                _showReprintInvoiceDialog(context);
+              },
+            ),
+            ListTile(
+              leading: Icon(LucideIcons.fileEdit, color: cs.primary),
+              title: Text('purchases.edit_purchase'.tr()),
+              enabled: state.purchaseId != null,
+              onTap: state.purchaseId != null ? () {
+                Navigator.pop(context);
+                context.push('/purchases/${state.purchaseId}/edit');
+              } : null,
+            ),
+            ListTile(
+              leading: Icon(LucideIcons.fileInput, color: cs.primary),
+              title: Text('purchases.import_from_po'.tr()),
+              onTap: () {
+                Navigator.pop(context);
+                // TODO: Implement import from PO
+              },
+            ),
+            ListTile(
+              leading: Icon(LucideIcons.fileOutput, color: cs.primary),
+              title: Text('purchases.import_from_dispatch'.tr()),
+              onTap: () {
+                Navigator.pop(context);
+                // TODO: Implement import from dispatch
+              },
+            ),
+          ],
         ),
       ),
     );
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // REPRINT INVOICE DIALOG
+  // ═══════════════════════════════════════════════════════
+  void _showReprintInvoiceDialog(BuildContext context) {
+    final controller = TextEditingController(text: '0');
+
+    showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        final theme = Theme.of(ctx);
+        return AlertDialog(
+          title: Text('purchases.reprint_invoice_title'.tr()),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('purchases.enter_invoice_number'.tr(),
+                  style: theme.textTheme.bodyMedium),
+              const SizedBox(height: 12),
+              TextField(
+                controller: controller,
+                keyboardType: TextInputType.number,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  border: UnderlineInputBorder(),
+                ),
+                style: theme.textTheme.titleLarge,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text('common.cancel'.tr()),
+            ),
+            FilledButton(
+              onPressed: () {
+                final invoiceNum = controller.text.trim();
+                Navigator.pop(ctx);
+                if (invoiceNum.isNotEmpty && invoiceNum != '0') {
+                  // Navigate to purchase detail for reprinting
+                  final id = int.tryParse(invoiceNum);
+                  if (id != null) {
+                    context.push('/purchases/$id');
+                  }
+                }
+              },
+              child: Text('purchases.continue_btn'.tr()),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // SAVE CONFIRMATION DIALOG (Print / Barcode / Finish)
+  // ═══════════════════════════════════════════════════════
+  void _showSaveConfirmationDialog(BuildContext context, PurchaseFormState state) {
+    final theme = Theme.of(context);
+    final invoiceNumber = state.purchaseNumber ?? '${state.purchaseId ?? ''}';
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return AlertDialog(
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.green.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(LucideIcons.checkCircle2, size: 48, color: Colors.green),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'purchases.invoice_saved_message'.tr(args: [invoiceNumber]),
+                style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+          actionsAlignment: MainAxisAlignment.center,
+          actions: [
+            TextButton.icon(
+              icon: const Icon(LucideIcons.printer, size: 18),
+              label: Text('purchases.print_invoice'.tr()),
+              onPressed: () {
+                Navigator.pop(ctx);
+                // TODO: Implement print functionality
+                context.pop();
+              },
+            ),
+            TextButton.icon(
+              icon: const Icon(LucideIcons.scan, size: 18),
+              label: Text('purchases.generate_barcode'.tr()),
+              onPressed: () {
+                Navigator.pop(ctx);
+                context.push('/barcode');
+                // Navigate back after barcode
+              },
+            ),
+            FilledButton.icon(
+              icon: const Icon(LucideIcons.checkCircle, size: 18),
+              label: Text('purchases.finish'.tr()),
+              onPressed: () {
+                Navigator.pop(ctx);
+                context.pop();
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // BARCODE SCANNER
+  // ═══════════════════════════════════════════════════════
+  void _openBarcodeScanner(BuildContext context) async {
+    final result = await context.push<String>('/barcode-scanner', extra: {'returnOnScan': true});
+    if (result != null && result.isNotEmpty && context.mounted) {
+      final productRepo = sl<ProductRepository>();
+      final variantRepo = sl<ProductVariantRepository>();
+
+      try {
+        // Try to find variant by barcode first
+        final variant = await variantRepo.getVariantByBarcode(result);
+        if (variant != null && context.mounted) {
+          final product = await productRepo.watchProduct(variant.productId).first;
+          if (product != null && context.mounted) {
+            context.read<PurchaseFormBloc>().add(PurchaseLineItemAdded(
+                  product: product,
+                  variant: variant,
+                  quantity: 1,
+                  unitCostCents: variant.costCents,
+                ));
+            return;
+          }
+        }
+
+        // Try product barcode
+        final product = await productRepo.findByBarcode(result);
+        if (product != null && context.mounted) {
+          context.read<PurchaseFormBloc>().add(PurchaseLineItemAdded(
+                product: product,
+                quantity: 1,
+                unitCostCents: product.costCents,
+              ));
+          return;
+        }
+
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('purchases.no_products_found'.tr()),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      } catch (_) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('purchases.no_products_found'.tr()),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+    }
   }
 
   // ═══════════════════════════════════════════════════════
@@ -853,28 +1204,6 @@ class _PurchaseFormView extends StatelessWidget {
   // DIALOGS & SHEETS
   // ═══════════════════════════════════════════════════════
 
-  void _showSupplierPicker(BuildContext context) async {
-    final suppliers = await sl<SupplierRepository>().searchSuppliers('');
-    if (!context.mounted) return;
-
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (sheetCtx) => _SupplierPickerSheet(
-        suppliers: suppliers,
-        onSelected: (supplier) {
-          context.read<PurchaseFormBloc>().add(
-                PurchaseSupplierChanged(supplier.id, supplierName: supplier.name),
-              );
-          Navigator.pop(sheetCtx);
-        },
-      ),
-    );
-  }
-
   void _showInvoiceDiscountDialog(BuildContext context, PurchaseFormState state) {
     final subtotalCents = state.subtotalCents;
     final subtotalIntCents = subtotalCents.toBigInt().toInt();
@@ -1026,6 +1355,7 @@ class _PurchaseFormView extends StatelessWidget {
         providers: [
           BlocProvider.value(value: context.read<ProductsBloc>()),
           BlocProvider(create: (_) => sl<VariantPreviewsBloc>()),
+          BlocProvider(create: (_) => sl<CategoriesBloc>()..add(const LoadCategories())),
         ],
         child: _AddItemSheet(
           onItemAdded: (product, variant, quantity, unitCost) {
@@ -2488,6 +2818,7 @@ class _AddItemSheetState extends State<_AddItemSheet> {
   Product? _selectedProduct;
   final int _quantity = 1;
   final _searchController = TextEditingController();
+  int? _selectedCategoryId;
 
   Color? _tryParseHexColor(String? hex) {
     if (hex == null) return null;
@@ -2740,8 +3071,8 @@ class _AddItemSheetState extends State<_AddItemSheet> {
                 ],
               ),
             ),
-            // Search
-            if (_selectedProduct == null)
+            // Search + Category Filter
+            if (_selectedProduct == null) ...[
               Padding(
                 padding: const EdgeInsets.all(16),
                 child: TextField(
@@ -2754,8 +3085,55 @@ class _AddItemSheetState extends State<_AddItemSheet> {
                   ),
                   onChanged: (_) => setState(() {}),
                 ),
-              )
-            else
+              ),
+              // Category filter chips
+              BlocBuilder<CategoriesBloc, RealtimeState<List<Category>>>(
+                builder: (context, catState) {
+                  List<Category> categories = const [];
+                  if (catState is RealtimeSuccess<List<Category>>) {
+                    categories = catState.data;
+                  } else if (catState is RealtimeLoading<List<Category>>) {
+                    categories = catState.previousData ?? const [];
+                  }
+                  if (categories.isEmpty) return const SizedBox.shrink();
+
+                  return SizedBox(
+                    height: 40,
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      children: [
+                        Padding(
+                          padding: const EdgeInsetsDirectional.only(end: 6),
+                          child: ChoiceChip(
+                            label: Text('purchases.all_categories'.tr()),
+                            selected: _selectedCategoryId == null,
+                            onSelected: (_) => setState(() => _selectedCategoryId = null),
+                            showCheckmark: false,
+                            selectedColor: cs.primaryContainer,
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        ),
+                        ...categories.map((cat) => Padding(
+                              padding: const EdgeInsetsDirectional.only(end: 6),
+                              child: ChoiceChip(
+                                label: Text(cat.name),
+                                selected: _selectedCategoryId == cat.id,
+                                onSelected: (_) => setState(() {
+                                  _selectedCategoryId = _selectedCategoryId == cat.id ? null : cat.id;
+                                }),
+                                showCheckmark: false,
+                                selectedColor: cs.primaryContainer,
+                                visualDensity: VisualDensity.compact,
+                              ),
+                            )),
+                      ],
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 8),
+            ] else
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: Text('purchases.select_variant'.tr(),
@@ -2802,6 +3180,10 @@ class _AddItemSheetState extends State<_AddItemSheet> {
 
             final query = _searchController.text.toLowerCase();
             final filtered = products.where((p) {
+              // Category filter
+              if (_selectedCategoryId != null && p.categoryId != _selectedCategoryId) {
+                return false;
+              }
               if (query.isEmpty) return true;
               return p.name.toLowerCase().contains(query) ||
                   (p.sku?.toLowerCase().contains(query) ?? false) ||

@@ -535,6 +535,9 @@ CREATE TABLE IF NOT EXISTS loyalty_settings (
     await _safeAddColumn('purchases', 'due_date', 'TEXT');
     await _safeAddColumn('purchase_returns', 'status', "TEXT NOT NULL DEFAULT 'draft'");
     await _safeAddColumn('purchase_returns', 'disposition_type', "TEXT NOT NULL DEFAULT 'restock'");
+    // Purchase returns accounting totals (v10018)
+    await _safeAddColumn('purchase_returns', 'subtotal_cents', 'INTEGER NOT NULL DEFAULT 0');
+    await _safeAddColumn('purchase_returns', 'tax_cents', 'INTEGER NOT NULL DEFAULT 0');
     await _safeAddColumn('purchase_return_items', 'reason', 'TEXT');
 
     await customStatement('''
@@ -577,7 +580,7 @@ CREATE TABLE IF NOT EXISTS sale_payments (
   }
 
   @override
-  int get schemaVersion => 10017;
+  int get schemaVersion => 10018;
 
   @override
   MigrationStrategy get migration {
@@ -761,6 +764,12 @@ CREATE TABLE IF NOT EXISTS sale_payments (
         // Migration 10016 -> 10017: Purchase-specific permissions in roles
         if (from < 10017) {
           await _updateRolesWithPurchasePermissions();
+        }
+
+        // Migration 10017 -> 10018: Purchase return subtotal/tax totals
+        if (from < 10018) {
+          await _safeAddColumn('purchase_returns', 'subtotal_cents', 'INTEGER NOT NULL DEFAULT 0');
+          await _safeAddColumn('purchase_returns', 'tax_cents', 'INTEGER NOT NULL DEFAULT 0');
         }
 
         await _createIndexes();
