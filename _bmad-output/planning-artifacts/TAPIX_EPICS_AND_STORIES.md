@@ -411,23 +411,38 @@
 - [ ] Form validation
 - [ ] Any money fields use integer cents
 
-### STORY-04-15: User Account Management
+### STORY-04-15: User Account Management ✅ DONE
 **As a** Owner
 **I want** to manage user accounts
 **So that** system access is controlled.
 
 **Acceptance Criteria:**
-- [ ] CRUD for users with roles
-- [ ] Sensitive actions enforce permission checks
+- [x] CRUD for users with roles
+- [x] Sensitive actions enforce permission checks
 
-### STORY-04-16: User Role Permissions
+**Implementation Notes:**
+- Implemented UserRepository with watch/CRUD methods
+- Created UsersBloc and UserFormBloc extending RealtimeBloc
+- Built UsersScreen with search, filter, and user list
+- Added UserFormScreen for create/edit with validation
+- 17 tests passing (6 for UsersBloc, 11 for UserFormBloc)
+- Fixed 4-role system (owner, manager, cashier, salesperson)
+
+### STORY-04-16: User Role Permissions ✅ DONE
 **As a** Owner
 **I want** role-based permissions
 **So that** users only see allowed modules/actions.
 
 **Acceptance Criteria:**
-- [ ] UI and business logic enforcement are consistent
-- [ ] GoRouter route guards follow current architecture
+- [x] UI and business logic enforcement are consistent
+- [x] GoRouter route guards follow current architecture
+
+**Implementation Notes:**
+- PermissionService implements hardcoded permission matrix
+- RolesScreen shows role overview and permission matrix
+- PermissionGate widget for conditional UI rendering
+- Route guards in app_router.dart check user roles
+- All permissions checked via PermissionService.canAccess()
 
 ### STORY-04-17: Employee Performance Tracking
 **As a** Manager

@@ -551,7 +551,262 @@ UX rules learned from research:
 
 ---
 
-## 📱 Responsive Design (MANDATORY)
+## � User Management & Role Permissions (IMPLEMENTED)
+
+### Overview
+
+The **User Management** feature provides comprehensive control over system access with fixed roles and granular permissions. This module is **offline-first** via Drift and **real-time** via `RealtimeBloc` streams.
+
+### Core Architecture
+
+#### Fixed Role System (4 Roles Only)
+
+**NO dynamic roles** - The system uses exactly 4 fixed roles defined in `UserRole` enum:
+
+```dart
+enum UserRole {
+  owner,      // Full system access
+  manager,    // Business operations, no user/system management
+  cashier,    // Sales processing only
+  salesperson // Sales + customer management
+}
+```
+
+**Critical**: NEVER add or modify roles. All permission logic is hardcoded for these 4 roles.
+
+#### Permission System
+
+**Permissions are checked via `PermissionService`** in `lib/features/auth/data/services/permission_service.dart`:
+
+```dart
+class PermissionService {
+  bool canAccess(String permission, UserRole role) {
+    // Hardcoded permission matrix for 4 roles
+    switch (permission) {
+      case 'module_dashboard':
+        return true; // All roles can access
+      case 'module_users':
+        return role == UserRole.owner; // Only owner
+      case 'manage_products':
+        return role == UserRole.owner || role == UserRole.manager;
+      // ... other permissions
+    }
+  }
+}
+```
+
+### Database Schema
+
+#### `users` table
+
+```sql
+CREATE TABLE users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  username TEXT NOT NULL UNIQUE,           -- Login username
+  password_hash TEXT NOT NULL,             -- bcrypt hashed password
+  role TEXT NOT NULL,                      -- UserRole enum value
+  is_active INTEGER NOT NULL DEFAULT 1,    -- Active/inactive flag
+  employee_id INTEGER NULL,                -- Optional link to employee
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  last_login_at TEXT NULL,                 -- Track last login
+  FOREIGN KEY (employee_id) REFERENCES employees(id)
+);
+```
+
+### Domain & Data Layer
+
+#### Key Entities
+- `UserEntity` - Domain model with `UserRole` enum
+- `UserRole` - Fixed enum with 4 values (owner, manager, cashier, salesperson)
+
+#### Repository Pattern
+- `UserRepositoryInterface` - Contract with watch/CRUD methods
+- `UserRepository` - Implementation using Drift + PasswordService
+
+**Key Methods:**
+```dart
+// Real-time streams
+Stream<List<UserEntity>> watchAllUsers();
+Stream<Map<UserRole, int>> watchRoleCounts();
+
+// CRUD operations
+Future<UserEntity> createUser({...});
+Future<void> updateUser({...});
+Future<void> toggleUserActive(int userId, bool isActive);
+
+// Validation
+Future<bool> isUsernameTaken(String username, {int? excludeUserId});
+```
+
+### Presentation Layer
+
+#### Screens Implemented
+
+1. **UsersScreen** (`/users`)
+   - Main dashboard with search, role filter, user list
+   - Quick stats cards (total, active, by role)
+   - Real-time updates via `UsersBloc`
+   - Responsive layout (mobile/tablet/desktop)
+
+2. **UserFormScreen** (`/users/add` or `/users/:id/edit`)
+   - Create/edit user with sections:
+     - Account Info (username, password)
+     - Role & Permissions (choice chips for 4 roles)
+     - Link to Employee (optional bottom sheet selector)
+   - Full validation via `UserFormBloc`
+   - Password hashing via `PasswordService`
+
+3. **RolesScreen** (`/users/roles`)
+   - Role overview with descriptions
+   - Permission matrix comparison table
+   - Interactive role selection with detailed permissions
+
+#### Blocs
+
+1. **UsersBloc** (extends RealtimeBloc)
+   - Events: `UsersInitialized`, `UserSearchRequested`, `UserFilterByRoleRequested`, `UserToggleActiveRequested`
+   - Real-time user list with search/filter
+   - Stores raw data separately for correct filter re-application
+
+2. **UserStatsBloc** (extends RealtimeBloc)
+   - Watches role counts via `watchRoleCounts()`
+   - Used in `UserStatsCards` widget
+
+3. **UserFormBloc** (extends RealtimeBloc)
+   - Events: `UserFormLoadRequested`, `UserFormSubmitRequested`
+   - Full validation:
+     - Username required, min 3 chars, uniqueness check
+     - Password required for new users, min 6 chars
+     - Password confirmation matching
+     - Role selection required
+
+### UI Patterns & Components
+
+#### UserCard Widget
+- Displays user info with role badge
+- Shows last login time (relative format)
+- Popup menu for edit/deactivate actions
+- Theme-aware colors for role badges
+
+#### UserStatsCards Widget
+- 4 stat cards: Total Users, Owners, Active Users, Managers
+- Responsive layout: 2×2 on mobile, 4×1 on desktop
+- Uses `LayoutBuilder` for breakpoint handling
+
+#### Role Selection UI
+- Choice chips for 4 fixed roles
+- Role descriptions below selection
+- Visual hierarchy with icons and colors
+
+### Security Implementation
+
+#### Password Management
+- **PasswordService** handles hashing/verification
+- Uses bcrypt with salt rounds of 12
+- Passwords never stored in plain text
+- Optional password change on edit (leave empty to keep)
+
+#### Authentication Flow
+- Users login via `AuthRepository` (existing)
+- Session managed by `SessionService` (existing)
+- Role permissions checked via `PermissionGate` widget
+
+### Integration Points
+
+#### Employee Linking (Optional)
+- Users can be linked to employee records
+- Facilitates payroll and attendance tracking
+- Implemented via bottom sheet selector
+- Uses existing `EmployeesBloc` for selection
+
+#### Navigation Structure
+```dart
+// Routes in app_router.dart
+/users                          // UsersScreen
+/users/add                     // UserFormScreen (create)
+/users/:id/edit                // UserFormScreen (edit)
+/users/roles                   // RolesScreen
+```
+
+### Localization
+
+All user management strings are under `users.*` in:
+- `assets/translations/en.json`
+- `assets/translations/ar.json`
+- `assets/translations/fr.json`
+
+Key keys:
+- `users.title`, `users.add`, `users.edit`
+- `users.role_*` (owner, manager, cashier, salesperson)
+- `users.role_*_desc` (descriptions for each role)
+- Validation messages: `username_required`, `password_min_length`, etc.
+
+### Testing Coverage
+
+**17 tests written and passing:**
+- `users_bloc_test.dart` - 6 tests (list, filter, search, toggle)
+- `user_form_bloc_test.dart` - 11 tests (create, edit, validation)
+
+All tests follow bloc_test patterns with proper mocking.
+
+### Usage Guidelines for Other Features
+
+When implementing new features that need user context:
+
+1. **Get Current User**: Use `AuthBloc` state to get current user
+2. **Check Permissions**: Use `PermissionService.canAccess()`
+3. **Role-Based UI**: Use `PermissionGate` widget to wrap components
+4. **User Selection**: Use existing user management screens - don't recreate
+
+**Example Permission Check:**
+```dart
+final permissionService = sl<PermissionService>();
+if (permissionService.canAccess('manage_products', currentUser.role)) {
+  // Show product management features
+}
+```
+
+**Example Permission Gate:**
+```dart
+PermissionGate(
+  permission: 'view_reports',
+  child: ReportsButton(),
+  fallback: Container(), // Hide if no permission
+)
+```
+
+### What's NOT Supported
+
+- ❌ Dynamic role creation/editing
+- ❌ Custom permissions per user
+- ❌ Role hierarchy (roles are flat, not hierarchical)
+- ❌ Server-side validation (offline-first only)
+- ❌ OAuth/external authentication (local users only)
+
+### Key Files Reference
+
+**Domain Layer:**
+- `lib/features/auth/domain/entities/user_entity.dart` - User entity + enum
+- `lib/features/auth/domain/repositories/user_repository_interface.dart` - Contract
+
+**Data Layer:**
+- `lib/features/auth/data/repositories/user_repository.dart` - Implementation
+- `lib/features/auth/data/services/password_service.dart` - Password hashing
+- `lib/features/auth/data/services/permission_service.dart` - Permission checks
+
+**Presentation Layer:**
+- `lib/features/auth/presentation/bloc/users_bloc.dart` - List management
+- `lib/features/auth/presentation/bloc/user_form_bloc.dart` - Form validation
+- `lib/features/auth/presentation/screens/users_screen.dart` - Main UI
+- `lib/features/auth/presentation/screens/user_form_screen.dart` - Create/edit
+- `lib/features/auth/presentation/screens/roles_screen.dart` - Role overview
+- `lib/features/auth/presentation/widgets/user_card.dart` - User list item
+- `lib/features/auth/presentation/widgets/user_stats_cards.dart` - Stats display
+
+---
+
+## �� Responsive Design (MANDATORY)
 
 ### Platform Support
 
@@ -1448,6 +1703,6 @@ If you're unsure about any pattern:
 
 ---
 
-**Last Updated**: 2026-02-1 
+**Last Updated**: 2026-02-8 
 **Version**: 1.0.0  
 **Status**: ACTIVE - Follow strictly for all implementations
