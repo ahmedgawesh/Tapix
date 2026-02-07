@@ -23,7 +23,9 @@ import '../../../products/presentation/bloc/products_bloc.dart';
 import '../../../products/presentation/bloc/product_variants_bloc.dart';
 import '../../../products/presentation/bloc/variant_previews_bloc.dart';
 import '../../../suppliers/domain/repositories/supplier_repository.dart';
+import '../../domain/repositories/purchase_repository.dart';
 import '../bloc/purchase_form_bloc.dart';
+import '../services/purchase_pdf_service.dart';
 
 class PurchaseFormScreen extends StatelessWidget {
   final int? purchaseId;
@@ -168,7 +170,7 @@ class _PurchaseFormView extends StatelessWidget {
               const SizedBox(height: 12),
               _buildSearchBarWithScan(context),
               const SizedBox(height: 12),
-              _buildDatesCard(context, state),
+              _buildDueDateCard(context, state),
               const SizedBox(height: 12),
               _buildRefCard(context, state),
               const SizedBox(height: 12),
@@ -404,7 +406,7 @@ class _PurchaseFormView extends StatelessWidget {
               title: Text('purchases.add_new_product'.tr()),
               onTap: () {
                 Navigator.pop(context);
-                context.push('/products/add');
+                context.push('/products/new');
               },
             ),
             ListTile(
@@ -429,7 +431,7 @@ class _PurchaseFormView extends StatelessWidget {
               title: Text('purchases.import_from_po'.tr()),
               onTap: () {
                 Navigator.pop(context);
-                // TODO: Implement import from PO
+                _showImportFromPurchaseDialog(context, isPO: true);
               },
             ),
             ListTile(
@@ -437,7 +439,7 @@ class _PurchaseFormView extends StatelessWidget {
               title: Text('purchases.import_from_dispatch'.tr()),
               onTap: () {
                 Navigator.pop(context);
-                // TODO: Implement import from dispatch
+                _showImportFromPurchaseDialog(context, isPO: false);
               },
             ),
           ],
@@ -501,6 +503,171 @@ class _PurchaseFormView extends StatelessWidget {
   }
 
   // ═══════════════════════════════════════════════════════
+  // IMPORT FROM PO / DISPATCH DIALOG
+  // ═══════════════════════════════════════════════════════
+  void _showImportFromPurchaseDialog(BuildContext context, {required bool isPO}) async {
+    final repo = sl<PurchaseRepository>();
+    final cs = sl<CurrencyService>();
+
+    // Load existing purchases to import from
+    final purchases = await repo.watchAllPurchases().first;
+    if (!context.mounted) return;
+
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final title = isPO ? 'purchases.select_po'.tr() : 'purchases.select_dispatch'.tr();
+    final emptyMsg = isPO ? 'purchases.no_po_found'.tr() : 'purchases.no_dispatch_found'.tr();
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetCtx) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.7,
+          maxChildSize: 0.9,
+          minChildSize: 0.4,
+          expand: false,
+          builder: (_, scrollController) {
+            return Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: colorScheme.primary.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(
+                          isPO ? LucideIcons.fileInput : LucideIcons.fileOutput,
+                          size: 18, color: colorScheme.primary,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Text(title, style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600)),
+                      const Spacer(),
+                      IconButton(
+                        icon: const Icon(LucideIcons.x),
+                        onPressed: () => Navigator.pop(sheetCtx),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                if (purchases.isEmpty)
+                  Expanded(
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(LucideIcons.fileX, size: 48,
+                              color: colorScheme.onSurfaceVariant.withValues(alpha: 0.3)),
+                          const SizedBox(height: 12),
+                          Text(emptyMsg, style: theme.textTheme.bodyMedium?.copyWith(
+                              color: colorScheme.onSurfaceVariant)),
+                        ],
+                      ),
+                    ),
+                  )
+                else
+                  Expanded(
+                    child: ListView.separated(
+                      controller: scrollController,
+                      padding: const EdgeInsets.all(8),
+                      itemCount: purchases.length,
+                      separatorBuilder: (_, _) => const Divider(height: 1),
+                      itemBuilder: (_, index) {
+                        final purchase = purchases[index];
+                        return ListTile(
+                          leading: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: colorScheme.primaryContainer,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Icon(LucideIcons.fileText, size: 18,
+                                color: colorScheme.onPrimaryContainer),
+                          ),
+                          title: Text(purchase.purchaseNumber.isNotEmpty ? purchase.purchaseNumber : '#${purchase.id}',
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                  fontWeight: FontWeight.w600)),
+                          subtitle: Text(
+                            '${DateFormat.yMMMd().format(purchase.purchaseDate)} • ${cs.format(purchase.totalCents.toBigInt().toInt())}',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                                color: colorScheme.onSurfaceVariant),
+                          ),
+                          trailing: FilledButton.tonal(
+                            onPressed: () async {
+                              Navigator.pop(sheetCtx);
+                              await _importItemsFromPurchase(context, purchase.id);
+                            },
+                            child: Text('purchases.import_items'.tr()),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _importItemsFromPurchase(BuildContext context, int purchaseId) async {
+    final repo = sl<PurchaseRepository>();
+    final productRepo = sl<ProductRepository>();
+
+    try {
+      final items = await repo.getPurchaseItems(purchaseId);
+      if (!context.mounted) return;
+
+      final bloc = context.read<PurchaseFormBloc>();
+      for (final item in items) {
+        final product = await productRepo.watchProduct(item.productId).first;
+        if (product != null) {
+          ProductVariant? variant;
+          if (item.variantId != null) {
+            final variantRepo = sl<ProductVariantRepository>();
+            variant = await variantRepo.getVariantById(item.variantId!);
+          }
+          bloc.add(PurchaseLineItemAdded(
+                product: product,
+                variant: variant,
+                quantity: item.quantity,
+                unitCostCents: item.unitCostCents,
+              ));
+        }
+      }
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('purchases.import_success'.tr()),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString()),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════
   // SAVE CONFIRMATION DIALOG (Print / Barcode / Finish)
   // ═══════════════════════════════════════════════════════
   void _showSaveConfirmationDialog(BuildContext context, PurchaseFormState state) {
@@ -537,10 +704,24 @@ class _PurchaseFormView extends StatelessWidget {
             TextButton.icon(
               icon: const Icon(LucideIcons.printer, size: 18),
               label: Text('purchases.print_invoice'.tr()),
-              onPressed: () {
+              onPressed: () async {
                 Navigator.pop(ctx);
-                // TODO: Implement print functionality
-                context.pop();
+                try {
+                  await PurchasePdfService.printFromFormState(
+                    context: context,
+                    state: state,
+                  );
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('purchases.print_error'.tr()),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
+                }
+                if (context.mounted) context.pop();
               },
             ),
             TextButton.icon(
@@ -548,8 +729,7 @@ class _PurchaseFormView extends StatelessWidget {
               label: Text('purchases.generate_barcode'.tr()),
               onPressed: () {
                 Navigator.pop(ctx);
-                context.push('/barcode');
-                // Navigate back after barcode
+                context.push('/products/barcode-design');
               },
             ),
             FilledButton.icon(
@@ -624,9 +804,9 @@ class _PurchaseFormView extends StatelessWidget {
   }
 
   // ═══════════════════════════════════════════════════════
-  // DATES CARD (Premium)
+  // DUE DATE CARD (Purchase date is in invoice header)
   // ═══════════════════════════════════════════════════════
-  Widget _buildDatesCard(BuildContext context, PurchaseFormState state) {
+  Widget _buildDueDateCard(BuildContext context, PurchaseFormState state) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
 
@@ -636,107 +816,57 @@ class _PurchaseFormView extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.5)),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            // Purchase Date
-            InkWell(
-              borderRadius: BorderRadius.circular(8),
-              onTap: () async {
-                final date = await showDatePicker(
-                  context: context,
-                  initialDate: state.purchaseDate,
-                  firstDate: DateTime(2020),
-                  lastDate: DateTime.now().add(const Duration(days: 365)),
-                );
-                if (date != null && context.mounted) {
-                  context.read<PurchaseFormBloc>().add(PurchaseDateChanged(date));
-                }
-              },
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [cs.primary, cs.primary.withValues(alpha: 0.7)],
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () async {
+          final date = await showDatePicker(
+            context: context,
+            initialDate: state.dueDate ?? state.purchaseDate.add(const Duration(days: 30)),
+            firstDate: state.purchaseDate,
+            lastDate: state.purchaseDate.add(const Duration(days: 365)),
+          );
+          if (date != null && context.mounted) {
+            context.read<PurchaseFormBloc>().add(PurchaseDueDateChanged(date));
+          }
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: state.dueDate != null
+                      ? cs.tertiary.withValues(alpha: 0.12)
+                      : cs.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(LucideIcons.calendarClock, size: 16,
+                    color: state.dueDate != null ? cs.tertiary : cs.onSurfaceVariant),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('purchases.due_date'.tr(),
+                        style: theme.textTheme.labelSmall?.copyWith(
+                            color: cs.onSurfaceVariant)),
+                    Text(
+                      state.dueDate != null
+                          ? DateFormat.yMMMd().format(state.dueDate!)
+                          : 'purchases.set_due_date'.tr(),
+                      style: theme.textTheme.bodyLarge?.copyWith(
+                        fontWeight: state.dueDate != null ? FontWeight.w500 : FontWeight.normal,
+                        color: state.dueDate != null ? null : cs.onSurfaceVariant,
                       ),
-                      borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Icon(LucideIcons.calendar, size: 16, color: Colors.white),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('purchases.date'.tr(),
-                            style: theme.textTheme.labelSmall?.copyWith(
-                                color: cs.onSurfaceVariant)),
-                        Text(DateFormat.yMMMd().format(state.purchaseDate),
-                            style: theme.textTheme.bodyLarge?.copyWith(
-                                fontWeight: FontWeight.w500)),
-                      ],
-                    ),
-                  ),
-                  Icon(LucideIcons.edit3, size: 14, color: cs.onSurfaceVariant),
-                ],
+                  ],
+                ),
               ),
-            ),
-            Divider(height: 24, color: cs.outlineVariant.withValues(alpha: 0.3)),
-            // Due Date
-            InkWell(
-              borderRadius: BorderRadius.circular(8),
-              onTap: () async {
-                final date = await showDatePicker(
-                  context: context,
-                  initialDate: state.dueDate ?? state.purchaseDate.add(const Duration(days: 30)),
-                  firstDate: state.purchaseDate,
-                  lastDate: state.purchaseDate.add(const Duration(days: 365)),
-                );
-                if (date != null && context.mounted) {
-                  context.read<PurchaseFormBloc>().add(PurchaseDueDateChanged(date));
-                }
-              },
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: state.dueDate != null
-                          ? cs.tertiary.withValues(alpha: 0.12)
-                          : cs.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(LucideIcons.calendarClock, size: 16,
-                        color: state.dueDate != null ? cs.tertiary : cs.onSurfaceVariant),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('purchases.due_date'.tr(),
-                            style: theme.textTheme.labelSmall?.copyWith(
-                                color: cs.onSurfaceVariant)),
-                        Text(
-                          state.dueDate != null
-                              ? DateFormat.yMMMd().format(state.dueDate!)
-                              : 'purchases.set_due_date'.tr(),
-                          style: theme.textTheme.bodyLarge?.copyWith(
-                            fontWeight: state.dueDate != null ? FontWeight.w500 : FontWeight.normal,
-                            color: state.dueDate != null ? null : cs.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Icon(LucideIcons.edit3, size: 14, color: cs.onSurfaceVariant),
-                ],
-              ),
-            ),
-          ],
+              Icon(LucideIcons.edit3, size: 14, color: cs.onSurfaceVariant),
+            ],
+          ),
         ),
       ),
     );
@@ -1794,6 +1924,21 @@ class _EditItemSheetState extends State<_EditItemSheet> {
   bool _updatingDiscount = false;
   bool _saving = false;
 
+  void _onSubtotalChanged() {
+    if (_updatingDiscount) return;
+
+    // If user entered a percent, fixed amount should track subtotal.
+    if (_discountPercentCtrl.text.trim().isNotEmpty) {
+      _syncFromPercent();
+      return;
+    }
+
+    // If user entered a fixed amount, percent should track subtotal.
+    if (_discountFixedCtrl.text.trim().isNotEmpty) {
+      _syncFromFixed();
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -1823,6 +1968,10 @@ class _EditItemSheetState extends State<_EditItemSheet> {
 
     _discountPercentCtrl.addListener(_syncFromPercent);
     _discountFixedCtrl.addListener(_syncFromFixed);
+
+    // Keep discount values reactive when subtotal changes.
+    _qtyCtrl.addListener(_onSubtotalChanged);
+    _costCtrl.addListener(_onSubtotalChanged);
   }
 
   int get _currentSubtotalCents {
@@ -1862,6 +2011,8 @@ class _EditItemSheetState extends State<_EditItemSheet> {
 
   @override
   void dispose() {
+    _qtyCtrl.removeListener(_onSubtotalChanged);
+    _costCtrl.removeListener(_onSubtotalChanged);
     _qtyCtrl.dispose();
     _costCtrl.dispose();
     _sellPriceCtrl.dispose();
@@ -2481,6 +2632,17 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                           ),
                         ),
                       ),
+                      // ── Supplier Balance Info ──
+                      if (state.supplierId != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8, bottom: 8),
+                          child: _SupplierBalanceInfo(
+                            supplierId: state.supplierId!,
+                            invoiceTotalCents: state.totalCents.toBigInt().toInt(),
+                            paidAmountCents: state.paidAmountCents.toBigInt().toInt(),
+                            currencyService: widget.currencyService,
+                          ),
+                        ),
                       const SizedBox(height: 16),
                       // ── Payment Method ──
                       _buildCheckoutSection(
@@ -2796,6 +2958,258 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
           Navigator.pop(sheetCtx);
         },
       ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// SUPPLIER BALANCE INFO (inline widget in checkout)
+// ═══════════════════════════════════════════════════════
+class _SupplierBalanceInfo extends StatelessWidget {
+  final int supplierId;
+  final int invoiceTotalCents;
+  final int paidAmountCents;
+  final CurrencyService currencyService;
+
+  const _SupplierBalanceInfo({
+    required this.supplierId,
+    required this.invoiceTotalCents,
+    required this.paidAmountCents,
+    required this.currencyService,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+
+    return StreamBuilder<Supplier?>(
+      stream: sl<SupplierRepository>().watchSupplier(supplierId),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || snapshot.data == null) {
+          return const SizedBox.shrink();
+        }
+        final supplier = snapshot.data!;
+        final currentBalanceCents = supplier.balanceCents.toDouble().round();
+        // After this invoice: balance increases by unpaid portion
+        final unpaidCents = invoiceTotalCents - paidAmountCents;
+        final projectedBalanceCents = currentBalanceCents + (unpaidCents > 0 ? unpaidCents : 0);
+
+        final isCurrentPayable = currentBalanceCents > 0;
+        final isProjectedPayable = projectedBalanceCents > 0;
+
+        return InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: () => _showBalanceDetailDialog(
+            context,
+            supplier: supplier,
+            currentBalanceCents: currentBalanceCents,
+            projectedBalanceCents: projectedBalanceCents,
+          ),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerHighest.withValues(alpha: 0.4),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.3)),
+            ),
+            child: Row(
+              children: [
+                Icon(LucideIcons.info, size: 16, color: cs.primary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'purchases.supplier_balance'.tr(),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: cs.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+                Text(
+                  currencyService.format(currentBalanceCents),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: isCurrentPayable ? cs.error : Colors.green,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Icon(LucideIcons.arrowRight, size: 14, color: cs.onSurfaceVariant),
+                const SizedBox(width: 4),
+                Text(
+                  currencyService.format(projectedBalanceCents),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: isProjectedPayable ? cs.error : Colors.green,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showBalanceDetailDialog(
+    BuildContext context, {
+    required Supplier supplier,
+    required int currentBalanceCents,
+    required int projectedBalanceCents,
+  }) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final isCurrentPayable = currentBalanceCents > 0;
+    final isProjectedPayable = projectedBalanceCents > 0;
+
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(LucideIcons.wallet, size: 20, color: cs.primary),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'purchases.supplier_account'.tr(),
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Supplier name
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: cs.primaryContainer.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 18,
+                    backgroundColor: cs.primaryContainer,
+                    child: Text(
+                      supplier.name.isNotEmpty ? supplier.name[0].toUpperCase() : '?',
+                      style: TextStyle(
+                        color: cs.onPrimaryContainer,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      supplier.name,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            // Current balance
+            _balanceRow(
+              theme: theme,
+              cs: cs,
+              icon: LucideIcons.wallet,
+              label: 'purchases.current_balance'.tr(),
+              amount: currencyService.format(currentBalanceCents),
+              amountColor: isCurrentPayable ? cs.error : Colors.green,
+              subtitle: isCurrentPayable
+                  ? 'purchases.balance_you_owe'.tr()
+                  : 'purchases.balance_credit'.tr(),
+            ),
+            const SizedBox(height: 12),
+            // Invoice amount
+            _balanceRow(
+              theme: theme,
+              cs: cs,
+              icon: LucideIcons.fileText,
+              label: 'purchases.this_invoice'.tr(),
+              amount: '+ ${currencyService.format(invoiceTotalCents)}',
+              amountColor: cs.onSurface,
+              subtitle: paidAmountCents > 0
+                  ? '${'purchases.paid_now'.tr()}: ${currencyService.format(paidAmountCents)}'
+                  : null,
+            ),
+            Divider(height: 24, color: cs.outlineVariant.withValues(alpha: 0.5)),
+            // Projected balance
+            _balanceRow(
+              theme: theme,
+              cs: cs,
+              icon: LucideIcons.trendingUp,
+              label: 'purchases.projected_balance'.tr(),
+              amount: currencyService.format(projectedBalanceCents),
+              amountColor: isProjectedPayable ? cs.error : Colors.green,
+              subtitle: isProjectedPayable
+                  ? 'purchases.balance_you_owe'.tr()
+                  : 'purchases.balance_credit'.tr(),
+              isBold: true,
+            ),
+          ],
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('common.close'.tr()),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _balanceRow({
+    required ThemeData theme,
+    required ColorScheme cs,
+    required IconData icon,
+    required String label,
+    required String amount,
+    required Color amountColor,
+    String? subtitle,
+    bool isBold = false,
+  }) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: cs.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, size: 16, color: cs.primary),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: theme.textTheme.bodySmall?.copyWith(
+                color: cs.onSurfaceVariant,
+              )),
+              if (subtitle != null)
+                Text(subtitle, style: theme.textTheme.labelSmall?.copyWith(
+                  color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+                  fontSize: 10,
+                )),
+            ],
+          ),
+        ),
+        Text(
+          amount,
+          style: (isBold ? theme.textTheme.titleMedium : theme.textTheme.bodyMedium)?.copyWith(
+            fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
+            color: amountColor,
+          ),
+        ),
+      ],
     );
   }
 }

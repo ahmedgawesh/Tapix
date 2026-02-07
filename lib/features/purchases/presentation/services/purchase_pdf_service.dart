@@ -1,0 +1,637 @@
+import 'package:easy_localization/easy_localization.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
+
+import '../../../../core/di/injection_container.dart';
+import '../../../../core/services/currency_service.dart';
+import '../../../settings/data/services/company_profile_service.dart';
+import '../../../settings/domain/entities/company_profile.dart';
+import '../../domain/entities/purchase_entity.dart';
+import '../bloc/purchase_form_bloc.dart';
+
+class PurchasePdfService {
+  /// Generate and print a purchase invoice PDF from saved purchase data
+  static Future<void> printPurchaseInvoice({
+    required BuildContext context,
+    required PurchaseEntity purchase,
+    required List<PurchaseItemEntity> items,
+  }) async {
+    final cs = sl<CurrencyService>();
+    final locale = context.locale;
+    final isRtl = locale.languageCode == 'ar';
+    final company = await sl<CompanyProfileService>().getProfile();
+
+    final pdf = await _buildPurchaseInvoicePdf(
+      purchase: purchase,
+      items: items,
+      cs: cs,
+      locale: locale,
+      isRtl: isRtl,
+      company: company,
+    );
+
+    await Printing.layoutPdf(
+      onLayout: (PdfPageFormat format) async => pdf.save(),
+      name: 'Purchase_${purchase.purchaseNumber}',
+    );
+  }
+
+  /// Generate and print a purchase invoice PDF from current form state
+  static Future<void> printFromFormState({
+    required BuildContext context,
+    required PurchaseFormState state,
+  }) async {
+    final cs = sl<CurrencyService>();
+    final locale = context.locale;
+    final isRtl = locale.languageCode == 'ar';
+    final company = await sl<CompanyProfileService>().getProfile();
+
+    final pdf = await _buildPurchaseInvoiceFromState(
+      state: state,
+      cs: cs,
+      locale: locale,
+      isRtl: isRtl,
+      company: company,
+    );
+
+    await Printing.layoutPdf(
+      onLayout: (PdfPageFormat format) async => pdf.save(),
+      name: 'Purchase_${state.purchaseNumber ?? state.purchaseId ?? 'draft'}',
+    );
+  }
+
+  /// Generate and print a purchase return invoice PDF
+  static Future<void> printPurchaseReturn({
+    required BuildContext context,
+    required PurchaseEntity originalPurchase,
+    required PurchaseReturnEntity returnEntity,
+    required List<PurchaseReturnItemEntity> returnItems,
+  }) async {
+    final cs = sl<CurrencyService>();
+    final locale = context.locale;
+    final isRtl = locale.languageCode == 'ar';
+    final company = await sl<CompanyProfileService>().getProfile();
+
+    final pdf = await _buildPurchaseReturnPdf(
+      originalPurchase: originalPurchase,
+      returnEntity: returnEntity,
+      returnItems: returnItems,
+      cs: cs,
+      locale: locale,
+      isRtl: isRtl,
+      company: company,
+    );
+
+    await Printing.layoutPdf(
+      onLayout: (PdfPageFormat format) async => pdf.save(),
+      name: 'PurchaseReturn_${returnEntity.id}',
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // PURCHASE INVOICE PDF FROM ENTITY
+  // ═══════════════════════════════════════════════════════
+  static Future<pw.Document> _buildPurchaseInvoicePdf({
+    required PurchaseEntity purchase,
+    required List<PurchaseItemEntity> items,
+    required CurrencyService cs,
+    required Locale locale,
+    required bool isRtl,
+    required CompanyProfile company,
+  }) async {
+    final fonts = await _loadFonts();
+    final pdf = pw.Document();
+
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        textDirection: isRtl ? pw.TextDirection.rtl : pw.TextDirection.ltr,
+        build: (pw.Context ctx) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+            children: [
+              _buildHeader(
+                company: company,
+                title: 'purchases.title'.tr(),
+                fonts: fonts,
+                isRtl: isRtl,
+              ),
+              pw.SizedBox(height: 16),
+              _buildInvoiceInfo(
+                invoiceNumber: purchase.purchaseNumber.isNotEmpty ? purchase.purchaseNumber : '${purchase.id}',
+                date: purchase.purchaseDate,
+                supplierName: purchase.supplierName,
+                locale: locale,
+                fonts: fonts,
+              ),
+              pw.SizedBox(height: 16),
+              _buildItemsTable(
+                items: items.map((item) => _PdfLineItem(
+                  name: item.productName ?? 'Product #${item.productId}',
+                  variantSku: item.variantSku,
+                  quantity: item.quantity,
+                  unitCostCents: item.unitCostCents.toBigInt().toInt(),
+                  totalCents: item.totalCents.toBigInt().toInt(),
+                )).toList(),
+                cs: cs,
+                fonts: fonts,
+                isRtl: isRtl,
+              ),
+              pw.SizedBox(height: 16),
+              _buildTotals(
+                subtotalCents: purchase.subtotalCents.toBigInt().toInt(),
+                discountCents: purchase.discountCents.toBigInt().toInt(),
+                taxCents: purchase.taxCents.toBigInt().toInt(),
+                totalCents: purchase.totalCents.toBigInt().toInt(),
+                cs: cs,
+                fonts: fonts,
+              ),
+              pw.Spacer(),
+              _buildFooter(fonts: fonts, locale: locale),
+            ],
+          );
+        },
+      ),
+    );
+
+    return pdf;
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // PURCHASE INVOICE PDF FROM FORM STATE
+  // ═══════════════════════════════════════════════════════
+  static Future<pw.Document> _buildPurchaseInvoiceFromState({
+    required PurchaseFormState state,
+    required CurrencyService cs,
+    required Locale locale,
+    required bool isRtl,
+    required CompanyProfile company,
+  }) async {
+    final fonts = await _loadFonts();
+    final pdf = pw.Document();
+
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        textDirection: isRtl ? pw.TextDirection.rtl : pw.TextDirection.ltr,
+        build: (pw.Context ctx) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+            children: [
+              _buildHeader(
+                company: company,
+                title: 'purchases.title'.tr(),
+                fonts: fonts,
+                isRtl: isRtl,
+              ),
+              pw.SizedBox(height: 16),
+              _buildInvoiceInfo(
+                invoiceNumber: state.purchaseNumber ?? '${state.purchaseId ?? ''}',
+                date: state.purchaseDate,
+                supplierName: state.supplierName,
+                locale: locale,
+                fonts: fonts,
+              ),
+              pw.SizedBox(height: 16),
+              _buildItemsTable(
+                items: state.items.map((item) => _PdfLineItem(
+                  name: item.product.name,
+                  variantSku: item.variant?.sku,
+                  quantity: item.quantity,
+                  unitCostCents: item.unitCostCents.toBigInt().toInt(),
+                  totalCents: item.totalCents.toBigInt().toInt(),
+                )).toList(),
+                cs: cs,
+                fonts: fonts,
+                isRtl: isRtl,
+              ),
+              pw.SizedBox(height: 16),
+              _buildTotals(
+                subtotalCents: state.subtotalCents.toBigInt().toInt(),
+                discountCents: state.totalDiscountCents.toBigInt().toInt(),
+                taxCents: state.taxCents.toBigInt().toInt(),
+                totalCents: state.totalCents.toBigInt().toInt(),
+                cs: cs,
+                fonts: fonts,
+              ),
+              if (state.notes != null && state.notes!.isNotEmpty) ...[
+                pw.SizedBox(height: 12),
+                pw.Container(
+                  padding: const pw.EdgeInsets.all(8),
+                  decoration: pw.BoxDecoration(
+                    border: pw.Border.all(color: PdfColors.grey300),
+                    borderRadius: pw.BorderRadius.circular(4),
+                  ),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text('purchases.notes'.tr(),
+                          style: pw.TextStyle(font: fonts.bold, fontSize: 10)),
+                      pw.SizedBox(height: 4),
+                      pw.Text(state.notes!,
+                          style: pw.TextStyle(font: fonts.regular, fontSize: 9)),
+                    ],
+                  ),
+                ),
+              ],
+              pw.Spacer(),
+              _buildFooter(fonts: fonts, locale: locale),
+            ],
+          );
+        },
+      ),
+    );
+
+    return pdf;
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // PURCHASE RETURN PDF
+  // ═══════════════════════════════════════════════════════
+  static Future<pw.Document> _buildPurchaseReturnPdf({
+    required PurchaseEntity originalPurchase,
+    required PurchaseReturnEntity returnEntity,
+    required List<PurchaseReturnItemEntity> returnItems,
+    required CurrencyService cs,
+    required Locale locale,
+    required bool isRtl,
+    required CompanyProfile company,
+  }) async {
+    final fonts = await _loadFonts();
+    final pdf = pw.Document();
+
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        textDirection: isRtl ? pw.TextDirection.rtl : pw.TextDirection.ltr,
+        build: (pw.Context ctx) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+            children: [
+              _buildHeader(
+                company: company,
+                title: 'purchases.purchase_return'.tr(),
+                fonts: fonts,
+                isRtl: isRtl,
+              ),
+              pw.SizedBox(height: 16),
+              // Return info
+              pw.Container(
+                padding: const pw.EdgeInsets.all(12),
+                decoration: pw.BoxDecoration(
+                  border: pw.Border.all(color: PdfColors.grey300),
+                  borderRadius: pw.BorderRadius.circular(6),
+                ),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    _pdfInfoRow('purchases.return_number'.tr(),
+                        '${returnEntity.id}', fonts.regular),
+                    _pdfInfoRow('purchases.return_date'.tr(),
+                        DateFormat.yMMMd(locale.toString()).format(returnEntity.returnDate),
+                        fonts.regular),
+                    _pdfInfoRow('purchases.return_from_purchase'.tr(),
+                        originalPurchase.purchaseNumber.isNotEmpty ? originalPurchase.purchaseNumber : '${originalPurchase.id}',
+                        fonts.regular),
+                    if (originalPurchase.supplierName != null)
+                      _pdfInfoRow('purchases.supplier'.tr(),
+                          originalPurchase.supplierName!, fonts.regular),
+                    _pdfInfoRow('purchases.disposition_type'.tr(),
+                        'purchases.disposition_${returnEntity.dispositionType}'.tr(),
+                        fonts.regular),
+                    if (returnEntity.reason != null && returnEntity.reason!.isNotEmpty)
+                      _pdfInfoRow('purchases.return_reason'.tr(),
+                          returnEntity.reason!, fonts.regular),
+                  ],
+                ),
+              ),
+              pw.SizedBox(height: 16),
+              // Return items table
+              _buildReturnItemsTable(
+                items: returnItems,
+                cs: cs,
+                fonts: fonts,
+                isRtl: isRtl,
+              ),
+              pw.SizedBox(height: 16),
+              // Return total
+              pw.Container(
+                padding: const pw.EdgeInsets.all(12),
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.red50,
+                  border: pw.Border.all(color: PdfColors.red200),
+                  borderRadius: pw.BorderRadius.circular(6),
+                ),
+                child: pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text('purchases.return_total'.tr(),
+                        style: pw.TextStyle(font: fonts.bold, fontSize: 14)),
+                    pw.Text(
+                      cs.format(returnEntity.totalCents.toBigInt().toInt()),
+                      style: pw.TextStyle(
+                        font: fonts.bold, fontSize: 14, color: PdfColors.red,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              pw.Spacer(),
+              _buildFooter(fonts: fonts, locale: locale),
+            ],
+          );
+        },
+      ),
+    );
+
+    return pdf;
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // SHARED PDF BUILDING BLOCKS
+  // ═══════════════════════════════════════════════════════
+
+  static Future<_PdfFonts> _loadFonts() async {
+    final fontData = await rootBundle.load('assets/fonts/IBMPlexSansArabic-Regular.ttf');
+    final fontBoldData = await rootBundle.load('assets/fonts/IBMPlexSansArabic-Bold.ttf');
+    return _PdfFonts(
+      regular: pw.Font.ttf(fontData),
+      bold: pw.Font.ttf(fontBoldData),
+    );
+  }
+
+  static pw.Widget _buildHeader({
+    required CompanyProfile company,
+    required String title,
+    required _PdfFonts fonts,
+    required bool isRtl,
+  }) {
+    return pw.Container(
+      padding: const pw.EdgeInsets.all(16),
+      decoration: pw.BoxDecoration(
+        color: PdfColors.blue50,
+        borderRadius: pw.BorderRadius.circular(8),
+      ),
+      child: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children: [
+          pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              if (company.name.isNotEmpty)
+                pw.Text(company.name,
+                    style: pw.TextStyle(font: fonts.bold, fontSize: 16)),
+              if (company.address != null && company.address!.isNotEmpty)
+                pw.Text(company.address!,
+                    style: pw.TextStyle(font: fonts.regular, fontSize: 8,
+                        color: PdfColors.grey600)),
+              if (company.phone != null && company.phone!.isNotEmpty)
+                pw.Text(company.phone!,
+                    style: pw.TextStyle(font: fonts.regular, fontSize: 8,
+                        color: PdfColors.grey600)),
+              if (company.taxNumber != null && company.taxNumber!.isNotEmpty)
+                pw.Text('Tax: ${company.taxNumber}',
+                    style: pw.TextStyle(font: fonts.regular, fontSize: 8,
+                        color: PdfColors.grey600)),
+            ],
+          ),
+          pw.Text(title,
+              style: pw.TextStyle(font: fonts.bold, fontSize: 20,
+                  color: PdfColors.blue800)),
+        ],
+      ),
+    );
+  }
+
+  static pw.Widget _buildInvoiceInfo({
+    required String invoiceNumber,
+    required DateTime date,
+    required String? supplierName,
+    required Locale locale,
+    required _PdfFonts fonts,
+  }) {
+    return pw.Container(
+      padding: const pw.EdgeInsets.all(12),
+      decoration: pw.BoxDecoration(
+        border: pw.Border.all(color: PdfColors.grey300),
+        borderRadius: pw.BorderRadius.circular(6),
+      ),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          _pdfInfoRow('purchases.invoice_number'.tr(), invoiceNumber, fonts.regular),
+          _pdfInfoRow('purchases.invoice_date'.tr(),
+              DateFormat.yMMMd(locale.toString()).format(date), fonts.regular),
+          if (supplierName != null)
+            _pdfInfoRow('purchases.supplier'.tr(), supplierName, fonts.regular),
+        ],
+      ),
+    );
+  }
+
+  static pw.Widget _buildItemsTable({
+    required List<_PdfLineItem> items,
+    required CurrencyService cs,
+    required _PdfFonts fonts,
+    required bool isRtl,
+  }) {
+    return pw.Table(
+      border: pw.TableBorder.all(color: PdfColors.grey300),
+      columnWidths: {
+        0: const pw.FlexColumnWidth(1),
+        1: const pw.FlexColumnWidth(3),
+        2: const pw.FlexColumnWidth(1),
+        3: const pw.FlexColumnWidth(1.5),
+        4: const pw.FlexColumnWidth(1.5),
+      },
+      children: [
+        // Header
+        pw.TableRow(
+          decoration: const pw.BoxDecoration(color: PdfColors.grey200),
+          children: [
+            _tableCell('#', fonts.bold, isHeader: true),
+            _tableCell('purchases.product'.tr(), fonts.bold, isHeader: true),
+            _tableCell('purchases.qty'.tr(), fonts.bold, isHeader: true),
+            _tableCell('purchases.unit_cost'.tr(), fonts.bold, isHeader: true),
+            _tableCell('purchases.total'.tr(), fonts.bold, isHeader: true),
+          ],
+        ),
+        // Items
+        ...items.asMap().entries.map((entry) {
+          final idx = entry.key;
+          final item = entry.value;
+          final displayName = item.variantSku != null
+              ? '${item.name} (${item.variantSku})'
+              : item.name;
+          return pw.TableRow(
+            children: [
+              _tableCell('${idx + 1}', fonts.regular),
+              _tableCell(displayName, fonts.regular),
+              _tableCell('${item.quantity}', fonts.regular),
+              _tableCell(cs.format(item.unitCostCents), fonts.regular),
+              _tableCell(cs.format(item.totalCents), fonts.regular),
+            ],
+          );
+        }),
+      ],
+    );
+  }
+
+  static pw.Widget _buildReturnItemsTable({
+    required List<PurchaseReturnItemEntity> items,
+    required CurrencyService cs,
+    required _PdfFonts fonts,
+    required bool isRtl,
+  }) {
+    return pw.Table(
+      border: pw.TableBorder.all(color: PdfColors.grey300),
+      columnWidths: {
+        0: const pw.FlexColumnWidth(1),
+        1: const pw.FlexColumnWidth(3),
+        2: const pw.FlexColumnWidth(1),
+        3: const pw.FlexColumnWidth(1.5),
+      },
+      children: [
+        pw.TableRow(
+          decoration: const pw.BoxDecoration(color: PdfColors.red50),
+          children: [
+            _tableCell('#', fonts.bold, isHeader: true),
+            _tableCell('purchases.product'.tr(), fonts.bold, isHeader: true),
+            _tableCell('purchases.qty'.tr(), fonts.bold, isHeader: true),
+            _tableCell('purchases.refund'.tr(), fonts.bold, isHeader: true),
+          ],
+        ),
+        ...items.asMap().entries.map((entry) {
+          final idx = entry.key;
+          final item = entry.value;
+          final displayName = item.productName != null
+              ? (item.variantSku != null
+                  ? '${item.productName} (${item.variantSku})'
+                  : item.productName!)
+              : 'Item #${item.purchaseItemId}';
+          return pw.TableRow(
+            children: [
+              _tableCell('${idx + 1}', fonts.regular),
+              _tableCell(displayName, fonts.regular),
+              _tableCell('${item.quantity}', fonts.regular),
+              _tableCell(cs.format(item.refundCents.toBigInt().toInt()), fonts.regular),
+            ],
+          );
+        }),
+      ],
+    );
+  }
+
+  static pw.Widget _buildTotals({
+    required int subtotalCents,
+    required int discountCents,
+    required int taxCents,
+    required int totalCents,
+    required CurrencyService cs,
+    required _PdfFonts fonts,
+  }) {
+    return pw.Container(
+      padding: const pw.EdgeInsets.all(12),
+      decoration: pw.BoxDecoration(
+        color: PdfColors.blue50,
+        border: pw.Border.all(color: PdfColors.blue200),
+        borderRadius: pw.BorderRadius.circular(6),
+      ),
+      child: pw.Column(
+        children: [
+          _pdfMoneyRow('purchases.subtotal'.tr(), cs.format(subtotalCents), fonts.regular),
+          if (discountCents > 0)
+            _pdfMoneyRow('purchases.discount'.tr(), '- ${cs.format(discountCents)}',
+                fonts.regular, valueColor: PdfColors.orange),
+          if (taxCents > 0)
+            _pdfMoneyRow('purchases.tax'.tr(), cs.format(taxCents), fonts.regular),
+          pw.Divider(thickness: 2),
+          _pdfMoneyRow('purchases.total'.tr(), cs.format(totalCents),
+              fonts.bold, fontSize: 14),
+        ],
+      ),
+    );
+  }
+
+  static pw.Widget _buildFooter({
+    required _PdfFonts fonts,
+    required Locale locale,
+  }) {
+    return pw.Container(
+      alignment: pw.Alignment.center,
+      child: pw.Text(
+        '${'purchases.generated_on'.tr()}: ${DateFormat('yyyy-MM-dd HH:mm', locale.toString()).format(DateTime.now())}',
+        style: pw.TextStyle(font: fonts.regular, fontSize: 8, color: PdfColors.grey500),
+      ),
+    );
+  }
+
+  static pw.Widget _tableCell(String text, pw.Font font, {bool isHeader = false}) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      child: pw.Text(text,
+          style: pw.TextStyle(
+            font: font,
+            fontSize: isHeader ? 9 : 8,
+          )),
+    );
+  }
+
+  static pw.Widget _pdfInfoRow(String label, String value, pw.Font font) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(vertical: 2),
+      child: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children: [
+          pw.Text(label, style: pw.TextStyle(font: font, fontSize: 9,
+              color: PdfColors.grey600)),
+          pw.Text(value, style: pw.TextStyle(font: font, fontSize: 10)),
+        ],
+      ),
+    );
+  }
+
+  static pw.Widget _pdfMoneyRow(String label, String value, pw.Font font,
+      {PdfColor? valueColor, double fontSize = 10}) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(vertical: 2),
+      child: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children: [
+          pw.Text(label, style: pw.TextStyle(font: font, fontSize: fontSize)),
+          pw.Text(value,
+              style: pw.TextStyle(
+                font: font, fontSize: fontSize,
+                color: valueColor,
+              )),
+        ],
+      ),
+    );
+  }
+}
+
+class _PdfFonts {
+  final pw.Font regular;
+  final pw.Font bold;
+
+  const _PdfFonts({required this.regular, required this.bold});
+}
+
+class _PdfLineItem {
+  final String name;
+  final String? variantSku;
+  final int quantity;
+  final int unitCostCents;
+  final int totalCents;
+
+  const _PdfLineItem({
+    required this.name,
+    this.variantSku,
+    required this.quantity,
+    required this.unitCostCents,
+    required this.totalCents,
+  });
+}

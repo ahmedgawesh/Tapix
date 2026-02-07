@@ -7,7 +7,9 @@ import 'package:easy_localization/easy_localization.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../domain/entities/purchase_entity.dart';
+import '../../domain/repositories/purchase_repository.dart';
 import '../bloc/purchase_return_form_bloc.dart';
+import '../services/purchase_pdf_service.dart';
 
 class PurchaseReturnFormScreen extends StatelessWidget {
   final int purchaseId;
@@ -255,9 +257,39 @@ class _ReturnFormView extends StatelessWidget {
             TextButton.icon(
               icon: const Icon(LucideIcons.printer, size: 18),
               label: Text('purchases.print_invoice'.tr()),
-              onPressed: () {
+              onPressed: () async {
                 Navigator.pop(ctx);
-                context.pop();
+                final state = context.read<PurchaseReturnFormBloc>().state;
+                try {
+                  if (state.purchaseId != null && state.purchase != null) {
+                    final repo = sl<PurchaseRepository>();
+                    // Get return items from the repository
+                    final returns = await repo.watchPurchaseReturnsByPurchase(state.purchaseId!).first;
+                    if (returns.isNotEmpty && context.mounted) {
+                      final latestReturn = returns.first;
+                      final returnItems = await repo.watchPurchaseReturnItems(latestReturn.id).first;
+                      if (context.mounted) {
+                        // Build a PurchaseEntity from the state purchase
+                        await PurchasePdfService.printPurchaseReturn(
+                          context: context,
+                          originalPurchase: state.purchase!,
+                          returnEntity: latestReturn,
+                          returnItems: returnItems,
+                        );
+                      }
+                    }
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('purchases.print_error'.tr()),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
+                }
+                if (context.mounted) context.pop();
               },
             ),
             FilledButton.icon(

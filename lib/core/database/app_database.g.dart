@@ -26365,6 +26365,16 @@ class $PurchaseItemsTable extends PurchaseItems
         requiredDuringInsert: true,
       ).withConverter<Decimal>($PurchaseItemsTable.$converterunitCostCents);
   @override
+  late final GeneratedColumnWithTypeConverter<Decimal, int> discountCents =
+      GeneratedColumn<int>(
+        'discount_cents',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(0),
+      ).withConverter<Decimal>($PurchaseItemsTable.$converterdiscountCents);
+  @override
   late final GeneratedColumnWithTypeConverter<Decimal, int> subtotalCents =
       GeneratedColumn<int>(
         'subtotal_cents',
@@ -26392,6 +26402,17 @@ class $PurchaseItemsTable extends PurchaseItems
         type: DriftSqlType.int,
         requiredDuringInsert: true,
       ).withConverter<Decimal>($PurchaseItemsTable.$convertertotalCents);
+  static const VerificationMeta _expiryDateMeta = const VerificationMeta(
+    'expiryDate',
+  );
+  @override
+  late final GeneratedColumn<DateTime> expiryDate = GeneratedColumn<DateTime>(
+    'expiry_date',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -26412,9 +26433,11 @@ class $PurchaseItemsTable extends PurchaseItems
     variantId,
     quantity,
     unitCostCents,
+    discountCents,
     subtotalCents,
     taxCents,
     totalCents,
+    expiryDate,
     createdAt,
   ];
   @override
@@ -26462,6 +26485,12 @@ class $PurchaseItemsTable extends PurchaseItems
     } else if (isInserting) {
       context.missing(_quantityMeta);
     }
+    if (data.containsKey('expiry_date')) {
+      context.handle(
+        _expiryDateMeta,
+        expiryDate.isAcceptableOrUnknown(data['expiry_date']!, _expiryDateMeta),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -26503,6 +26532,12 @@ class $PurchaseItemsTable extends PurchaseItems
           data['${effectivePrefix}unit_cost_cents'],
         )!,
       ),
+      discountCents: $PurchaseItemsTable.$converterdiscountCents.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}discount_cents'],
+        )!,
+      ),
       subtotalCents: $PurchaseItemsTable.$convertersubtotalCents.fromSql(
         attachedDatabase.typeMapping.read(
           DriftSqlType.int,
@@ -26521,6 +26556,10 @@ class $PurchaseItemsTable extends PurchaseItems
           data['${effectivePrefix}total_cents'],
         )!,
       ),
+      expiryDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}expiry_date'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -26534,6 +26573,8 @@ class $PurchaseItemsTable extends PurchaseItems
   }
 
   static TypeConverter<Decimal, int> $converterunitCostCents =
+      const MoneyConverter();
+  static TypeConverter<Decimal, int> $converterdiscountCents =
       const MoneyConverter();
   static TypeConverter<Decimal, int> $convertersubtotalCents =
       const MoneyConverter();
@@ -26550,9 +26591,11 @@ class PurchaseItem extends DataClass implements Insertable<PurchaseItem> {
   final int? variantId;
   final int quantity;
   final Decimal unitCostCents;
+  final Decimal discountCents;
   final Decimal subtotalCents;
   final Decimal taxCents;
   final Decimal totalCents;
+  final DateTime? expiryDate;
   final DateTime createdAt;
   const PurchaseItem({
     required this.id,
@@ -26561,9 +26604,11 @@ class PurchaseItem extends DataClass implements Insertable<PurchaseItem> {
     this.variantId,
     required this.quantity,
     required this.unitCostCents,
+    required this.discountCents,
     required this.subtotalCents,
     required this.taxCents,
     required this.totalCents,
+    this.expiryDate,
     required this.createdAt,
   });
   @override
@@ -26582,6 +26627,11 @@ class PurchaseItem extends DataClass implements Insertable<PurchaseItem> {
       );
     }
     {
+      map['discount_cents'] = Variable<int>(
+        $PurchaseItemsTable.$converterdiscountCents.toSql(discountCents),
+      );
+    }
+    {
       map['subtotal_cents'] = Variable<int>(
         $PurchaseItemsTable.$convertersubtotalCents.toSql(subtotalCents),
       );
@@ -26595,6 +26645,9 @@ class PurchaseItem extends DataClass implements Insertable<PurchaseItem> {
       map['total_cents'] = Variable<int>(
         $PurchaseItemsTable.$convertertotalCents.toSql(totalCents),
       );
+    }
+    if (!nullToAbsent || expiryDate != null) {
+      map['expiry_date'] = Variable<DateTime>(expiryDate);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     return map;
@@ -26610,9 +26663,13 @@ class PurchaseItem extends DataClass implements Insertable<PurchaseItem> {
           : Value(variantId),
       quantity: Value(quantity),
       unitCostCents: Value(unitCostCents),
+      discountCents: Value(discountCents),
       subtotalCents: Value(subtotalCents),
       taxCents: Value(taxCents),
       totalCents: Value(totalCents),
+      expiryDate: expiryDate == null && nullToAbsent
+          ? const Value.absent()
+          : Value(expiryDate),
       createdAt: Value(createdAt),
     );
   }
@@ -26629,9 +26686,11 @@ class PurchaseItem extends DataClass implements Insertable<PurchaseItem> {
       variantId: serializer.fromJson<int?>(json['variantId']),
       quantity: serializer.fromJson<int>(json['quantity']),
       unitCostCents: serializer.fromJson<Decimal>(json['unitCostCents']),
+      discountCents: serializer.fromJson<Decimal>(json['discountCents']),
       subtotalCents: serializer.fromJson<Decimal>(json['subtotalCents']),
       taxCents: serializer.fromJson<Decimal>(json['taxCents']),
       totalCents: serializer.fromJson<Decimal>(json['totalCents']),
+      expiryDate: serializer.fromJson<DateTime?>(json['expiryDate']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
   }
@@ -26645,9 +26704,11 @@ class PurchaseItem extends DataClass implements Insertable<PurchaseItem> {
       'variantId': serializer.toJson<int?>(variantId),
       'quantity': serializer.toJson<int>(quantity),
       'unitCostCents': serializer.toJson<Decimal>(unitCostCents),
+      'discountCents': serializer.toJson<Decimal>(discountCents),
       'subtotalCents': serializer.toJson<Decimal>(subtotalCents),
       'taxCents': serializer.toJson<Decimal>(taxCents),
       'totalCents': serializer.toJson<Decimal>(totalCents),
+      'expiryDate': serializer.toJson<DateTime?>(expiryDate),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
   }
@@ -26659,9 +26720,11 @@ class PurchaseItem extends DataClass implements Insertable<PurchaseItem> {
     Value<int?> variantId = const Value.absent(),
     int? quantity,
     Decimal? unitCostCents,
+    Decimal? discountCents,
     Decimal? subtotalCents,
     Decimal? taxCents,
     Decimal? totalCents,
+    Value<DateTime?> expiryDate = const Value.absent(),
     DateTime? createdAt,
   }) => PurchaseItem(
     id: id ?? this.id,
@@ -26670,9 +26733,11 @@ class PurchaseItem extends DataClass implements Insertable<PurchaseItem> {
     variantId: variantId.present ? variantId.value : this.variantId,
     quantity: quantity ?? this.quantity,
     unitCostCents: unitCostCents ?? this.unitCostCents,
+    discountCents: discountCents ?? this.discountCents,
     subtotalCents: subtotalCents ?? this.subtotalCents,
     taxCents: taxCents ?? this.taxCents,
     totalCents: totalCents ?? this.totalCents,
+    expiryDate: expiryDate.present ? expiryDate.value : this.expiryDate,
     createdAt: createdAt ?? this.createdAt,
   );
   PurchaseItem copyWithCompanion(PurchaseItemsCompanion data) {
@@ -26687,6 +26752,9 @@ class PurchaseItem extends DataClass implements Insertable<PurchaseItem> {
       unitCostCents: data.unitCostCents.present
           ? data.unitCostCents.value
           : this.unitCostCents,
+      discountCents: data.discountCents.present
+          ? data.discountCents.value
+          : this.discountCents,
       subtotalCents: data.subtotalCents.present
           ? data.subtotalCents.value
           : this.subtotalCents,
@@ -26694,6 +26762,9 @@ class PurchaseItem extends DataClass implements Insertable<PurchaseItem> {
       totalCents: data.totalCents.present
           ? data.totalCents.value
           : this.totalCents,
+      expiryDate: data.expiryDate.present
+          ? data.expiryDate.value
+          : this.expiryDate,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
@@ -26707,9 +26778,11 @@ class PurchaseItem extends DataClass implements Insertable<PurchaseItem> {
           ..write('variantId: $variantId, ')
           ..write('quantity: $quantity, ')
           ..write('unitCostCents: $unitCostCents, ')
+          ..write('discountCents: $discountCents, ')
           ..write('subtotalCents: $subtotalCents, ')
           ..write('taxCents: $taxCents, ')
           ..write('totalCents: $totalCents, ')
+          ..write('expiryDate: $expiryDate, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
@@ -26723,9 +26796,11 @@ class PurchaseItem extends DataClass implements Insertable<PurchaseItem> {
     variantId,
     quantity,
     unitCostCents,
+    discountCents,
     subtotalCents,
     taxCents,
     totalCents,
+    expiryDate,
     createdAt,
   );
   @override
@@ -26738,9 +26813,11 @@ class PurchaseItem extends DataClass implements Insertable<PurchaseItem> {
           other.variantId == this.variantId &&
           other.quantity == this.quantity &&
           other.unitCostCents == this.unitCostCents &&
+          other.discountCents == this.discountCents &&
           other.subtotalCents == this.subtotalCents &&
           other.taxCents == this.taxCents &&
           other.totalCents == this.totalCents &&
+          other.expiryDate == this.expiryDate &&
           other.createdAt == this.createdAt);
 }
 
@@ -26751,9 +26828,11 @@ class PurchaseItemsCompanion extends UpdateCompanion<PurchaseItem> {
   final Value<int?> variantId;
   final Value<int> quantity;
   final Value<Decimal> unitCostCents;
+  final Value<Decimal> discountCents;
   final Value<Decimal> subtotalCents;
   final Value<Decimal> taxCents;
   final Value<Decimal> totalCents;
+  final Value<DateTime?> expiryDate;
   final Value<DateTime> createdAt;
   const PurchaseItemsCompanion({
     this.id = const Value.absent(),
@@ -26762,9 +26841,11 @@ class PurchaseItemsCompanion extends UpdateCompanion<PurchaseItem> {
     this.variantId = const Value.absent(),
     this.quantity = const Value.absent(),
     this.unitCostCents = const Value.absent(),
+    this.discountCents = const Value.absent(),
     this.subtotalCents = const Value.absent(),
     this.taxCents = const Value.absent(),
     this.totalCents = const Value.absent(),
+    this.expiryDate = const Value.absent(),
     this.createdAt = const Value.absent(),
   });
   PurchaseItemsCompanion.insert({
@@ -26774,9 +26855,11 @@ class PurchaseItemsCompanion extends UpdateCompanion<PurchaseItem> {
     this.variantId = const Value.absent(),
     required int quantity,
     required Decimal unitCostCents,
+    this.discountCents = const Value.absent(),
     required Decimal subtotalCents,
     this.taxCents = const Value.absent(),
     required Decimal totalCents,
+    this.expiryDate = const Value.absent(),
     this.createdAt = const Value.absent(),
   }) : purchaseId = Value(purchaseId),
        productId = Value(productId),
@@ -26791,9 +26874,11 @@ class PurchaseItemsCompanion extends UpdateCompanion<PurchaseItem> {
     Expression<int>? variantId,
     Expression<int>? quantity,
     Expression<int>? unitCostCents,
+    Expression<int>? discountCents,
     Expression<int>? subtotalCents,
     Expression<int>? taxCents,
     Expression<int>? totalCents,
+    Expression<DateTime>? expiryDate,
     Expression<DateTime>? createdAt,
   }) {
     return RawValuesInsertable({
@@ -26803,9 +26888,11 @@ class PurchaseItemsCompanion extends UpdateCompanion<PurchaseItem> {
       if (variantId != null) 'variant_id': variantId,
       if (quantity != null) 'quantity': quantity,
       if (unitCostCents != null) 'unit_cost_cents': unitCostCents,
+      if (discountCents != null) 'discount_cents': discountCents,
       if (subtotalCents != null) 'subtotal_cents': subtotalCents,
       if (taxCents != null) 'tax_cents': taxCents,
       if (totalCents != null) 'total_cents': totalCents,
+      if (expiryDate != null) 'expiry_date': expiryDate,
       if (createdAt != null) 'created_at': createdAt,
     });
   }
@@ -26817,9 +26904,11 @@ class PurchaseItemsCompanion extends UpdateCompanion<PurchaseItem> {
     Value<int?>? variantId,
     Value<int>? quantity,
     Value<Decimal>? unitCostCents,
+    Value<Decimal>? discountCents,
     Value<Decimal>? subtotalCents,
     Value<Decimal>? taxCents,
     Value<Decimal>? totalCents,
+    Value<DateTime?>? expiryDate,
     Value<DateTime>? createdAt,
   }) {
     return PurchaseItemsCompanion(
@@ -26829,9 +26918,11 @@ class PurchaseItemsCompanion extends UpdateCompanion<PurchaseItem> {
       variantId: variantId ?? this.variantId,
       quantity: quantity ?? this.quantity,
       unitCostCents: unitCostCents ?? this.unitCostCents,
+      discountCents: discountCents ?? this.discountCents,
       subtotalCents: subtotalCents ?? this.subtotalCents,
       taxCents: taxCents ?? this.taxCents,
       totalCents: totalCents ?? this.totalCents,
+      expiryDate: expiryDate ?? this.expiryDate,
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -26859,6 +26950,11 @@ class PurchaseItemsCompanion extends UpdateCompanion<PurchaseItem> {
         $PurchaseItemsTable.$converterunitCostCents.toSql(unitCostCents.value),
       );
     }
+    if (discountCents.present) {
+      map['discount_cents'] = Variable<int>(
+        $PurchaseItemsTable.$converterdiscountCents.toSql(discountCents.value),
+      );
+    }
     if (subtotalCents.present) {
       map['subtotal_cents'] = Variable<int>(
         $PurchaseItemsTable.$convertersubtotalCents.toSql(subtotalCents.value),
@@ -26873,6 +26969,9 @@ class PurchaseItemsCompanion extends UpdateCompanion<PurchaseItem> {
       map['total_cents'] = Variable<int>(
         $PurchaseItemsTable.$convertertotalCents.toSql(totalCents.value),
       );
+    }
+    if (expiryDate.present) {
+      map['expiry_date'] = Variable<DateTime>(expiryDate.value);
     }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
@@ -26889,9 +26988,11 @@ class PurchaseItemsCompanion extends UpdateCompanion<PurchaseItem> {
           ..write('variantId: $variantId, ')
           ..write('quantity: $quantity, ')
           ..write('unitCostCents: $unitCostCents, ')
+          ..write('discountCents: $discountCents, ')
           ..write('subtotalCents: $subtotalCents, ')
           ..write('taxCents: $taxCents, ')
           ..write('totalCents: $totalCents, ')
+          ..write('expiryDate: $expiryDate, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
@@ -59185,9 +59286,11 @@ typedef $$PurchaseItemsTableCreateCompanionBuilder =
       Value<int?> variantId,
       required int quantity,
       required Decimal unitCostCents,
+      Value<Decimal> discountCents,
       required Decimal subtotalCents,
       Value<Decimal> taxCents,
       required Decimal totalCents,
+      Value<DateTime?> expiryDate,
       Value<DateTime> createdAt,
     });
 typedef $$PurchaseItemsTableUpdateCompanionBuilder =
@@ -59198,9 +59301,11 @@ typedef $$PurchaseItemsTableUpdateCompanionBuilder =
       Value<int?> variantId,
       Value<int> quantity,
       Value<Decimal> unitCostCents,
+      Value<Decimal> discountCents,
       Value<Decimal> subtotalCents,
       Value<Decimal> taxCents,
       Value<Decimal> totalCents,
+      Value<DateTime?> expiryDate,
       Value<DateTime> createdAt,
     });
 
@@ -59322,6 +59427,12 @@ class $$PurchaseItemsTableFilterComposer
         builder: (column) => ColumnWithTypeConverterFilters(column),
       );
 
+  ColumnWithTypeConverterFilters<Decimal, Decimal, int> get discountCents =>
+      $composableBuilder(
+        column: $table.discountCents,
+        builder: (column) => ColumnWithTypeConverterFilters(column),
+      );
+
   ColumnWithTypeConverterFilters<Decimal, Decimal, int> get subtotalCents =>
       $composableBuilder(
         column: $table.subtotalCents,
@@ -59339,6 +59450,11 @@ class $$PurchaseItemsTableFilterComposer
         column: $table.totalCents,
         builder: (column) => ColumnWithTypeConverterFilters(column),
       );
+
+  ColumnFilters<DateTime> get expiryDate => $composableBuilder(
+    column: $table.expiryDate,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
@@ -59464,6 +59580,11 @@ class $$PurchaseItemsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get discountCents => $composableBuilder(
+    column: $table.discountCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get subtotalCents => $composableBuilder(
     column: $table.subtotalCents,
     builder: (column) => ColumnOrderings(column),
@@ -59476,6 +59597,11 @@ class $$PurchaseItemsTableOrderingComposer
 
   ColumnOrderings<int> get totalCents => $composableBuilder(
     column: $table.totalCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get expiryDate => $composableBuilder(
+    column: $table.expiryDate,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -59575,6 +59701,12 @@ class $$PurchaseItemsTableAnnotationComposer
         builder: (column) => column,
       );
 
+  GeneratedColumnWithTypeConverter<Decimal, int> get discountCents =>
+      $composableBuilder(
+        column: $table.discountCents,
+        builder: (column) => column,
+      );
+
   GeneratedColumnWithTypeConverter<Decimal, int> get subtotalCents =>
       $composableBuilder(
         column: $table.subtotalCents,
@@ -59589,6 +59721,11 @@ class $$PurchaseItemsTableAnnotationComposer
         column: $table.totalCents,
         builder: (column) => column,
       );
+
+  GeneratedColumn<DateTime> get expiryDate => $composableBuilder(
+    column: $table.expiryDate,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -59728,9 +59865,11 @@ class $$PurchaseItemsTableTableManager
                 Value<int?> variantId = const Value.absent(),
                 Value<int> quantity = const Value.absent(),
                 Value<Decimal> unitCostCents = const Value.absent(),
+                Value<Decimal> discountCents = const Value.absent(),
                 Value<Decimal> subtotalCents = const Value.absent(),
                 Value<Decimal> taxCents = const Value.absent(),
                 Value<Decimal> totalCents = const Value.absent(),
+                Value<DateTime?> expiryDate = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
               }) => PurchaseItemsCompanion(
                 id: id,
@@ -59739,9 +59878,11 @@ class $$PurchaseItemsTableTableManager
                 variantId: variantId,
                 quantity: quantity,
                 unitCostCents: unitCostCents,
+                discountCents: discountCents,
                 subtotalCents: subtotalCents,
                 taxCents: taxCents,
                 totalCents: totalCents,
+                expiryDate: expiryDate,
                 createdAt: createdAt,
               ),
           createCompanionCallback:
@@ -59752,9 +59893,11 @@ class $$PurchaseItemsTableTableManager
                 Value<int?> variantId = const Value.absent(),
                 required int quantity,
                 required Decimal unitCostCents,
+                Value<Decimal> discountCents = const Value.absent(),
                 required Decimal subtotalCents,
                 Value<Decimal> taxCents = const Value.absent(),
                 required Decimal totalCents,
+                Value<DateTime?> expiryDate = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
               }) => PurchaseItemsCompanion.insert(
                 id: id,
@@ -59763,9 +59906,11 @@ class $$PurchaseItemsTableTableManager
                 variantId: variantId,
                 quantity: quantity,
                 unitCostCents: unitCostCents,
+                discountCents: discountCents,
                 subtotalCents: subtotalCents,
                 taxCents: taxCents,
                 totalCents: totalCents,
+                expiryDate: expiryDate,
                 createdAt: createdAt,
               ),
           withReferenceMapper: (p0) => p0

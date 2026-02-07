@@ -97,9 +97,11 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
           variantId: Value(item.variantId),
           quantity: Value(item.quantity),
           unitCostCents: Value(item.unitCostCents),
+          discountCents: Value(item.discountCents),
           subtotalCents: Value(item.subtotalCents),
           taxCents: Value(item.taxCents),
           totalCents: Value(item.totalCents),
+          expiryDate: Value(item.expiryDate),
         )).toList();
 
     final purchaseId = await _datasource.createPurchase(purchase, itemCompanions);
@@ -156,9 +158,11 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
           variantId: Value(item.variantId),
           quantity: Value(item.quantity),
           unitCostCents: Value(item.unitCostCents),
+          discountCents: Value(item.discountCents),
           subtotalCents: Value(item.subtotalCents),
           taxCents: Value(item.taxCents),
           totalCents: Value(item.totalCents),
+          expiryDate: Value(item.expiryDate),
         )).toList();
 
     final ok = await _datasource.updatePurchase(purchaseId, purchase, itemCompanions);

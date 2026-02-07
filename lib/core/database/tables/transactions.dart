@@ -122,9 +122,11 @@ class PurchaseItems extends Table {
   IntColumn get variantId => integer().nullable().references(ProductVariants, #id, onDelete: KeyAction.restrict)();
   IntColumn get quantity => integer()();
   IntColumn get unitCostCents => integer().map(const MoneyConverter())();
+  IntColumn get discountCents => integer().map(const MoneyConverter()).withDefault(const Constant(0))();
   IntColumn get subtotalCents => integer().map(const MoneyConverter())();
   IntColumn get taxCents => integer().map(const MoneyConverter()).withDefault(const Constant(0))();
   IntColumn get totalCents => integer().map(const MoneyConverter())();
+  DateTimeColumn get expiryDate => dateTime().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 }
 

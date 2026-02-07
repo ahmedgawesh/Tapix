@@ -96,9 +96,11 @@ class PurchaseItemModel extends PurchaseItemEntity {
       variantId: item.variantId,
       quantity: item.quantity,
       unitCostCents: item.unitCostCents,
+      discountCents: item.discountCents,
       subtotalCents: item.subtotalCents,
       taxCents: item.taxCents,
       totalCents: item.totalCents,
+      expiryDate: item.expiryDate,
       createdAt: item.createdAt,
     );
   }
@@ -113,9 +115,11 @@ class PurchaseItemModel extends PurchaseItemEntity {
       variantSku: d.variant?.sku,
       quantity: d.item.quantity,
       unitCostCents: d.item.unitCostCents,
+      discountCents: d.item.discountCents,
       subtotalCents: d.item.subtotalCents,
       taxCents: d.item.taxCents,
       totalCents: d.item.totalCents,
+      expiryDate: d.item.expiryDate,
       createdAt: d.item.createdAt,
     );
   }
