@@ -39,6 +39,7 @@ import '../../features/products/presentation/bloc/categories_bloc.dart';
 import '../../features/products/presentation/bloc/colors_bloc.dart';
 import '../../features/products/presentation/bloc/sizes_bloc.dart';
 import '../../features/products/presentation/bloc/variant_summaries_bloc.dart';
+import '../../features/products/presentation/bloc/variant_previews_bloc.dart';
 import '../../features/products/services/file_import_service.dart';
 import '../../features/products/services/import_validation_service.dart';
 import '../../features/products/services/product_import_service.dart';
@@ -230,6 +231,7 @@ Future<void> init() async {
   sl.registerFactory(() => ColorsBloc(sl<ProductColorRepository>()));
   sl.registerFactory(() => SizesBloc(sl<SizeRepository>()));
   sl.registerFactory(() => VariantSummariesBloc(sl<ProductVariantRepository>()));
+  sl.registerFactory(() => VariantPreviewsBloc(sl<ProductVariantRepository>()));
   sl.registerFactory(() => ImportProductsBloc(
     parseImportFile: sl<ParseImportFile>(),
     validateImportData: sl<ValidateImportData>(),

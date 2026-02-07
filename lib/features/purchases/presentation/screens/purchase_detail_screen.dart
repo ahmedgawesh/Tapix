@@ -8,6 +8,7 @@ import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../domain/entities/purchase_entity.dart';
 import '../../domain/repositories/purchase_repository.dart';
+import '../../../products/domain/repositories/product_variant_repository.dart';
 
 class PurchaseDetailScreen extends StatefulWidget {
   final int purchaseId;
@@ -460,6 +461,20 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
+    Color? tryParseHexColor(String? hex) {
+      if (hex == null) return null;
+      final cleaned = hex.trim().replaceFirst('#', '');
+      if (cleaned.isEmpty) return null;
+      final buffer = StringBuffer();
+      if (cleaned.length == 6) buffer.write('FF');
+      buffer.write(cleaned);
+      try {
+        return Color(int.parse(buffer.toString(), radix: 16));
+      } catch (_) {
+        return null;
+      }
+    }
+
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
@@ -566,117 +581,188 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
               ),
             ),
             // Items
-            ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: _items.length,
-              itemBuilder: (context, index) {
-                final item = _items[index];
-                final isEven = index % 2 == 0;
-                return Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                  color: isEven ? Colors.transparent : colorScheme.surfaceContainerHighest.withValues(alpha: 0.2),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        width: 26, height: 26,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: colorScheme.primaryContainer.withValues(alpha: 0.6),
-                          borderRadius: BorderRadius.circular(7),
-                        ),
-                        child: Text('${index + 1}',
-                            style: theme.textTheme.labelSmall?.copyWith(
+            StreamBuilder<Map<int, ({String? sizeName, String? colorHex})>>(
+              stream: sl<ProductVariantRepository>().watchVariantPreviews(),
+              builder: (context, snapshot) {
+                final previews = snapshot.data ?? const {};
+                return ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: _items.length,
+                  itemBuilder: (context, index) {
+                    final item = _items[index];
+                    final isEven = index % 2 == 0;
+                    final preview = previews[item.productId];
+                    final sizeName = preview?.sizeName?.trim();
+                    final shade = tryParseHexColor(preview?.colorHex);
+
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      color: isEven
+                          ? Colors.transparent
+                          : colorScheme.surfaceContainerHighest.withValues(alpha: 0.2),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            width: 26,
+                            height: 26,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: colorScheme.primaryContainer.withValues(alpha: 0.6),
+                              borderRadius: BorderRadius.circular(7),
+                            ),
+                            child: Text(
+                              '${index + 1}',
+                              style: theme.textTheme.labelSmall?.copyWith(
                                 color: colorScheme.onPrimaryContainer,
                                 fontWeight: FontWeight.bold,
-                                fontSize: 11)),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        flex: 3,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              item.productName ?? 'Product #${item.productId}',
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                  fontWeight: FontWeight.w500),
-                              maxLines: 2, overflow: TextOverflow.ellipsis,
+                                fontSize: 11,
+                              ),
                             ),
-                            if (item.variantSku != null)
-                              Container(
-                                margin: const EdgeInsets.only(top: 2),
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                                decoration: BoxDecoration(
-                                  color: colorScheme.tertiaryContainer.withValues(alpha: 0.4),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(item.variantSku!,
-                                    style: theme.textTheme.labelSmall?.copyWith(
-                                        color: colorScheme.onTertiaryContainer,
-                                        fontSize: 10)),
-                              ),
-                            Text(
-                              cs.format(item.unitCostCents.toBigInt().toInt()),
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                  color: colorScheme.onSurfaceVariant, fontSize: 11),
-                            ),
-                            if (item.discountCents > Decimal.zero)
-                              Text(
-                                '-${cs.format(item.discountCents.toBigInt().toInt())}',
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                    color: colorScheme.tertiary, fontSize: 11),
-                              ),
-                            if (item.expiryDate != null)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 2),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(LucideIcons.calendarClock, size: 10, color: Colors.orange.shade700),
-                                    const SizedBox(width: 3),
-                                    Text(
-                                      DateFormat.yMMMd().format(item.expiryDate!),
-                                      style: theme.textTheme.bodySmall?.copyWith(
-                                          color: Colors.orange.shade700, fontSize: 10),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                      SizedBox(
-                        width: 50,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: colorScheme.surfaceContainerHighest,
-                            borderRadius: BorderRadius.circular(6),
                           ),
-                          alignment: Alignment.center,
-                          child: Text('${item.quantity}',
-                              style: theme.textTheme.labelMedium?.copyWith(
-                                  fontWeight: FontWeight.bold)),
-                        ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            flex: 3,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  item.productName ?? 'Product #${item.productId}',
+                                  style: theme.textTheme.bodyMedium
+                                      ?.copyWith(fontWeight: FontWeight.w500),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                if ((sizeName != null && sizeName.isNotEmpty) || shade != null)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 2),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        if (sizeName != null && sizeName.isNotEmpty)
+                                          Flexible(
+                                            child: Text(
+                                              sizeName,
+                                              style: theme.textTheme.bodySmall?.copyWith(
+                                                color: colorScheme.onSurfaceVariant,
+                                                fontSize: 11,
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                        if (sizeName != null && sizeName.isNotEmpty && shade != null)
+                                          const SizedBox(width: 6),
+                                        if (shade != null)
+                                          Container(
+                                            width: 10,
+                                            height: 10,
+                                            decoration: BoxDecoration(
+                                              color: shade,
+                                              shape: BoxShape.circle,
+                                              border: Border.all(color: colorScheme.outline),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                if (item.variantSku != null)
+                                  Container(
+                                    margin: const EdgeInsets.only(top: 2),
+                                    padding:
+                                        const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                    decoration: BoxDecoration(
+                                      color: colorScheme.tertiaryContainer.withValues(alpha: 0.4),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      item.variantSku!,
+                                      style: theme.textTheme.labelSmall?.copyWith(
+                                        color: colorScheme.onTertiaryContainer,
+                                        fontSize: 10,
+                                      ),
+                                    ),
+                                  ),
+                                Text(
+                                  cs.format(item.unitCostCents.toBigInt().toInt()),
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: colorScheme.onSurfaceVariant,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                                if (item.discountCents > Decimal.zero)
+                                  Text(
+                                    '-${cs.format(item.discountCents.toBigInt().toInt())}',
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: colorScheme.tertiary,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                if (item.expiryDate != null)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 2),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          LucideIcons.calendarClock,
+                                          size: 10,
+                                          color: Colors.orange.shade700,
+                                        ),
+                                        const SizedBox(width: 3),
+                                        Text(
+                                          '${'purchases.expiry_date'.tr()}: ${item.expiryDate!.toLocal().toString().split(' ').first}',
+                                          style: theme.textTheme.bodySmall?.copyWith(
+                                            color: colorScheme.onSurfaceVariant,
+                                            fontSize: 10,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          SizedBox(
+                            width: 50,
+                            child: Text(
+                              '${item.quantity}',
+                              style: theme.textTheme.bodyMedium
+                                  ?.copyWith(fontWeight: FontWeight.w600),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                          Expanded(
+                            flex: 2,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text(
+                                  cs.format(item.totalCents.toBigInt().toInt()),
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                    color: colorScheme.primary,
+                                  ),
+                                ),
+                                Text(
+                                  cs.format(item.subtotalCents.toBigInt().toInt()),
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: colorScheme.onSurfaceVariant,
+                                    fontSize: 10,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
-                      Expanded(
-                        flex: 2,
-                        child: Text(
-                          cs.format(item.totalCents.toBigInt().toInt()),
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                              fontWeight: FontWeight.w600),
-                          textAlign: TextAlign.end,
-                        ),
-                      ),
-                    ],
-                  ),
+                    );
+                  },
                 );
               },
             ),
           ],
-          const SizedBox(height: 8),
         ],
       ),
     );

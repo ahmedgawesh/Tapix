@@ -840,6 +840,8 @@
     "old_cost": "Old Cost",
     "new_cost": "New Cost",
     "sell_price": "Sell Price",
+    "new_sell_price": "New Sell Price",
+    "new_wholesale_price": "New Wholesale Price",
     "discount_percent": "Discount %",
     "discount_fixed": "Fixed Amount",
     "checkout": "Checkout",

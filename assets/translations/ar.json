@@ -840,6 +840,8 @@
     "old_cost": "التكلفة القديمة",
     "new_cost": "التكلفة الجديدة",
     "sell_price": "سعر البيع",
+    "new_sell_price": "سعر البيع الجديد",
+    "new_wholesale_price": "سعر الجملة الجديد",
     "discount_percent": "نسبة الخصم %",
     "discount_fixed": "مبلغ ثابت",
     "checkout": "إتمام",

@@ -12,8 +12,13 @@ import '../../../../core/services/currency_service.dart';
 import '../../../../core/database/app_database.dart' show Supplier;
 import '../../../products/domain/entities/product_entity.dart';
 import '../../../products/domain/entities/product_variant_entity.dart';
+import '../../../products/domain/repositories/product_color_repository.dart';
+import '../../../products/domain/repositories/product_repository.dart';
+import '../../../products/domain/repositories/size_repository.dart';
+import '../../../products/domain/repositories/product_variant_repository.dart';
 import '../../../products/presentation/bloc/products_bloc.dart';
 import '../../../products/presentation/bloc/product_variants_bloc.dart';
+import '../../../products/presentation/bloc/variant_previews_bloc.dart';
 import '../../../suppliers/domain/repositories/supplier_repository.dart';
 import '../bloc/purchase_form_bloc.dart';
 
@@ -1017,8 +1022,11 @@ class _PurchaseFormView extends StatelessWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (sheetContext) => BlocProvider.value(
-        value: context.read<ProductsBloc>(),
+      builder: (sheetContext) => MultiBlocProvider(
+        providers: [
+          BlocProvider.value(value: context.read<ProductsBloc>()),
+          BlocProvider(create: (_) => sl<VariantPreviewsBloc>()),
+        ],
         child: _AddItemSheet(
           onItemAdded: (product, variant, quantity, unitCost) {
             context.read<PurchaseFormBloc>().add(PurchaseLineItemAdded(
@@ -1448,10 +1456,13 @@ class _EditItemSheet extends StatefulWidget {
 class _EditItemSheetState extends State<_EditItemSheet> {
   late final TextEditingController _qtyCtrl;
   late final TextEditingController _costCtrl;
+  late final TextEditingController _sellPriceCtrl;
+  late final TextEditingController _wholesalePriceCtrl;
   late final TextEditingController _discountPercentCtrl;
   late final TextEditingController _discountFixedCtrl;
   DateTime? _expiryDate;
   bool _updatingDiscount = false;
+  bool _saving = false;
 
   @override
   void initState() {
@@ -1459,6 +1470,15 @@ class _EditItemSheetState extends State<_EditItemSheet> {
     _qtyCtrl = TextEditingController(text: '${widget.item.quantity}');
     _costCtrl = TextEditingController(
         text: (widget.item.unitCostCents.toBigInt().toInt() / 100).toStringAsFixed(2));
+
+    final sellPriceCents = widget.item.variant?.priceCents.toBigInt().toInt() ??
+        widget.item.product.priceCents.toBigInt().toInt();
+    final wholesaleCents = widget.item.variant?.wholesalePriceCents?.toBigInt().toInt() ??
+        widget.item.product.wholesalePriceCents?.toBigInt().toInt();
+    _sellPriceCtrl = TextEditingController(
+        text: (sellPriceCents / 100).toStringAsFixed(2));
+    _wholesalePriceCtrl = TextEditingController(
+        text: wholesaleCents == null ? '' : (wholesaleCents / 100).toStringAsFixed(2));
 
     final discCents = widget.item.discountCents.toBigInt().toInt();
     final subtotalCents = widget.item.unitCostCents.toBigInt().toInt() * widget.item.quantity;
@@ -1514,6 +1534,8 @@ class _EditItemSheetState extends State<_EditItemSheet> {
   void dispose() {
     _qtyCtrl.dispose();
     _costCtrl.dispose();
+    _sellPriceCtrl.dispose();
+    _wholesalePriceCtrl.dispose();
     _discountPercentCtrl.dispose();
     _discountFixedCtrl.dispose();
     super.dispose();
@@ -1693,6 +1715,37 @@ class _EditItemSheetState extends State<_EditItemSheet> {
                         ),
                       ],
                     ),
+
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _sellPriceCtrl,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
+                            decoration: InputDecoration(
+                              labelText: 'purchases.new_sell_price'.tr(),
+                              border: const OutlineInputBorder(),
+                              prefixIcon: const Icon(LucideIcons.tag, size: 18),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextField(
+                            controller: _wholesalePriceCtrl,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
+                            decoration: InputDecoration(
+                              labelText: 'purchases.new_wholesale_price'.tr(),
+                              border: const OutlineInputBorder(),
+                              prefixIcon: const Icon(LucideIcons.badgePercent, size: 18),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                     // ── Discount (% and fixed, auto-sync) ──
                     if (widget.discountMode == DiscountMode.perItem) ...[
                       const SizedBox(height: 16),
@@ -1789,23 +1842,61 @@ class _EditItemSheetState extends State<_EditItemSheet> {
                     child: FilledButton.icon(
                       icon: const Icon(LucideIcons.check, size: 18),
                       label: Text('common.save'.tr()),
-                      onPressed: () {
-                        final qty = int.tryParse(_qtyCtrl.text) ?? 1;
-                        final costVal = double.tryParse(_costCtrl.text) ?? 0;
-                        final costCents = Decimal.fromInt((costVal * 100).round());
-                        Decimal? discountCents;
-                        if (widget.discountMode == DiscountMode.perItem) {
-                          final discVal = double.tryParse(_discountFixedCtrl.text) ?? 0;
-                          discountCents = Decimal.fromInt((discVal * 100).round());
-                        }
-                        widget.onSave(
-                          qty < 1 ? 1 : qty,
-                          costCents,
-                          discountCents,
-                          _expiryDate,
-                          _expiryDate == null && widget.item.expiryDate != null,
-                        );
-                      },
+                      onPressed: _saving
+                          ? null
+                          : () async {
+                              setState(() => _saving = true);
+                              try {
+                                final qty = int.tryParse(_qtyCtrl.text) ?? 1;
+                                final costVal = double.tryParse(_costCtrl.text) ?? 0;
+                                final costCents = Decimal.fromInt((costVal * 100).round());
+                                Decimal? discountCents;
+                                if (widget.discountMode == DiscountMode.perItem) {
+                                  final discVal = double.tryParse(_discountFixedCtrl.text) ?? 0;
+                                  discountCents = Decimal.fromInt((discVal * 100).round());
+                                }
+
+                                final sellVal = double.tryParse(_sellPriceCtrl.text) ?? 0;
+                                final sellCents = Decimal.fromInt((sellVal * 100).round());
+                                final wholesaleVal = double.tryParse(_wholesalePriceCtrl.text);
+                                final wholesaleCents = wholesaleVal == null
+                                    ? null
+                                    : Decimal.fromInt((wholesaleVal * 100).round());
+
+                                if (item.variant != null) {
+                                  final updatedVariant = item.variant!.copyWith(
+                                    priceCents: sellCents,
+                                    wholesalePriceCents: wholesaleCents,
+                                  );
+                                  await sl<ProductVariantRepository>().updateVariant(updatedVariant);
+                                } else {
+                                  final updatedProduct = item.product.copyWith(
+                                    priceCents: sellCents,
+                                    wholesalePriceCents: wholesaleCents,
+                                  );
+                                  await sl<ProductRepository>().updateProduct(updatedProduct);
+                                }
+
+                                widget.onSave(
+                                  qty < 1 ? 1 : qty,
+                                  costCents,
+                                  discountCents,
+                                  _expiryDate,
+                                  _expiryDate == null && widget.item.expiryDate != null,
+                                );
+                              } catch (e) {
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(e.toString()),
+                                      behavior: SnackBarBehavior.floating,
+                                    ),
+                                  );
+                                }
+                              } finally {
+                                if (mounted) setState(() => _saving = false);
+                              }
+                            },
                     ),
                   ),
                 ],
@@ -2398,6 +2489,205 @@ class _AddItemSheetState extends State<_AddItemSheet> {
   final int _quantity = 1;
   final _searchController = TextEditingController();
 
+  Color? _tryParseHexColor(String? hex) {
+    if (hex == null) return null;
+    final cleaned = hex.trim().replaceFirst('#', '');
+    if (cleaned.isEmpty) return null;
+    final buffer = StringBuffer();
+    if (cleaned.length == 6) buffer.write('FF');
+    buffer.write(cleaned);
+    try {
+      return Color(int.parse(buffer.toString(), radix: 16));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _showVariantsInfoDialog(Product product) async {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: colorScheme.surface,
+          title: Text(product.name),
+          content: SizedBox(
+            width: 520,
+            child: FutureBuilder<({
+              List<ProductVariant> variants,
+              Map<int, String> sizeNameById,
+              Map<int, String?> colorHexById,
+            })>(
+              future: () async {
+                final variantRepo = sl<ProductVariantRepository>();
+                final colorRepo = sl<ProductColorRepository>();
+                final sizeRepo = sl<SizeRepository>();
+
+                final results = await Future.wait([
+                  variantRepo.getVariantsByProduct(product.id),
+                  colorRepo.getAllColors(),
+                  sizeRepo.getAllSizes(),
+                ]);
+
+                final variants = results[0] as List<ProductVariant>;
+                final colors = results[1] as List<dynamic>;
+                final sizes = results[2] as List<dynamic>;
+
+                final sizeNameById = <int, String>{};
+                for (final s in sizes) {
+                  sizeNameById[(s as dynamic).id as int] = (s as dynamic).name as String;
+                }
+                final colorHexById = <int, String?>{};
+                for (final c in colors) {
+                  colorHexById[(c as dynamic).id as int] = (c as dynamic).hexCode as String?;
+                }
+
+                return (
+                  variants: variants,
+                  sizeNameById: sizeNameById,
+                  colorHexById: colorHexById,
+                );
+              }(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) {
+                  return const SizedBox(
+                    height: 120,
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
+
+                final variants = snapshot.data!.variants;
+                final sizeNameById = snapshot.data!.sizeNameById;
+                final colorHexById = snapshot.data!.colorHexById;
+
+                final distinctColorHexes = <String>{};
+                final distinctSizeNames = <String>{};
+                for (final v in variants.where((x) => x.isActive)) {
+                  final hex = v.colorId == null ? null : colorHexById[v.colorId!];
+                  if (hex != null && hex.trim().isNotEmpty) {
+                    distinctColorHexes.add(hex.trim());
+                  }
+                  final sizeName = v.sizeId == null ? null : sizeNameById[v.sizeId!];
+                  if (sizeName != null && sizeName.trim().isNotEmpty) {
+                    distinctSizeNames.add(sizeName.trim());
+                  }
+                }
+
+                final dots = distinctColorHexes
+                    .map(_tryParseHexColor)
+                    .whereType<Color>()
+                    .toList();
+                final sizeList = distinctSizeNames.toList()..sort();
+
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (dots.isNotEmpty) ...[
+                      Text('colors.title'.tr(), style: Theme.of(context).textTheme.labelMedium),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          for (final c in dots)
+                            Container(
+                              width: 14,
+                              height: 14,
+                              decoration: BoxDecoration(
+                                color: c,
+                                shape: BoxShape.circle,
+                                border: Border.all(color: colorScheme.outline),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                    if (sizeList.isNotEmpty) ...[
+                      Text('sizes.title'.tr(), style: Theme.of(context).textTheme.labelMedium),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          for (final s in sizeList) Chip(label: Text(s)),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                    Text('variants.title'.tr(), style: Theme.of(context).textTheme.labelMedium),
+                    const SizedBox(height: 6),
+                    SizedBox(
+                      height: 220,
+                      child: ListView.separated(
+                        itemCount: variants.length,
+                        separatorBuilder: (context, index) => const Divider(height: 1),
+                        itemBuilder: (context, index) {
+                          final v = variants[index];
+                          final sizeName = v.sizeId == null ? null : sizeNameById[v.sizeId!];
+                          final hex = v.colorId == null ? null : colorHexById[v.colorId!];
+                          final shade = _tryParseHexColor(hex);
+
+                          final title = v.sku?.isNotEmpty == true
+                              ? v.sku!
+                              : 'product_form.variant_item_title'.tr(args: ['${v.id}']);
+
+                          return ListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                            subtitle: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (sizeName != null && sizeName.trim().isNotEmpty)
+                                  Flexible(
+                                    child: Text(
+                                      sizeName,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                if (sizeName != null && sizeName.trim().isNotEmpty && shade != null)
+                                  const SizedBox(width: 8),
+                                if (shade != null)
+                                  Container(
+                                    width: 10,
+                                    height: 10,
+                                    decoration: BoxDecoration(
+                                      color: shade,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(color: colorScheme.outline),
+                                    ),
+                                  ),
+                                const Spacer(),
+                                Text(
+                                  '${'variants.stock'.tr()}: ${v.stockQuantity}',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text('common.close'.tr()),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   void dispose() {
     _searchController.dispose();
@@ -2488,85 +2778,165 @@ class _AddItemSheetState extends State<_AddItemSheet> {
     final cs = Theme.of(context).colorScheme;
     final currencyService = sl<CurrencyService>();
 
-    return BlocBuilder<ProductsBloc, RealtimeState<List<Product>>>(
-      builder: (context, state) {
-        List<Product>? products;
-        if (state is RealtimeSuccess<List<Product>>) {
-          products = state.data;
-        } else if (state is RealtimeLoading<List<Product>>) {
-          products = state.previousData;
+    return BlocBuilder<VariantPreviewsBloc, RealtimeState<Map<int, VariantPreview>>>(
+      builder: (context, previewState) {
+        Map<int, VariantPreview> previews = const {};
+        if (previewState is RealtimeSuccess<Map<int, VariantPreview>>) {
+          previews = previewState.data;
+        } else if (previewState is RealtimeLoading<Map<int, VariantPreview>>) {
+          previews = previewState.previousData ?? const {};
         }
 
-        if (products == null) {
-          return const Center(child: CircularProgressIndicator());
-        }
+        return BlocBuilder<ProductsBloc, RealtimeState<List<Product>>>(
+          builder: (context, state) {
+            List<Product>? products;
+            if (state is RealtimeSuccess<List<Product>>) {
+              products = state.data;
+            } else if (state is RealtimeLoading<List<Product>>) {
+              products = state.previousData;
+            }
 
-        final query = _searchController.text.toLowerCase();
-        final filtered = products.where((p) {
-          if (query.isEmpty) return true;
-          return p.name.toLowerCase().contains(query) ||
-              (p.sku?.toLowerCase().contains(query) ?? false) ||
-              (p.barcode?.toLowerCase().contains(query) ?? false);
-        }).toList();
+            if (products == null) {
+              return const Center(child: CircularProgressIndicator());
+            }
 
-        if (filtered.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(LucideIcons.searchX, size: 48, color: cs.onSurfaceVariant.withValues(alpha: 0.3)),
-                const SizedBox(height: 12),
-                Text('purchases.no_products_found'.tr(),
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: cs.onSurfaceVariant)),
-              ],
-            ),
-          );
-        }
+            final query = _searchController.text.toLowerCase();
+            final filtered = products.where((p) {
+              if (query.isEmpty) return true;
+              return p.name.toLowerCase().contains(query) ||
+                  (p.sku?.toLowerCase().contains(query) ?? false) ||
+                  (p.barcode?.toLowerCase().contains(query) ?? false);
+            }).toList();
 
-        return ListView.separated(
-          controller: scrollController,
-          itemCount: filtered.length,
-          separatorBuilder: (_, idx) => Divider(height: 1, indent: 56,
-              color: cs.outlineVariant.withValues(alpha: 0.5)),
-          itemBuilder: (context, index) {
-            final product = filtered[index];
-            return ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              leading: Container(
-                width: 40, height: 40,
-                decoration: BoxDecoration(
-                  color: cs.primaryContainer.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(
-                  product.hasVariants ? LucideIcons.layers : LucideIcons.package,
-                  size: 20, color: cs.primary,
-                ),
-              ),
-              title: Text(product.name, style: const TextStyle(fontWeight: FontWeight.w500)),
-              subtitle: Row(
-                children: [
-                  if (product.sku != null) ...[
-                    Text('SKU: ${product.sku}',
-                        style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
-                    const SizedBox(width: 8),
+            if (filtered.isEmpty) {
+              return Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(LucideIcons.searchX,
+                        size: 48, color: cs.onSurfaceVariant.withValues(alpha: 0.3)),
+                    const SizedBox(height: 12),
+                    Text('purchases.no_products_found'.tr(),
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodyMedium
+                            ?.copyWith(color: cs.onSurfaceVariant)),
                   ],
-                  if (!product.hasVariants)
-                    Text(currencyService.format(product.costCents.toBigInt().toInt()),
-                        style: TextStyle(fontSize: 12, color: cs.primary, fontWeight: FontWeight.w500)),
-                ],
+                ),
+              );
+            }
+
+            return ListView.separated(
+              controller: scrollController,
+              itemCount: filtered.length,
+              separatorBuilder: (_, idx) => Divider(
+                height: 1,
+                indent: 56,
+                color: cs.outlineVariant.withValues(alpha: 0.5),
               ),
-              trailing: Icon(
-                product.hasVariants ? LucideIcons.chevronRight : LucideIcons.plusCircle,
-                size: 20, color: cs.primary,
-              ),
-              onTap: () {
-                if (product.hasVariants) {
-                  setState(() => _selectedProduct = product);
-                } else {
-                  widget.onItemAdded(product, null, _quantity, product.costCents);
+              itemBuilder: (context, index) {
+                final product = filtered[index];
+                final preview = previews[product.id];
+                final sizeName = (!product.hasVariants ? preview?.sizeName?.trim() : null);
+                final colorHex = (!product.hasVariants ? preview?.colorHex?.trim() : null);
+
+                Color? shade;
+                if (colorHex != null && colorHex.isNotEmpty) {
+                  final cleaned = colorHex.replaceFirst('#', '');
+                  if (cleaned.length == 6 || cleaned.length == 8) {
+                    final argb = cleaned.length == 6 ? 'FF$cleaned' : cleaned;
+                    try {
+                      shade = Color(int.parse(argb, radix: 16));
+                    } catch (_) {}
+                  }
                 }
+
+                return ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  leading: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: cs.primaryContainer.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      product.hasVariants ? LucideIcons.layers : LucideIcons.package,
+                      size: 20,
+                      color: cs.primary,
+                    ),
+                  ),
+                  title: Text(product.name, style: const TextStyle(fontWeight: FontWeight.w500)),
+                  subtitle: Row(
+                    children: [
+                      if (product.sku != null) ...[
+                        Flexible(
+                          child: Text(
+                            'SKU: ${product.sku}',
+                            style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                      ],
+                      if (sizeName != null && sizeName.isNotEmpty) ...[
+                        Flexible(
+                          child: Text(
+                            sizeName,
+                            style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (shade != null) const SizedBox(width: 6),
+                      ],
+                      if (shade != null)
+                        Container(
+                          width: 10,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            color: shade,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: cs.outline),
+                          ),
+                        ),
+                      const Spacer(),
+                      if (!product.hasVariants)
+                        Text(
+                          currencyService.format(product.costCents.toBigInt().toInt()),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: cs.primary,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                    ],
+                  ),
+                  trailing: product.hasVariants
+                      ? Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(LucideIcons.info, size: 18),
+                              onPressed: () => _showVariantsInfoDialog(product),
+                            ),
+                            Icon(LucideIcons.chevronRight, size: 20, color: cs.primary),
+                          ],
+                        )
+                      : Icon(
+                          LucideIcons.plusCircle,
+                          size: 20,
+                          color: cs.primary,
+                        ),
+                  onTap: () {
+                    if (product.hasVariants) {
+                      setState(() => _selectedProduct = product);
+                    } else {
+                      widget.onItemAdded(product, null, _quantity, product.costCents);
+                    }
+                  },
+                );
               },
             );
           },
@@ -2596,40 +2966,117 @@ class _AddItemSheetState extends State<_AddItemSheet> {
             return const Center(child: CircularProgressIndicator());
           }
 
-          return ListView.separated(
-            itemCount: variants.length,
-            separatorBuilder: (_, idx) => Divider(height: 1, indent: 56,
-                color: cs.outlineVariant.withValues(alpha: 0.5)),
-            itemBuilder: (context, index) {
-              final variant = variants![index];
-              return ListTile(
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                leading: Container(
-                  width: 40, height: 40,
-                  decoration: BoxDecoration(
-                    color: cs.tertiaryContainer.withValues(alpha: 0.5),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(LucideIcons.tag, size: 18, color: cs.tertiary),
+          return FutureBuilder<({Map<int, String> sizeNameById, Map<int, String?> colorHexById})>(
+            future: () async {
+              final colorRepo = sl<ProductColorRepository>();
+              final sizeRepo = sl<SizeRepository>();
+
+              final results = await Future.wait([
+                colorRepo.getAllColors(),
+                sizeRepo.getAllSizes(),
+              ]);
+
+              final colors = results[0] as List<dynamic>;
+              final sizes = results[1] as List<dynamic>;
+
+              final sizeNameById = <int, String>{};
+              for (final s in sizes) {
+                sizeNameById[(s as dynamic).id as int] = (s as dynamic).name as String;
+              }
+
+              final colorHexById = <int, String?>{};
+              for (final c in colors) {
+                colorHexById[(c as dynamic).id as int] = (c as dynamic).hexCode as String?;
+              }
+
+              return (sizeNameById: sizeNameById, colorHexById: colorHexById);
+            }(),
+            builder: (context, snapshot) {
+              final sizeNameById = snapshot.data?.sizeNameById ?? const <int, String>{};
+              final colorHexById = snapshot.data?.colorHexById ?? const <int, String?>{};
+
+              final variantsList = variants;
+              if (variantsList == null) {
+                return const Center(child: CircularProgressIndicator());
+              }
+
+              return ListView.separated(
+                itemCount: variantsList.length,
+                separatorBuilder: (_, idx) => Divider(
+                  height: 1,
+                  indent: 56,
+                  color: cs.outlineVariant.withValues(alpha: 0.5),
                 ),
-                title: Text(variant.sku ?? 'Variant ${variant.id}',
-                    style: const TextStyle(fontWeight: FontWeight.w500)),
-                subtitle: Row(
-                  children: [
-                    Icon(LucideIcons.warehouse, size: 12, color: cs.onSurfaceVariant),
-                    const SizedBox(width: 4),
-                    Text('${variant.stockQuantity}',
-                        style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
-                    const SizedBox(width: 12),
-                    Icon(LucideIcons.coins, size: 12, color: cs.primary),
-                    const SizedBox(width: 4),
-                    Text(currencyService.format(variant.costCents.toBigInt().toInt()),
-                        style: TextStyle(fontSize: 12, color: cs.primary, fontWeight: FontWeight.w500)),
-                  ],
-                ),
-                trailing: Icon(LucideIcons.plusCircle, size: 20, color: cs.primary),
-                onTap: () {
-                  widget.onItemAdded(_selectedProduct!, variant, _quantity, variant.costCents);
+                itemBuilder: (context, index) {
+                  final variant = variantsList[index];
+                  final sizeName = variant.sizeId == null ? null : sizeNameById[variant.sizeId!];
+                  final colorHex = variant.colorId == null ? null : colorHexById[variant.colorId!];
+                  final shade = _tryParseHexColor(colorHex);
+
+                  return ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    leading: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: cs.tertiaryContainer.withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(LucideIcons.tag, size: 18, color: cs.tertiary),
+                    ),
+                    title: Text(
+                      variant.sku ?? 'Variant ${variant.id}',
+                      style: const TextStyle(fontWeight: FontWeight.w500),
+                    ),
+                    subtitle: Row(
+                      children: [
+                        if (sizeName != null && sizeName.trim().isNotEmpty) ...[
+                          Flexible(
+                            child: Text(
+                              sizeName,
+                              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (shade != null) const SizedBox(width: 6),
+                        ],
+                        if (shade != null) ...[
+                          Container(
+                            width: 10,
+                            height: 10,
+                            decoration: BoxDecoration(
+                              color: shade,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: cs.outline),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                        ],
+                        Icon(LucideIcons.warehouse, size: 12, color: cs.onSurfaceVariant),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${variant.stockQuantity}',
+                          style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                        ),
+                        const SizedBox(width: 12),
+                        Icon(LucideIcons.coins, size: 12, color: cs.primary),
+                        const SizedBox(width: 4),
+                        Text(
+                          currencyService.format(variant.costCents.toBigInt().toInt()),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: cs.primary,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                    trailing: Icon(LucideIcons.plusCircle, size: 20, color: cs.primary),
+                    onTap: () {
+                      widget.onItemAdded(_selectedProduct!, variant, _quantity, variant.costCents);
+                    },
+                  );
                 },
               );
             },

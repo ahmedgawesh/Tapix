@@ -838,6 +838,8 @@
     "old_cost": "Ancien coût",
     "new_cost": "Nouveau coût",
     "sell_price": "Prix de vente",
+    "new_sell_price": "Nouveau prix de vente",
+    "new_wholesale_price": "Nouveau prix de gros",
     "discount_percent": "Remise %",
     "discount_fixed": "Montant fixe",
     "checkout": "Finaliser",

@@ -477,14 +477,24 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
 
       // Fetch real variant data for color/size resolution
       final variantFutures = <int, Future<ProductVariant?>>{};
+      final defaultVariantFutures = <int, Future<ProductVariant?>>{};
       for (final i in items) {
         if (i.variantId != null && !variantFutures.containsKey(i.variantId)) {
           variantFutures[i.variantId!] = _variantRepository.getVariantById(i.variantId!);
+        }
+        if (i.variantId == null && !defaultVariantFutures.containsKey(i.productId)) {
+          defaultVariantFutures[i.productId] =
+              _variantRepository.getDefaultVariantByProduct(i.productId);
         }
       }
       final resolvedVariants = <int, ProductVariant?>{};
       for (final entry in variantFutures.entries) {
         resolvedVariants[entry.key] = await entry.value;
+      }
+
+      final resolvedDefaultVariants = <int, ProductVariant?>{};
+      for (final entry in defaultVariantFutures.entries) {
+        resolvedDefaultVariants[entry.key] = await entry.value;
       }
 
       final mappedItems = items.map((i) {
@@ -503,7 +513,8 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
         );
 
         final realVariant = i.variantId != null ? resolvedVariants[i.variantId!] : null;
-        final variant = realVariant ?? (i.variantId == null
+        final defaultVariant = i.variantId == null ? resolvedDefaultVariants[i.productId] : null;
+        final variant = realVariant ?? defaultVariant ?? (i.variantId == null
             ? null
             : ProductVariant(
                 id: i.variantId!,
@@ -610,21 +621,30 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
     emit(state.copyWith(invoiceDiscountCents: event.discountCents));
   }
 
-  void _onLineItemAdded(
+  Future<void> _onLineItemAdded(
     PurchaseLineItemAdded event,
     Emitter<PurchaseFormState> emit,
-  ) {
+  ) async {
+    await _loadColorSizeLookups();
+
+    ProductVariant? resolvedVariant = event.variant;
+    if (resolvedVariant == null) {
+      try {
+        resolvedVariant = await _variantRepository.getDefaultVariantByProduct(event.product.id);
+      } catch (_) {}
+    }
+
     final newItem = PurchaseLineItem(
       tempId: _generateTempId(),
       product: event.product,
-      variant: event.variant,
+      variant: resolvedVariant,
       quantity: event.quantity,
       unitCostCents: event.unitCostCents,
       discountCents: event.discountCents,
       expiryDate: event.expiryDate,
-      colorName: _resolveColorName(event.variant?.colorId),
-      colorHex: _resolveColorHex(event.variant?.colorId),
-      sizeName: _resolveSizeName(event.variant?.sizeId),
+      colorName: _resolveColorName(resolvedVariant?.colorId),
+      colorHex: _resolveColorHex(resolvedVariant?.colorId),
+      sizeName: _resolveSizeName(resolvedVariant?.sizeId),
     );
     emit(state.copyWith(items: [...state.items, newItem]));
   }
