@@ -76,6 +76,21 @@ class CurrencyService {
     return formatter.format(value);
   }
   
+  /// Format cents as a display string with currency symbol
+  String formatCents(int cents, {bool showSymbol = true}) => format(cents, showSymbol: showSymbol);
+
+  /// Convert cents to a decimal string for form fields (e.g. 1999 → "19.99")
+  String centsToDecimalString(int cents) {
+    final value = cents / 100.0;
+    return value.toStringAsFixed(2);
+  }
+
+  /// Convert a decimal string from form fields to cents (e.g. "19.99" → 1999)
+  int decimalStringToCents(String decimalString) {
+    final parsed = double.tryParse(decimalString) ?? 0.0;
+    return (parsed * 100).round();
+  }
+
   // Expose current properties
   String get currencyCode => getCurrency().code;
   String get currencySymbol => getCurrency().symbol;

@@ -4,6 +4,7 @@ import 'package:drift/drift.dart';
 import '../../../../core/database/app_database.dart';
 import '../../domain/models/journal_entry_data.dart';
 import '../../domain/models/trial_balance.dart';
+import '../../domain/models/reconciliation_result.dart';
 import '../../domain/exceptions/accounting_exception.dart';
 
 /// AccountingRepository - SINGLE SOURCE OF TRUTH for all accounting operations
@@ -534,15 +535,3 @@ class AccountingRepository {
   }
 }
 
-/// Result of reconciliation check
-class ReconciliationResult {
-  final bool isHealthy;
-  final List<String> issues;
-  final DateTime timestamp;
-
-  ReconciliationResult({
-    required this.isHealthy,
-    required this.issues,
-    required this.timestamp,
-  });
-}

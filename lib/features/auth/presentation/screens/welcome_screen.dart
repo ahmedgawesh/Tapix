@@ -237,11 +237,11 @@ class _LanguageOption extends StatelessWidget {
   String get _languageName {
     switch (locale.languageCode) {
       case 'en':
-        return 'english'.tr();
+        return 'common.english'.tr();
       case 'ar':
-        return 'arabic'.tr();
+        return 'common.arabic'.tr();
       case 'fr':
-        return 'french'.tr();
+        return 'common.french'.tr();
       default:
         return locale.languageCode;
     }

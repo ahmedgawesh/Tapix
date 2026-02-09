@@ -94,7 +94,7 @@ class _CustomerPickerSheetState extends State<_CustomerPickerSheet> {
                     controller: scrollCtrl, itemCount: customers.length,
                     itemBuilder: (context, i) {
                       final c = customers[i];
-                      final bal = c.balanceCents.toDouble().round();
+                      final bal = c.balanceCents.toBigInt().toInt();
                       return ListTile(
                         leading: CircleAvatar(
                           backgroundColor: cs.primaryContainer,
@@ -250,6 +250,7 @@ class _AddItemSheet extends StatefulWidget {
 class _AddItemSheetState extends State<_AddItemSheet> {
   Product? _selectedProduct;
   final _searchController = TextEditingController();
+  int? _selectedCategoryId;
 
   @override
   void dispose() { _searchController.dispose(); super.dispose(); }
@@ -281,8 +282,8 @@ class _AddItemSheetState extends State<_AddItemSheet> {
               ),
             ]),
           ),
-          // Search (only when selecting product)
-          if (_selectedProduct == null)
+          // Search + Category Filter (only when selecting product)
+          if (_selectedProduct == null) ...[
             Padding(
               padding: const EdgeInsets.all(16),
               child: TextField(
@@ -295,8 +296,55 @@ class _AddItemSheetState extends State<_AddItemSheet> {
                 ),
                 onChanged: (v) => context.read<ProductsBloc>().add(ProductSearchRequested(v)),
               ),
-            )
-          else
+            ),
+            // Category filter chips
+            BlocBuilder<CategoriesBloc, RealtimeState<List<Category>>>(
+              builder: (context, catState) {
+                List<Category> categories = const [];
+                if (catState is RealtimeSuccess<List<Category>>) {
+                  categories = catState.data;
+                } else if (catState is RealtimeLoading<List<Category>>) {
+                  categories = catState.previousData ?? const [];
+                }
+                if (categories.isEmpty) return const SizedBox.shrink();
+
+                return SizedBox(
+                  height: 40,
+                  child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    children: [
+                      Padding(
+                        padding: const EdgeInsetsDirectional.only(end: 6),
+                        child: ChoiceChip(
+                          label: Text('sales.all_categories'.tr()),
+                          selected: _selectedCategoryId == null,
+                          onSelected: (_) => setState(() => _selectedCategoryId = null),
+                          showCheckmark: false,
+                          selectedColor: cs.primaryContainer,
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ),
+                      ...categories.map((cat) => Padding(
+                        padding: const EdgeInsetsDirectional.only(end: 6),
+                        child: ChoiceChip(
+                          label: Text(cat.name),
+                          selected: _selectedCategoryId == cat.id,
+                          onSelected: (_) => setState(() {
+                            _selectedCategoryId = _selectedCategoryId == cat.id ? null : cat.id;
+                          }),
+                          showCheckmark: false,
+                          selectedColor: cs.primaryContainer,
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      )),
+                    ],
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 8),
+          ] else
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Text('sales.select_variant'.tr(),
@@ -337,7 +385,17 @@ class _AddItemSheetState extends State<_AddItemSheet> {
 
             if (products == null) return const Center(child: CircularProgressIndicator());
 
-            if (products.isEmpty) {
+            // Apply category filter
+            final query = _searchController.text.toLowerCase();
+            final filtered = products.where((p) {
+              if (_selectedCategoryId != null && p.categoryId != _selectedCategoryId) return false;
+              if (query.isEmpty) return true;
+              return p.name.toLowerCase().contains(query) ||
+                  (p.sku?.toLowerCase().contains(query) ?? false) ||
+                  (p.barcode?.toLowerCase().contains(query) ?? false);
+            }).toList();
+
+            if (filtered.isEmpty) {
               return Center(
                 child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
                   Icon(LucideIcons.searchX, size: 48, color: cs.onSurfaceVariant.withValues(alpha: 0.3)),
@@ -350,10 +408,10 @@ class _AddItemSheetState extends State<_AddItemSheet> {
 
             return ListView.separated(
               controller: scrollController,
-              itemCount: products.length,
+              itemCount: filtered.length,
               separatorBuilder: (context, i) => Divider(height: 1, indent: 56, color: cs.outlineVariant.withValues(alpha: 0.5)),
               itemBuilder: (context, index) {
-                final product = products![index];
+                final product = filtered[index];
                 final preview = previews[product.id];
                 final sizeName = (!product.hasVariants ? preview?.sizeName?.trim() : null);
                 final colorHex = (!product.hasVariants ? preview?.colorHex?.trim() : null);
@@ -402,12 +460,30 @@ class _AddItemSheetState extends State<_AddItemSheet> {
                   trailing: product.hasVariants
                     ? Icon(LucideIcons.chevronRight, size: 20, color: cs.primary)
                     : Icon(LucideIcons.plusCircle, size: 20, color: cs.primary),
-                  onTap: () {
+                  onTap: () async {
                     if (product.hasVariants) {
                       setState(() => _selectedProduct = product);
                     } else {
-                      // Product without variants: use product price directly
-                      widget.onItemAdded(product, null, 1, product.priceCents);
+                      // Check stock via default variant
+                      try {
+                        final variantRepo = sl<ProductVariantRepository>();
+                        final defaultVariant = await variantRepo.getDefaultVariantByProduct(product.id);
+                        if (defaultVariant != null && defaultVariant.stockQuantity <= 0 && context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('sales.out_of_stock_warning'.tr()),
+                              behavior: SnackBarBehavior.floating,
+                              backgroundColor: Theme.of(context).colorScheme.error,
+                            ),
+                          );
+                          return;
+                        }
+                      } catch (_) {
+                        // If we can't check stock, allow the sale
+                      }
+                      if (context.mounted) {
+                        widget.onItemAdded(product, null, 1, product.priceCents);
+                      }
                     }
                   },
                 );
@@ -509,8 +585,19 @@ class _AddItemSheetState extends State<_AddItemSheet> {
                       Text(currencyService.format(variant.priceCents.toBigInt().toInt()),
                         style: TextStyle(fontSize: 12, color: cs.primary, fontWeight: FontWeight.w500)),
                     ]),
-                    trailing: Icon(LucideIcons.plusCircle, size: 20, color: cs.primary),
+                    trailing: Icon(LucideIcons.plusCircle, size: 20,
+                      color: variant.stockQuantity > 0 ? cs.primary : cs.onSurfaceVariant.withValues(alpha: 0.3)),
                     onTap: () {
+                      if (variant.stockQuantity <= 0) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('sales.out_of_stock_warning'.tr()),
+                            behavior: SnackBarBehavior.floating,
+                            backgroundColor: Theme.of(context).colorScheme.error,
+                          ),
+                        );
+                        return;
+                      }
                       widget.onItemAdded(
                         _selectedProduct!, variant, 1, variant.priceCents,
                       );
@@ -531,9 +618,12 @@ class _AddItemSheetState extends State<_AddItemSheet> {
 // ═══════════════════════════════════════════════════════
 class _EditItemSheet extends StatefulWidget {
   final SaleLineItem item;
-  final void Function(int quantity, Decimal unitPrice, Decimal discount) onUpdated;
+  final bool showSalesperson;
+  final void Function(int quantity, Decimal unitPrice, Decimal discount, {
+    int? employeeId, String? employeeName, String? itemNote, bool clearEmployee,
+  }) onUpdated;
   final VoidCallback onRemoved;
-  const _EditItemSheet({required this.item, required this.onUpdated, required this.onRemoved});
+  const _EditItemSheet({required this.item, required this.onUpdated, required this.onRemoved, this.showSalesperson = false});
 
   @override
   State<_EditItemSheet> createState() => _EditItemSheetState();
@@ -543,6 +633,11 @@ class _EditItemSheetState extends State<_EditItemSheet> {
   late int _quantity;
   late TextEditingController _priceCtrl;
   late TextEditingController _discountCtrl;
+  late TextEditingController _noteCtrl;
+  late TextEditingController _quantityCtrl;
+  bool _discountIsPercent = false;
+  int? _employeeId;
+  String? _employeeName;
 
   @override
   void initState() {
@@ -554,23 +649,32 @@ class _EditItemSheetState extends State<_EditItemSheet> {
       text: widget.item.discountCents > Decimal.zero
         ? (widget.item.discountCents.toBigInt().toInt() / 100).toStringAsFixed(2)
         : '');
+    _noteCtrl = TextEditingController(text: widget.item.itemNote ?? '');
+    _quantityCtrl = TextEditingController(text: '$_quantity');
+    _employeeId = widget.item.employeeId;
+    _employeeName = widget.item.employeeName;
   }
 
   @override
-  void dispose() { _priceCtrl.dispose(); _discountCtrl.dispose(); super.dispose(); }
+  void dispose() { _priceCtrl.dispose(); _discountCtrl.dispose(); _noteCtrl.dispose(); _quantityCtrl.dispose(); super.dispose(); }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final curr = sl<CurrencyService>();
+    final variant = widget.item.variant;
+    final stockQty = variant?.stockQuantity ?? 0;
+    final costCents = variant?.costCents ?? widget.item.product.costCents;
+    final wholesalePrice = variant?.wholesalePriceCents ?? widget.item.product.wholesalePriceCents;
+    final retailPrice = variant?.priceCents ?? widget.item.product.priceCents;
 
     return Padding(
       padding: EdgeInsets.only(left: 16, right: 16, top: 16,
         bottom: MediaQuery.of(context).viewInsets.bottom + 16),
       child: SingleChildScrollView(
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          // Header
+          // Header with barcode icon
           Row(children: [
             Container(width: 44, height: 44,
               decoration: BoxDecoration(color: cs.surfaceContainerHighest, borderRadius: BorderRadius.circular(10)),
@@ -586,6 +690,16 @@ class _EditItemSheetState extends State<_EditItemSheet> {
                     [widget.item.sizeName, widget.item.colorHex]
                       .where((s) => s != null && s.isNotEmpty).join(' / '),
                     style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                if (variant?.barcode != null && variant!.barcode!.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(LucideIcons.scanLine, size: 12, color: cs.onSurfaceVariant),
+                      const SizedBox(width: 4),
+                      Text(variant.barcode!,
+                        style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
+                    ]),
+                  ),
               ]),
             ),
             IconButton(
@@ -593,35 +707,39 @@ class _EditItemSheetState extends State<_EditItemSheet> {
               onPressed: widget.onRemoved,
             ),
           ]),
-          const SizedBox(height: 24),
-
-          // Quantity
-          Text('sales.quantity'.tr(),
-            style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
           const SizedBox(height: 12),
+
+          // Stock & Cost info row
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
-              borderRadius: BorderRadius.circular(14)),
-            child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-              IconButton.filledTonal(
-                onPressed: _quantity > 1 ? () => setState(() => _quantity--) : null,
-                icon: const Icon(LucideIcons.minus, size: 18)),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Text('$_quantity',
-                  style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold))),
-              IconButton.filledTonal(
-                onPressed: () => setState(() => _quantity++),
-                icon: const Icon(LucideIcons.plus, size: 18)),
+              color: cs.surfaceContainerHighest.withValues(alpha: 0.4),
+              borderRadius: BorderRadius.circular(10)),
+            child: Row(children: [
+              Icon(LucideIcons.warehouse, size: 14, color: cs.onSurfaceVariant),
+              const SizedBox(width: 4),
+              Text('${'sales.available_stock'.tr()}: ', style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+              Text('$stockQty', style: theme.textTheme.bodySmall?.copyWith(
+                fontWeight: FontWeight.bold, color: stockQty > 0 ? cs.primary : cs.error)),
+              const Spacer(),
+              Icon(LucideIcons.coins, size: 14, color: cs.onSurfaceVariant),
+              const SizedBox(width: 4),
+              Text('${'sales.cost_price'.tr()}: ', style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+              Text(curr.format(costCents.toBigInt().toInt()), style: theme.textTheme.bodySmall?.copyWith(
+                fontWeight: FontWeight.bold, color: cs.onSurfaceVariant)),
             ]),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
 
-          // Price
+          // Price with tier buttons
           Text('sales.unit_price'.tr(),
             style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          Row(children: [
+            _priceTierBtn(cs, theme, 'sales.retail_price'.tr(), retailPrice, curr),
+            if (wholesalePrice != null) ...[const SizedBox(width: 6),
+              _priceTierBtn(cs, theme, 'sales.wholesale_price'.tr(), wholesalePrice, curr)],
+          ]),
           const SizedBox(height: 8),
           TextField(
             controller: _priceCtrl,
@@ -634,9 +752,71 @@ class _EditItemSheetState extends State<_EditItemSheet> {
           ),
           const SizedBox(height: 16),
 
-          // Discount
-          Text('sales.item_discount'.tr(),
+          // Quantity (editable text input with +/- buttons)
+          Text('sales.quantity'.tr(),
             style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(14)),
+            child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              IconButton.filledTonal(
+                onPressed: _quantity > 1 ? () => setState(() {
+                  _quantity--;
+                  _quantityCtrl.text = '$_quantity';
+                }) : null,
+                icon: const Icon(LucideIcons.minus, size: 18)),
+              SizedBox(
+                width: 80,
+                child: TextField(
+                  controller: _quantityCtrl,
+                  keyboardType: TextInputType.number,
+                  textAlign: TextAlign.center,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
+                  decoration: const InputDecoration(
+                    border: InputBorder.none,
+                    contentPadding: EdgeInsets.zero,
+                    isDense: true,
+                  ),
+                  onChanged: (v) {
+                    final parsed = int.tryParse(v);
+                    if (parsed != null && parsed > 0) {
+                      setState(() => _quantity = parsed);
+                    }
+                  },
+                ),
+              ),
+              IconButton.filledTonal(
+                onPressed: () => setState(() {
+                  _quantity++;
+                  _quantityCtrl.text = '$_quantity';
+                }),
+                icon: const Icon(LucideIcons.plus, size: 18)),
+            ]),
+          ),
+          const SizedBox(height: 16),
+
+          // Discount with % / $ toggle
+          Row(children: [
+            Text('sales.item_discount'.tr(),
+              style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+            const Spacer(),
+            SegmentedButton<bool>(
+              segments: [
+                ButtonSegment(value: false, label: Text(curr.currencySymbol, style: const TextStyle(fontSize: 12))),
+                const ButtonSegment(value: true, label: Text('%', style: TextStyle(fontSize: 12))),
+              ],
+              selected: {_discountIsPercent},
+              onSelectionChanged: (v) => setState(() {
+                _discountIsPercent = v.first;
+                _discountCtrl.clear();
+              }),
+              style: const ButtonStyle(visualDensity: VisualDensity.compact, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+            ),
+          ]),
           const SizedBox(height: 8),
           TextField(
             controller: _discountCtrl,
@@ -644,10 +824,30 @@ class _EditItemSheetState extends State<_EditItemSheet> {
             inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
             decoration: InputDecoration(
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              filled: true, isDense: true, hintText: '0.00',
-              prefixIcon: const Icon(LucideIcons.tag, size: 18)),
+              filled: true, isDense: true,
+              hintText: _discountIsPercent ? '0 %' : '0.00',
+              prefixIcon: Icon(_discountIsPercent ? LucideIcons.percent : LucideIcons.tag, size: 18)),
+            onChanged: (_) => setState(() {}),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
+
+          // Item note
+          Text('sales.item_note'.tr(),
+            style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _noteCtrl,
+            maxLines: 2,
+            decoration: InputDecoration(
+              hintText: 'sales.item_note_hint'.tr(),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              filled: true, isDense: true,
+              prefixIcon: const Icon(LucideIcons.stickyNote, size: 18)),
+          ),
+          const SizedBox(height: 16),
+
+          // Per-item salesperson
+          if (widget.showSalesperson) ...[_buildItemSalesperson(theme, cs), const SizedBox(height: 16)],
 
           // Preview total
           Container(
@@ -678,20 +878,99 @@ class _EditItemSheetState extends State<_EditItemSheet> {
     );
   }
 
+  Widget _priceTierBtn(ColorScheme cs, ThemeData theme, String tier, Decimal priceCents, CurrencyService curr) {
+    final priceStr = (priceCents.toBigInt().toInt() / 100).toStringAsFixed(2);
+    final isActive = _priceCtrl.text == priceStr;
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: () => setState(() => _priceCtrl.text = priceStr),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: isActive ? cs.primary : cs.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: isActive ? cs.primary : cs.outlineVariant)),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Text(tier, style: theme.textTheme.labelSmall?.copyWith(
+            color: isActive ? cs.onPrimary : cs.onSurfaceVariant, fontWeight: FontWeight.bold)),
+          const SizedBox(width: 4),
+          Text(curr.format(priceCents.toBigInt().toInt()), style: theme.textTheme.labelSmall?.copyWith(
+            color: isActive ? cs.onPrimary : cs.onSurface, fontWeight: FontWeight.w500)),
+        ]),
+      ),
+    );
+  }
+
+  Widget _buildItemSalesperson(ThemeData theme, ColorScheme cs) {
+    final hasEmp = _employeeId != null;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text('sales.item_salesperson'.tr(),
+        style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+      const SizedBox(height: 8),
+      InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () async {
+          final result = await showModalBottomSheet<Employee>(
+            context: context, isScrollControlled: true,
+            shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+            builder: (sc) => _EmployeePickerSheet(onSelected: (e) => Navigator.pop(sc, e)),
+          );
+          if (result != null) {
+            setState(() { _employeeId = result.id; _employeeName = result.name; });
+          }
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            border: Border.all(color: cs.outlineVariant),
+            borderRadius: BorderRadius.circular(12)),
+          child: Row(children: [
+            Icon(LucideIcons.userCheck, size: 16, color: hasEmp ? cs.tertiary : cs.onSurfaceVariant),
+            const SizedBox(width: 8),
+            Expanded(child: Text(
+              hasEmp ? _employeeName! : 'sales.select_salesperson'.tr(),
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: hasEmp ? null : cs.onSurfaceVariant),
+            )),
+            if (hasEmp)
+              GestureDetector(
+                onTap: () => setState(() { _employeeId = null; _employeeName = null; }),
+                child: Icon(LucideIcons.x, size: 14, color: cs.onSurfaceVariant)),
+          ]),
+        ),
+      ),
+    ]);
+  }
+
+  int _computeDiscountCents() {
+    final val = double.tryParse(_discountCtrl.text) ?? 0;
+    if (_discountIsPercent) {
+      final price = double.tryParse(_priceCtrl.text) ?? 0;
+      final subtotal = (price * 100).round() * _quantity;
+      return (subtotal * val / 100).round();
+    }
+    return (val * 100).round();
+  }
+
   String _previewTotal(CurrencyService curr) {
     final price = double.tryParse(_priceCtrl.text) ?? 0;
-    final discount = double.tryParse(_discountCtrl.text) ?? 0;
-    final cents = ((price * 100).round() * _quantity) - (discount * 100).round();
+    final discountCents = _computeDiscountCents();
+    final cents = ((price * 100).round() * _quantity) - discountCents;
     return curr.format(cents > 0 ? cents : 0);
   }
 
   void _onSave() {
     final price = double.tryParse(_priceCtrl.text) ?? 0;
-    final discount = double.tryParse(_discountCtrl.text) ?? 0;
+    final discountCents = _computeDiscountCents();
+    final note = _noteCtrl.text.trim();
     widget.onUpdated(
       _quantity,
       Decimal.fromInt((price * 100).round()),
-      Decimal.fromInt((discount * 100).round()),
+      Decimal.fromInt(discountCents),
+      employeeId: _employeeId,
+      employeeName: _employeeName,
+      itemNote: note.isEmpty ? null : note,
+      clearEmployee: _employeeId == null && widget.item.employeeId != null,
     );
   }
 }
@@ -699,7 +978,7 @@ class _EditItemSheetState extends State<_EditItemSheet> {
 // ═══════════════════════════════════════════════════════
 // CHECKOUT SHEET
 // ═══════════════════════════════════════════════════════
-class _CheckoutSheet extends StatelessWidget {
+class _CheckoutSheet extends StatefulWidget {
   final CurrencyService currencyService;
   final TextEditingController notesCtrl;
   final TextEditingController taxCtrl;
@@ -709,6 +988,16 @@ class _CheckoutSheet extends StatelessWidget {
     required this.currencyService, required this.notesCtrl,
     required this.taxCtrl, required this.onConfirm,
   });
+
+  @override
+  State<_CheckoutSheet> createState() => _CheckoutSheetState();
+}
+
+class _CheckoutSheetState extends State<_CheckoutSheet> {
+  final _paidCtrl = TextEditingController();
+
+  @override
+  void dispose() { _paidCtrl.dispose(); super.dispose(); }
 
   @override
   Widget build(BuildContext context) {
@@ -737,6 +1026,68 @@ class _CheckoutSheet extends StatelessWidget {
                 controller: scrollCtrl,
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 children: [
+                  // Customer Selection
+                  _section(theme, cs, LucideIcons.users, 'sales.customer'.tr(),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(10),
+                      onTap: () => _showCustomerPickerInCheckout(context),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: cs.outlineVariant),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(children: [
+                          if (state.customerName != null) ...[
+                            CircleAvatar(
+                              radius: 16,
+                              backgroundColor: cs.primaryContainer,
+                              child: Text(
+                                state.customerName![0].toUpperCase(),
+                                style: TextStyle(
+                                  color: cs.onPrimaryContainer,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                          ],
+                          Expanded(
+                            child: Text(
+                              state.customerName ?? 'sales.select_customer'.tr(),
+                              style: theme.textTheme.bodyLarge?.copyWith(
+                                fontWeight: state.customerName != null ? FontWeight.w500 : FontWeight.normal,
+                                color: state.customerName != null ? null : cs.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
+                          if (state.customerId != null)
+                            GestureDetector(
+                              onTap: () => context.read<SaleFormBloc>().add(
+                                const SaleCustomerChanged()),
+                              child: Padding(
+                                padding: const EdgeInsetsDirectional.only(end: 4),
+                                child: Icon(LucideIcons.x, size: 16, color: cs.onSurfaceVariant),
+                              ),
+                            ),
+                          Icon(LucideIcons.chevronDown, size: 18, color: cs.onSurfaceVariant),
+                        ]),
+                      ),
+                    ),
+                  ),
+                  // Customer Balance Info
+                  if (state.customerId != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8, bottom: 8),
+                      child: _CustomerBalanceInfo(
+                        customerId: state.customerId!,
+                        invoiceTotalCents: state.totalCents.toBigInt().toInt(),
+                        paidAmountCents: state.paidAmountCents.toBigInt().toInt(),
+                        currencyService: widget.currencyService,
+                      ),
+                    ),
+                  const SizedBox(height: 16),
+
                   // Payment Method
                   _section(theme, cs, LucideIcons.wallet, 'sales.payment_method'.tr(),
                     child: Wrap(spacing: 8, runSpacing: 8,
@@ -753,10 +1104,77 @@ class _CheckoutSheet extends StatelessWidget {
                   ),
                   const SizedBox(height: 16),
 
+                  // Cheque due date (only for cheque)
+                  if (state.paymentMethod == SalePaymentMethod.cheque) ...[
+                    _section(theme, cs, LucideIcons.calendar, 'sales.cheque_due_date'.tr(),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(10),
+                        onTap: () async {
+                          final picked = await showDatePicker(
+                            context: context,
+                            initialDate: state.dueDate ?? DateTime.now().add(const Duration(days: 30)),
+                            firstDate: DateTime.now(),
+                            lastDate: DateTime.now().add(const Duration(days: 365)),
+                          );
+                          if (picked != null && context.mounted) {
+                            context.read<SaleFormBloc>().add(SaleDueDateChanged(picked));
+                          }
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: cs.outlineVariant),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Row(children: [
+                            Icon(LucideIcons.calendar, size: 18, color: cs.primary),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                state.dueDate != null
+                                  ? '${state.dueDate!.year}-${state.dueDate!.month.toString().padLeft(2, '0')}-${state.dueDate!.day.toString().padLeft(2, '0')}'
+                                  : 'sales.select_due_date'.tr(),
+                                style: theme.textTheme.bodyLarge?.copyWith(
+                                  color: state.dueDate != null ? null : cs.onSurfaceVariant,
+                                ),
+                              ),
+                            ),
+                            Icon(LucideIcons.chevronDown, size: 18, color: cs.onSurfaceVariant),
+                          ]),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+
+                  // Credit/Cheque info message
+                  if (state.paymentMethod == SalePaymentMethod.credit ||
+                      state.paymentMethod == SalePaymentMethod.cheque) ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: cs.tertiaryContainer.withValues(alpha: 0.3),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: cs.tertiary.withValues(alpha: 0.3)),
+                      ),
+                      child: Row(children: [
+                        Icon(LucideIcons.info, size: 16, color: cs.tertiary),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'sales.credit_balance_info'.tr(),
+                            style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                          ),
+                        ),
+                      ]),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+
                   // Tax Rate
                   _section(theme, cs, LucideIcons.percent, 'sales.tax_rate'.tr(),
                     child: TextField(
-                      controller: taxCtrl,
+                      controller: widget.taxCtrl,
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
                       inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
                       decoration: const InputDecoration(
@@ -789,18 +1207,62 @@ class _CheckoutSheet extends StatelessWidget {
                     const SizedBox(height: 16),
                   ],
 
-                  // Notes
-                  _section(theme, cs, LucideIcons.stickyNote, 'sales.notes'.tr(),
-                    child: TextField(
-                      controller: notesCtrl, maxLines: 2,
-                      decoration: InputDecoration(
-                        hintText: 'sales.notes_hint'.tr(),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                        isDense: true),
-                      onChanged: (v) => context.read<SaleFormBloc>().add(SaleNotesChanged(v)),
+                  // Paid Amount (only for cash)
+                  if (state.paymentMethod == SalePaymentMethod.cash) ...[
+                    _section(theme, cs, LucideIcons.banknote, 'sales.paid_amount'.tr(),
+                      child: TextField(
+                        controller: _paidCtrl,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
+                        decoration: InputDecoration(
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          filled: true, isDense: true,
+                          hintText: (state.totalCents.toBigInt().toInt() / 100).toStringAsFixed(2),
+                          prefixIcon: const Icon(LucideIcons.dollarSign, size: 18)),
+                        onChanged: (v) {
+                          final val = double.tryParse(v) ?? 0;
+                          context.read<SaleFormBloc>().add(
+                            SalePaidAmountChanged(Decimal.fromInt((val * 100).round())));
+                        },
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 20),
+                    const SizedBox(height: 12),
+
+                    // Remaining / Change display
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: state.changeCents > Decimal.zero
+                          ? Colors.green.withValues(alpha: 0.08)
+                          : state.remainingCents > Decimal.zero
+                            ? cs.errorContainer.withValues(alpha: 0.3)
+                            : cs.primaryContainer.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: state.changeCents > Decimal.zero
+                          ? Colors.green.withValues(alpha: 0.3)
+                          : state.remainingCents > Decimal.zero
+                            ? cs.error.withValues(alpha: 0.2)
+                            : cs.primary.withValues(alpha: 0.2))),
+                      child: Column(children: [
+                        if (state.remainingCents > Decimal.zero)
+                          _cRow(theme, 'sales.remaining'.tr(),
+                            widget.currencyService.format(state.remainingCents.toBigInt().toInt()),
+                            isBold: true, valueColor: cs.error),
+                        if (state.changeCents > Decimal.zero)
+                          _cRow(theme, 'sales.change'.tr(),
+                            widget.currencyService.format(state.changeCents.toBigInt().toInt()),
+                            isBold: true, valueColor: Colors.green),
+                        if (state.remainingCents == Decimal.zero && state.changeCents == Decimal.zero)
+                          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                            Icon(LucideIcons.checkCircle, size: 16, color: cs.primary),
+                            const SizedBox(width: 6),
+                            Text('sales.fully_paid'.tr(), style: theme.textTheme.titleSmall?.copyWith(
+                              color: cs.primary, fontWeight: FontWeight.w600)),
+                          ]),
+                      ]),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
 
                   // Financial Summary
                   Container(
@@ -811,23 +1273,36 @@ class _CheckoutSheet extends StatelessWidget {
                       border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.3))),
                     child: Column(children: [
                       _cRow(theme, 'sales.subtotal'.tr(),
-                        currencyService.format(state.subtotalCents.toBigInt().toInt())),
+                        widget.currencyService.format(state.subtotalCents.toBigInt().toInt())),
                       if (state.totalDiscountCents > Decimal.zero) ...[
                         const SizedBox(height: 8),
                         _cRow(theme, 'sales.discount'.tr(),
-                          '- ${currencyService.format(state.totalDiscountCents.toBigInt().toInt())}',
+                          '- ${widget.currencyService.format(state.totalDiscountCents.toBigInt().toInt())}',
                           valueColor: cs.tertiary),
                       ],
                       if (state.taxCents > Decimal.zero) ...[
                         const SizedBox(height: 8),
                         _cRow(theme, 'sales.tax'.tr(),
-                          currencyService.format(state.taxCents.toBigInt().toInt())),
+                          widget.currencyService.format(state.taxCents.toBigInt().toInt())),
                       ],
                       Divider(height: 20, color: cs.outlineVariant.withValues(alpha: 0.5)),
                       _cRow(theme, 'sales.total'.tr(),
-                        currencyService.format(state.totalCents.toBigInt().toInt()),
+                        widget.currencyService.format(state.totalCents.toBigInt().toInt()),
                         isBold: true, valueColor: cs.primary),
                     ]),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Notes
+                  _section(theme, cs, LucideIcons.stickyNote, 'sales.notes'.tr(),
+                    child: TextField(
+                      controller: widget.notesCtrl, maxLines: 2,
+                      decoration: InputDecoration(
+                        hintText: 'sales.notes_hint'.tr(),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        isDense: true),
+                      onChanged: (v) => context.read<SaleFormBloc>().add(SaleNotesChanged(v)),
+                    ),
                   ),
                   const SizedBox(height: 80),
                 ],
@@ -845,22 +1320,30 @@ class _CheckoutSheet extends StatelessWidget {
               child: SafeArea(
                 child: Row(children: [
                   Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: Text('common.cancel'.tr()),
-                    ),
+                    child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text('sales.total'.tr(), style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
+                      Text(widget.currencyService.format(state.totalCents.toBigInt().toInt()),
+                        style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: cs.primary)),
+                    ]),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     flex: 2,
-                    child: FilledButton.icon(
-                      onPressed: state.isSubmitting ? null : onConfirm,
-                      icon: state.isSubmitting
-                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Icon(LucideIcons.check, size: 18),
-                      label: Text('sales.confirm_save'.tr()),
-                      style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
-                    ),
+                    child: Builder(builder: (ctx) {
+                      final cashInsufficient = state.paymentMethod == SalePaymentMethod.cash &&
+                          state.paidAmountCents < state.totalCents;
+                      final chequeNoDueDate = state.paymentMethod == SalePaymentMethod.cheque &&
+                          state.dueDate == null;
+                      final canConfirm = !state.isSubmitting && !cashInsufficient && !chequeNoDueDate;
+                      return FilledButton.icon(
+                        onPressed: canConfirm ? widget.onConfirm : null,
+                        icon: state.isSubmitting
+                          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Icon(LucideIcons.check, size: 18),
+                        label: Text('sales.confirm_save'.tr()),
+                        style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
+                      );
+                    }),
                   ),
                 ]),
               ),
@@ -905,4 +1388,245 @@ class _CheckoutSheet extends StatelessWidget {
     SalePaymentMethod.card => LucideIcons.creditCard,
     SalePaymentMethod.cheque => LucideIcons.fileText,
   };
+
+  void _showCustomerPickerInCheckout(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetCtx) => _CustomerPickerSheet(
+        onSelected: (customer) {
+          context.read<SaleFormBloc>().add(
+            SaleCustomerChanged(customerId: customer.id, customerName: customer.name),
+          );
+          Navigator.pop(sheetCtx);
+        },
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// CUSTOMER BALANCE INFO (inline widget in checkout)
+// ═══════════════════════════════════════════════════════
+class _CustomerBalanceInfo extends StatelessWidget {
+  final int customerId;
+  final int invoiceTotalCents;
+  final int paidAmountCents;
+  final CurrencyService currencyService;
+
+  const _CustomerBalanceInfo({
+    required this.customerId,
+    required this.invoiceTotalCents,
+    required this.paidAmountCents,
+    required this.currencyService,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+
+    return StreamBuilder<Customer?>(
+      stream: sl<CustomerRepository>().watchCustomer(customerId),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || snapshot.data == null) {
+          return const SizedBox.shrink();
+        }
+        final customer = snapshot.data!;
+        final currentBalanceCents = customer.balanceCents.toBigInt().toInt();
+        // After this invoice: balance changes by (invoice total - paid now).
+        final projectedBalanceCents = currentBalanceCents + invoiceTotalCents - paidAmountCents;
+
+        final isCurrentReceivable = currentBalanceCents > 0;
+        final isProjectedReceivable = projectedBalanceCents > 0;
+
+        return InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: () => _showBalanceDetailDialog(
+            context,
+            customer: customer,
+            currentBalanceCents: currentBalanceCents,
+            projectedBalanceCents: projectedBalanceCents,
+          ),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerHighest.withValues(alpha: 0.4),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.3)),
+            ),
+            child: Row(children: [
+              Icon(LucideIcons.info, size: 16, color: cs.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'sales.customer_balance'.tr(),
+                  style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                ),
+              ),
+              Text(
+                currencyService.format(currentBalanceCents),
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: isCurrentReceivable ? cs.error : Colors.green,
+                ),
+              ),
+              const SizedBox(width: 4),
+              Icon(LucideIcons.arrowRight, size: 14, color: cs.onSurfaceVariant),
+              const SizedBox(width: 4),
+              Text(
+                currencyService.format(projectedBalanceCents),
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: isProjectedReceivable ? cs.error : Colors.green,
+                ),
+              ),
+            ]),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showBalanceDetailDialog(
+    BuildContext context, {
+    required Customer customer,
+    required int currentBalanceCents,
+    required int projectedBalanceCents,
+  }) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final isCurrentReceivable = currentBalanceCents > 0;
+    final isProjectedReceivable = projectedBalanceCents > 0;
+
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(children: [
+          Icon(LucideIcons.wallet, size: 20, color: cs.primary),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text('sales.customer_account'.tr(),
+              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+          ),
+        ]),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Customer name
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: cs.primaryContainer.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(children: [
+                CircleAvatar(
+                  radius: 18,
+                  backgroundColor: cs.primaryContainer,
+                  child: Text(
+                    customer.name.isNotEmpty ? customer.name[0].toUpperCase() : '?',
+                    style: TextStyle(color: cs.onPrimaryContainer, fontWeight: FontWeight.bold),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(customer.name,
+                    style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+                ),
+              ]),
+            ),
+            const SizedBox(height: 16),
+            // Current balance
+            _balanceRow(
+              theme: theme, cs: cs,
+              icon: LucideIcons.wallet,
+              label: 'sales.current_balance'.tr(),
+              amount: currencyService.format(currentBalanceCents),
+              amountColor: isCurrentReceivable ? cs.error : Colors.green,
+              subtitle: isCurrentReceivable
+                  ? 'sales.balance_owes_you'.tr()
+                  : 'sales.balance_credit'.tr(),
+            ),
+            const SizedBox(height: 12),
+            // Invoice amount
+            _balanceRow(
+              theme: theme, cs: cs,
+              icon: LucideIcons.fileText,
+              label: 'sales.this_invoice'.tr(),
+              amount: '+ ${currencyService.format(invoiceTotalCents)}',
+              amountColor: cs.error,
+              subtitle: paidAmountCents > 0
+                  ? '${'sales.paid_now'.tr()}: - ${currencyService.format(paidAmountCents)}'
+                  : null,
+            ),
+            Divider(height: 24, color: cs.outlineVariant.withValues(alpha: 0.5)),
+            // Projected balance
+            _balanceRow(
+              theme: theme, cs: cs,
+              icon: LucideIcons.trendingUp,
+              label: 'sales.projected_balance'.tr(),
+              amount: currencyService.format(projectedBalanceCents),
+              amountColor: isProjectedReceivable ? cs.error : Colors.green,
+              subtitle: isProjectedReceivable
+                  ? 'sales.balance_owes_you'.tr()
+                  : 'sales.balance_credit'.tr(),
+              isBold: true,
+            ),
+          ],
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('common.close'.tr()),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _balanceRow({
+    required ThemeData theme,
+    required ColorScheme cs,
+    required IconData icon,
+    required String label,
+    required String amount,
+    required Color amountColor,
+    String? subtitle,
+    bool isBold = false,
+  }) {
+    return Row(children: [
+      Container(
+        padding: const EdgeInsets.all(6),
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Icon(icon, size: 16, color: cs.primary),
+      ),
+      const SizedBox(width: 10),
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label, style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+            if (subtitle != null)
+              Text(subtitle, style: theme.textTheme.labelSmall?.copyWith(
+                color: cs.onSurfaceVariant.withValues(alpha: 0.7), fontSize: 10)),
+          ],
+        ),
+      ),
+      Text(
+        amount,
+        style: (isBold ? theme.textTheme.titleMedium : theme.textTheme.bodyMedium)?.copyWith(
+          fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
+          color: amountColor,
+        ),
+      ),
+    ]);
+  }
 }

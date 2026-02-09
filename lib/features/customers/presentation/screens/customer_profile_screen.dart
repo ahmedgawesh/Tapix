@@ -1,4 +1,5 @@
 import 'package:easy_localization/easy_localization.dart';
+import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -7,6 +8,8 @@ import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../../../core/di/injection_container.dart';
+import '../../../sales/domain/repositories/sale_repository.dart';
+import '../../../sales/domain/entities/sale_entity.dart';
 import '../../domain/repositories/customer_repository.dart';
 import '../../domain/repositories/loyalty_repository.dart';
 import '../bloc/customer_loyalty_bloc.dart';
@@ -22,7 +25,202 @@ class CustomerProfileScreen extends StatefulWidget {
   State<CustomerProfileScreen> createState() => _CustomerProfileScreenState();
 }
 
+class _OutstandingChequesSection extends StatelessWidget {
+  final int customerId;
+
+  const _OutstandingChequesSection({required this.customerId});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final currencyService = sl<CurrencyService>();
+
+    return StreamBuilder<List<SaleEntity>>(
+      stream: sl<SaleRepository>().watchCustomerSales(customerId),
+      builder: (context, snapshot) {
+        final sales = snapshot.data ?? const <SaleEntity>[];
+        final chequeSales = sales
+            .where((s) =>
+                s.isCompleted &&
+                s.paymentMethod == 'cheque' &&
+                s.dueDate != null &&
+                s.remainingCents > Decimal.zero)
+            .toList();
+
+        return Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.5)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.event_note_outlined, size: 18),
+                    const SizedBox(width: 8),
+                    Text(
+                      'customers.outstanding_cheques'.tr(),
+                      style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                if (snapshot.connectionState == ConnectionState.waiting)
+                  const Center(child: CircularProgressIndicator())
+                else if (chequeSales.isEmpty)
+                  Text(
+                    'customers.no_outstanding_cheques'.tr(),
+                    style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+                  )
+                else
+                  ...chequeSales.take(5).map((s) {
+                    final dueDate = s.dueDate;
+                    final isOverdue = dueDate != null && DateTime.now().isAfter(dueDate);
+                    final remainingCents = s.remainingCents.toBigInt().toInt();
+
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: InkWell(
+                        onTap: () => context.push('/sales/${s.id}'),
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: (isOverdue ? cs.error : cs.primary).withValues(alpha: 0.06),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: (isOverdue ? cs.error : cs.primary).withValues(alpha: 0.25),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.payments_outlined,
+                                color: isOverdue ? cs.error : cs.primary,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'customers.cheque_for_invoice'.tr(args: [s.invoiceNumber]),
+                                      style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                                    ),
+                                    if (dueDate != null)
+                                      Text(
+                                        'customers.cheque_due_on'.tr(args: [DateFormat.yMMMd().format(dueDate)]),
+                                        style: theme.textTheme.bodySmall?.copyWith(
+                                          color: cs.onSurfaceVariant,
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Text(
+                                    currencyService.format(remainingCents),
+                                    style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+                                  ),
+                                  Text(
+                                    (isOverdue
+                                            ? 'customers.cheque_overdue'
+                                            : 'customers.cheque_pending')
+                                        .tr(),
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: isOverdue ? cs.error : cs.primary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  }),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
+  Future<void> _selectSaleForReturn(BuildContext context, Customer customer) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'customers.select_sale_for_return'.tr(),
+                  style: Theme.of(ctx).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 12),
+                Flexible(
+                  child: StreamBuilder<List<SaleEntity>>(
+                    stream: sl<SaleRepository>().watchCustomerSales(customer.id),
+                    builder: (context, snapshot) {
+                      final sales = snapshot.data ?? const <SaleEntity>[];
+                      final completedSales = sales.where((s) => s.isCompleted).toList();
+
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+
+                      if (completedSales.isEmpty) {
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 24),
+                          child: Center(child: Text('customers.no_completed_sales'.tr())),
+                        );
+                      }
+
+                      return ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: completedSales.length,
+                        separatorBuilder: (_, index) => const Divider(height: 1),
+                        itemBuilder: (context, index) {
+                          final sale = completedSales[index];
+                          return ListTile(
+                            leading: const Icon(Icons.receipt_long_outlined),
+                            title: Text(sale.invoiceNumber),
+                            subtitle: Text(DateFormat.yMMMd().format(sale.saleDate)),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: () {
+                              Navigator.pop(ctx);
+                              context.push('/sales/returns/new?saleId=${sale.id}');
+                            },
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final currencyService = sl<CurrencyService>();
@@ -69,7 +267,7 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
             );
           }
 
-          final balanceCents = customer.balanceCents.toDouble().round();
+          final balanceCents = customer.balanceCents.toBigInt().toInt();
 
           return Scaffold(
             appBar: AppBar(
@@ -155,7 +353,10 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                         extra: {'customerId': customer.id},
                       ),
                       onDiscountPressed: () => _showDiscountDialog(context, customer),
+                      onReturnPressed: () => _selectSaleForReturn(context, customer),
                     ),
+                    const SizedBox(height: 16),
+                    _OutstandingChequesSection(customerId: widget.customerId),
                     const SizedBox(height: 16),
                     _ContactInformationSection(customer: customer),
                     const SizedBox(height: 16),
@@ -171,7 +372,7 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
   }
 
   void _showDeleteConfirmation(BuildContext context, Customer customer) {
-    final balanceCents = customer.balanceCents.toDouble().round();
+    final balanceCents = customer.balanceCents.toBigInt().toInt();
     
     if (balanceCents != 0) {
       showDialog<void>(
@@ -325,13 +526,6 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                 description: descriptionController.text.isEmpty
                     ? null
                     : descriptionController.text,
-              );
-
-              // Update balance
-              final currentBalance = customer.balanceCents.toDouble().round();
-              await sl<CustomerRepository>().updateCustomerBalance(
-                customer.id,
-                currentBalance - amountCents,
               );
 
               profileBloc.refresh();
@@ -861,22 +1055,29 @@ class _LoyaltyStat extends StatelessWidget {
       children: [
         Icon(icon, size: 20, color: theme.colorScheme.primary),
         const SizedBox(width: 8),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              label,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.outline,
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.outline,
+                ),
               ),
-            ),
-            Text(
-              value,
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
+              Text(
+                value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ],
     );
@@ -887,11 +1088,13 @@ class _QuickActionsSection extends StatelessWidget {
   final Customer customer;
   final VoidCallback onPaymentPressed;
   final VoidCallback onDiscountPressed;
+  final VoidCallback onReturnPressed;
 
   const _QuickActionsSection({
     required this.customer,
     required this.onPaymentPressed,
     required this.onDiscountPressed,
+    required this.onReturnPressed,
   });
 
   @override
@@ -924,7 +1127,7 @@ class _QuickActionsSection extends StatelessWidget {
       color: isDark ? const Color(0xFF80CBC4) : colorScheme.tertiary,
       backgroundColor: isDark ? const Color(0xFF0B1A18) : colorScheme.tertiaryContainer.withValues(alpha: 0.4),
       borderColor: isDark ? const Color(0xFF1A3330) : colorScheme.tertiary.withValues(alpha: 0.2),
-      onTap: () {},
+      onTap: onReturnPressed,
     );
 
     return LayoutBuilder(

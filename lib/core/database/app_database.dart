@@ -344,18 +344,68 @@ FROM product_variants__old
         ).getSingle();
         if (colExists.read<int>('cnt') == 0) continue;
 
-        // Convert integer timestamps to ISO 8601 text using SQLite's datetime() function
-        // datetime(value, 'unixepoch') converts Unix seconds to 'YYYY-MM-DD HH:MM:SS'
+        // Convert integer timestamps to ISO 8601 text using SQLite's datetime() function.
+        // Handle both Unix seconds and milliseconds:
+        //   - Values > 10000000000 are likely milliseconds → divide by 1000
+        //   - Otherwise treat as seconds
+        // Use COALESCE to guarantee NOT NULL columns don't get set to NULL.
         try {
-          await customStatement(
-            "UPDATE $table SET $col = datetime($col, 'unixepoch') WHERE $col IS NOT NULL AND typeof($col) = 'integer'",
-          );
+          final sql = 'UPDATE $table SET $col = COALESCE('
+              "CASE WHEN $col > 10000000000 THEN datetime($col / 1000, 'unixepoch') "
+              "ELSE datetime($col, 'unixepoch') END, "
+              "datetime('now')"
+              ") WHERE $col IS NOT NULL AND typeof($col) = 'integer'";
+          await customStatement(sql);
         } catch (e) {
           debugPrint('Warning: could not convert $table.$col: $e');
         }
       }
     }
     debugPrint('Integer timestamp conversion completed.');
+  }
+
+  static const _kSettingIntegerTimestampsConverted =
+      'db.integer_timestamps_converted_to_text_v2';
+
+  Future<bool> _appSettingsTableExists() async {
+    final result = await customSelect(
+      "SELECT COUNT(*) as cnt FROM sqlite_master WHERE type = 'table' AND name = 'app_settings'",
+    ).getSingle();
+    return result.read<int>('cnt') > 0;
+  }
+
+  Future<bool> _getBoolSetting(String key) async {
+    if (!await _appSettingsTableExists()) return false;
+    final result = await (select(appSettings)..where((s) => s.key.equals(key)))
+        .getSingleOrNull();
+    return (result?.value ?? '').toLowerCase() == 'true';
+  }
+
+  Future<void> _setBoolSetting(String key, bool value, {String? description}) async {
+    if (!await _appSettingsTableExists()) return;
+    await into(appSettings).insert(
+      AppSettingsCompanion(
+        key: Value(key),
+        value: Value(value ? 'true' : 'false'),
+        description:
+            description == null ? const Value.absent() : Value(description),
+        updatedAt: Value(DateTime.now()),
+      ),
+      mode: InsertMode.insertOrReplace,
+    );
+  }
+
+  Future<void> _convertIntegerTimestampsToTextOnce() async {
+    final alreadyConverted = await _getBoolSetting(_kSettingIntegerTimestampsConverted);
+    if (alreadyConverted) return;
+
+    await _convertIntegerTimestampsToText();
+    await _setBoolSetting(
+      _kSettingIntegerTimestampsConverted,
+      true,
+      description:
+          'One-time migration: convert legacy integer DateTime columns to text',
+    );
   }
 
   Future<void> _safeAddColumn(String table, String column, String type) async {
@@ -560,6 +610,7 @@ CREATE TABLE IF NOT EXISTS purchase_payments (
     await _safeAddColumn('sales', 'due_date', 'TEXT');
     await _safeAddColumn('sale_returns', 'status', "TEXT NOT NULL DEFAULT 'draft'");
     await _safeAddColumn('sale_returns', 'disposition_type', "TEXT NOT NULL DEFAULT 'restock'");
+    await _safeAddColumn('sale_returns', 'refund_method', "TEXT NOT NULL DEFAULT 'cash'");
     await _safeAddColumn('sale_return_items', 'reason', 'TEXT');
 
     await customStatement('''
@@ -580,7 +631,7 @@ CREATE TABLE IF NOT EXISTS sale_payments (
   }
 
   @override
-  int get schemaVersion => 10019;
+  int get schemaVersion => 10020;
 
   @override
   MigrationStrategy get migration {
@@ -778,6 +829,11 @@ CREATE TABLE IF NOT EXISTS sale_payments (
           await _safeAddColumn('purchase_items', 'expiry_date', 'TEXT');
         }
 
+        // Migration 10019 -> 10020: Purchase return refund method
+        if (from < 10020) {
+          await _safeAddColumn('purchase_returns', 'refund_method', "TEXT NOT NULL DEFAULT 'credit'");
+        }
+
         await _createIndexes();
         await _seedInitialData();
       },
@@ -788,7 +844,7 @@ CREATE TABLE IF NOT EXISTS sale_payments (
         await customStatement('PRAGMA foreign_keys = ON');
         await _ensureSchemaIntegrity();
         await _repairProductVariantsSkuNullabilityIfNeeded();
-        await _convertIntegerTimestampsToText();
+        await _convertIntegerTimestampsToTextOnce();
         await _dedupeUniqueSkuBarcodeIfNeeded();
         try {
           await _seedDefaultBarcodeTemplates();

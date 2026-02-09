@@ -54,6 +54,8 @@ class PurchaseReturnFormState extends Equatable {
   final String? reason;
   /// restock, write_off, repair, replace, refund
   final String dispositionType;
+  /// cash, credit, cheque
+  final String refundMethod;
   final int currencyId;
   final bool isLoading;
   final bool isSubmitting;
@@ -69,6 +71,7 @@ class PurchaseReturnFormState extends Equatable {
     this.alreadyReturnedQty = const {},
     this.reason,
     this.dispositionType = 'restock',
+    this.refundMethod = 'credit',
     this.currencyId = 1,
     this.isLoading = false,
     this.isSubmitting = false,
@@ -100,6 +103,7 @@ class PurchaseReturnFormState extends Equatable {
     Map<int, int>? alreadyReturnedQty,
     String? reason,
     String? dispositionType,
+    String? refundMethod,
     int? currencyId,
     bool? isLoading,
     bool? isSubmitting,
@@ -115,6 +119,7 @@ class PurchaseReturnFormState extends Equatable {
       alreadyReturnedQty: alreadyReturnedQty ?? this.alreadyReturnedQty,
       reason: reason ?? this.reason,
       dispositionType: dispositionType ?? this.dispositionType,
+      refundMethod: refundMethod ?? this.refundMethod,
       currencyId: currencyId ?? this.currencyId,
       isLoading: isLoading ?? this.isLoading,
       isSubmitting: isSubmitting ?? this.isSubmitting,
@@ -127,7 +132,7 @@ class PurchaseReturnFormState extends Equatable {
   @override
   List<Object?> get props => [
         purchaseId, purchase, availableItems, returnItems,
-        alreadyReturnedQty, reason, dispositionType, currencyId,
+        alreadyReturnedQty, reason, dispositionType, refundMethod, currencyId,
         isLoading, isSubmitting, error, isSuccess, hasUnsavedChanges,
       ];
 }
@@ -191,6 +196,14 @@ class ReturnDispositionChanged extends PurchaseReturnFormEvent {
   List<Object?> get props => [dispositionType];
 }
 
+class ReturnRefundMethodChanged extends PurchaseReturnFormEvent {
+  final String refundMethod;
+  const ReturnRefundMethodChanged(this.refundMethod);
+
+  @override
+  List<Object?> get props => [refundMethod];
+}
+
 class PurchaseReturnFormSubmitted extends PurchaseReturnFormEvent {
   const PurchaseReturnFormSubmitted();
 }
@@ -209,6 +222,7 @@ class PurchaseReturnFormBloc
     on<ReturnItemReasonChanged>(_onItemReasonChanged);
     on<ReturnReasonChanged>(_onReasonChanged);
     on<ReturnDispositionChanged>(_onDispositionChanged);
+    on<ReturnRefundMethodChanged>(_onRefundMethodChanged);
     on<PurchaseReturnFormSubmitted>(_onSubmitted);
   }
 
@@ -329,6 +343,13 @@ class PurchaseReturnFormBloc
     emit(state.copyWith(dispositionType: event.dispositionType));
   }
 
+  void _onRefundMethodChanged(
+    ReturnRefundMethodChanged event,
+    Emitter<PurchaseReturnFormState> emit,
+  ) {
+    emit(state.copyWith(refundMethod: event.refundMethod));
+  }
+
   Future<void> _onSubmitted(
     PurchaseReturnFormSubmitted event,
     Emitter<PurchaseReturnFormState> emit,
@@ -360,6 +381,7 @@ class PurchaseReturnFormBloc
         totalCents: state.totalRefundCents,
         items: items,
         dispositionType: state.dispositionType,
+        refundMethod: state.refundMethod,
         reason: state.reason,
         returnDate: DateTime.now(),
       );

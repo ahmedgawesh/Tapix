@@ -62,6 +62,8 @@ class SaleReturns extends Table {
   TextColumn get status => text().withDefault(const Constant('draft'))();
   /// restock, write_off, exchange, store_credit, refund
   TextColumn get dispositionType => text().withDefault(const Constant('restock'))();
+  /// cash, credit, cheque
+  TextColumn get refundMethod => text().withDefault(const Constant('cash'))();
   TextColumn get reason => text().nullable()();
   DateTimeColumn get returnDate => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
@@ -141,6 +143,8 @@ class PurchaseReturns extends Table {
   TextColumn get status => text().withDefault(const Constant('draft'))();
   /// restock, write_off, repair, replace, refund
   TextColumn get dispositionType => text().withDefault(const Constant('restock'))();
+  /// cash, credit, cheque
+  TextColumn get refundMethod => text().withDefault(const Constant('credit'))();
   TextColumn get reason => text().nullable()();
   DateTimeColumn get returnDate => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();

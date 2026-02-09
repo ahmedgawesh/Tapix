@@ -159,7 +159,7 @@ class SupplierFormBloc extends Bloc<SupplierFormEvent, SupplierFormState> {
             email: supplier.email ?? '',
             phone: supplier.phone ?? '',
             address: supplier.address ?? '',
-            balance: (supplier.balanceCents.toDouble() / 100).toStringAsFixed(2),
+            balance: (supplier.balanceCents.toBigInt().toInt() / 100).toStringAsFixed(2),
             currencyId: supplier.currencyId,
             isEditing: true,
           ));

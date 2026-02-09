@@ -6,11 +6,16 @@ import '../models/sale_model.dart';
 
 abstract class SaleLocalDatasource {
   Stream<List<SaleEntity>> watchAllSales();
+  Stream<List<SaleEntity>> watchCustomerSales(int customerId);
   Future<SaleEntity?> getSaleById(int id);
   Future<List<SaleItemEntity>> getSaleItems(int saleId);
   Stream<List<SaleItemEntity>> watchSaleItems(int saleId);
   Future<List<SaleItemEntity>> getSaleItemsWithDetails(int saleId);
   Stream<List<SaleReturnEntity>> watchAllSaleReturns();
+  Future<SaleReturnEntity?> getSaleReturnById(int id);
+  Stream<List<SaleReturnItemEntity>> watchSaleReturnItemsWithDetails(int returnId);
+  Stream<List<SaleReturnEntity>> watchSaleReturnsBySale(int saleId);
+  Stream<Set<int>> watchSaleIdsWithReturns();
   Future<void> voidSaleReturn(int returnId);
   Stream<List<SalePaymentEntity>> watchSalePayments(int saleId);
   Future<List<SalePaymentEntity>> getSalePayments(int saleId);
@@ -31,6 +36,13 @@ class SaleLocalDatasourceImpl implements SaleLocalDatasource {
   Stream<List<SaleEntity>> watchAllSales() {
     return _dao.watchAllSalesWithCustomer().map(
       (list) => list.map((swc) => SaleModel.fromDriftWithCustomer(swc)).toList(),
+    );
+  }
+
+  @override
+  Stream<List<SaleEntity>> watchCustomerSales(int customerId) {
+    return _dao.watchCustomerSales(customerId).map(
+      (list) => list.map((s) => SaleModel.fromDrift(s)).toList(),
     );
   }
 
@@ -66,6 +78,44 @@ class SaleLocalDatasourceImpl implements SaleLocalDatasource {
       (list) => list.map((r) => SaleReturnModel.fromDrift(r)).toList(),
     );
   }
+
+  @override
+  Future<SaleReturnEntity?> getSaleReturnById(int id) async {
+    final r = await _dao.getSaleReturnById(id);
+    if (r == null) return null;
+    return SaleReturnModel.fromDrift(r);
+  }
+
+  @override
+  Stream<List<SaleReturnItemEntity>> watchSaleReturnItemsWithDetails(int returnId) {
+    return _dao.watchSaleReturnItemsWithDetails(returnId).map(
+      (list) => list.map((d) => SaleReturnItemEntity(
+        id: d.returnItem.id,
+        returnId: d.returnItem.returnId,
+        saleItemId: d.returnItem.saleItemId,
+        quantity: d.returnItem.quantity,
+        refundCents: d.returnItem.refundCents,
+        reason: d.returnItem.reason,
+        productName: d.product.name,
+        variantSku: d.variant?.sku,
+        variantBarcode: d.variant?.barcode,
+        colorName: d.colorName,
+        colorHex: d.colorHex,
+        sizeName: d.sizeName,
+        createdAt: d.returnItem.createdAt,
+      )).toList(),
+    );
+  }
+
+  @override
+  Stream<List<SaleReturnEntity>> watchSaleReturnsBySale(int saleId) {
+    return _dao.watchSaleReturnsBySale(saleId).map(
+      (list) => list.map((r) => SaleReturnModel.fromDrift(r)).toList(),
+    );
+  }
+
+  @override
+  Stream<Set<int>> watchSaleIdsWithReturns() => _dao.watchSaleIdsWithReturns();
 
   @override
   Future<void> voidSaleReturn(int returnId) => _dao.voidSaleReturn(returnId);

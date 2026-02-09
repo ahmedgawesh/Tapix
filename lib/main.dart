@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -13,30 +15,66 @@ import 'core/services/localization_service.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/auth.dart';
 import 'core/services/currency_service.dart';
+import 'core/services/logging_service.dart';
 import 'core/bloc/simple_bloc_observer.dart';
 import 'features/settings/presentation/bloc/company_bloc.dart';
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await EasyLocalization.ensureInitialized();
-  
-  Bloc.observer = SimpleBlocObserver();
-  
-  await di.init();
+void main() {
+  runZonedGuarded(() async {
+    WidgetsFlutterBinding.ensureInitialized();
+    await EasyLocalization.ensureInitialized();
 
-  final localizationService = di.sl<LocalizationService>();
-  final startLocale = localizationService.getLocale();
+    Bloc.observer = SimpleBlocObserver();
 
-  runApp(
-    EasyLocalization(
-      supportedLocales: LocalizationService.supportedLocales,
-      path: 'assets/translations',
-      fallbackLocale: const Locale('en'),
-      startLocale: startLocale,
-      saveLocale: false,
-      child: const TapixApp(),
-    ),
-  );
+    FlutterError.onError = (details) {
+      LoggingService.error(
+        'FlutterError.onError',
+        error: details.exception,
+        stackTrace: details.stack,
+      );
+      FlutterError.presentError(details);
+    };
+
+    WidgetsBinding.instance.platformDispatcher.onError = (error, stackTrace) {
+      LoggingService.error(
+        'PlatformDispatcher.onError',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      return true;
+    };
+
+    ErrorWidget.builder = (details) {
+      LoggingService.error(
+        'ErrorWidget.builder',
+        error: details.exception,
+        stackTrace: details.stack,
+      );
+      return ErrorWidget(details.exception);
+    };
+
+    await di.init();
+
+    final localizationService = di.sl<LocalizationService>();
+    final startLocale = localizationService.getLocale();
+
+    runApp(
+      EasyLocalization(
+        supportedLocales: LocalizationService.supportedLocales,
+        path: 'assets/translations',
+        fallbackLocale: const Locale('en'),
+        startLocale: startLocale,
+        saveLocale: false,
+        child: const TapixApp(),
+      ),
+    );
+  }, (error, stackTrace) {
+    LoggingService.error(
+      'runZonedGuarded',
+      error: error,
+      stackTrace: stackTrace,
+    );
+  });
 }
 
 class TapixApp extends StatefulWidget {

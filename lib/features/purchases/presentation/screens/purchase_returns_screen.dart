@@ -327,7 +327,10 @@ class _ReturnTile extends StatelessWidget {
         color: cs.surface,
         borderRadius: BorderRadius.circular(14),
         clipBehavior: Clip.antiAlias,
-        child: Container(
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: () => context.push('/purchases/returns/${returnEntity.id}'),
+          child: Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
             border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
@@ -461,6 +464,7 @@ class _ReturnTile extends StatelessWidget {
               ],
             ),
           ),
+        ),
         ),
       ),
     );

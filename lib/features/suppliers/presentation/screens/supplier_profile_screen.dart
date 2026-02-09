@@ -22,6 +22,27 @@ class SupplierProfileScreen extends StatefulWidget {
 }
 
 class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
+  var _didBackfillAccounting = false;
+
+  Future<void> _backfillAccountingIfNeeded() async {
+    if (_didBackfillAccounting) return;
+    _didBackfillAccounting = true;
+
+    final db = sl<AppDatabase>();
+    final rows = await db.customSelect(
+      'SELECT id FROM purchases WHERE supplier_id = ? AND status = ?',
+      variables: [
+        Variable.withInt(widget.supplierId),
+        const Variable<String>('posted'),
+      ],
+    ).get();
+
+    for (final r in rows) {
+      final purchaseId = r.read<int>('id');
+      await db.purchaseDao.ensureSupplierAccountingForPostedPurchase(purchaseId);
+    }
+  }
+
   Future<int> _getNetPostedPurchasesSubtotalCents({
     required int supplierId,
     required DateTime start,
@@ -73,7 +94,17 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
     return BlocProvider(
       create: (context) => SupplierProfileBloc(sl<SupplierRepository>())
         ..add(SupplierProfileLoadRequested(widget.supplierId)),
-      child: BlocBuilder<SupplierProfileBloc, RealtimeState<Supplier?>>(
+      child: BlocConsumer<SupplierProfileBloc, RealtimeState<Supplier?>>(
+        listener: (context, state) async {
+          if (state is RealtimeSuccess<Supplier?> && state.data != null) {
+            if (!_didBackfillAccounting) {
+              final bloc = context.read<SupplierProfileBloc>();
+              await _backfillAccountingIfNeeded();
+              if (!mounted) return;
+              bloc.refresh();
+            }
+          }
+        },
         builder: (context, state) {
           final theme = Theme.of(context);
           final colorScheme = theme.colorScheme;
@@ -100,7 +131,7 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
             );
           }
 
-          final balanceCents = supplier.balanceCents.toDouble().round();
+          final balanceCents = supplier.balanceCents.toBigInt().toInt();
 
           return Scaffold(
             appBar: AppBar(
@@ -191,7 +222,7 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
   }
 
   void _showDeleteConfirmation(BuildContext context, Supplier supplier) {
-    final balanceCents = supplier.balanceCents.toDouble().round();
+    final balanceCents = supplier.balanceCents.toBigInt().toInt();
 
     if (balanceCents != 0) {
       showDialog<void>(
@@ -317,13 +348,6 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
                 description: descriptionController.text.isEmpty
                     ? null
                     : descriptionController.text,
-              );
-
-              // Update balance
-              final currentBalance = supplier.balanceCents.toDouble().round();
-              await sl<SupplierRepository>().updateSupplierBalance(
-                supplier.id,
-                currentBalance - amountCents,
               );
 
               profileBloc.refresh();
@@ -648,12 +672,6 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
                         description: descriptionController.text.isEmpty
                             ? 'suppliers.seasonal_discount'.tr()
                             : descriptionController.text,
-                      );
-
-                      final currentBalance = supplier.balanceCents.toDouble().round();
-                      await sl<SupplierRepository>().updateSupplierBalance(
-                        supplier.id,
-                        currentBalance - amountCents,
                       );
 
                       profileBloc.refresh();

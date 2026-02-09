@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons/lucide_icons.dart';
@@ -21,7 +23,9 @@ class SaleDetailScreen extends StatefulWidget {
 class _SaleDetailScreenState extends State<SaleDetailScreen> {
   SaleEntity? _sale;
   List<SaleItemEntity> _items = [];
+  List<SaleReturnEntity> _returns = [];
   bool _loading = true;
+  StreamSubscription<List<SaleReturnEntity>>? _returnsSub;
 
   @override
   void initState() {
@@ -29,10 +33,22 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
     _loadSale();
   }
 
+  @override
+  void dispose() {
+    _returnsSub?.cancel();
+    super.dispose();
+  }
+
   Future<void> _loadSale() async {
     final repo = sl<SaleRepository>();
     final sale = await repo.getSaleById(widget.saleId);
     final items = await repo.getSaleItems(widget.saleId);
+
+    _returnsSub?.cancel();
+    _returnsSub = repo.watchSaleReturnsBySale(widget.saleId).listen((returns) {
+      if (mounted) setState(() => _returns = returns);
+    });
+
     if (mounted) {
       setState(() {
         _sale = sale;
@@ -195,6 +211,10 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
             padding: const EdgeInsets.all(16),
             children: [
               _buildItemsCard(context, cs),
+              if (_returns.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                _buildReturnsCard(context, cs),
+              ],
             ],
           ),
         ),
@@ -211,6 +231,10 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
         _buildInfoCard(context, sale, cs),
         const SizedBox(height: 16),
         _buildItemsCard(context, cs),
+        if (_returns.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          _buildReturnsCard(context, cs),
+        ],
         const SizedBox(height: 16),
         _buildTotalsCard(context, sale, cs),
         if (sale.notes != null && sale.notes!.isNotEmpty) ...[          const SizedBox(height: 16),
@@ -830,6 +854,109 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
               child: Text(sale.notes!,
                   style: theme.textTheme.bodyMedium?.copyWith(
                       color: cs.onSurface, height: 1.4)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReturnsCard(BuildContext context, CurrencyService cs) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: colorScheme.error.withValues(alpha: 0.25)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(7),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [colorScheme.error, colorScheme.error.withValues(alpha: 0.7)],
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(LucideIcons.undo2, size: 16, color: Colors.white),
+                ),
+                const SizedBox(width: 10),
+                Text('sales.returns'.tr(),
+                    style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: colorScheme.errorContainer,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text('${_returns.length}',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                          color: colorScheme.onErrorContainer, fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _returns.length,
+              separatorBuilder: (_, _) => Divider(
+                  height: 1, color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+              itemBuilder: (context, index) {
+                final ret = _returns[index];
+                final statusColor = ret.isVoided ? colorScheme.error : Colors.green;
+                final statusLabel = ret.isVoided
+                    ? 'sales.status_voided'.tr()
+                    : 'sales.status_posted'.tr();
+
+                return ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  onTap: () => context.push('/sales/returns/${ret.id}'),
+                  leading: Container(
+                    width: 36, height: 36,
+                    decoration: BoxDecoration(
+                      color: colorScheme.errorContainer.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    alignment: Alignment.center,
+                    child: Icon(LucideIcons.undo2, size: 16, color: colorScheme.error),
+                  ),
+                  title: Text(ret.returnNumber,
+                      style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                  subtitle: Row(
+                    children: [
+                      Text(DateFormat.yMMMd().format(ret.returnDate),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onSurfaceVariant, fontSize: 11)),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: statusColor.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(statusLabel,
+                            style: theme.textTheme.labelSmall?.copyWith(
+                                color: statusColor, fontSize: 9, fontWeight: FontWeight.w600)),
+                      ),
+                    ],
+                  ),
+                  trailing: Text(
+                    cs.format(ret.totalCents.toBigInt().toInt()),
+                    style: theme.textTheme.titleSmall?.copyWith(
+                        color: colorScheme.error, fontWeight: FontWeight.bold),
+                  ),
+                );
+              },
             ),
           ],
         ),

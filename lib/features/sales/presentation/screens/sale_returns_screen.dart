@@ -170,6 +170,7 @@ class _SaleReturnsViewState extends State<_SaleReturnsView> {
                                     .withValues(alpha: 0.4)),
                           ),
                           child: ListTile(
+                            onTap: () => context.push('/sales/returns/${ret.id}'),
                             leading: Container(
                               width: 40,
                               height: 40,

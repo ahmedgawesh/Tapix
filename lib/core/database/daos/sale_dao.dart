@@ -28,6 +28,25 @@ class SaleItemWithDetails {
   });
 }
 
+/// Data class for sale return item with product details
+class SaleReturnItemWithDetails {
+  final SaleReturnItem returnItem;
+  final Product product;
+  final ProductVariant? variant;
+  final String? colorName;
+  final String? colorHex;
+  final String? sizeName;
+
+  SaleReturnItemWithDetails({
+    required this.returnItem,
+    required this.product,
+    this.variant,
+    this.colorName,
+    this.colorHex,
+    this.sizeName,
+  });
+}
+
 /// Dashboard stats for sales
 class SaleDashboardStats {
   final int totalCount;
@@ -51,7 +70,18 @@ class SaleDashboardStats {
   });
 }
 
-@DriftAccessor(tables: [Sales, SaleItems, SaleTaxBands, SaleReturns, SaleReturnItems, SalePayments, Customers, Products, ProductVariants])
+@DriftAccessor(tables: [
+  Sales,
+  SaleItems,
+  SaleTaxBands,
+  SaleReturns,
+  SaleReturnItems,
+  SalePayments,
+  Customers,
+  CustomerTransactions,
+  Products,
+  ProductVariants,
+])
 class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
   SaleDao(super.db);
 
@@ -204,15 +234,23 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
     });
   }
 
-  /// Post sale - deduct variant stock
+  /// Post sale - deduct variant stock and handle customer accounting.
+  ///
+  /// Accounting rules by payment method:
+  /// - cash / card: Fully settled at point of sale. paidAmountCents >= totalCents.
+  ///   A sale_payment row is created. No impact on customer balance.
+  /// - credit: Full invoice amount added to customer balance (accounts receivable).
+  ///   Customer owes the full amount until payments are recorded via recordPayment().
+  /// - cheque: Like credit — full amount added to customer balance.
+  ///   The cheque due date tracks when payment is expected.
   Future<void> postSale(int saleId) {
     return transaction(() async {
       final sale = await getSaleById(saleId);
       if (sale == null) throw Exception('Sale not found');
       if (sale.status == 'completed') throw Exception('Sale already completed');
 
+      // 1. Deduct stock
       final items = await getSaleItems(saleId);
-
       for (final item in items) {
         final variantId = item.variantId;
         if (variantId != null) {
@@ -223,11 +261,96 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
         }
       }
 
+      // 2. Update status
       await updateSaleStatus(saleId, 'completed');
+
+      // 3. Customer accounting (only if a customer is assigned)
+      final customerId = sale.customerId;
+      if (customerId == null) return;
+
+      final totalCents = sale.totalCents.toBigInt().toInt();
+      final headerPaidCents = sale.paidAmountCents.toBigInt().toInt();
+      final paymentMethod = sale.paymentMethod;
+
+      // 3a. Ensure paidAmountCents is backed by sale_payments rows
+      //     (mirrors purchase_dao.postPurchase pattern)
+      var totalPaidCents = (await getSalePayments(saleId))
+          .fold<int>(0, (sum, p) => sum + p.amountCents.toBigInt().toInt());
+      int? backfilledPaymentId;
+      if (totalPaidCents == 0 && headerPaidCents > 0) {
+        backfilledPaymentId = await into(salePayments).insert(
+          SalePaymentsCompanion.insert(
+            saleId: saleId,
+            amountCents: Decimal.fromInt(headerPaidCents),
+            currencyId: sale.currencyId,
+            paymentMethod: paymentMethod,
+            reference: const Value(null),
+            notes: const Value('Initial payment on posting'),
+            paymentDate: Value(sale.saleDate),
+          ),
+        );
+        totalPaidCents = headerPaidCents;
+      }
+
+      // 3b. Keep sales.paid_amount_cents consistent with payment rows
+      await (update(sales)..where((s) => s.id.equals(saleId)))
+          .write(SalesCompanion(
+            paidAmountCents: Value(Decimal.fromInt(totalPaidCents)),
+            updatedAt: Value(DateTime.now()),
+          ));
+
+      // 3c. Record sale transaction in customer ledger
+      await into(db.customerTransactions).insert(
+        CustomerTransactionsCompanion.insert(
+          customerId: customerId,
+          transactionType: 'sale',
+          amountCents: Decimal.fromInt(totalCents),
+          currencyId: sale.currencyId,
+          description: Value('Sale ${sale.invoiceNumber}'),
+          referenceId: Value(saleId),
+          referenceType: const Value('sale'),
+        ),
+      );
+
+      // 3d. Record payment transaction only when we backfilled a payment row.
+      //     Later payments are logged via recordPayment().
+      if (backfilledPaymentId != null && totalPaidCents > 0) {
+        await into(db.customerTransactions).insert(
+          CustomerTransactionsCompanion.insert(
+            customerId: customerId,
+            transactionType: 'payment',
+            amountCents: Decimal.fromInt(-totalPaidCents),
+            currencyId: sale.currencyId,
+            description: Value('Payment for ${sale.invoiceNumber}'),
+            referenceId: Value(backfilledPaymentId),
+            referenceType: const Value('sale_payment'),
+          ),
+        );
+      }
+
+      // 3e. Apply net balance delta once.
+      //     For cash/card: delta = 0 (fully paid)
+      //     For credit/cheque: delta = totalCents (full amount owed)
+      final deltaCents = totalCents - totalPaidCents;
+      if (deltaCents != 0) {
+        final customer = await (select(customers)
+              ..where((c) => c.id.equals(customerId)))
+            .getSingleOrNull();
+        if (customer != null) {
+          final oldBalance = customer.balanceCents.toBigInt().toInt();
+          final newBalance = oldBalance + deltaCents;
+          await (update(customers)..where((c) => c.id.equals(customerId)))
+              .write(CustomersCompanion(
+                balanceCents: Value(Decimal.fromInt(newBalance)),
+                updatedAt: Value(DateTime.now()),
+              ));
+        }
+      }
     });
   }
 
-  /// Void sale - reverse stock if completed (no hard delete)
+  /// Void sale - reverse stock and customer accounting if completed.
+  /// Mirrors voidPurchase pattern for full accounting reversal.
   Future<void> voidSale(int saleId) {
     return transaction(() async {
       final sale = await getSaleById(saleId);
@@ -235,6 +358,7 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
       if (sale.status == 'voided') throw Exception('Sale already voided');
 
       if (sale.status == 'completed') {
+        // 1. Reverse stock
         final items = await getSaleItems(saleId);
         for (final item in items) {
           final variantId = item.variantId;
@@ -243,6 +367,62 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
               'UPDATE product_variants SET stock_quantity = stock_quantity + ?, updated_at = ? WHERE id = ?',
               [item.quantity, DateTime.now().toIso8601String(), variantId],
             );
+          }
+        }
+
+        // 2. Reverse customer accounting
+        final customerId = sale.customerId;
+        if (customerId != null) {
+          final totalCents = sale.totalCents.toBigInt().toInt();
+          final payments = await getSalePayments(saleId);
+          final totalPaidCents = payments.fold<int>(
+            0, (sum, p) => sum + p.amountCents.toBigInt().toInt(),
+          );
+
+          // Record reversal transaction for the sale (negative = undo receivable)
+          await into(db.customerTransactions).insert(
+            CustomerTransactionsCompanion.insert(
+              customerId: customerId,
+              transactionType: 'sale_void',
+              amountCents: Decimal.fromInt(-totalCents),
+              currencyId: sale.currencyId,
+              description: Value('Voided sale ${sale.invoiceNumber}'),
+              referenceId: Value(saleId),
+              referenceType: const Value('sale'),
+            ),
+          );
+
+          // Record reversal for payments (positive = undo payment offset)
+          if (totalPaidCents > 0) {
+            await into(db.customerTransactions).insert(
+              CustomerTransactionsCompanion.insert(
+                customerId: customerId,
+                transactionType: 'payment_reversal',
+                amountCents: Decimal.fromInt(totalPaidCents),
+                currencyId: sale.currencyId,
+                description: Value('Reversed payments for voided sale ${sale.invoiceNumber}'),
+                referenceId: Value(saleId),
+                referenceType: const Value('sale'),
+              ),
+            );
+          }
+
+          // Net balance change: -(totalCents - totalPaidCents)
+          // Undoes the delta that was applied on posting
+          final netReversalCents = totalCents - totalPaidCents;
+          if (netReversalCents != 0) {
+            final customer = await (select(customers)
+                  ..where((c) => c.id.equals(customerId)))
+                .getSingleOrNull();
+            if (customer != null) {
+              final oldBalance = customer.balanceCents.toBigInt().toInt();
+              final newBalance = oldBalance - netReversalCents;
+              await (update(customers)..where((c) => c.id.equals(customerId)))
+                  .write(CustomersCompanion(
+                    balanceCents: Value(Decimal.fromInt(newBalance)),
+                    updatedAt: Value(DateTime.now()),
+                  ));
+            }
           }
         }
       }
@@ -375,13 +555,18 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
     });
   }
 
-  /// Post sale return - restore variant stock based on disposition
+  /// Post sale return - restore variant stock and handle customer accounting.
+  ///
+  /// Customer accounting rules by refund method:
+  /// - cash / cheque: Customer already received money back → no balance change.
+  /// - credit: Refund applied as credit note → reduces customer balance (they owe less).
   Future<void> postSaleReturn(int returnId) {
     return transaction(() async {
       final returnData = await getSaleReturnById(returnId);
       if (returnData == null) throw Exception('Return not found');
       if (returnData.status == 'posted') throw Exception('Return already posted');
 
+      // 1. Restore stock for applicable dispositions
       final shouldRestoreStock = returnData.dispositionType == 'restock' ||
           returnData.dispositionType == 'refund' ||
           returnData.dispositionType == 'exchange';
@@ -405,21 +590,67 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
         }
       }
 
-      // Update return status to posted
+      // 2. Update return status to posted
       await (update(saleReturns)..where((r) => r.id.equals(returnId)))
           .write(const SaleReturnsCompanion(status: Value('posted')));
+
+      // 3. Customer accounting
+      final sale = await getSaleById(returnData.saleId);
+      if (sale != null && sale.customerId != null) {
+        final customerId = sale.customerId!;
+        final refundCents = returnData.totalCents.toBigInt().toInt();
+        final refundMethod = returnData.refundMethod;
+
+        // Determine transaction type based on refund method:
+        // - credit: customer gets credit note → reduces what they owe
+        // - cash/cheque: customer already got money back → no balance change
+        final isCreditRefund = refundMethod == 'credit';
+        final txType = isCreditRefund ? 'credit_note' : 'refund';
+
+        // Record customer transaction for audit trail (always)
+        await into(db.customerTransactions).insert(
+          CustomerTransactionsCompanion.insert(
+            customerId: customerId,
+            transactionType: txType,
+            amountCents: Decimal.fromInt(-refundCents),
+            currencyId: sale.currencyId,
+            description: Value('Sale return ${returnData.returnNumber} ($refundMethod)'),
+            referenceId: Value(returnId),
+            referenceType: const Value('sale_return'),
+          ),
+        );
+
+        // Only adjust customer balance for credit refunds.
+        // Cash/cheque means we already gave the customer money back,
+        // so the balance (what they owe us) doesn't change.
+        if (isCreditRefund) {
+          final customer = await (select(customers)
+                ..where((c) => c.id.equals(customerId)))
+              .getSingleOrNull();
+          if (customer != null) {
+            final oldBalance = customer.balanceCents.toBigInt().toInt();
+            final newBalance = oldBalance - refundCents;
+            await (update(customers)..where((c) => c.id.equals(customerId)))
+                .write(CustomersCompanion(
+                  balanceCents: Value(Decimal.fromInt(newBalance)),
+                  updatedAt: Value(DateTime.now()),
+                ));
+          }
+        }
+      }
     });
   }
 
-  /// Void a sale return
+  /// Void a sale return - reverse stock and customer accounting if posted.
+  /// Mirrors voidPurchaseReturn pattern.
   Future<void> voidSaleReturn(int returnId) {
     return transaction(() async {
       final returnData = await getSaleReturnById(returnId);
       if (returnData == null) throw Exception('Return not found');
       if (returnData.status == 'voided') throw Exception('Return already voided');
 
-      // If posted, reverse stock changes
       if (returnData.status == 'posted') {
+        // 1. Reverse stock changes
         final shouldReverseStock = returnData.dispositionType == 'restock' ||
             returnData.dispositionType == 'refund' ||
             returnData.dispositionType == 'exchange';
@@ -440,6 +671,46 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
               'UPDATE product_variants SET stock_quantity = stock_quantity - ?, updated_at = ? WHERE id = ?',
               [returnItem.quantity, DateTime.now().toIso8601String(), variantId],
             );
+          }
+        }
+
+        // 2. Reverse customer accounting
+        final sale = await getSaleById(returnData.saleId);
+        if (sale != null && sale.customerId != null) {
+          final customerId = sale.customerId!;
+          final refundCents = returnData.totalCents.toBigInt().toInt();
+          final isCreditRefund = returnData.refundMethod == 'credit';
+
+          // Record reversal transaction for audit trail (always)
+          final reversalType = isCreditRefund ? 'credit_note_reversal' : 'refund_reversal';
+          await into(db.customerTransactions).insert(
+            CustomerTransactionsCompanion.insert(
+              customerId: customerId,
+              transactionType: reversalType,
+              amountCents: Decimal.fromInt(refundCents),
+              currencyId: sale.currencyId,
+              description: Value('Voided sale return ${returnData.returnNumber}'),
+              referenceId: Value(returnId),
+              referenceType: const Value('sale_return'),
+            ),
+          );
+
+          // Only restore customer balance for credit refunds.
+          // Cash/cheque refunds did not change the balance on posting,
+          // so voiding them should not change it either.
+          if (isCreditRefund) {
+            final customer = await (select(customers)
+                  ..where((c) => c.id.equals(customerId)))
+                .getSingleOrNull();
+            if (customer != null) {
+              final oldBalance = customer.balanceCents.toBigInt().toInt();
+              final newBalance = oldBalance + refundCents;
+              await (update(customers)..where((c) => c.id.equals(customerId)))
+                  .write(CustomersCompanion(
+                    balanceCents: Value(Decimal.fromInt(newBalance)),
+                    updatedAt: Value(DateTime.now()),
+                  ));
+            }
           }
         }
       }
@@ -470,6 +741,11 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
   /// Record a payment and update paid_amount_cents on the sale
   Future<int> recordPayment(SalePaymentsCompanion payment) {
     return transaction(() async {
+      final sale = await getSaleById(payment.saleId.value);
+      if (sale == null) {
+        throw Exception('Sale not found');
+      }
+
       final paymentId = await into(salePayments).insert(payment);
 
       // Recalculate total paid
@@ -483,6 +759,36 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
             updatedAt: Value(DateTime.now()),
           ));
 
+      final isOnAccount = sale.paymentMethod == 'credit' || sale.paymentMethod == 'cheque';
+      if (sale.customerId != null && sale.status == 'completed' && isOnAccount) {
+        final amountCents = payment.amountCents.value.toBigInt().toInt();
+
+        await into(db.customerTransactions).insert(
+          CustomerTransactionsCompanion.insert(
+            customerId: sale.customerId!,
+            transactionType: 'payment',
+            amountCents: Decimal.fromInt(-amountCents),
+            currencyId: sale.currencyId,
+            description: Value('Payment for ${sale.invoiceNumber}'),
+            referenceId: Value(paymentId),
+            referenceType: const Value('sale_payment'),
+          ),
+        );
+
+        final customer = await (select(customers)
+              ..where((c) => c.id.equals(sale.customerId!)))
+            .getSingleOrNull();
+        if (customer != null) {
+          final oldBalance = customer.balanceCents.toBigInt().toInt();
+          final newBalance = oldBalance - amountCents;
+          await (update(customers)..where((c) => c.id.equals(sale.customerId!)))
+              .write(CustomersCompanion(
+                balanceCents: Value(Decimal.fromInt(newBalance)),
+                updatedAt: Value(DateTime.now()),
+              ));
+        }
+      }
+
       return paymentId;
     });
   }
@@ -492,6 +798,8 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
     return transaction(() async {
       final payment = await (select(salePayments)..where((p) => p.id.equals(paymentId))).getSingleOrNull();
       if (payment == null) return;
+
+      final sale = await getSaleById(payment.saleId);
 
       await (delete(salePayments)..where((p) => p.id.equals(paymentId))).go();
 
@@ -504,6 +812,36 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
             paidAmountCents: Value(Decimal.fromInt(totalPaid)),
             updatedAt: Value(DateTime.now()),
           ));
+
+      final isOnAccount = sale?.paymentMethod == 'credit' || sale?.paymentMethod == 'cheque';
+      if (sale != null && sale.customerId != null && sale.status == 'completed' && isOnAccount) {
+        final amountCents = payment.amountCents.toBigInt().toInt();
+
+        await into(db.customerTransactions).insert(
+          CustomerTransactionsCompanion.insert(
+            customerId: sale.customerId!,
+            transactionType: 'payment_reversal',
+            amountCents: Decimal.fromInt(amountCents),
+            currencyId: sale.currencyId,
+            description: Value('Deleted payment for ${sale.invoiceNumber}'),
+            referenceId: Value(paymentId),
+            referenceType: const Value('sale_payment'),
+          ),
+        );
+
+        final customer = await (select(customers)
+              ..where((c) => c.id.equals(sale.customerId!)))
+            .getSingleOrNull();
+        if (customer != null) {
+          final oldBalance = customer.balanceCents.toBigInt().toInt();
+          final newBalance = oldBalance + amountCents;
+          await (update(customers)..where((c) => c.id.equals(sale.customerId!)))
+              .write(CustomersCompanion(
+                balanceCents: Value(Decimal.fromInt(newBalance)),
+                updatedAt: Value(DateTime.now()),
+              ));
+        }
+      }
     });
   }
 
@@ -558,5 +896,44 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
   /// Watch sale return items
   Stream<List<SaleReturnItem>> watchSaleReturnItemsList(int returnId) {
     return (select(saleReturnItems)..where((i) => i.returnId.equals(returnId))).watch();
+  }
+
+  /// Watch sale return items with full product details (name, color, size, SKU)
+  Stream<List<SaleReturnItemWithDetails>> watchSaleReturnItemsWithDetails(int returnId) {
+    final query = select(saleReturnItems).join([
+      innerJoin(saleItems, saleItems.id.equalsExp(saleReturnItems.saleItemId)),
+      innerJoin(products, products.id.equalsExp(saleItems.productId)),
+      leftOuterJoin(productVariants, productVariants.id.equalsExp(saleItems.variantId)),
+      leftOuterJoin(productColors, productColors.id.equalsExp(productVariants.colorId)),
+      leftOuterJoin(sizes, sizes.id.equalsExp(productVariants.sizeId)),
+    ])
+      ..where(saleReturnItems.returnId.equals(returnId));
+
+    return query.watch().map((rows) => rows.map((row) {
+      return SaleReturnItemWithDetails(
+        returnItem: row.readTable(saleReturnItems),
+        product: row.readTable(products),
+        variant: row.readTableOrNull(productVariants),
+        colorName: row.readTableOrNull(productColors)?.name,
+        colorHex: row.readTableOrNull(productColors)?.hexCode,
+        sizeName: row.readTableOrNull(sizes)?.name,
+      );
+    }).toList());
+  }
+
+  /// Watch set of sale IDs that have at least one non-voided return
+  Stream<Set<int>> watchSaleIdsWithReturns() {
+    return (select(saleReturns)
+          ..where((r) => r.status.equals('posted')))
+        .watch()
+        .map((list) => list.map((r) => r.saleId).toSet());
+  }
+
+  /// Watch returns for a specific sale
+  Stream<List<SaleReturn>> watchSaleReturnsBySale(int saleId) {
+    return (select(saleReturns)
+          ..where((r) => r.saleId.equals(saleId))
+          ..orderBy([(r) => OrderingTerm.desc(r.returnDate)]))
+        .watch();
   }
 }

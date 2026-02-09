@@ -28,6 +28,7 @@ abstract class PurchaseLocalDatasource {
   Future<List<PurchaseReturnEntity>> getPurchaseReturns(int purchaseId);
   Future<PurchaseReturnEntity?> getPurchaseReturnById(int id);
   Stream<List<PurchaseReturnItemEntity>> watchPurchaseReturnItems(int returnId);
+  Stream<List<PurchaseReturnItemEntity>> watchPurchaseReturnItemsWithDetails(int returnId);
   Future<String> generateReturnNumber();
   Future<int> createPurchaseReturn(db.PurchaseReturnsCompanion returnData, List<db.PurchaseReturnItemsCompanion> items);
   Future<void> updatePurchaseReturnTotals(int returnId);
@@ -190,6 +191,13 @@ class PurchaseLocalDatasourceImpl implements PurchaseLocalDatasource {
     return _dao
         .watchPurchaseReturnItems(returnId)
         .map((items) => items.map(PurchaseReturnItemModel.fromDrift).toList());
+  }
+
+  @override
+  Stream<List<PurchaseReturnItemEntity>> watchPurchaseReturnItemsWithDetails(int returnId) {
+    return _dao
+        .watchPurchaseReturnItemsWithDetails(returnId)
+        .map((items) => items.map(PurchaseReturnItemModel.fromDriftWithDetails).toList());
   }
 
   @override

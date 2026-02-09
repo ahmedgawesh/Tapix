@@ -124,9 +124,9 @@ class _CustomerHubContentState extends State<_CustomerHubContent> {
     final activeCount = data.customers.length;
     final totalBalanceCents = data.customers.fold<int>(
       0,
-      (sum, c) => sum + c.balanceCents.toDouble().round(),
+      (sum, c) => sum + c.balanceCents.toBigInt().toInt(),
     );
-    final withCreditCount = data.customers.where((c) => c.balanceCents.toDouble() > 0).length;
+    final withCreditCount = data.customers.where((c) => c.balanceCents.toBigInt().toInt() > 0).length;
 
     // Calculate segment counts
     final segmentCounts = <String, int>{
@@ -582,7 +582,7 @@ class _CustomerListTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final currencyService = sl<CurrencyService>();
-    final balanceCents = customer.balanceCents.toDouble().round();
+    final balanceCents = customer.balanceCents.toBigInt().toInt();
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),

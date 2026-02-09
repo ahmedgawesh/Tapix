@@ -51,11 +51,13 @@ class SaleReturnFormState extends Equatable {
   final List<SaleReturnLineItem> returnItems;
   final String? reason;
   final String dispositionType;
+  final String refundMethod;
   final int currencyId;
   final bool isLoading;
   final bool isSubmitting;
   final String? error;
   final bool isSuccess;
+  final Map<int, int> alreadyReturnedQty;
 
   const SaleReturnFormState({
     this.saleId,
@@ -64,12 +66,21 @@ class SaleReturnFormState extends Equatable {
     this.returnItems = const [],
     this.reason,
     this.dispositionType = 'restock',
+    this.refundMethod = 'cash',
     this.currencyId = 1,
     this.isLoading = false,
     this.isSubmitting = false,
     this.error,
     this.isSuccess = false,
+    this.alreadyReturnedQty = const {},
   });
+
+  bool get hasUnsavedChanges => returnItems.isNotEmpty;
+
+  int maxReturnableQty(int itemId, int originalQty) {
+    final alreadyReturned = alreadyReturnedQty[itemId] ?? 0;
+    return (originalQty - alreadyReturned).clamp(0, originalQty);
+  }
 
   Decimal get totalRefundCents => returnItems.fold(
         Decimal.zero,
@@ -86,11 +97,13 @@ class SaleReturnFormState extends Equatable {
     List<SaleReturnLineItem>? returnItems,
     String? reason,
     String? dispositionType,
+    String? refundMethod,
     int? currencyId,
     bool? isLoading,
     bool? isSubmitting,
     String? error,
     bool? isSuccess,
+    Map<int, int>? alreadyReturnedQty,
   }) {
     return SaleReturnFormState(
       saleId: saleId ?? this.saleId,
@@ -99,18 +112,21 @@ class SaleReturnFormState extends Equatable {
       returnItems: returnItems ?? this.returnItems,
       reason: reason ?? this.reason,
       dispositionType: dispositionType ?? this.dispositionType,
+      refundMethod: refundMethod ?? this.refundMethod,
       currencyId: currencyId ?? this.currencyId,
       isLoading: isLoading ?? this.isLoading,
       isSubmitting: isSubmitting ?? this.isSubmitting,
       error: error,
       isSuccess: isSuccess ?? this.isSuccess,
+      alreadyReturnedQty: alreadyReturnedQty ?? this.alreadyReturnedQty,
     );
   }
 
   @override
   List<Object?> get props => [
         saleId, sale, availableItems, returnItems,
-        reason, dispositionType, currencyId, isLoading, isSubmitting, error, isSuccess,
+        reason, dispositionType, refundMethod, currencyId,
+        isLoading, isSubmitting, error, isSuccess, alreadyReturnedQty,
       ];
 }
 
@@ -173,6 +189,14 @@ class SaleReturnDispositionChanged extends SaleReturnFormEvent {
   List<Object?> get props => [dispositionType];
 }
 
+class SaleReturnRefundMethodChanged extends SaleReturnFormEvent {
+  final String refundMethod;
+  const SaleReturnRefundMethodChanged(this.refundMethod);
+
+  @override
+  List<Object?> get props => [refundMethod];
+}
+
 class SaleReturnFormSubmitted extends SaleReturnFormEvent {
   const SaleReturnFormSubmitted();
 }
@@ -191,6 +215,7 @@ class SaleReturnFormBloc
     on<SaleReturnItemReasonChanged>(_onItemReasonChanged);
     on<SaleReturnReasonChanged>(_onReasonChanged);
     on<SaleReturnDispositionChanged>(_onDispositionChanged);
+    on<SaleReturnRefundMethodChanged>(_onRefundMethodChanged);
     on<SaleReturnFormSubmitted>(_onSubmitted);
   }
 
@@ -204,11 +229,19 @@ class SaleReturnFormBloc
       final sale = await _repository.getSaleById(event.saleId);
       final items = await _repository.getSaleItems(event.saleId);
 
+      // Fetch already-returned quantities for each item
+      final alreadyReturned = <int, int>{};
+      for (final item in items) {
+        final qty = await _repository.getReturnedQuantity(item.id);
+        if (qty > 0) alreadyReturned[item.id] = qty;
+      }
+
       emit(state.copyWith(
         sale: sale,
         availableItems: items,
         currencyId: sale?.currencyId ?? 1,
         isLoading: false,
+        alreadyReturnedQty: alreadyReturned,
       ));
     } catch (e) {
       emit(state.copyWith(isLoading: false, error: e.toString()));
@@ -229,10 +262,15 @@ class SaleReturnFormBloc
           .toList();
       emit(state.copyWith(returnItems: updated));
     } else {
+      final maxQty = state.maxReturnableQty(event.item.id, event.item.quantity);
+      if (maxQty <= 0) return; // fully returned already
+      final origQty = event.item.quantity;
+      final totalInt = event.item.totalCents.toBigInt().toInt();
+      final refundInt = origQty > 0 ? (totalInt * maxQty) ~/ origQty : 0;
       final newItem = SaleReturnLineItem(
         originalItem: event.item,
-        returnQuantity: event.item.quantity,
-        refundCents: event.item.totalCents,
+        returnQuantity: maxQty,
+        refundCents: Decimal.fromInt(refundInt),
       );
       emit(state.copyWith(returnItems: [...state.returnItems, newItem]));
     }
@@ -244,7 +282,8 @@ class SaleReturnFormBloc
   ) {
     final updated = state.returnItems.map((item) {
       if (item.originalItem.id == event.saleItemId) {
-        final qty = event.quantity.clamp(1, item.originalItem.quantity);
+        final maxQty = state.maxReturnableQty(item.originalItem.id, item.originalItem.quantity);
+        final qty = event.quantity.clamp(1, maxQty > 0 ? maxQty : 1);
         final origQty = item.originalItem.quantity;
         final totalInt = item.originalItem.totalCents.toBigInt().toInt();
         final refundInt = origQty > 0 ? (totalInt * qty) ~/ origQty : 0;
@@ -285,6 +324,13 @@ class SaleReturnFormBloc
     emit(state.copyWith(dispositionType: event.dispositionType));
   }
 
+  void _onRefundMethodChanged(
+    SaleReturnRefundMethodChanged event,
+    Emitter<SaleReturnFormState> emit,
+  ) {
+    emit(state.copyWith(refundMethod: event.refundMethod));
+  }
+
   Future<void> _onSubmitted(
     SaleReturnFormSubmitted event,
     Emitter<SaleReturnFormState> emit,
@@ -317,6 +363,7 @@ class SaleReturnFormBloc
         items: items,
         reason: state.reason,
         dispositionType: state.dispositionType,
+        refundMethod: state.refundMethod,
         returnDate: DateTime.now(),
       );
 

@@ -46,6 +46,9 @@ abstract class SaleRepository {
   /// Watch all sales (with customer name resolved)
   Stream<List<SaleEntity>> watchAllSales();
 
+  /// Watch sales for a specific customer
+  Stream<List<SaleEntity>> watchCustomerSales(int customerId);
+
   /// Get sale by ID
   Future<SaleEntity?> getSaleById(int id);
 
@@ -64,6 +67,7 @@ abstract class SaleRepository {
     required Decimal discountCents,
     required Decimal taxCents,
     required Decimal totalCents,
+    required Decimal paidAmountCents,
     required String paymentMethod,
     required List<SaleItemInput> items,
     String? notes,
@@ -81,6 +85,7 @@ abstract class SaleRepository {
     required Decimal discountCents,
     required Decimal taxCents,
     required Decimal totalCents,
+    required Decimal paidAmountCents,
     required String paymentMethod,
     required List<SaleItemInput> items,
     String? notes,
@@ -102,6 +107,18 @@ abstract class SaleRepository {
   /// Watch all sale returns
   Stream<List<SaleReturnEntity>> watchAllSaleReturns();
 
+  /// Get sale return by ID
+  Future<SaleReturnEntity?> getSaleReturnById(int id);
+
+  /// Watch return items with full product details
+  Stream<List<SaleReturnItemEntity>> watchSaleReturnItemsWithDetails(int returnId);
+
+  /// Watch returns for a specific sale
+  Stream<List<SaleReturnEntity>> watchSaleReturnsBySale(int saleId);
+
+  /// Watch set of sale IDs that have at least one non-voided return
+  Stream<Set<int>> watchSaleIdsWithReturns();
+
   /// Create a sale return
   Future<int> createSaleReturn({
     required int saleId,
@@ -110,6 +127,7 @@ abstract class SaleRepository {
     required List<SaleReturnItemInput> items,
     String? reason,
     String? dispositionType,
+    String? refundMethod,
     DateTime? returnDate,
   });
 
@@ -142,6 +160,9 @@ abstract class SaleRepository {
   Future<int> getReturnedQuantity(int saleItemId);
 
   // ==================== DASHBOARD ====================
+
+  /// Generate next invoice number for display
+  Future<String> generateInvoiceNumber();
 
   /// Watch dashboard stats
   Stream<SaleDashboardStats> watchDashboardStats();

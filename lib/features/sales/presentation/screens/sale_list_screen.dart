@@ -354,6 +354,7 @@ class _SaleHubViewState extends State<_SaleHubView> {
                   return _SaleTile(
                     sale: sale,
                     currencyService: currencyService,
+                    hasReturn: data.saleIdsWithReturns.contains(sale.id),
                     onTap: () => context.push('/sales/${sale.id}'),
                   );
                 },
@@ -752,11 +753,13 @@ class _FilterChip extends StatelessWidget {
 class _SaleTile extends StatelessWidget {
   final SaleEntity sale;
   final CurrencyService currencyService;
+  final bool hasReturn;
   final VoidCallback onTap;
 
   const _SaleTile({
     required this.sale,
     required this.currencyService,
+    this.hasReturn = false,
     required this.onTap,
   });
 
@@ -939,6 +942,37 @@ class _SaleTile extends StatelessWidget {
                                   sale.paymentMethod,
                                   style: theme.textTheme.bodySmall
                                       ?.copyWith(color: cs.onSurfaceVariant),
+                                ),
+                              ],
+                              if (hasReturn) ...[
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: cs.error.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(
+                                      color: cs.error.withValues(alpha: 0.3),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(LucideIcons.undo2,
+                                          size: 10, color: cs.error),
+                                      const SizedBox(width: 3),
+                                      Text(
+                                        'sales.has_returns'.tr(),
+                                        style: theme.textTheme.labelSmall
+                                            ?.copyWith(
+                                          color: cs.error,
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 9,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ],
                               const Spacer(),

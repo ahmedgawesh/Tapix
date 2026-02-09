@@ -23,6 +23,8 @@ mixin _$SaleDaoMixin on DatabaseAccessor<AppDatabase> {
   $SaleReturnsTable get saleReturns => attachedDatabase.saleReturns;
   $SaleReturnItemsTable get saleReturnItems => attachedDatabase.saleReturnItems;
   $SalePaymentsTable get salePayments => attachedDatabase.salePayments;
+  $CustomerTransactionsTable get customerTransactions =>
+      attachedDatabase.customerTransactions;
   SaleDaoManager get managers => SaleDaoManager(this);
 }
 
@@ -74,4 +76,9 @@ class SaleDaoManager {
       );
   $$SalePaymentsTableTableManager get salePayments =>
       $$SalePaymentsTableTableManager(_db.attachedDatabase, _db.salePayments);
+  $$CustomerTransactionsTableTableManager get customerTransactions =>
+      $$CustomerTransactionsTableTableManager(
+        _db.attachedDatabase,
+        _db.customerTransactions,
+      );
 }

@@ -23,6 +23,7 @@ import '../../../products/presentation/bloc/products_bloc.dart';
 import '../../../products/presentation/bloc/product_variants_bloc.dart';
 import '../../../products/presentation/bloc/variant_previews_bloc.dart';
 import '../../../suppliers/domain/repositories/supplier_repository.dart';
+import '../../../barcode/data/models/invoice_print_data.dart';
 import '../../domain/repositories/purchase_repository.dart';
 import '../bloc/purchase_form_bloc.dart';
 import '../services/purchase_pdf_service.dart';
@@ -47,6 +48,35 @@ class PurchaseFormScreen extends StatelessWidget {
 
 class _PurchaseFormView extends StatelessWidget {
   const _PurchaseFormView();
+
+  InvoicePrintData _buildInvoicePrintDataFromPurchaseFormState(PurchaseFormState state) {
+    final lines = state.items
+        .where((i) => (i.variant?.barcode ?? i.product.barcode ?? '').trim().isNotEmpty)
+        .map((i) {
+          final barcode = (i.variant?.barcode ?? i.product.barcode)!.trim();
+          final skuValue = (i.variant?.sku ?? i.product.sku ?? '').trim();
+          return InvoiceLinePrintData(
+            variantId: i.variant?.id ?? i.product.id,
+            quantity: i.quantity,
+            productName: i.product.name,
+            colorName: i.colorName,
+            sizeName: i.sizeName,
+            barcode: barcode,
+            sku: skuValue.isEmpty ? '${i.variant?.id ?? i.product.id}' : skuValue,
+            unitPriceCents: i.unitCostCents.toBigInt().toInt(),
+            isActive: true,
+          );
+        })
+        .toList();
+
+    return InvoicePrintData(
+      lines: lines,
+      invoiceType: 'purchase',
+      invoiceId: state.purchaseId ?? 0,
+      invoiceNumber: state.purchaseNumber ?? 'draft',
+      invoiceDate: state.purchaseDate,
+    );
+  }
 
   Future<bool> _onWillPop(BuildContext context) async {
     final state = context.read<PurchaseFormBloc>().state;
@@ -94,9 +124,10 @@ class _PurchaseFormView extends StatelessWidget {
           _showSaveConfirmationDialog(context, state);
         }
         if (state.error != null) {
+          final key = state.error!;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(state.error!),
+              content: Text(key.tr() == key ? key : key.tr()),
               backgroundColor: colorScheme.error,
               behavior: SnackBarBehavior.floating,
             ),
@@ -725,11 +756,37 @@ class _PurchaseFormView extends StatelessWidget {
               },
             ),
             TextButton.icon(
+              icon: const Icon(LucideIcons.share2, size: 18),
+              label: Text('common.share'.tr()),
+              onPressed: () async {
+                Navigator.pop(ctx);
+                try {
+                  await PurchasePdfService.shareFromFormState(
+                    context: context,
+                    state: state,
+                  );
+                } catch (_) {
+                  // Keep silent; sharing is best-effort.
+                }
+                if (context.mounted) context.pop();
+              },
+            ),
+            TextButton.icon(
               icon: const Icon(LucideIcons.scan, size: 18),
               label: Text('purchases.generate_barcode'.tr()),
               onPressed: () {
                 Navigator.pop(ctx);
-                context.push('/products/barcode-design');
+                final invoiceData = _buildInvoicePrintDataFromPurchaseFormState(state);
+                final products = state.items
+                    .map((i) => i.product)
+                    .toList();
+                context.push(
+                  '/products/barcode-design',
+                  extra: {
+                    'products': products,
+                    'invoiceData': invoiceData,
+                  },
+                );
               },
             ),
             FilledButton.icon(
@@ -2446,6 +2503,7 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
   late final TextEditingController _discountPercentCtrl;
   late final TextEditingController _discountFixedCtrl;
   bool _updatingDiscount = false;
+  bool _hasHydratedFromBloc = false;
 
   @override
   void initState() {
@@ -2472,6 +2530,38 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
 
     _discountPercentCtrl.addListener(_syncDiscountFromPercent);
     _discountFixedCtrl.addListener(_syncDiscountFromFixed);
+  }
+
+  void _hydrateControllersIfNeeded(PurchaseFormState state) {
+    // If user is currently typing, don't overwrite.
+    final focused = FocusManager.instance.primaryFocus;
+    final isEditingText = focused?.context?.widget is EditableText;
+    if (isEditingText) return;
+
+    // Initial hydration for edit flow: once bloc loads async data.
+    if (!_hasHydratedFromBloc) {
+      final taxText = state.taxRatePercent > Decimal.zero ? state.taxRatePercent.toString() : '';
+      final paidText = state.paidAmountCents > Decimal.zero
+          ? (state.paidAmountCents.toBigInt().toInt() / 100).toStringAsFixed(2)
+          : '';
+      final notesText = state.notes ?? '';
+
+      if (_taxCtrl.text != taxText) _taxCtrl.text = taxText;
+      if (_paidCtrl.text != paidText) _paidCtrl.text = paidText;
+      if (_notesCtrl.text != notesText) _notesCtrl.text = notesText;
+
+      final discCents = state.invoiceDiscountCents.toBigInt().toInt();
+      final subtotalCents = state.subtotalCents.toBigInt().toInt();
+      final fixedText = discCents > 0 ? (discCents / 100).toStringAsFixed(2) : '';
+      final pctText = discCents > 0 && subtotalCents > 0
+          ? ((discCents / subtotalCents) * 100).toStringAsFixed(2)
+          : '';
+
+      if (_discountFixedCtrl.text != fixedText) _discountFixedCtrl.text = fixedText;
+      if (_discountPercentCtrl.text != pctText) _discountPercentCtrl.text = pctText;
+
+      _hasHydratedFromBloc = true;
+    }
   }
 
   void _syncDiscountFromPercent() {
@@ -2530,6 +2620,7 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
 
     return BlocBuilder<PurchaseFormBloc, PurchaseFormState>(
       builder: (context, state) {
+        _hydrateControllersIfNeeded(state);
         return DraggableScrollableSheet(
           initialChildSize: 0.85,
           minChildSize: 0.5,
@@ -2669,6 +2760,76 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                         ),
                       ),
                       const SizedBox(height: 16),
+                      // ── Cheque due date (only for cheque) ──
+                      if (state.paymentMethod == PurchasePaymentMethod.cheque) ...[
+                        _buildCheckoutSection(
+                          theme: theme,
+                          cs: cs,
+                          icon: LucideIcons.calendar,
+                          title: 'purchases.cheque_due_date'.tr(),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(10),
+                            onTap: () async {
+                              final picked = await showDatePicker(
+                                context: context,
+                                initialDate: state.dueDate ?? DateTime.now().add(const Duration(days: 30)),
+                                firstDate: DateTime.now(),
+                                lastDate: DateTime.now().add(const Duration(days: 365)),
+                              );
+                              if (picked != null && context.mounted) {
+                                context.read<PurchaseFormBloc>().add(PurchaseDueDateChanged(picked));
+                              }
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                              decoration: BoxDecoration(
+                                border: Border.all(color: cs.outlineVariant),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Row(children: [
+                                Icon(LucideIcons.calendar, size: 18, color: cs.primary),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    state.dueDate != null
+                                      ? '${state.dueDate!.year}-${state.dueDate!.month.toString().padLeft(2, '0')}-${state.dueDate!.day.toString().padLeft(2, '0')}'
+                                      : 'purchases.select_due_date'.tr(),
+                                    style: theme.textTheme.bodyLarge?.copyWith(
+                                      color: state.dueDate != null ? null : cs.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ),
+                                Icon(LucideIcons.chevronDown, size: 18, color: cs.onSurfaceVariant),
+                              ]),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+                      // ── Credit/Cheque info message ──
+                      if (state.paymentMethod == PurchasePaymentMethod.credit ||
+                          state.paymentMethod == PurchasePaymentMethod.cheque ||
+                          state.paymentMethod == PurchasePaymentMethod.purchaseOrder) ...[
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: cs.tertiaryContainer.withValues(alpha: 0.3),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: cs.tertiary.withValues(alpha: 0.3)),
+                          ),
+                          child: Row(children: [
+                            Icon(LucideIcons.info, size: 16, color: cs.tertiary),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'purchases.credit_balance_info'.tr(),
+                                style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                              ),
+                            ),
+                          ]),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
                       // ── Tax Rate ──
                       _buildCheckoutSection(
                         theme: theme,
@@ -2735,30 +2896,67 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                           ),
                           const SizedBox(height: 16),
                         ],
-                      // ── Paid Amount ──
-                      _buildCheckoutSection(
-                        theme: theme,
-                        cs: cs,
-                        icon: LucideIcons.banknote,
-                        title: 'purchases.paid_amount'.tr(),
-                        child: TextField(
-                          controller: _paidCtrl,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
-                          decoration: const InputDecoration(
-                            border: OutlineInputBorder(),
-                            hintText: '0.00',
-                            isDense: true,
+                      // ── Paid Amount (only for cash) ──
+                      if (state.paymentMethod == PurchasePaymentMethod.cash) ...[
+                        _buildCheckoutSection(
+                          theme: theme,
+                          cs: cs,
+                          icon: LucideIcons.banknote,
+                          title: 'purchases.paid_amount'.tr(),
+                          child: TextField(
+                            controller: _paidCtrl,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
+                            decoration: InputDecoration(
+                              border: const OutlineInputBorder(),
+                              hintText: (state.totalCents.toBigInt().toInt() / 100).toStringAsFixed(2),
+                              isDense: true,
+                            ),
+                            onChanged: (v) {
+                              final val = double.tryParse(v) ?? 0;
+                              context.read<PurchaseFormBloc>().add(
+                                    PurchasePaidAmountChanged(Decimal.fromInt((val * 100).round())),
+                                  );
+                            },
                           ),
-                          onChanged: (v) {
-                            final val = double.tryParse(v) ?? 0;
-                            context.read<PurchaseFormBloc>().add(
-                                  PurchasePaidAmountChanged(Decimal.fromInt((val * 100).round())),
-                                );
-                          },
                         ),
-                      ),
-                      const SizedBox(height: 16),
+                        const SizedBox(height: 12),
+                        // ── Remaining / Change display ──
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: state.changeCents > Decimal.zero
+                              ? Colors.green.withValues(alpha: 0.08)
+                              : state.remainingCents > Decimal.zero
+                                ? cs.errorContainer.withValues(alpha: 0.3)
+                                : cs.primaryContainer.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: state.changeCents > Decimal.zero
+                              ? Colors.green.withValues(alpha: 0.3)
+                              : state.remainingCents > Decimal.zero
+                                ? cs.error.withValues(alpha: 0.2)
+                                : cs.primary.withValues(alpha: 0.2)),
+                          ),
+                          child: Column(children: [
+                            if (state.remainingCents > Decimal.zero)
+                              _checkoutRow(theme, 'purchases.remaining'.tr(),
+                                widget.currencyService.format(state.remainingCents.toBigInt().toInt()),
+                                isBold: true, valueColor: cs.error),
+                            if (state.changeCents > Decimal.zero)
+                              _checkoutRow(theme, 'purchases.change'.tr(),
+                                widget.currencyService.format(state.changeCents.toBigInt().toInt()),
+                                isBold: true, valueColor: Colors.green),
+                            if (state.remainingCents == Decimal.zero && state.changeCents == Decimal.zero)
+                              Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                                Icon(LucideIcons.checkCircle, size: 16, color: cs.primary),
+                                const SizedBox(width: 6),
+                                Text('purchases.fully_paid'.tr(), style: theme.textTheme.titleSmall?.copyWith(
+                                  color: cs.primary, fontWeight: FontWeight.w600)),
+                              ]),
+                          ]),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
                       // ── Notes ──
                       _buildCheckoutSection(
                         theme: theme,
@@ -2806,17 +3004,6 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                             _checkoutRow(theme, 'purchases.total'.tr(),
                                 widget.currencyService.format(state.totalCents.toBigInt().toInt()),
                                 isBold: true, valueColor: cs.primary),
-                            if (state.paidAmountCents > Decimal.zero) ...[
-                              const SizedBox(height: 8),
-                              _checkoutRow(theme, 'purchases.paid_amount'.tr(),
-                                  widget.currencyService.format(state.paidAmountCents.toBigInt().toInt()),
-                                  valueColor: Colors.green),
-                              const SizedBox(height: 4),
-                              _checkoutRow(theme, 'purchases.remaining'.tr(),
-                                  widget.currencyService.format(state.remainingCents.toBigInt().toInt()),
-                                  isBold: true,
-                                  valueColor: state.remainingCents > Decimal.zero ? cs.error : Colors.green),
-                            ],
                           ],
                         ),
                       ),
@@ -2850,16 +3037,24 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                         const SizedBox(width: 12),
                         Expanded(
                           flex: 2,
-                          child: FilledButton.icon(
-                            onPressed: state.supplierId == null
-                                ? null
-                                : widget.onConfirm,
-                            icon: const Icon(LucideIcons.check, size: 18),
-                            label: Text('purchases.confirm_save'.tr()),
-                            style: FilledButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                            ),
-                          ),
+                          child: Builder(builder: (ctx) {
+                            final cashInsufficient = state.paymentMethod == PurchasePaymentMethod.cash &&
+                                state.paidAmountCents < state.totalCents;
+                            final chequeNoDueDate = state.paymentMethod == PurchasePaymentMethod.cheque &&
+                                state.dueDate == null;
+                            final canConfirm = state.supplierId != null &&
+                                !state.isSubmitting && !cashInsufficient && !chequeNoDueDate;
+                            return FilledButton.icon(
+                              onPressed: canConfirm ? widget.onConfirm : null,
+                              icon: state.isSubmitting
+                                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                                : const Icon(LucideIcons.check, size: 18),
+                              label: Text('purchases.confirm_save'.tr()),
+                              style: FilledButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                              ),
+                            );
+                          }),
                         ),
                       ],
                     ),
@@ -2990,10 +3185,10 @@ class _SupplierBalanceInfo extends StatelessWidget {
           return const SizedBox.shrink();
         }
         final supplier = snapshot.data!;
-        final currentBalanceCents = supplier.balanceCents.toDouble().round();
-        // After this invoice: balance increases by unpaid portion
-        final unpaidCents = invoiceTotalCents - paidAmountCents;
-        final projectedBalanceCents = currentBalanceCents + (unpaidCents > 0 ? unpaidCents : 0);
+        final currentBalanceCents = supplier.balanceCents.toBigInt().toInt();
+        // After this invoice: balance changes by (invoice total - paid now).
+        // This supports overpayment (paid > total) which should reduce payable or create credit.
+        final projectedBalanceCents = currentBalanceCents + invoiceTotalCents - paidAmountCents;
 
         final isCurrentPayable = currentBalanceCents > 0;
         final isProjectedPayable = projectedBalanceCents > 0;
@@ -3135,9 +3330,9 @@ class _SupplierBalanceInfo extends StatelessWidget {
               icon: LucideIcons.fileText,
               label: 'purchases.this_invoice'.tr(),
               amount: '+ ${currencyService.format(invoiceTotalCents)}',
-              amountColor: cs.onSurface,
+              amountColor: cs.error,
               subtitle: paidAmountCents > 0
-                  ? '${'purchases.paid_now'.tr()}: ${currencyService.format(paidAmountCents)}'
+                  ? '${'purchases.paid_now'.tr()}: - ${currencyService.format(paidAmountCents)}'
                   : null,
             ),
             Divider(height: 24, color: cs.outlineVariant.withValues(alpha: 0.5)),

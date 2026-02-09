@@ -136,21 +136,21 @@ development_status:
   epic-6-retrospective: optional
 
   # EPIC-07: Finance & Accounting
-  epic-7: backlog
-  7-1-expenses-management: backlog
-  7-2-expenses-screen: backlog
-  7-3-expense-form-screen: backlog
-  7-4-expense-categories-screen: backlog
-  7-5-journal-entries-general-ledger: backlog
-  7-6-journal-entries-list-screen: backlog
-  7-7-journal-entry-form-screen: backlog
-  7-8-journal-entry-detail-screen: backlog
-  epic-7-retrospective: optional
+  epic-7: done
+  7-1-expenses-management: done
+  7-2-expenses-screen: done
+  7-3-expense-form-screen: done
+  7-4-expense-categories-screen: done
+  7-5-journal-entries-general-ledger: done
+  7-6-journal-entries-list-screen: done
+  7-7-journal-entry-form-screen: done
+  7-8-journal-entry-detail-screen: done
+  epic-7-retrospective: done
 
   # EPIC-08: Reporting
-  epic-8: backlog
-  8-1-financial-reports: backlog
-  8-2-inventory-reports: backlog
+  epic-8: in-progress
+  8-1-financial-reports: done
+  8-2-inventory-reports: ready-for-dev
   8-3-customer-relationship-reports: backlog
   8-4-supplier-performance-reports: backlog
   8-5-salespeople-commission-reports: backlog
@@ -176,16 +176,16 @@ development_status:
   8-25-dead-stock-reports: backlog
   8-26-category-stocktake-reports: backlog
   8-27-product-movement-reports: backlog
-  8-28-financial-statements-reports: backlog
-  8-29-profit-loss-reports: backlog
-  8-30-balance-sheet-reports: backlog
-  8-31-trial-balance-reports: backlog
-  8-32-general-ledger-reports: backlog
+  8-28-financial-statements-reports: done
+  8-29-profit-loss-reports: done
+  8-30-balance-sheet-reports: done
+  8-31-trial-balance-reports: done
+  8-32-general-ledger-reports: done
   8-33-cash-flow-reports: backlog
   8-34-tax-reports: backlog
   8-35-sales-summary-reports: backlog
   8-36-void-logs-reports: backlog
-  8-37-reconciliation-diagnostics-reports: backlog
+  8-37-reconciliation-diagnostics-reports: done
   epic-8-retrospective: optional
 
   # EPIC-09: Settings & Admin

@@ -94,6 +94,21 @@ import '../../features/employees/presentation/bloc/attendance_bloc.dart';
 import '../../features/employees/presentation/bloc/leave_requests_bloc.dart';
 import '../../features/employees/presentation/bloc/payroll_bloc.dart';
 import '../../features/employees/presentation/bloc/roles_bloc.dart';
+import '../database/daos/accounting_dao.dart';
+import '../../features/expenses/domain/repositories/expense_repository.dart';
+import '../../features/expenses/data/datasources/expense_local_datasource.dart';
+import '../../features/expenses/data/repositories/expense_repository_impl.dart';
+import '../../features/expenses/presentation/bloc/expenses_bloc.dart';
+import '../../features/expenses/presentation/bloc/expense_form_bloc.dart';
+import '../../features/expenses/presentation/bloc/expense_categories_bloc.dart';
+import '../../features/accounting/domain/repositories/journal_repository.dart';
+import '../../features/accounting/data/datasources/journal_local_datasource.dart';
+import '../../features/accounting/data/repositories/journal_repository_impl.dart';
+import '../../features/accounting/presentation/bloc/accounts_bloc.dart';
+import '../../features/accounting/presentation/bloc/journal_entries_bloc.dart';
+import '../../features/accounting/presentation/bloc/journal_entry_form_bloc.dart';
+import '../../features/accounting/presentation/bloc/accounting_health_bloc.dart';
+import '../../features/reports/presentation/bloc/reports_bloc.dart';
 
 final sl = GetIt.instance;
 
@@ -118,6 +133,7 @@ Future<void> init() async {
   sl.registerLazySingleton(() => CustomerDao(sl()));
   sl.registerLazySingleton(() => EmployeeDao(sl()));
   sl.registerLazySingleton(() => SupplierDao(sl()));
+  sl.registerLazySingleton(() => AccountingDao(sl()));
 
   // Auth Services
   sl.registerLazySingleton(() => PasswordService());
@@ -297,6 +313,34 @@ Future<void> init() async {
   sl.registerFactory(() => SuppliersBloc(sl<SupplierRepository>()));
   sl.registerFactory(() => SupplierFormBloc(sl<SupplierRepository>()));
   sl.registerFactory(() => SupplierProfileBloc(sl<SupplierRepository>()));
+
+  // Expenses
+  sl.registerLazySingleton<ExpenseLocalDatasource>(
+    () => ExpenseLocalDatasourceImpl(sl<AccountingDao>()),
+  );
+  sl.registerLazySingleton<ExpenseRepository>(
+    () => ExpenseRepositoryImpl(sl<ExpenseLocalDatasource>()),
+  );
+
+  // Expenses Blocs
+  sl.registerFactory(() => ExpensesBloc(sl<ExpenseRepository>()));
+  sl.registerFactory(() => ExpenseFormBloc(sl<ExpenseRepository>()));
+  sl.registerFactory(() => ExpenseCategoriesBloc(sl<ExpenseRepository>()));
+
+  // Accounting / Journal Entries
+  sl.registerLazySingleton<JournalLocalDatasource>(
+    () => JournalLocalDatasourceImpl(sl<AccountingDao>()),
+  );
+  sl.registerLazySingleton<JournalRepository>(
+    () => JournalRepositoryImpl(sl<JournalLocalDatasource>()),
+  );
+
+  // Accounting Blocs
+  sl.registerFactory(() => AccountsBloc(sl<JournalRepository>()));
+  sl.registerFactory(() => JournalEntriesBloc(sl<JournalRepository>()));
+  sl.registerFactory(() => JournalEntryFormBloc(sl<JournalRepository>()));
+  sl.registerFactory(() => AccountingHealthBloc(sl<JournalRepository>()));
+  sl.registerFactory(() => ReportsBloc(sl<JournalRepository>()));
 
   // Barcode Services
   sl.registerLazySingleton(() => BarcodeValidationService());

@@ -98,6 +98,11 @@ class PurchaseFormState extends Equatable {
     return r < Decimal.zero ? Decimal.zero : r;
   }
 
+  Decimal get changeCents {
+    final change = paidAmountCents - totalCents;
+    return change > Decimal.zero ? change : Decimal.zero;
+  }
+
   Decimal get totalCents {
     final net = subtotalCents - totalDiscountCents + taxCents;
     return net < Decimal.zero ? Decimal.zero : net;
@@ -458,6 +463,23 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
     return 'line_$_lineCounter';
   }
 
+  PurchasePaymentMethod _parsePaymentMethod(String? raw) {
+    switch (raw) {
+      case 'cash':
+        return PurchasePaymentMethod.cash;
+      case 'credit':
+        return PurchasePaymentMethod.credit;
+      case 'card':
+        return PurchasePaymentMethod.card;
+      case 'cheque':
+        return PurchasePaymentMethod.cheque;
+      case 'purchaseOrder':
+        return PurchasePaymentMethod.purchaseOrder;
+      default:
+        return PurchasePaymentMethod.cash;
+    }
+  }
+
   Future<void> _onInitialized(
     PurchaseFormInitialized event,
     Emitter<PurchaseFormState> emit,
@@ -564,6 +586,29 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
         );
       }).toList();
 
+      final itemDiscountCents = mappedItems.fold<Decimal>(
+        Decimal.zero,
+        (sum, item) => sum + item.discountCents,
+      );
+      final hasAnyItemDiscount = itemDiscountCents > Decimal.zero;
+      final hasInvoiceDiscount = purchase.discountCents > Decimal.zero;
+      final resolvedDiscountMode = (!hasAnyItemDiscount && hasInvoiceDiscount)
+          ? DiscountMode.invoice
+          : DiscountMode.perItem;
+      final resolvedInvoiceDiscountCents =
+          resolvedDiscountMode == DiscountMode.invoice ? purchase.discountCents : Decimal.zero;
+
+      final hasAnyItemTax = mappedItems.any((i) => i.taxCents > Decimal.zero);
+      Decimal resolvedTaxRatePercent = Decimal.zero;
+      if (!hasAnyItemTax && purchase.taxCents > Decimal.zero) {
+        final taxable = purchase.subtotalCents - purchase.discountCents;
+        if (taxable > Decimal.zero) {
+          final rawPct = (purchase.taxCents * Decimal.fromInt(100)) / taxable;
+          final rawPctDouble = double.tryParse(rawPct.toString()) ?? 0;
+          resolvedTaxRatePercent = Decimal.parse(rawPctDouble.toStringAsFixed(2));
+        }
+      }
+
       emit(state.copyWith(
         purchaseId: purchase.id,
         purchaseNumber: purchase.purchaseNumber,
@@ -571,10 +616,15 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
         supplierName: purchase.supplierName,
         currencyId: purchase.currencyId,
         purchaseDate: purchase.purchaseDate,
+        dueDate: purchase.dueDate,
+        supplierInvoiceRef: purchase.supplierInvoiceRef,
         notes: purchase.notes,
         items: mappedItems,
-        discountMode: DiscountMode.perItem,
-        invoiceDiscountCents: Decimal.zero,
+        discountMode: resolvedDiscountMode,
+        invoiceDiscountCents: resolvedInvoiceDiscountCents,
+        paymentMethod: _parsePaymentMethod(purchase.paymentMethod),
+        paidAmountCents: purchase.paidAmountCents,
+        taxRatePercent: resolvedTaxRatePercent,
       ));
     } catch (e) {
       emit(state.copyWith(error: e.toString()));
@@ -708,6 +758,13 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
       return;
     }
 
+    // Cash validation: paid amount must be >= total
+    if (state.paymentMethod == PurchasePaymentMethod.cash &&
+        state.paidAmountCents < state.totalCents) {
+      emit(state.copyWith(error: 'purchases.cash_insufficient'));
+      return;
+    }
+
     emit(state.copyWith(isSubmitting: true, error: null));
 
     try {
@@ -723,6 +780,18 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
             expiryDate: item.expiryDate,
           )).toList();
 
+      // Determine effective paid amount:
+      // - cash: user-entered paid amount
+      // - card: auto-set to total (fully settled)
+      // - credit/cheque/purchaseOrder: 0 (full amount goes to supplier balance)
+      final effectivePaidCents = switch (state.paymentMethod) {
+        PurchasePaymentMethod.cash => state.paidAmountCents,
+        PurchasePaymentMethod.card => state.totalCents,
+        PurchasePaymentMethod.credit => Decimal.zero,
+        PurchasePaymentMethod.cheque => Decimal.zero,
+        PurchasePaymentMethod.purchaseOrder => Decimal.zero,
+      };
+
       if (state.purchaseId == null) {
         final purchaseId = await _repository.createPurchase(
           supplierId: state.supplierId!,
@@ -731,6 +800,7 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
           discountCents: state.totalDiscountCents,
           taxCents: state.taxCents,
           totalCents: state.totalCents,
+          paidAmountCents: effectivePaidCents,
           items: items,
           paymentMethod: state.paymentMethod.name,
           supplierInvoiceRef: state.supplierInvoiceRef,
@@ -754,6 +824,7 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
           discountCents: state.totalDiscountCents,
           taxCents: state.taxCents,
           totalCents: state.totalCents,
+          paidAmountCents: effectivePaidCents,
           items: items,
           paymentMethod: state.paymentMethod.name,
           supplierInvoiceRef: state.supplierInvoiceRef,
@@ -784,7 +855,11 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
     PurchasePaymentMethodChanged event,
     Emitter<PurchaseFormState> emit,
   ) {
-    emit(state.copyWith(paymentMethod: event.method));
+    // Reset paid amount when switching payment methods
+    emit(state.copyWith(
+      paymentMethod: event.method,
+      paidAmountCents: Decimal.zero,
+    ));
   }
 
   void _onTaxRateChanged(

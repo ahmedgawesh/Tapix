@@ -13,12 +13,14 @@ class SalesHubData {
   final SaleDashboardStats stats;
   final String? searchQuery;
   final String? statusFilter;
+  final Set<int> saleIdsWithReturns;
 
   const SalesHubData({
     required this.sales,
     required this.stats,
     this.searchQuery,
     this.statusFilter,
+    this.saleIdsWithReturns = const {},
   });
 
   List<SaleEntity> get filteredSales {
@@ -71,11 +73,17 @@ class SalesBloc extends RealtimeBloc<SalesHubData, SalesEvent> {
 
   List<SaleEntity>? _latestSales;
   SaleDashboardStats? _latestStats;
+  Set<int>? _returnSaleIds;
   StreamSubscription<SaleDashboardStats>? _statsSub;
+  StreamSubscription<Set<int>>? _returnIdsSub;
 
   SalesBloc(this._repository) : super(const RealtimeLoading()) {
     _statsSub = _repository.watchDashboardStats().listen((stats) {
       _latestStats = stats;
+      _emitCombined();
+    });
+    _returnIdsSub = _repository.watchSaleIdsWithReturns().listen((ids) {
+      _returnSaleIds = ids;
       _emitCombined();
     });
   }
@@ -101,6 +109,7 @@ class SalesBloc extends RealtimeBloc<SalesHubData, SalesEvent> {
         ),
         searchQuery: _searchQuery,
         statusFilter: _statusFilter,
+        saleIdsWithReturns: _returnSaleIds ?? const {},
       );
     });
   }
@@ -113,6 +122,7 @@ class SalesBloc extends RealtimeBloc<SalesHubData, SalesEvent> {
         stats: _latestStats!,
         searchQuery: _searchQuery,
         statusFilter: _statusFilter,
+        saleIdsWithReturns: _returnSaleIds ?? const {},
       )));
     }
   }
@@ -129,6 +139,7 @@ class SalesBloc extends RealtimeBloc<SalesHubData, SalesEvent> {
         stats: data.stats,
         searchQuery: _searchQuery,
         statusFilter: _statusFilter,
+        saleIdsWithReturns: data.saleIdsWithReturns,
       )));
     }
   }
@@ -145,6 +156,7 @@ class SalesBloc extends RealtimeBloc<SalesHubData, SalesEvent> {
         stats: data.stats,
         searchQuery: _searchQuery,
         statusFilter: _statusFilter,
+        saleIdsWithReturns: data.saleIdsWithReturns,
       )));
     }
   }
@@ -174,6 +186,7 @@ class SalesBloc extends RealtimeBloc<SalesHubData, SalesEvent> {
   @override
   Future<void> close() {
     _statsSub?.cancel();
+    _returnIdsSub?.cancel();
     return super.close();
   }
 }

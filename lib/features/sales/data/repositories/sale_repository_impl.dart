@@ -14,7 +14,14 @@ class SaleRepositoryImpl implements SaleRepository {
   SaleRepositoryImpl(this._datasource, this._dao);
 
   @override
+  Future<String> generateInvoiceNumber() => _datasource.generateInvoiceNumber();
+
+  @override
   Stream<List<SaleEntity>> watchAllSales() => _datasource.watchAllSales();
+
+  @override
+  Stream<List<SaleEntity>> watchCustomerSales(int customerId) =>
+      _datasource.watchCustomerSales(customerId);
 
   @override
   Future<SaleEntity?> getSaleById(int id) => _datasource.getSaleById(id);
@@ -36,6 +43,7 @@ class SaleRepositoryImpl implements SaleRepository {
     required Decimal discountCents,
     required Decimal taxCents,
     required Decimal totalCents,
+    required Decimal paidAmountCents,
     required String paymentMethod,
     required List<SaleItemInput> items,
     String? notes,
@@ -52,9 +60,10 @@ class SaleRepositoryImpl implements SaleRepository {
       taxCents: Value(taxCents),
       discountCents: Value(discountCents),
       totalCents: Value(totalCents),
+      paidAmountCents: Value(paidAmountCents),
       currencyId: Value(currencyId),
       paymentMethod: Value(paymentMethod),
-      status: const Value('completed'),
+      status: const Value('draft'),
       notes: notes != null ? Value(notes) : const Value.absent(),
       saleDate: saleDate != null ? Value(saleDate) : Value(DateTime.now()),
       dueDate: dueDate != null ? Value(dueDate) : const Value.absent(),
@@ -89,6 +98,7 @@ class SaleRepositoryImpl implements SaleRepository {
     required Decimal discountCents,
     required Decimal taxCents,
     required Decimal totalCents,
+    required Decimal paidAmountCents,
     required String paymentMethod,
     required List<SaleItemInput> items,
     String? notes,
@@ -102,6 +112,7 @@ class SaleRepositoryImpl implements SaleRepository {
       taxCents: Value(taxCents),
       discountCents: Value(discountCents),
       totalCents: Value(totalCents),
+      paidAmountCents: Value(paidAmountCents),
       currencyId: Value(currencyId),
       paymentMethod: Value(paymentMethod),
       notes: notes != null ? Value(notes) : const Value.absent(),
@@ -139,6 +150,22 @@ class SaleRepositoryImpl implements SaleRepository {
       _datasource.watchAllSaleReturns();
 
   @override
+  Future<SaleReturnEntity?> getSaleReturnById(int id) =>
+      _datasource.getSaleReturnById(id);
+
+  @override
+  Stream<List<SaleReturnItemEntity>> watchSaleReturnItemsWithDetails(int returnId) =>
+      _datasource.watchSaleReturnItemsWithDetails(returnId);
+
+  @override
+  Stream<List<SaleReturnEntity>> watchSaleReturnsBySale(int saleId) =>
+      _datasource.watchSaleReturnsBySale(saleId);
+
+  @override
+  Stream<Set<int>> watchSaleIdsWithReturns() =>
+      _datasource.watchSaleIdsWithReturns();
+
+  @override
   Future<int> createSaleReturn({
     required int saleId,
     required int currencyId,
@@ -146,6 +173,7 @@ class SaleRepositoryImpl implements SaleRepository {
     required List<SaleReturnItemInput> items,
     String? reason,
     String? dispositionType,
+    String? refundMethod,
     DateTime? returnDate,
   }) async {
     final returnNumber = await _datasource.generateSaleReturnNumber();
@@ -157,6 +185,7 @@ class SaleRepositoryImpl implements SaleRepository {
       currencyId: Value(currencyId),
       reason: reason != null ? Value(reason) : const Value.absent(),
       dispositionType: dispositionType != null ? Value(dispositionType) : const Value.absent(),
+      refundMethod: refundMethod != null ? Value(refundMethod) : const Value.absent(),
       returnDate: returnDate != null ? Value(returnDate) : Value(DateTime.now()),
     );
 

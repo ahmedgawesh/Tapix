@@ -4,6 +4,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:decimal/decimal.dart';
 
+import '../../../../core/database/app_database.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../domain/entities/purchase_entity.dart';
@@ -34,6 +35,14 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
   Future<void> _loadPurchase() async {
     final repo = sl<PurchaseRepository>();
     final purchase = await repo.getPurchaseById(widget.purchaseId);
+
+    // Repair legacy supplier accounting for already-posted purchases (idempotent).
+    if (purchase != null && purchase.status == 'posted') {
+      await sl<AppDatabase>()
+          .purchaseDao
+          .ensureSupplierAccountingForPostedPurchase(widget.purchaseId);
+    }
+
     final items = await repo.getPurchaseItems(widget.purchaseId);
     final returns = await repo.getPurchaseReturns(widget.purchaseId);
     if (mounted) {

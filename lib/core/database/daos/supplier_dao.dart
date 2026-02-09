@@ -47,8 +47,41 @@ class SupplierDao extends DatabaseAccessor<AppDatabase> with _$SupplierDaoMixin 
     return (delete(suppliers)..where((s) => s.id.equals(id))).go();
   }
 
-  Future<int> createTransaction(SupplierTransactionsCompanion transaction) {
-    return into(supplierTransactions).insert(transaction);
+  Future<int> createTransaction(SupplierTransactionsCompanion tx) {
+    return transaction(() async {
+      final txId = await into(supplierTransactions).insert(tx);
+
+      final supplierId = tx.supplierId.value;
+      final deltaCents = tx.amountCents.value.toBigInt().toInt();
+
+      final type = tx.transactionType.value;
+      final affectsBalance = type == 'purchase' ||
+          type == 'payment' ||
+          type == 'payment_reversal' ||
+          type == 'discount' ||
+          type == 'adjustment' ||
+          type == 'credit_note' ||
+          type == 'credit_note_reversal';
+
+      if (!affectsBalance) {
+        return txId;
+      }
+
+      final supplier = await (select(suppliers)..where((s) => s.id.equals(supplierId)))
+          .getSingleOrNull();
+      if (supplier != null) {
+        final oldBalance = supplier.balanceCents.toBigInt().toInt();
+        final newBalance = oldBalance + deltaCents;
+        await (update(suppliers)..where((s) => s.id.equals(supplierId))).write(
+          SuppliersCompanion(
+            balanceCents: Value(Decimal.fromInt(newBalance)),
+            updatedAt: Value(DateTime.now()),
+          ),
+        );
+      }
+
+      return txId;
+    });
   }
 
   Stream<List<SupplierTransaction>> watchSupplierTransactions(int supplierId) {
@@ -111,5 +144,38 @@ class SupplierDao extends DatabaseAccessor<AppDatabase> with _$SupplierDaoMixin 
         updatedAt: Value(DateTime.now()),
       ),
     );
+  }
+
+  /// Recalculate supplier balance from the transaction ledger (single source of truth).
+  /// This derives the balance from SUM(supplier_transactions.amount_cents) and
+  /// overwrites the cached suppliers.balance_cents field.
+  /// Use this for reconciliation or to fix any balance drift.
+  Future<int> recalculateBalance(int supplierId) async {
+    return transaction(() async {
+      final result = await customSelect(
+        'SELECT COALESCE(SUM(amount_cents), 0) AS derived_balance '
+        'FROM supplier_transactions WHERE supplier_id = ?',
+        variables: [Variable.withInt(supplierId)],
+      ).getSingle();
+
+      final derivedBalance = result.read<int>('derived_balance');
+
+      await (update(suppliers)..where((s) => s.id.equals(supplierId))).write(
+        SuppliersCompanion(
+          balanceCents: Value(Decimal.fromInt(derivedBalance)),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+
+      return derivedBalance;
+    });
+  }
+
+  /// Recalculate balances for ALL suppliers from their transaction ledgers.
+  Future<void> recalculateAllBalances() async {
+    final allSuppliers = await select(suppliers).get();
+    for (final s in allSuppliers) {
+      await recalculateBalance(s.id);
+    }
   }
 }

@@ -47,8 +47,42 @@ class CustomerDao extends DatabaseAccessor<AppDatabase> with _$CustomerDaoMixin 
     return (delete(customers)..where((c) => c.id.equals(id))).go();
   }
 
-  Future<int> createTransaction(CustomerTransactionsCompanion transaction) {
-    return into(customerTransactions).insert(transaction);
+  Future<int> createTransaction(CustomerTransactionsCompanion tx) {
+    return transaction(() async {
+      final txId = await into(customerTransactions).insert(tx);
+
+      final customerId = tx.customerId.value;
+      final deltaCents = tx.amountCents.value.toBigInt().toInt();
+
+      final type = tx.transactionType.value;
+      final affectsBalance = type == 'payment' ||
+          type == 'payment_reversal' ||
+          type == 'discount' ||
+          type == 'adjustment' ||
+          type == 'sale' ||
+          type == 'sale_return' ||
+          type == 'credit_note' ||
+          type == 'credit_note_reversal';
+
+      if (!affectsBalance) {
+        return txId;
+      }
+
+      final customer = await (select(customers)..where((c) => c.id.equals(customerId)))
+          .getSingleOrNull();
+      if (customer != null) {
+        final oldBalance = customer.balanceCents.toBigInt().toInt();
+        final newBalance = oldBalance + deltaCents;
+        await (update(customers)..where((c) => c.id.equals(customerId))).write(
+          CustomersCompanion(
+            balanceCents: Value(Decimal.fromInt(newBalance)),
+            updatedAt: Value(DateTime.now()),
+          ),
+        );
+      }
+
+      return txId;
+    });
   }
 
   Stream<List<CustomerTransaction>> watchCustomerTransactions(int customerId) {
@@ -120,5 +154,38 @@ class CustomerDao extends DatabaseAccessor<AppDatabase> with _$CustomerDaoMixin 
         updatedAt: Value(DateTime.now()),
       ),
     );
+  }
+
+  /// Recalculate customer balance from the transaction ledger (single source of truth).
+  /// This derives the balance from SUM(customer_transactions.amount_cents) and
+  /// overwrites the cached customers.balance_cents field.
+  /// Use this for reconciliation or to fix any balance drift.
+  Future<int> recalculateBalance(int customerId) async {
+    return transaction(() async {
+      final result = await customSelect(
+        'SELECT COALESCE(SUM(amount_cents), 0) AS derived_balance '
+        'FROM customer_transactions WHERE customer_id = ?',
+        variables: [Variable.withInt(customerId)],
+      ).getSingle();
+
+      final derivedBalance = result.read<int>('derived_balance');
+
+      await (update(customers)..where((c) => c.id.equals(customerId))).write(
+        CustomersCompanion(
+          balanceCents: Value(Decimal.fromInt(derivedBalance)),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+
+      return derivedBalance;
+    });
+  }
+
+  /// Recalculate balances for ALL customers from their transaction ledgers.
+  Future<void> recalculateAllBalances() async {
+    final allCustomers = await select(customers).get();
+    for (final c in allCustomers) {
+      await recalculateBalance(c.id);
+    }
   }
 }

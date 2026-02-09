@@ -21,6 +21,7 @@ class PurchaseReturnsBloc
     extends RealtimeBloc<List<PurchaseReturnEntity>, PurchaseReturnsEvent> {
   final PurchaseRepository _repository;
   String? _searchQuery;
+  List<PurchaseReturnEntity>? _latestStreamData;
 
   PurchaseReturnsBloc(this._repository) : super(const RealtimeLoading());
 
@@ -34,15 +35,22 @@ class PurchaseReturnsBloc
     return _repository.watchAllPurchaseReturns();
   }
 
+  @override
+  RealtimeState<List<PurchaseReturnEntity>> mapDataToState(
+      List<PurchaseReturnEntity> data) {
+    _latestStreamData = data;
+    return RealtimeSuccess<List<PurchaseReturnEntity>>(data: _applyFilter(data));
+  }
+
   void _onSearch(
     PurchaseReturnsSearchRequested event,
     Emitter<RealtimeState<List<PurchaseReturnEntity>>> emit,
   ) {
     _searchQuery = event.query.isEmpty ? null : event.query;
-    final data = currentData;
-    if (data != null) {
-      final filtered = _applyFilter(data);
-      emit(RealtimeSuccess(data: filtered));
+
+    final base = _latestStreamData ?? currentData;
+    if (base != null) {
+      emit(RealtimeSuccess(data: _applyFilter(base)));
     }
   }
 

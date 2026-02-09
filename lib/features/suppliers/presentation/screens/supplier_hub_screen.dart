@@ -168,9 +168,9 @@ class _SupplierHubContentState extends State<_SupplierHubContent> {
     final activeCount = data.suppliers.length;
     final totalBalanceCents = data.suppliers.fold<int>(
       0,
-      (sum, s) => sum + s.balanceCents.toDouble().round(),
+      (sum, s) => sum + s.balanceCents.toBigInt().toInt(),
     );
-    final withBalanceCount = data.suppliers.where((s) => s.balanceCents.toDouble() > 0).length;
+    final withBalanceCount = data.suppliers.where((s) => s.balanceCents.toBigInt().toInt() > 0).length;
 
     return RefreshIndicator(
       onRefresh: () async {
@@ -469,7 +469,7 @@ class _SupplierListTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final currencyService = sl<CurrencyService>();
-    final balanceCents = supplier.balanceCents.toDouble().round();
+    final balanceCents = supplier.balanceCents.toBigInt().toInt();
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),

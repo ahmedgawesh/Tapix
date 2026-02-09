@@ -24,12 +24,14 @@ import '../../features/products/presentation/screens/variants_screen.dart';
 import '../../features/products/presentation/bloc/categories_bloc.dart';
 import '../../features/products/presentation/bloc/colors_bloc.dart';
 import '../../features/products/domain/entities/product_entity.dart';
+import '../../features/barcode/data/models/invoice_print_data.dart';
 import '../../features/auth/presentation/screens/audit_log_screen.dart';
 import '../../features/purchases/presentation/screens/purchase_list_screen.dart';
 import '../../features/purchases/presentation/screens/purchase_form_screen.dart';
 import '../../features/purchases/presentation/screens/purchase_detail_screen.dart';
 import '../../features/purchases/presentation/screens/purchase_returns_screen.dart';
 import '../../features/purchases/presentation/screens/purchase_return_form_screen.dart';
+import '../../features/purchases/presentation/screens/purchase_return_detail_screen.dart';
 import '../../features/customers/presentation/screens/customer_hub_screen.dart';
 import '../../features/customers/presentation/screens/customer_form_screen.dart';
 import '../../features/customers/presentation/screens/customer_profile_screen.dart';
@@ -39,6 +41,7 @@ import '../../features/sales/presentation/screens/sale_form_screen.dart';
 import '../../features/sales/presentation/screens/sale_detail_screen.dart';
 import '../../features/sales/presentation/screens/sale_returns_screen.dart';
 import '../../features/sales/presentation/screens/sale_return_form_screen.dart';
+import '../../features/sales/presentation/screens/sale_return_detail_screen.dart';
 import '../../features/barcode/presentation/screens/barcode_scanner_screen.dart';
 import '../../features/barcode/presentation/screens/barcode_label_designer_screen.dart';
 import '../../features/barcode/presentation/screens/barcode_design_screen.dart';
@@ -54,6 +57,18 @@ import '../../features/employees/presentation/screens/employee_detail_screen.dar
 import '../../features/suppliers/presentation/screens/supplier_hub_screen.dart';
 import '../../features/suppliers/presentation/screens/supplier_form_screen.dart';
 import '../../features/suppliers/presentation/screens/supplier_profile_screen.dart';
+import '../../features/expenses/presentation/screens/expenses_screen.dart';
+import '../../features/expenses/presentation/screens/expense_form_screen.dart';
+import '../../features/expenses/presentation/screens/expense_categories_screen.dart';
+import '../../features/accounting/presentation/screens/journal_entries_list_screen.dart';
+import '../../features/accounting/presentation/screens/journal_entry_form_screen.dart';
+import '../../features/accounting/presentation/screens/journal_entry_detail_screen.dart';
+import '../../features/reports/presentation/screens/reports_hub_screen.dart';
+import '../../features/reports/presentation/screens/trial_balance_screen.dart';
+import '../../features/reports/presentation/screens/profit_loss_screen.dart';
+import '../../features/reports/presentation/screens/balance_sheet_screen.dart';
+import '../../features/reports/presentation/screens/general_ledger_screen.dart';
+import '../../features/reports/presentation/screens/accounting_health_screen.dart';
 import '../di/injection_container.dart';
 import 'route_permissions.dart';
 
@@ -324,6 +339,15 @@ class AppRouter {
                   return SaleReturnFormScreen(saleId: saleId);
                 },
               ),
+              GoRoute(
+                path: ':returnId',
+                builder: (context, state) {
+                  final returnId = int.tryParse(
+                      state.pathParameters['returnId'] ?? '');
+                  if (returnId == null) return const SaleReturnsScreen();
+                  return SaleReturnDetailScreen(returnId: returnId);
+                },
+              ),
             ],
           ),
           GoRoute(
@@ -428,6 +452,15 @@ class AppRouter {
                   return PurchaseReturnFormScreen(purchaseId: purchaseId);
                 },
               ),
+              GoRoute(
+                path: ':returnId',
+                builder: (context, state) {
+                  final returnId = int.tryParse(
+                      state.pathParameters['returnId'] ?? '');
+                  if (returnId == null) return const PurchaseReturnsScreen();
+                  return PurchaseReturnDetailScreen(returnId: returnId);
+                },
+              ),
             ],
           ),
           GoRoute(
@@ -451,11 +484,50 @@ class AppRouter {
       ),
       GoRoute(
         path: '/expenses',
-        builder: (context, state) => const PlaceholderScreen(title: 'Expenses'),
+        builder: (context, state) => const ExpensesScreen(),
+        routes: [
+          GoRoute(
+            path: 'new',
+            builder: (context, state) => const ExpenseFormScreen(),
+          ),
+          GoRoute(
+            path: 'categories',
+            builder: (context, state) => const ExpenseCategoriesScreen(),
+          ),
+          GoRoute(
+            path: ':id/edit',
+            builder: (context, state) {
+              final id = int.tryParse(state.pathParameters['id'] ?? '');
+              return ExpenseFormScreen(expenseId: id);
+            },
+          ),
+        ],
       ),
       GoRoute(
         path: '/reports',
-        builder: (context, state) => const PlaceholderScreen(title: 'Reports'),
+        builder: (context, state) => const ReportsHubScreen(),
+        routes: [
+          GoRoute(
+            path: 'trial-balance',
+            builder: (context, state) => const TrialBalanceScreen(),
+          ),
+          GoRoute(
+            path: 'profit-loss',
+            builder: (context, state) => const ProfitLossScreen(),
+          ),
+          GoRoute(
+            path: 'balance-sheet',
+            builder: (context, state) => const BalanceSheetScreen(),
+          ),
+          GoRoute(
+            path: 'general-ledger',
+            builder: (context, state) => const GeneralLedgerScreen(),
+          ),
+          GoRoute(
+            path: 'health',
+            builder: (context, state) => const AccountingHealthScreen(),
+          ),
+        ],
       ),
       GoRoute(
         path: '/settings',
@@ -492,9 +564,11 @@ class AppRouter {
           final extra = state.extra as Map<String, dynamic>?;
           final products = extra?['products'] as List<Product>?;
           final variantInfoByProductId = extra?['variantInfoByProductId'] as Map<int, String>?;
+          final invoiceData = extra?['invoiceData'] as InvoicePrintData?;
           return BarcodeDesignScreen(
             initialProducts: products,
             variantInfoByProductId: variantInfoByProductId,
+            invoiceData: invoiceData,
           );
         },
       ),
@@ -563,7 +637,27 @@ class AppRouter {
       ),
       GoRoute(
         path: '/accounting',
-        builder: (context, state) => const PlaceholderScreen(title: 'Accounting'),
+        builder: (context, state) => const JournalEntriesListScreen(),
+        routes: [
+          GoRoute(
+            path: 'journal-entries',
+            builder: (context, state) => const JournalEntriesListScreen(),
+            routes: [
+              GoRoute(
+                path: 'add',
+                builder: (context, state) => const JournalEntryFormScreen(),
+              ),
+              GoRoute(
+                path: ':id',
+                builder: (context, state) {
+                  final id = int.tryParse(state.pathParameters['id'] ?? '');
+                  if (id == null) return const JournalEntriesListScreen();
+                  return JournalEntryDetailScreen(entryId: id);
+                },
+              ),
+            ],
+          ),
+        ],
       ),
       GoRoute(
         path: '/audit',

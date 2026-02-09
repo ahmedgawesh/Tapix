@@ -15,10 +15,14 @@ enum SaleDiscountMode { perItem, invoice }
 /// Payment method for sale invoice
 enum SalePaymentMethod { cash, credit, card, cheque }
 
+/// Salesperson assignment mode: per-invoice or per-item
+enum SalespersonMode { perInvoice, perItem }
+
 // ==================== STATE ====================
 
 class SaleFormState extends Equatable {
   final int? saleId;
+  final String? saleNumber;
   final int? customerId;
   final String? customerName;
   final int? employeeId;
@@ -32,12 +36,15 @@ class SaleFormState extends Equatable {
   final DateTime? dueDate;
   final SalePaymentMethod paymentMethod;
   final Decimal taxRatePercent;
+  final SalespersonMode salespersonMode;
+  final Decimal paidAmountCents;
   final bool isSubmitting;
   final String? error;
   final bool isSuccess;
 
   SaleFormState({
     this.saleId,
+    this.saleNumber,
     this.customerId,
     this.customerName,
     this.employeeId,
@@ -51,11 +58,14 @@ class SaleFormState extends Equatable {
     this.dueDate,
     this.paymentMethod = SalePaymentMethod.cash,
     Decimal? taxRatePercent,
+    this.salespersonMode = SalespersonMode.perInvoice,
+    Decimal? paidAmountCents,
     this.isSubmitting = false,
     this.error,
     this.isSuccess = false,
   }) : invoiceDiscountCents = invoiceDiscountCents ?? Decimal.zero,
-       taxRatePercent = taxRatePercent ?? Decimal.zero;
+       taxRatePercent = taxRatePercent ?? Decimal.zero,
+       paidAmountCents = paidAmountCents ?? Decimal.zero;
 
   Decimal get subtotalCents => items.fold(
         Decimal.zero,
@@ -95,8 +105,19 @@ class SaleFormState extends Equatable {
 
   int get totalQuantity => items.fold(0, (sum, item) => sum + item.quantity);
 
+  Decimal get remainingCents {
+    final remaining = totalCents - paidAmountCents;
+    return remaining < Decimal.zero ? Decimal.zero : remaining;
+  }
+
+  Decimal get changeCents {
+    final change = paidAmountCents - totalCents;
+    return change > Decimal.zero ? change : Decimal.zero;
+  }
+
   SaleFormState copyWith({
     int? saleId,
+    String? saleNumber,
     int? customerId,
     String? customerName,
     int? employeeId,
@@ -110,6 +131,8 @@ class SaleFormState extends Equatable {
     DateTime? dueDate,
     SalePaymentMethod? paymentMethod,
     Decimal? taxRatePercent,
+    SalespersonMode? salespersonMode,
+    Decimal? paidAmountCents,
     bool? isSubmitting,
     String? error,
     bool? isSuccess,
@@ -117,6 +140,7 @@ class SaleFormState extends Equatable {
   }) {
     return SaleFormState(
       saleId: saleId ?? this.saleId,
+      saleNumber: saleNumber ?? this.saleNumber,
       customerId: clearCustomer ? null : (customerId ?? this.customerId),
       customerName: clearCustomer ? null : (customerName ?? this.customerName),
       employeeId: clearCustomer ? this.employeeId : (employeeId ?? this.employeeId),
@@ -130,6 +154,8 @@ class SaleFormState extends Equatable {
       dueDate: dueDate ?? this.dueDate,
       paymentMethod: paymentMethod ?? this.paymentMethod,
       taxRatePercent: taxRatePercent ?? this.taxRatePercent,
+      salespersonMode: salespersonMode ?? this.salespersonMode,
+      paidAmountCents: paidAmountCents ?? this.paidAmountCents,
       isSubmitting: isSubmitting ?? this.isSubmitting,
       error: error,
       isSuccess: isSuccess ?? this.isSuccess,
@@ -138,9 +164,9 @@ class SaleFormState extends Equatable {
 
   @override
   List<Object?> get props => [
-        saleId, customerId, customerName, employeeId, employeeName, currencyId, items,
+        saleId, saleNumber, customerId, customerName, employeeId, employeeName, currencyId, items,
         discountMode, invoiceDiscountCents, notes, saleDate, dueDate,
-        paymentMethod, taxRatePercent,
+        paymentMethod, taxRatePercent, salespersonMode, paidAmountCents,
         isSubmitting, error, isSuccess,
       ];
 }
@@ -157,6 +183,9 @@ class SaleLineItem extends Equatable {
   final String? colorName;
   final String? colorHex;
   final String? sizeName;
+  final int? employeeId;
+  final String? employeeName;
+  final String? itemNote;
 
   SaleLineItem({
     required this.tempId,
@@ -169,6 +198,9 @@ class SaleLineItem extends Equatable {
     this.colorName,
     this.colorHex,
     this.sizeName,
+    this.employeeId,
+    this.employeeName,
+    this.itemNote,
   })  : discountCents = discountCents ?? Decimal.zero,
         taxCents = taxCents ?? Decimal.zero;
 
@@ -200,6 +232,10 @@ class SaleLineItem extends Equatable {
     String? colorName,
     String? colorHex,
     String? sizeName,
+    int? employeeId,
+    String? employeeName,
+    String? itemNote,
+    bool clearEmployee = false,
   }) {
     return SaleLineItem(
       tempId: tempId ?? this.tempId,
@@ -212,6 +248,9 @@ class SaleLineItem extends Equatable {
       colorName: colorName ?? this.colorName,
       colorHex: colorHex ?? this.colorHex,
       sizeName: sizeName ?? this.sizeName,
+      employeeId: clearEmployee ? null : (employeeId ?? this.employeeId),
+      employeeName: clearEmployee ? null : (employeeName ?? this.employeeName),
+      itemNote: itemNote ?? this.itemNote,
     );
   }
 
@@ -220,6 +259,7 @@ class SaleLineItem extends Equatable {
         tempId, product, variant, quantity,
         unitPriceCents, discountCents, taxCents,
         colorName, colorHex, sizeName,
+        employeeId, employeeName, itemNote,
       ];
 }
 
@@ -253,6 +293,14 @@ class SaleCustomerChanged extends SaleFormEvent {
 class SaleDateChanged extends SaleFormEvent {
   final DateTime date;
   const SaleDateChanged(this.date);
+
+  @override
+  List<Object?> get props => [date];
+}
+
+class SaleDueDateChanged extends SaleFormEvent {
+  final DateTime date;
+  const SaleDueDateChanged(this.date);
 
   @override
   List<Object?> get props => [date];
@@ -315,16 +363,24 @@ class SaleLineItemUpdated extends SaleFormEvent {
   final int? quantity;
   final Decimal? unitPriceCents;
   final Decimal? discountCents;
+  final int? employeeId;
+  final String? employeeName;
+  final String? itemNote;
+  final bool clearEmployee;
 
   const SaleLineItemUpdated({
     required this.tempId,
     this.quantity,
     this.unitPriceCents,
     this.discountCents,
+    this.employeeId,
+    this.employeeName,
+    this.itemNote,
+    this.clearEmployee = false,
   });
 
   @override
-  List<Object?> get props => [tempId, quantity, unitPriceCents, discountCents];
+  List<Object?> get props => [tempId, quantity, unitPriceCents, discountCents, employeeId, employeeName, itemNote, clearEmployee];
 }
 
 class SaleLineItemRemoved extends SaleFormEvent {
@@ -353,6 +409,22 @@ class SaleTaxRateChanged extends SaleFormEvent {
 
   @override
   List<Object?> get props => [taxRatePercent];
+}
+
+class SaleSalespersonModeChanged extends SaleFormEvent {
+  final SalespersonMode mode;
+  const SaleSalespersonModeChanged(this.mode);
+
+  @override
+  List<Object?> get props => [mode];
+}
+
+class SalePaidAmountChanged extends SaleFormEvent {
+  final Decimal paidAmountCents;
+  const SalePaidAmountChanged(this.paidAmountCents);
+
+  @override
+  List<Object?> get props => [paidAmountCents];
 }
 
 // ==================== BLOC ====================
@@ -384,6 +456,9 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
     on<SaleFormSubmitted>(_onSubmitted);
     on<SalePaymentMethodChanged>(_onPaymentMethodChanged);
     on<SaleTaxRateChanged>(_onTaxRateChanged);
+    on<SaleSalespersonModeChanged>(_onSalespersonModeChanged);
+    on<SalePaidAmountChanged>(_onPaidAmountChanged);
+    on<SaleDueDateChanged>(_onDueDateChanged);
   }
 
   Future<void> _loadColorSizeLookups() async {
@@ -411,12 +486,25 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
     Emitter<SaleFormState> emit,
   ) async {
     await _loadColorSizeLookups();
+
+    if (event.saleId == null) {
+      // New sale: generate next invoice number
+      try {
+        final nextNumber = await _repository.generateInvoiceNumber();
+        emit(state.copyWith(
+          currencyId: event.currencyId,
+          saleNumber: nextNumber,
+        ));
+      } catch (_) {
+        emit(state.copyWith(currencyId: event.currencyId));
+      }
+      return;
+    }
+
     emit(state.copyWith(
       saleId: event.saleId,
       currencyId: event.currencyId,
     ));
-
-    if (event.saleId == null) return;
 
     try {
       final sale = await _repository.getSaleById(event.saleId!);
@@ -499,6 +587,7 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
 
       emit(state.copyWith(
         saleId: sale.id,
+        saleNumber: sale.invoiceNumber,
         customerId: sale.customerId,
         customerName: sale.customerName,
         currencyId: sale.currencyId,
@@ -608,6 +697,10 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
           quantity: event.quantity,
           unitPriceCents: event.unitPriceCents,
           discountCents: event.discountCents,
+          employeeId: event.employeeId,
+          employeeName: event.employeeName,
+          itemNote: event.itemNote,
+          clearEmployee: event.clearEmployee,
         );
       }
       return item;
@@ -632,6 +725,13 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
       return;
     }
 
+    // Cash validation: paid amount must be >= total
+    if (state.paymentMethod == SalePaymentMethod.cash &&
+        state.paidAmountCents < state.totalCents) {
+      emit(state.copyWith(error: 'sales.cash_insufficient'));
+      return;
+    }
+
     emit(state.copyWith(isSubmitting: true, error: null));
 
     try {
@@ -648,6 +748,17 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
 
       final paymentMethodStr = state.paymentMethod.name;
 
+      // Determine effective paid amount:
+      // - cash: user-entered paid amount
+      // - card: auto-set to total (fully settled)
+      // - credit/cheque: 0 (full amount goes to balance)
+      final effectivePaidCents = switch (state.paymentMethod) {
+        SalePaymentMethod.cash => state.paidAmountCents,
+        SalePaymentMethod.card => state.totalCents,
+        SalePaymentMethod.credit => Decimal.zero,
+        SalePaymentMethod.cheque => Decimal.zero,
+      };
+
       if (state.saleId == null) {
         final saleId = await _repository.createSale(
           customerId: state.customerId,
@@ -657,6 +768,7 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
           discountCents: state.totalDiscountCents,
           taxCents: state.taxCents,
           totalCents: state.totalCents,
+          paidAmountCents: effectivePaidCents,
           paymentMethod: paymentMethodStr,
           items: items,
           notes: state.notes,
@@ -679,6 +791,7 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
           discountCents: state.totalDiscountCents,
           taxCents: state.taxCents,
           totalCents: state.totalCents,
+          paidAmountCents: effectivePaidCents,
           paymentMethod: paymentMethodStr,
           items: items,
           notes: state.notes,
@@ -705,7 +818,11 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
     SalePaymentMethodChanged event,
     Emitter<SaleFormState> emit,
   ) {
-    emit(state.copyWith(paymentMethod: event.method));
+    // Reset paid amount when switching payment methods
+    emit(state.copyWith(
+      paymentMethod: event.method,
+      paidAmountCents: Decimal.zero,
+    ));
   }
 
   void _onTaxRateChanged(
@@ -713,5 +830,26 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
     Emitter<SaleFormState> emit,
   ) {
     emit(state.copyWith(taxRatePercent: event.taxRatePercent));
+  }
+
+  void _onSalespersonModeChanged(
+    SaleSalespersonModeChanged event,
+    Emitter<SaleFormState> emit,
+  ) {
+    emit(state.copyWith(salespersonMode: event.mode));
+  }
+
+  void _onPaidAmountChanged(
+    SalePaidAmountChanged event,
+    Emitter<SaleFormState> emit,
+  ) {
+    emit(state.copyWith(paidAmountCents: event.paidAmountCents));
+  }
+
+  void _onDueDateChanged(
+    SaleDueDateChanged event,
+    Emitter<SaleFormState> emit,
+  ) {
+    emit(state.copyWith(dueDate: event.date));
   }
 }

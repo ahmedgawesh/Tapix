@@ -135,6 +135,7 @@ class PurchaseReturnModel extends PurchaseReturnEntity {
     required super.currencyId,
     super.status,
     super.dispositionType,
+    super.refundMethod,
     super.reason,
     required super.returnDate,
     required super.createdAt,
@@ -149,6 +150,7 @@ class PurchaseReturnModel extends PurchaseReturnEntity {
       currencyId: r.currencyId,
       status: r.status,
       dispositionType: r.dispositionType,
+      refundMethod: r.refundMethod,
       reason: r.reason,
       returnDate: r.returnDate,
       createdAt: r.createdAt,
@@ -166,6 +168,10 @@ class PurchaseReturnItemModel extends PurchaseReturnItemEntity {
     super.reason,
     super.productName,
     super.variantSku,
+    super.variantBarcode,
+    super.colorName,
+    super.colorHex,
+    super.sizeName,
     required super.createdAt,
   });
 
@@ -178,6 +184,25 @@ class PurchaseReturnItemModel extends PurchaseReturnItemEntity {
       refundCents: item.refundCents,
       reason: item.reason,
       createdAt: item.createdAt,
+    );
+  }
+
+  factory PurchaseReturnItemModel.fromDriftWithDetails(
+      PurchaseReturnItemWithDetails d) {
+    return PurchaseReturnItemModel(
+      id: d.returnItem.id,
+      returnId: d.returnItem.returnId,
+      purchaseItemId: d.returnItem.purchaseItemId,
+      quantity: d.returnItem.quantity,
+      refundCents: d.returnItem.refundCents,
+      reason: d.returnItem.reason,
+      productName: d.product.name,
+      variantSku: d.variant?.sku,
+      variantBarcode: d.variant?.barcode,
+      colorName: d.colorName,
+      colorHex: d.colorHex,
+      sizeName: d.sizeName,
+      createdAt: d.returnItem.createdAt,
     );
   }
 }

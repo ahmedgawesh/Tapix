@@ -7,7 +7,9 @@ import 'package:easy_localization/easy_localization.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../domain/entities/sale_entity.dart';
+import '../../domain/repositories/sale_repository.dart';
 import '../bloc/sale_return_form_bloc.dart';
+import '../services/sale_pdf_service.dart';
 
 class SaleReturnFormScreen extends StatelessWidget {
   final int saleId;
@@ -17,11 +19,8 @@ class SaleReturnFormScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (_) {
-        final bloc = sl<SaleReturnFormBloc>();
-        bloc.add(SaleReturnFormInitialized(saleId));
-        return bloc;
-      },
+      create: (_) => sl<SaleReturnFormBloc>()
+        ..add(SaleReturnFormInitialized(saleId)),
       child: const _SaleReturnFormView(),
     );
   }
@@ -30,114 +29,240 @@ class SaleReturnFormScreen extends StatelessWidget {
 class _SaleReturnFormView extends StatelessWidget {
   const _SaleReturnFormView();
 
+  Future<bool> _onWillPop(BuildContext context) async {
+    final state = context.read<SaleReturnFormBloc>().state;
+    if (!state.hasUnsavedChanges) return true;
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('sales.unsaved_changes_title'.tr()),
+        content: Text('sales.unsaved_changes_message'.tr()),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('sales.discard'.tr()),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('sales.stay'.tr()),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
+  }
+
+  void _navigateBack(BuildContext context) async {
+    final shouldPop = await _onWillPop(context);
+    if (shouldPop && context.mounted) {
+      if (context.canPop()) {
+        context.pop();
+      } else {
+        context.go('/sales');
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
     final cs = sl<CurrencyService>();
+    final colorScheme = Theme.of(context).colorScheme;
 
     return BlocConsumer<SaleReturnFormBloc, SaleReturnFormState>(
-      listenWhen: (prev, curr) =>
-          prev.isSuccess != curr.isSuccess || prev.error != curr.error,
       listener: (context, state) {
         if (state.isSuccess) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('sales.return_created'.tr())),
-          );
-          if (context.canPop()) {
-            context.pop();
-          } else {
-            context.go('/sales');
-          }
+          _showReturnSavedDialog(context);
         }
         if (state.error != null) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(state.error!),
               backgroundColor: colorScheme.error,
+              behavior: SnackBarBehavior.floating,
             ),
           );
         }
       },
       builder: (context, state) {
-        return Scaffold(
-          appBar: AppBar(
-            leading: IconButton(
-              icon: const Icon(LucideIcons.arrowLeft),
-              onPressed: () {
-                if (context.canPop()) {
-                  context.pop();
-                } else {
-                  context.go('/sales');
-                }
-              },
+        return PopScope(
+          canPop: !state.hasUnsavedChanges,
+          onPopInvokedWithResult: (didPop, _) async {
+            if (didPop) return;
+            _navigateBack(context);
+          },
+          child: Scaffold(
+            appBar: AppBar(
+              leading: IconButton(
+                icon: const Icon(LucideIcons.arrowLeft),
+                onPressed: () => _navigateBack(context),
+              ),
+              title: Text('sales.create_return'.tr()),
             ),
-            title: Text('sales.create_return'.tr()),
-            actions: [
-              if (state.isSubmitting)
-                const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: SizedBox(
-                    width: 20, height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+            body: state.isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : LayoutBuilder(
+                    builder: (context, constraints) {
+                      final isWide = constraints.maxWidth > 900;
+                      if (isWide) return _buildWideLayout(context, state, cs);
+                      return _buildNarrowLayout(context, state, cs);
+                    },
                   ),
-                )
-              else
-                FilledButton.icon(
-                  onPressed: state.returnItems.isEmpty
-                      ? null
-                      : () => context
-                          .read<SaleReturnFormBloc>()
-                          .add(const SaleReturnFormSubmitted()),
-                  icon: const Icon(LucideIcons.check, size: 16),
-                  label: Text('common.save'.tr()),
-                ),
-              const SizedBox(width: 8),
-            ],
           ),
-          body: state.isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : Column(
-                  children: [
-                    Expanded(
-                      child: ListView(
-                        padding: const EdgeInsets.all(16),
-                        children: [
-                          // Sale info
-                          if (state.sale != null)
-                            _buildSaleInfoCard(context, state.sale!, cs),
-                          const SizedBox(height: 12),
-
-                          // Disposition type
-                          _buildDispositionCard(context, state),
-                          const SizedBox(height: 12),
-
-                          // Items to return
-                          _buildItemsSelectionCard(context, state, cs),
-                          const SizedBox(height: 12),
-
-                          // Reason
-                          _buildReasonCard(context, state),
-                          const SizedBox(height: 12),
-
-                          // Total refund
-                          if (state.returnItems.isNotEmpty)
-                            _buildFinancialImpactCard(context, state, cs),
-                          const SizedBox(height: 80),
-                        ],
-                      ),
-                    ),
-                    _buildBottomBar(context, state, cs),
-                  ],
-                ),
         );
       },
     );
   }
 
-  Widget _buildSaleInfoCard(BuildContext context, SaleEntity sale, CurrencyService cs) {
+  // ═══════════════════════════════════════════════════════
+  // RETURN SAVED DIALOG
+  // ═══════════════════════════════════════════════════════
+  void _showReturnSavedDialog(BuildContext context) {
+    final theme = Theme.of(context);
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return AlertDialog(
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.green.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(LucideIcons.checkCircle2, size: 48, color: Colors.green),
+              ),
+              const SizedBox(height: 16),
+              Text('sales.return_saved'.tr(),
+                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center),
+            ],
+          ),
+          actionsAlignment: MainAxisAlignment.center,
+          actions: [
+            TextButton.icon(
+              icon: const Icon(LucideIcons.printer, size: 18),
+              label: Text('sales.print_invoice'.tr()),
+              onPressed: () async {
+                Navigator.pop(ctx);
+                await _printOrShareReturn(context, share: false);
+                if (context.mounted) context.pop();
+              },
+            ),
+            TextButton.icon(
+              icon: const Icon(LucideIcons.share2, size: 18),
+              label: Text('sales.share_invoice'.tr()),
+              onPressed: () async {
+                Navigator.pop(ctx);
+                await _printOrShareReturn(context, share: true);
+                if (context.mounted) context.pop();
+              },
+            ),
+            FilledButton.icon(
+              icon: const Icon(LucideIcons.checkCircle, size: 18),
+              label: Text('sales.finish'.tr()),
+              onPressed: () {
+                Navigator.pop(ctx);
+                context.pop();
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _printOrShareReturn(BuildContext context, {required bool share}) async {
+    final state = context.read<SaleReturnFormBloc>().state;
+    try {
+      if (state.saleId != null && state.sale != null) {
+        final repo = sl<SaleRepository>();
+        final returns = await repo.watchAllSaleReturns().first;
+        final saleReturns = returns.where((r) => r.saleId == state.saleId).toList();
+        if (saleReturns.isNotEmpty && context.mounted) {
+          final latestReturn = saleReturns.first;
+          final returnItems = state.returnItems.map((ri) => SaleReturnItemEntity(
+            id: 0, returnId: 0,
+            saleItemId: ri.originalItem.id,
+            quantity: ri.returnQuantity,
+            refundCents: ri.refundCents,
+            reason: ri.reason,
+            createdAt: DateTime.now(),
+          )).toList();
+          if (context.mounted) {
+            if (share) {
+              await SalePdfService.shareSaleReturn(
+                context: context, originalSale: state.sale!,
+                returnEntity: latestReturn, returnItems: returnItems);
+            } else {
+              await SalePdfService.printSaleReturn(
+                context: context, originalSale: state.sale!,
+                returnEntity: latestReturn, returnItems: returnItems);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('sales.print_error'.tr()), behavior: SnackBarBehavior.floating),
+        );
+      }
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // LAYOUTS
+  // ═══════════════════════════════════════════════════════
+  Widget _buildWideLayout(BuildContext context, SaleReturnFormState state, CurrencyService cs) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(width: 360, child: ListView(padding: const EdgeInsets.all(16), children: [
+          _buildSaleInfoCard(context, state, cs),
+          const SizedBox(height: 12),
+          _buildDispositionCard(context, state),
+          const SizedBox(height: 12),
+          _buildReasonCard(context, state),
+          const SizedBox(height: 12),
+          _buildFinancialImpactCard(context, state, cs),
+        ])),
+        const VerticalDivider(width: 1),
+        Expanded(child: Column(children: [
+          Expanded(child: ListView(padding: const EdgeInsets.all(16), children: [
+            _buildItemsSelectionCard(context, state, cs),
+          ])),
+          _buildBottomBar(context, state, cs),
+        ])),
+      ],
+    );
+  }
+
+  Widget _buildNarrowLayout(BuildContext context, SaleReturnFormState state, CurrencyService cs) {
+    return Column(children: [
+      Expanded(child: ListView(padding: const EdgeInsets.all(16), children: [
+        _buildSaleInfoCard(context, state, cs),
+        const SizedBox(height: 12),
+        _buildItemsSelectionCard(context, state, cs),
+        const SizedBox(height: 12),
+        _buildDispositionCard(context, state),
+        const SizedBox(height: 12),
+        _buildReasonCard(context, state),
+        const SizedBox(height: 12),
+        _buildFinancialImpactCard(context, state, cs),
+        const SizedBox(height: 80),
+      ])),
+      _buildBottomBar(context, state, cs),
+    ]);
+  }
+
+  Widget _buildSaleInfoCard(BuildContext context, SaleReturnFormState state, CurrencyService cs) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final sale = state.sale;
+    if (sale == null) return const SizedBox.shrink();
     final customerInitial = sale.customerName != null && sale.customerName!.isNotEmpty
         ? sale.customerName![0].toUpperCase()
         : '?';
@@ -153,6 +278,46 @@ class _SaleReturnFormView extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (sale.paymentMethod == 'cheque' && sale.dueDate != null) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: colorScheme.error.withValues(alpha: 0.06),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: colorScheme.error.withValues(alpha: 0.25)),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(LucideIcons.alertTriangle, size: 18, color: colorScheme.error),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'sales.cheque_warning_title'.tr(),
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: colorScheme.error,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'sales.cheque_warning_message'
+                                .tr(args: [DateFormat.yMMMd().format(sale.dueDate!)]),
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
             Row(
               children: [
                 Container(
@@ -241,6 +406,12 @@ class _SaleReturnFormView extends StatelessWidget {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
 
+    const refundMethods = [
+      ('cash', LucideIcons.banknote),
+      ('credit', LucideIcons.wallet),
+      ('cheque', LucideIcons.fileCheck),
+    ];
+
     const dispositions = [
       ('restock', LucideIcons.package),
       ('exchange', LucideIcons.repeat),
@@ -260,6 +431,7 @@ class _SaleReturnFormView extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // ── Refund Method ──
             Row(
               children: [
                 Container(
@@ -268,14 +440,85 @@ class _SaleReturnFormView extends StatelessWidget {
                     color: cs.primary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Icon(LucideIcons.settings2, size: 16, color: cs.primary),
+                  child: Icon(LucideIcons.creditCard, size: 16, color: cs.primary),
                 ),
                 const SizedBox(width: 10),
-                Text('sales.disposition_type'.tr(),
+                Text('sales.refund_method'.tr(),
                     style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
+            ...refundMethods.map((m) {
+              final isSelected = state.refundMethod == m.$1;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Material(
+                  color: isSelected
+                      ? cs.primaryContainer.withValues(alpha: 0.5)
+                      : cs.surfaceContainerHighest.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(10),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(10),
+                    onTap: () => context
+                        .read<SaleReturnFormBloc>()
+                        .add(SaleReturnRefundMethodChanged(m.$1)),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      child: Row(
+                        children: [
+                          Icon(m.$2, size: 18,
+                              color: isSelected ? cs.primary : cs.onSurfaceVariant),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('sales.refund_method_${m.$1}'.tr(),
+                                    style: theme.textTheme.bodyMedium?.copyWith(
+                                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal)),
+                                Text('sales.refund_method_${m.$1}_desc'.tr(),
+                                    style: theme.textTheme.labelSmall?.copyWith(
+                                        color: cs.onSurfaceVariant, fontSize: 10)),
+                              ],
+                            ),
+                          ),
+                          if (isSelected)
+                            Icon(LucideIcons.checkCircle2, size: 18, color: cs.primary),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }),
+            Divider(height: 20, color: cs.outlineVariant.withValues(alpha: 0.4)),
+            // ── Disposition Type ──
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(LucideIcons.package, size: 16, color: Colors.amber.shade700),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text('sales.disposition_type'.tr(),
+                      style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+                ),
+                InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () => _showDispositionInfoDialog(context),
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Icon(LucideIcons.info, size: 18, color: cs.onSurfaceVariant),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
             Wrap(
               spacing: 8,
               runSpacing: 8,
@@ -300,6 +543,71 @@ class _SaleReturnFormView extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  void _showDispositionInfoDialog(BuildContext context) {
+    final theme = Theme.of(context);
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(LucideIcons.info, size: 20, color: theme.colorScheme.primary),
+            const SizedBox(width: 8),
+            Text('sales.disposition_type'.tr()),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _dispositionInfoItem(theme, LucideIcons.package,
+                  'sales.disposition_restock'.tr(), 'sales.disposition_restock_desc'.tr()),
+              const SizedBox(height: 12),
+              _dispositionInfoItem(theme, LucideIcons.repeat,
+                  'sales.disposition_exchange'.tr(), 'sales.disposition_exchange_desc'.tr()),
+              const SizedBox(height: 12),
+              _dispositionInfoItem(theme, LucideIcons.wallet,
+                  'sales.disposition_store_credit'.tr(), 'sales.disposition_store_credit_desc'.tr()),
+              const SizedBox(height: 12),
+              _dispositionInfoItem(theme, LucideIcons.banknote,
+                  'sales.disposition_refund'.tr(), 'sales.disposition_refund_desc'.tr()),
+              const SizedBox(height: 12),
+              _dispositionInfoItem(theme, LucideIcons.trash2,
+                  'sales.disposition_write_off'.tr(), 'sales.disposition_write_off_desc'.tr()),
+            ],
+          ),
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('common.close'.tr()),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _dispositionInfoItem(ThemeData theme, IconData icon, String title, String desc) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 18, color: theme.colorScheme.primary),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 2),
+              Text(desc, style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant)),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -377,7 +685,7 @@ class _SaleReturnFormView extends StatelessWidget {
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: state.availableItems.length,
-                separatorBuilder: (context2, idx) => Divider(
+                separatorBuilder: (_, idx) => Divider(
                     height: 1, color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
                 itemBuilder: (context, index) {
                   final item = state.availableItems[index];
@@ -385,139 +693,25 @@ class _SaleReturnFormView extends StatelessWidget {
                       .where((r) => r.originalItem.id == item.id)
                       .toList();
                   final isSelected = returnItem.isNotEmpty;
-                  final displayName = item.variantSku != null
-                      ? '${item.productName ?? 'Product'} (${item.variantSku})'
-                      : item.productName ?? 'Product #${item.productId}';
+                  final alreadyReturned = state.alreadyReturnedQty[item.id] ?? 0;
+                  final maxReturnable = state.maxReturnableQty(item.id, item.quantity);
 
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    child: Column(
-                      children: [
-                        Row(
-                          children: [
-                            Checkbox(
-                              value: isSelected,
-                              onChanged: (_) => context
-                                  .read<SaleReturnFormBloc>()
-                                  .add(SaleReturnItemToggled(item)),
-                              activeColor: colorScheme.error,
-                            ),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(displayName,
-                                      style: theme.textTheme.titleSmall?.copyWith(
-                                          fontWeight: FontWeight.w600)),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    '${cs.format(item.unitPriceCents.toBigInt().toInt())} × ${item.quantity}  •  ${cs.format(item.totalCents.toBigInt().toInt())}',
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                        color: colorScheme.onSurfaceVariant),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                        if (isSelected && returnItem.isNotEmpty) ...[
-                          const SizedBox(height: 8),
-                          Padding(
-                            padding: const EdgeInsets.only(left: 48),
-                            child: Column(
-                              children: [
-                                Row(
-                                  children: [
-                                    Text('sales.return_qty'.tr(),
-                                        style: theme.textTheme.bodySmall?.copyWith(
-                                            color: colorScheme.onSurfaceVariant)),
-                                    const SizedBox(width: 8),
-                                    Container(
-                                      decoration: BoxDecoration(
-                                        color: colorScheme.surfaceContainerHighest,
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          InkWell(
-                                            borderRadius: BorderRadius.circular(8),
-                                            onTap: returnItem.first.returnQuantity > 1
-                                                ? () => context
-                                                    .read<SaleReturnFormBloc>()
-                                                    .add(SaleReturnItemQuantityChanged(
-                                                        item.id, returnItem.first.returnQuantity - 1))
-                                                : null,
-                                            child: Padding(
-                                              padding: const EdgeInsets.all(6),
-                                              child: Icon(LucideIcons.minus, size: 14,
-                                                  color: returnItem.first.returnQuantity > 1
-                                                      ? colorScheme.onSurface
-                                                      : colorScheme.onSurface.withValues(alpha: 0.3)),
-                                            ),
-                                          ),
-                                          Padding(
-                                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                                            child: Text('${returnItem.first.returnQuantity}',
-                                                style: theme.textTheme.labelLarge?.copyWith(
-                                                    fontWeight: FontWeight.bold,
-                                                    color: colorScheme.error)),
-                                          ),
-                                          InkWell(
-                                            borderRadius: BorderRadius.circular(8),
-                                            onTap: returnItem.first.returnQuantity < item.quantity
-                                                ? () => context
-                                                    .read<SaleReturnFormBloc>()
-                                                    .add(SaleReturnItemQuantityChanged(
-                                                        item.id, returnItem.first.returnQuantity + 1))
-                                                : null,
-                                            child: Padding(
-                                              padding: const EdgeInsets.all(6),
-                                              child: Icon(LucideIcons.plus, size: 14,
-                                                  color: returnItem.first.returnQuantity < item.quantity
-                                                      ? colorScheme.onSurface
-                                                      : colorScheme.onSurface.withValues(alpha: 0.3)),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text('/ ${item.quantity}',
-                                        style: theme.textTheme.bodySmall?.copyWith(
-                                            color: colorScheme.onSurfaceVariant)),
-                                    const Spacer(),
-                                    Text(
-                                      cs.format(returnItem.first.refundCents.toBigInt().toInt()),
-                                      style: theme.textTheme.titleSmall?.copyWith(
-                                          fontWeight: FontWeight.bold, color: colorScheme.error),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                                TextField(
-                                  decoration: InputDecoration(
-                                    hintText: 'sales.item_reason_hint'.tr(),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                      borderSide: BorderSide(
-                                          color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
-                                    ),
-                                    isDense: true,
-                                    contentPadding: const EdgeInsets.symmetric(
-                                        horizontal: 12, vertical: 8),
-                                  ),
-                                  style: theme.textTheme.bodySmall,
-                                  onChanged: (v) => context
-                                      .read<SaleReturnFormBloc>()
-                                      .add(SaleReturnItemReasonChanged(item.id, v)),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
+                  return _ReturnItemTile(
+                    item: item,
+                    returnItem: isSelected ? returnItem.first : null,
+                    isSelected: isSelected,
+                    currencyService: cs,
+                    maxReturnableQty: maxReturnable,
+                    alreadyReturnedQty: alreadyReturned,
+                    onToggle: maxReturnable > 0
+                        ? () => context.read<SaleReturnFormBloc>().add(SaleReturnItemToggled(item))
+                        : null,
+                    onQuantityChanged: (qty) => context
+                        .read<SaleReturnFormBloc>()
+                        .add(SaleReturnItemQuantityChanged(item.id, qty)),
+                    onReasonChanged: (reason) => context
+                        .read<SaleReturnFormBloc>()
+                        .add(SaleReturnItemReasonChanged(item.id, reason)),
                   );
                 },
               ),
@@ -735,9 +929,7 @@ class _SaleReturnFormView extends StatelessWidget {
             ),
             const Spacer(),
             OutlinedButton(
-              onPressed: state.isSubmitting ? null : () {
-                if (context.canPop()) context.pop();
-              },
+              onPressed: state.isSubmitting ? null : () => _navigateBack(context),
               child: Text('common.cancel'.tr()),
             ),
             const SizedBox(width: 8),
@@ -757,6 +949,197 @@ class _SaleReturnFormView extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// RETURN ITEM TILE (extracted widget)
+// ═══════════════════════════════════════════════════════
+class _ReturnItemTile extends StatelessWidget {
+  final SaleItemEntity item;
+  final SaleReturnLineItem? returnItem;
+  final bool isSelected;
+  final CurrencyService currencyService;
+  final int maxReturnableQty;
+  final int alreadyReturnedQty;
+  final VoidCallback? onToggle;
+  final ValueChanged<int> onQuantityChanged;
+  final ValueChanged<String> onReasonChanged;
+
+  const _ReturnItemTile({
+    required this.item,
+    this.returnItem,
+    required this.isSelected,
+    required this.currencyService,
+    required this.maxReturnableQty,
+    required this.alreadyReturnedQty,
+    this.onToggle,
+    required this.onQuantityChanged,
+    required this.onReasonChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final cs = currencyService;
+
+    final displayName = item.variantSku != null
+        ? '${item.productName ?? 'Product'} (${item.variantSku})'
+        : item.productName ?? 'Product #${item.productId}';
+    final fullyReturned = maxReturnableQty <= 0;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Checkbox(
+                value: isSelected,
+                onChanged: fullyReturned ? null : (_) => onToggle?.call(),
+                activeColor: colorScheme.error,
+              ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(displayName,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: fullyReturned ? colorScheme.onSurface.withValues(alpha: 0.5) : null)),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${cs.format(item.unitPriceCents.toBigInt().toInt())} × ${item.quantity}  •  ${cs.format(item.totalCents.toBigInt().toInt())}',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant),
+                    ),
+                    if (alreadyReturnedQty > 0) ...[
+                      const SizedBox(height: 4),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          'sales.already_returned'.tr(args: ['$alreadyReturnedQty']),
+                          style: theme.textTheme.labelSmall?.copyWith(
+                              color: Colors.orange.shade700, fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                    ],
+                    if (fullyReturned) ...[
+                      const SizedBox(height: 4),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: colorScheme.error.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          'sales.fully_returned'.tr(),
+                          style: theme.textTheme.labelSmall?.copyWith(
+                              color: colorScheme.error, fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (isSelected && returnItem != null) ...[
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.only(left: 48),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Text('sales.return_qty'.tr(),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onSurfaceVariant)),
+                      const SizedBox(width: 8),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: colorScheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            InkWell(
+                              borderRadius: BorderRadius.circular(8),
+                              onTap: returnItem!.returnQuantity > 1
+                                  ? () => onQuantityChanged(returnItem!.returnQuantity - 1)
+                                  : null,
+                              child: Padding(
+                                padding: const EdgeInsets.all(6),
+                                child: Icon(LucideIcons.minus, size: 14,
+                                    color: returnItem!.returnQuantity > 1
+                                        ? colorScheme.onSurface
+                                        : colorScheme.onSurface.withValues(alpha: 0.3)),
+                              ),
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              child: Text('${returnItem!.returnQuantity}',
+                                  style: theme.textTheme.labelLarge?.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                      color: colorScheme.error)),
+                            ),
+                            InkWell(
+                              borderRadius: BorderRadius.circular(8),
+                              onTap: returnItem!.returnQuantity < maxReturnableQty
+                                  ? () => onQuantityChanged(returnItem!.returnQuantity + 1)
+                                  : null,
+                              child: Padding(
+                                padding: const EdgeInsets.all(6),
+                                child: Icon(LucideIcons.plus, size: 14,
+                                    color: returnItem!.returnQuantity < maxReturnableQty
+                                        ? colorScheme.onSurface
+                                        : colorScheme.onSurface.withValues(alpha: 0.3)),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text('/ $maxReturnableQty',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onSurfaceVariant)),
+                      const Spacer(),
+                      Text(
+                        cs.format(returnItem!.refundCents.toBigInt().toInt()),
+                        style: theme.textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.bold, color: colorScheme.error),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    decoration: InputDecoration(
+                      hintText: 'sales.item_reason_hint'.tr(),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(
+                            color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                      ),
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
+                    ),
+                    style: theme.textTheme.bodySmall,
+                    onChanged: onReasonChanged,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }

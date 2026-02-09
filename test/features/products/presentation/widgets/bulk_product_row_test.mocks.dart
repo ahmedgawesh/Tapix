@@ -118,6 +118,40 @@ class MockCurrencyService extends _i1.Mock implements _i2.CurrencyService {
           as String);
 
   @override
+  String formatCents(int? cents, {bool? showSymbol = true}) =>
+      (super.noSuchMethod(
+            Invocation.method(#formatCents, [cents], {#showSymbol: showSymbol}),
+            returnValue: _i4.dummyValue<String>(
+              this,
+              Invocation.method(
+                #formatCents,
+                [cents],
+                {#showSymbol: showSymbol},
+              ),
+            ),
+          )
+          as String);
+
+  @override
+  String centsToDecimalString(int? cents) =>
+      (super.noSuchMethod(
+            Invocation.method(#centsToDecimalString, [cents]),
+            returnValue: _i4.dummyValue<String>(
+              this,
+              Invocation.method(#centsToDecimalString, [cents]),
+            ),
+          )
+          as String);
+
+  @override
+  int decimalStringToCents(String? decimalString) =>
+      (super.noSuchMethod(
+            Invocation.method(#decimalStringToCents, [decimalString]),
+            returnValue: 0,
+          )
+          as int);
+
+  @override
   _i3.Future<void> dispose() =>
       (super.noSuchMethod(
             Invocation.method(#dispose, []),

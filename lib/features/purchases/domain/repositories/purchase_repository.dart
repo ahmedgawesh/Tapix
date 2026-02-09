@@ -36,6 +36,7 @@ abstract class PurchaseRepository {
     required Decimal discountCents,
     required Decimal taxCents,
     required Decimal totalCents,
+    required Decimal paidAmountCents,
     required List<PurchaseItemInput> items,
     String? paymentMethod,
     String? supplierInvoiceRef,
@@ -53,6 +54,7 @@ abstract class PurchaseRepository {
     required Decimal discountCents,
     required Decimal taxCents,
     required Decimal totalCents,
+    required Decimal paidAmountCents,
     required List<PurchaseItemInput> items,
     String? paymentMethod,
     String? supplierInvoiceRef,
@@ -93,6 +95,9 @@ abstract class PurchaseRepository {
   /// Watch return items
   Stream<List<PurchaseReturnItemEntity>> watchPurchaseReturnItems(int returnId);
 
+  /// Watch return items with full product details (name, color, size, SKU)
+  Stream<List<PurchaseReturnItemEntity>> watchPurchaseReturnItemsWithDetails(int returnId);
+
   /// Generate next return number
   Future<String> generateReturnNumber();
 
@@ -103,6 +108,7 @@ abstract class PurchaseRepository {
     required Decimal totalCents,
     required List<PurchaseReturnItemInput> items,
     String dispositionType = 'restock',
+    String refundMethod = 'credit',
     String? reason,
     DateTime? returnDate,
   });

@@ -10,6 +10,7 @@ import '../../../../core/services/currency_service.dart';
 import '../../../settings/data/services/company_profile_service.dart';
 import '../../../settings/domain/entities/company_profile.dart';
 import '../../domain/entities/purchase_entity.dart';
+import '../../../suppliers/domain/repositories/supplier_repository.dart';
 import '../bloc/purchase_form_bloc.dart';
 
 class PurchasePdfService {
@@ -63,6 +64,31 @@ class PurchasePdfService {
     );
   }
 
+  /// Generate and share a purchase invoice PDF from current form state
+  static Future<void> shareFromFormState({
+    required BuildContext context,
+    required PurchaseFormState state,
+  }) async {
+    final cs = sl<CurrencyService>();
+    final locale = context.locale;
+    final isRtl = locale.languageCode == 'ar';
+    final company = await sl<CompanyProfileService>().getProfile();
+
+    final pdf = await _buildPurchaseInvoiceFromState(
+      state: state,
+      cs: cs,
+      locale: locale,
+      isRtl: isRtl,
+      company: company,
+    );
+
+    final bytes = await pdf.save();
+    await Printing.sharePdf(
+      bytes: bytes,
+      filename: 'Purchase_${state.purchaseNumber ?? state.purchaseId ?? 'draft'}.pdf',
+    );
+  }
+
   /// Generate and print a purchase return invoice PDF
   static Future<void> printPurchaseReturn({
     required BuildContext context,
@@ -91,6 +117,35 @@ class PurchasePdfService {
     );
   }
 
+  /// Generate and share a purchase return invoice PDF
+  static Future<void> sharePurchaseReturn({
+    required BuildContext context,
+    required PurchaseEntity originalPurchase,
+    required PurchaseReturnEntity returnEntity,
+    required List<PurchaseReturnItemEntity> returnItems,
+  }) async {
+    final cs = sl<CurrencyService>();
+    final locale = context.locale;
+    final isRtl = locale.languageCode == 'ar';
+    final company = await sl<CompanyProfileService>().getProfile();
+
+    final pdf = await _buildPurchaseReturnPdf(
+      originalPurchase: originalPurchase,
+      returnEntity: returnEntity,
+      returnItems: returnItems,
+      cs: cs,
+      locale: locale,
+      isRtl: isRtl,
+      company: company,
+    );
+
+    final bytes = await pdf.save();
+    await Printing.sharePdf(
+      bytes: bytes,
+      filename: 'PurchaseReturn_${returnEntity.returnNumber}.pdf',
+    );
+  }
+
   // ═══════════════════════════════════════════════════════
   // PURCHASE INVOICE PDF FROM ENTITY
   // ═══════════════════════════════════════════════════════
@@ -104,6 +159,21 @@ class PurchasePdfService {
   }) async {
     final fonts = await _loadFonts();
     final pdf = pw.Document();
+
+    // Fetch supplier balance for the PDF footer
+    pw.Widget? supplierBalanceWidget;
+    try {
+      final supplierRepo = sl<SupplierRepository>();
+      final supplier = await supplierRepo.getSupplier(purchase.supplierId);
+      if (supplier != null) {
+        supplierBalanceWidget = _buildSupplierBalance(
+          supplierName: supplier.name,
+          balanceCents: supplier.balanceCents.toBigInt().toInt(),
+          cs: cs,
+          fonts: fonts,
+        );
+      }
+    } catch (_) {}
 
     pdf.addPage(
       pw.Page(
@@ -149,6 +219,10 @@ class PurchasePdfService {
                 cs: cs,
                 fonts: fonts,
               ),
+              if (supplierBalanceWidget != null) ...[
+                pw.SizedBox(height: 12),
+                supplierBalanceWidget,
+              ],
               pw.Spacer(),
               _buildFooter(fonts: fonts, locale: locale),
             ],
@@ -172,6 +246,23 @@ class PurchasePdfService {
   }) async {
     final fonts = await _loadFonts();
     final pdf = pw.Document();
+
+    // Fetch supplier balance for the PDF footer (best-effort)
+    pw.Widget? supplierBalanceWidget;
+    try {
+      if (state.supplierId != null) {
+        final supplierRepo = sl<SupplierRepository>();
+        final supplier = await supplierRepo.getSupplier(state.supplierId!);
+        if (supplier != null) {
+          supplierBalanceWidget = _buildSupplierBalance(
+            supplierName: supplier.name,
+            balanceCents: supplier.balanceCents.toBigInt().toInt(),
+            cs: cs,
+            fonts: fonts,
+          );
+        }
+      }
+    } catch (_) {}
 
     pdf.addPage(
       pw.Page(
@@ -228,14 +319,16 @@ class PurchasePdfService {
                   child: pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
-                      pw.Text('purchases.notes'.tr(),
-                          style: pw.TextStyle(font: fonts.bold, fontSize: 10)),
+                      _bidiText('purchases.notes'.tr(), fonts.bold, fontSize: 10),
                       pw.SizedBox(height: 4),
-                      pw.Text(state.notes!,
-                          style: pw.TextStyle(font: fonts.regular, fontSize: 9)),
+                      _bidiText(state.notes!, fonts.regular, fontSize: 9),
                     ],
                   ),
                 ),
+              ],
+              if (supplierBalanceWidget != null) ...[
+                pw.SizedBox(height: 12),
+                supplierBalanceWidget,
               ],
               pw.Spacer(),
               _buildFooter(fonts: fonts, locale: locale),
@@ -263,6 +356,21 @@ class PurchasePdfService {
     final fonts = await _loadFonts();
     final pdf = pw.Document();
 
+    // Fetch supplier balance for the PDF footer
+    pw.Widget? supplierBalanceWidget;
+    try {
+      final supplierRepo = sl<SupplierRepository>();
+      final supplier = await supplierRepo.getSupplier(originalPurchase.supplierId);
+      if (supplier != null) {
+        supplierBalanceWidget = _buildSupplierBalance(
+          supplierName: supplier.name,
+          balanceCents: supplier.balanceCents.toBigInt().toInt(),
+          cs: cs,
+          fonts: fonts,
+        );
+      }
+    } catch (_) {}
+
     pdf.addPage(
       pw.Page(
         pageFormat: PdfPageFormat.a4,
@@ -289,7 +397,7 @@ class PurchasePdfService {
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
                     _pdfInfoRow('purchases.return_number'.tr(),
-                        '${returnEntity.id}', fonts.regular),
+                        returnEntity.returnNumber, fonts.regular),
                     _pdfInfoRow('purchases.return_date'.tr(),
                         DateFormat.yMMMd(locale.toString()).format(returnEntity.returnDate),
                         fonts.regular),
@@ -299,6 +407,9 @@ class PurchasePdfService {
                     if (originalPurchase.supplierName != null)
                       _pdfInfoRow('purchases.supplier'.tr(),
                           originalPurchase.supplierName!, fonts.regular),
+                    _pdfInfoRow('purchases.refund_method'.tr(),
+                        'purchases.refund_method_${returnEntity.refundMethod}'.tr(),
+                        fonts.regular),
                     _pdfInfoRow('purchases.disposition_type'.tr(),
                         'purchases.disposition_${returnEntity.dispositionType}'.tr(),
                         fonts.regular),
@@ -328,8 +439,7 @@ class PurchasePdfService {
                 child: pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
-                    pw.Text('purchases.return_total'.tr(),
-                        style: pw.TextStyle(font: fonts.bold, fontSize: 14)),
+                    _bidiText('purchases.return_total'.tr(), fonts.bold, fontSize: 14),
                     pw.Text(
                       cs.format(returnEntity.totalCents.toBigInt().toInt()),
                       style: pw.TextStyle(
@@ -339,6 +449,10 @@ class PurchasePdfService {
                   ],
                 ),
               ),
+              if (supplierBalanceWidget != null) ...[
+                pw.SizedBox(height: 12),
+                supplierBalanceWidget,
+              ],
               pw.Spacer(),
               _buildFooter(fonts: fonts, locale: locale),
             ],
@@ -382,25 +496,16 @@ class PurchasePdfService {
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
               if (company.name.isNotEmpty)
-                pw.Text(company.name,
-                    style: pw.TextStyle(font: fonts.bold, fontSize: 16)),
+                _bidiText(company.name, fonts.bold, fontSize: 16),
               if (company.address != null && company.address!.isNotEmpty)
-                pw.Text(company.address!,
-                    style: pw.TextStyle(font: fonts.regular, fontSize: 8,
-                        color: PdfColors.grey600)),
+                _bidiText(company.address!, fonts.regular, fontSize: 8, color: PdfColors.grey600),
               if (company.phone != null && company.phone!.isNotEmpty)
-                pw.Text(company.phone!,
-                    style: pw.TextStyle(font: fonts.regular, fontSize: 8,
-                        color: PdfColors.grey600)),
+                _bidiText(company.phone!, fonts.regular, fontSize: 8, color: PdfColors.grey600),
               if (company.taxNumber != null && company.taxNumber!.isNotEmpty)
-                pw.Text('Tax: ${company.taxNumber}',
-                    style: pw.TextStyle(font: fonts.regular, fontSize: 8,
-                        color: PdfColors.grey600)),
+                _bidiText('Tax: ${company.taxNumber}', fonts.regular, fontSize: 8, color: PdfColors.grey600),
             ],
           ),
-          pw.Text(title,
-              style: pw.TextStyle(font: fonts.bold, fontSize: 20,
-                  color: PdfColors.blue800)),
+          _bidiText(title, fonts.bold, fontSize: 20, color: PdfColors.blue800),
         ],
       ),
     );
@@ -490,7 +595,7 @@ class PurchasePdfService {
       border: pw.TableBorder.all(color: PdfColors.grey300),
       columnWidths: {
         0: const pw.FlexColumnWidth(1),
-        1: const pw.FlexColumnWidth(3),
+        1: const pw.FlexColumnWidth(4),
         2: const pw.FlexColumnWidth(1),
         3: const pw.FlexColumnWidth(1.5),
       },
@@ -507,15 +612,36 @@ class PurchasePdfService {
         ...items.asMap().entries.map((entry) {
           final idx = entry.key;
           final item = entry.value;
-          final displayName = item.productName != null
-              ? (item.variantSku != null
-                  ? '${item.productName} (${item.variantSku})'
-                  : item.productName!)
-              : 'Item #${item.purchaseItemId}';
+          final productName = item.productName ?? 'Item #${item.purchaseItemId}';
+          // Build variant details (color · size · SKU)
+          final variantParts = <String>[];
+          if (item.colorName != null && item.colorName!.isNotEmpty) {
+            variantParts.add(item.colorName!);
+          }
+          if (item.sizeName != null && item.sizeName!.isNotEmpty) {
+            variantParts.add(item.sizeName!);
+          }
+          if (item.variantSku != null && item.variantSku!.isNotEmpty) {
+            variantParts.add(item.variantSku!);
+          }
+          final variantLine = variantParts.isNotEmpty
+              ? variantParts.join(' · ')
+              : null;
+
           return pw.TableRow(
             children: [
               _tableCell('${idx + 1}', fonts.regular),
-              _tableCell(displayName, fonts.regular),
+              pw.Padding(
+                padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    _bidiText(productName, fonts.regular, fontSize: 8),
+                    if (variantLine != null)
+                      _bidiText(variantLine, fonts.regular, fontSize: 7, color: PdfColors.grey600),
+                  ],
+                ),
+              ),
               _tableCell('${item.quantity}', fonts.regular),
               _tableCell(cs.format(item.refundCents.toBigInt().toInt()), fonts.regular),
             ],
@@ -556,27 +682,77 @@ class PurchasePdfService {
     );
   }
 
+  static pw.Widget _buildSupplierBalance({
+    required String supplierName,
+    required int balanceCents,
+    required CurrencyService cs,
+    required _PdfFonts fonts,
+  }) {
+    final isCredit = balanceCents < 0; // negative = supplier owes you
+    final absBalance = balanceCents.abs();
+    final balanceLabel = isCredit
+        ? 'purchases.balance_credit'.tr()
+        : 'purchases.balance_you_owe'.tr();
+    final balanceColor = isCredit ? PdfColors.green700 : PdfColors.red700;
+
+    return pw.Container(
+      padding: const pw.EdgeInsets.all(10),
+      decoration: pw.BoxDecoration(
+        color: PdfColors.grey100,
+        border: pw.Border.all(color: PdfColors.grey300),
+        borderRadius: pw.BorderRadius.circular(6),
+      ),
+      child: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children: [
+          pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              _bidiText('purchases.supplier_account'.tr(), fonts.bold, fontSize: 9),
+              _bidiText(supplierName, fonts.regular, fontSize: 8, color: PdfColors.grey600),
+            ],
+          ),
+          pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.end,
+            children: [
+              _bidiText(balanceLabel, fonts.regular, fontSize: 8, color: PdfColors.grey600),
+              pw.Text(cs.format(absBalance),
+                  style: pw.TextStyle(font: fonts.bold, fontSize: 11,
+                      color: balanceColor)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   static pw.Widget _buildFooter({
     required _PdfFonts fonts,
     required Locale locale,
   }) {
+    final footerText = '${'purchases.generated_on'.tr()}: ${DateFormat('yyyy-MM-dd HH:mm', locale.toString()).format(DateTime.now())}';
     return pw.Container(
       alignment: pw.Alignment.center,
-      child: pw.Text(
-        '${'purchases.generated_on'.tr()}: ${DateFormat('yyyy-MM-dd HH:mm', locale.toString()).format(DateTime.now())}',
-        style: pw.TextStyle(font: fonts.regular, fontSize: 8, color: PdfColors.grey500),
-      ),
+      child: _bidiText(footerText, fonts.regular, fontSize: 8, color: PdfColors.grey500),
     );
+  }
+
+  /// Detect if text contains Arabic/Hebrew characters that need RTL
+  static bool _hasArabic(String text) {
+    return RegExp(r'[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF\u0590-\u05FF]').hasMatch(text);
+  }
+
+  /// Create a pw.Text that auto-detects Arabic and sets textDirection accordingly
+  static pw.Text _bidiText(String text, pw.Font font, {double fontSize = 8, PdfColor? color}) {
+    return pw.Text(text,
+        textDirection: _hasArabic(text) ? pw.TextDirection.rtl : pw.TextDirection.ltr,
+        style: pw.TextStyle(font: font, fontSize: fontSize, color: color));
   }
 
   static pw.Widget _tableCell(String text, pw.Font font, {bool isHeader = false}) {
     return pw.Padding(
       padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-      child: pw.Text(text,
-          style: pw.TextStyle(
-            font: font,
-            fontSize: isHeader ? 9 : 8,
-          )),
+      child: _bidiText(text, font, fontSize: isHeader ? 9 : 8),
     );
   }
 
@@ -586,9 +762,8 @@ class PurchasePdfService {
       child: pw.Row(
         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
         children: [
-          pw.Text(label, style: pw.TextStyle(font: font, fontSize: 9,
-              color: PdfColors.grey600)),
-          pw.Text(value, style: pw.TextStyle(font: font, fontSize: 10)),
+          _bidiText(label, font, fontSize: 9, color: PdfColors.grey600),
+          _bidiText(value, font, fontSize: 10),
         ],
       ),
     );
@@ -601,7 +776,7 @@ class PurchasePdfService {
       child: pw.Row(
         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
         children: [
-          pw.Text(label, style: pw.TextStyle(font: font, fontSize: fontSize)),
+          _bidiText(label, font, fontSize: fontSize),
           pw.Text(value,
               style: pw.TextStyle(
                 font: font, fontSize: fontSize,

@@ -45,6 +45,11 @@ class _EmployeeDetailContent extends StatelessWidget {
                   tooltip: 'employees.export_payslip'.tr(),
                 ),
                 IconButton(
+                  icon: const Icon(Icons.share_outlined),
+                  onPressed: () => _sharePayslip(context, state),
+                  tooltip: 'employees.share_payslip'.tr(),
+                ),
+                IconButton(
                   icon: const Icon(Icons.edit_outlined),
                   onPressed: () =>
                       context.push('/employees/${state.employeeId}/edit'),
@@ -118,6 +123,31 @@ class _EmployeeDetailContent extends StatelessWidget {
     if (state.employee == null) return;
     try {
       await PayslipPdfService.generateAndPrint(
+        context: context,
+        employee: state.employee!,
+        role: state.role,
+        period: state.period,
+        attendanceCounts: state.attendanceCounts,
+        payroll: state.latestPayroll,
+        totalCommissionCents: state.totalCommissionCents,
+        leaveRequests: state.leaveRequests,
+      );
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _sharePayslip(
+    BuildContext context,
+    EmployeeDetailState state,
+  ) async {
+    if (state.employee == null) return;
+    try {
+      await PayslipPdfService.generateAndShare(
         context: context,
         employee: state.employee!,
         role: state.role,

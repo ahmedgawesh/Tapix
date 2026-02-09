@@ -259,36 +259,16 @@ class _ReturnFormView extends StatelessWidget {
               label: Text('purchases.print_invoice'.tr()),
               onPressed: () async {
                 Navigator.pop(ctx);
-                final state = context.read<PurchaseReturnFormBloc>().state;
-                try {
-                  if (state.purchaseId != null && state.purchase != null) {
-                    final repo = sl<PurchaseRepository>();
-                    // Get return items from the repository
-                    final returns = await repo.watchPurchaseReturnsByPurchase(state.purchaseId!).first;
-                    if (returns.isNotEmpty && context.mounted) {
-                      final latestReturn = returns.first;
-                      final returnItems = await repo.watchPurchaseReturnItems(latestReturn.id).first;
-                      if (context.mounted) {
-                        // Build a PurchaseEntity from the state purchase
-                        await PurchasePdfService.printPurchaseReturn(
-                          context: context,
-                          originalPurchase: state.purchase!,
-                          returnEntity: latestReturn,
-                          returnItems: returnItems,
-                        );
-                      }
-                    }
-                  }
-                } catch (e) {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('purchases.print_error'.tr()),
-                        behavior: SnackBarBehavior.floating,
-                      ),
-                    );
-                  }
-                }
+                await _printOrShareReturn(context, share: false);
+                if (context.mounted) context.pop();
+              },
+            ),
+            TextButton.icon(
+              icon: const Icon(LucideIcons.share2, size: 18),
+              label: Text('purchases.share_pdf'.tr()),
+              onPressed: () async {
+                Navigator.pop(ctx);
+                await _printOrShareReturn(context, share: true);
                 if (context.mounted) context.pop();
               },
             ),
@@ -304,6 +284,46 @@ class _ReturnFormView extends StatelessWidget {
         );
       },
     );
+  }
+
+  Future<void> _printOrShareReturn(BuildContext context, {required bool share}) async {
+    final state = context.read<PurchaseReturnFormBloc>().state;
+    try {
+      if (state.purchaseId != null && state.purchase != null) {
+        final repo = sl<PurchaseRepository>();
+        final returns = await repo.watchPurchaseReturnsByPurchase(state.purchaseId!).first;
+        if (returns.isNotEmpty && context.mounted) {
+          final latestReturn = returns.first;
+          final returnItems = await repo.watchPurchaseReturnItemsWithDetails(latestReturn.id).first;
+          if (context.mounted) {
+            if (share) {
+              await PurchasePdfService.sharePurchaseReturn(
+                context: context,
+                originalPurchase: state.purchase!,
+                returnEntity: latestReturn,
+                returnItems: returnItems,
+              );
+            } else {
+              await PurchasePdfService.printPurchaseReturn(
+                context: context,
+                originalPurchase: state.purchase!,
+                returnEntity: latestReturn,
+                returnItems: returnItems,
+              );
+            }
+          }
+        }
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('purchases.print_error'.tr()),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
   }
 
   Widget _buildWideLayout(
@@ -396,6 +416,46 @@ class _ReturnFormView extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (purchase?.paymentMethod == 'cheque' && purchase?.dueDate != null) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: colorScheme.error.withValues(alpha: 0.06),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: colorScheme.error.withValues(alpha: 0.25)),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(LucideIcons.alertTriangle, size: 18, color: colorScheme.error),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'purchases.cheque_warning_title'.tr(),
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: colorScheme.error,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'purchases.cheque_warning_message'
+                                .tr(args: [DateFormat.yMMMd().format(purchase!.dueDate!)]),
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
             Row(
               children: [
                 Container(
@@ -618,18 +678,21 @@ class _ReturnFormView extends StatelessWidget {
   }
 
   // ═══════════════════════════════════════════════════════
-  // DISPOSITION TYPE CARD
+  // REFUND METHOD CARD (Primary – how money comes back)
   // ═══════════════════════════════════════════════════════
   Widget _buildDispositionCard(BuildContext context, PurchaseReturnFormState state) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
 
+    const refundMethods = [
+      ('cash', LucideIcons.banknote),
+      ('credit', LucideIcons.wallet),
+      ('cheque', LucideIcons.fileCheck),
+    ];
+
     const dispositions = [
       ('restock', LucideIcons.package),
       ('write_off', LucideIcons.trash2),
-      ('repair', LucideIcons.wrench),
-      ('replace', LucideIcons.repeat),
-      ('refund', LucideIcons.banknote),
     ];
 
     return Card(
@@ -643,6 +706,7 @@ class _ReturnFormView extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // ── Refund Method ──
             Row(
               children: [
                 Container(
@@ -651,15 +715,91 @@ class _ReturnFormView extends StatelessWidget {
                     color: cs.primary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Icon(LucideIcons.settings2, size: 16, color: cs.primary),
+                  child: Icon(LucideIcons.creditCard, size: 16, color: cs.primary),
                 ),
                 const SizedBox(width: 10),
-                Text('purchases.disposition_type'.tr(),
+                Text('purchases.refund_method'.tr(),
                     style: theme.textTheme.titleSmall?.copyWith(
                         fontWeight: FontWeight.w600)),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
+            ...refundMethods.map((m) {
+              final isSelected = state.refundMethod == m.$1;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Material(
+                  color: isSelected
+                      ? cs.primaryContainer.withValues(alpha: 0.5)
+                      : cs.surfaceContainerHighest.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(10),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(10),
+                    onTap: () => context
+                        .read<PurchaseReturnFormBloc>()
+                        .add(ReturnRefundMethodChanged(m.$1)),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      child: Row(
+                        children: [
+                          Icon(m.$2, size: 18,
+                              color: isSelected ? cs.primary : cs.onSurfaceVariant),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('purchases.refund_method_${m.$1}'.tr(),
+                                    style: theme.textTheme.bodyMedium?.copyWith(
+                                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal)),
+                                Text('purchases.refund_method_${m.$1}_desc'.tr(),
+                                    style: theme.textTheme.labelSmall?.copyWith(
+                                        color: cs.onSurfaceVariant, fontSize: 10)),
+                              ],
+                            ),
+                          ),
+                          if (isSelected)
+                            Icon(LucideIcons.checkCircle2, size: 18, color: cs.primary),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }),
+            Divider(height: 20, color: cs.outlineVariant.withValues(alpha: 0.4)),
+            // ── Disposition (what happens to the goods) ──
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(LucideIcons.package, size: 16, color: Colors.amber.shade700),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text('purchases.disposition_type'.tr(),
+                      style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600)),
+                ),
+                InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () => _showDispositionInfoDialog(context),
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: cs.surfaceContainerHighest,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(LucideIcons.info, size: 14, color: cs.onSurfaceVariant),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
             Wrap(
               spacing: 8,
               runSpacing: 8,
@@ -681,8 +821,101 @@ class _ReturnFormView extends StatelessWidget {
                 );
               }).toList(),
             ),
+            const SizedBox(height: 4),
+            Text('purchases.disposition_hint'.tr(),
+                style: theme.textTheme.labelSmall?.copyWith(
+                    color: cs.onSurfaceVariant.withValues(alpha: 0.6), fontSize: 10)),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showDispositionInfoDialog(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(LucideIcons.info, size: 20, color: cs.primary),
+            const SizedBox(width: 10),
+            Text('purchases.disposition_type'.tr(),
+                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _dispositionInfoTile(
+              context,
+              icon: LucideIcons.package,
+              title: 'purchases.disposition_restock'.tr(),
+              description: 'purchases.disposition_restock_info'.tr(),
+              color: Colors.green,
+            ),
+            const SizedBox(height: 10),
+            _dispositionInfoTile(
+              context,
+              icon: LucideIcons.trash2,
+              title: 'purchases.disposition_write_off'.tr(),
+              description: 'purchases.disposition_write_off_info'.tr(),
+              color: Colors.red,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('purchases.finish'.tr()),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _dispositionInfoTile(BuildContext context, {
+    required IconData icon,
+    required String title,
+    required String description,
+    required Color color,
+  }) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, size: 18, color: color),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600)),
+                const SizedBox(height: 4),
+                Text(description, style: theme.textTheme.bodySmall?.copyWith(
+                    color: cs.onSurfaceVariant, height: 1.4)),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -15,6 +15,25 @@ class PurchaseWithSupplier {
   PurchaseWithSupplier({required this.purchase, required this.supplier});
 }
 
+/// Data class for purchase return item with full product details
+class PurchaseReturnItemWithDetails {
+  final PurchaseReturnItem returnItem;
+  final Product product;
+  final ProductVariant? variant;
+  final String? colorName;
+  final String? colorHex;
+  final String? sizeName;
+
+  PurchaseReturnItemWithDetails({
+    required this.returnItem,
+    required this.product,
+    this.variant,
+    this.colorName,
+    this.colorHex,
+    this.sizeName,
+  });
+}
+
 /// Data class for purchase item with product and variant info
 class PurchaseItemWithDetails {
   final PurchaseItem item;
@@ -273,6 +292,210 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
 
       // Update purchase status to posted
       await updatePurchaseStatus(purchaseId, 'posted', userId: userId);
+
+      // Supplier accounting (one source of truth = suppliers.balanceCents):
+      // - A posted purchase increases payable by total.
+      // - Any paid amount decreases payable.
+      // This keeps balances accurate even when paidAmountCents is used to settle
+      // previous balance + this invoice.
+      final totalCents = purchase.totalCents.toBigInt().toInt();
+
+      // Ensure paidAmountCents is backed by purchase_payments rows so it doesn't
+      // get lost when later payments are recorded.
+      var totalPaidCents = (await getPurchasePayments(purchaseId))
+          .fold<int>(0, (sum, p) => sum + p.amountCents.toBigInt().toInt());
+      final headerPaidCents = purchase.paidAmountCents.toBigInt().toInt();
+      int? backfilledInitialPaymentId;
+      if (totalPaidCents == 0 && headerPaidCents > 0) {
+        backfilledInitialPaymentId = await into(purchasePayments).insert(
+          PurchasePaymentsCompanion.insert(
+            purchaseId: purchaseId,
+            amountCents: Decimal.fromInt(headerPaidCents),
+            currencyId: purchase.currencyId,
+            paymentMethod: purchase.paymentMethod ?? 'cash',
+            reference: const Value(null),
+            notes: const Value('Initial payment on posting'),
+            paymentDate: Value(purchase.purchaseDate),
+          ),
+        );
+        totalPaidCents = headerPaidCents;
+      }
+
+      // Keep purchases.paid_amount_cents consistent with payment rows.
+      await (update(purchases)..where((p) => p.id.equals(purchaseId)))
+          .write(PurchasesCompanion(
+            paidAmountCents: Value(Decimal.fromInt(totalPaidCents)),
+            updatedAt: Value(DateTime.now()),
+          ));
+
+      // Record supplier transactions for audit.
+      await into(supplierTransactions).insert(
+        SupplierTransactionsCompanion.insert(
+          supplierId: purchase.supplierId,
+          transactionType: 'purchase',
+          amountCents: Decimal.fromInt(totalCents),
+          currencyId: purchase.currencyId,
+          description: Value('Purchase ${purchase.purchaseNumber}'),
+          referenceId: Value(purchaseId),
+          referenceType: const Value('purchase'),
+        ),
+      );
+
+      // Only log an initial payment transaction when we had to backfill a payment row.
+      // Later payments are logged via recordPayment().
+      if (backfilledInitialPaymentId != null && totalPaidCents > 0) {
+        await into(supplierTransactions).insert(
+          SupplierTransactionsCompanion.insert(
+            supplierId: purchase.supplierId,
+            transactionType: 'payment',
+            amountCents: Decimal.fromInt(-totalPaidCents),
+            currencyId: purchase.currencyId,
+            description: Value('Payment for ${purchase.purchaseNumber}'),
+            referenceId: Value(backfilledInitialPaymentId),
+            referenceType: const Value('purchase_payment'),
+          ),
+        );
+      }
+
+      // Apply net balance delta once.
+      final deltaCents = totalCents - totalPaidCents;
+      if (deltaCents != 0) {
+        final supplier = await (select(suppliers)
+              ..where((s) => s.id.equals(purchase.supplierId)))
+            .getSingleOrNull();
+        if (supplier != null) {
+          final oldBalance = supplier.balanceCents.toBigInt().toInt();
+          final newBalance = oldBalance + deltaCents;
+          await (update(suppliers)..where((s) => s.id.equals(purchase.supplierId)))
+              .write(SuppliersCompanion(
+                balanceCents: Value(Decimal.fromInt(newBalance)),
+                updatedAt: Value(DateTime.now()),
+              ));
+        }
+      }
+    });
+  }
+
+  /// Ensure supplier accounting exists for an already-posted purchase.
+  /// This is used to repair legacy data created before supplier accounting was implemented.
+  /// The method is idempotent: it only inserts missing supplier_transactions and only applies
+  /// the corresponding missing balance deltas.
+  Future<void> ensureSupplierAccountingForPostedPurchase(int purchaseId) {
+    return transaction(() async {
+      final purchase = await getPurchaseById(purchaseId);
+      if (purchase == null) return;
+      if (purchase.status != 'posted') return;
+
+      final supplierId = purchase.supplierId;
+      final currencyId = purchase.currencyId;
+      final totalCents = purchase.totalCents.toBigInt().toInt();
+
+      var deltaBalanceCents = 0;
+
+      final existingPurchaseTx = await (select(supplierTransactions)
+            ..where((t) => t.referenceType.equals('purchase') &
+                t.referenceId.equals(purchaseId) &
+                t.transactionType.equals('purchase')))
+          .getSingleOrNull();
+
+      if (existingPurchaseTx == null) {
+        await into(supplierTransactions).insert(
+          SupplierTransactionsCompanion.insert(
+            supplierId: supplierId,
+            transactionType: 'purchase',
+            amountCents: Decimal.fromInt(totalCents),
+            currencyId: currencyId,
+            description: Value('Purchase ${purchase.purchaseNumber} (backfilled)'),
+            referenceId: Value(purchaseId),
+            referenceType: const Value('purchase'),
+          ),
+        );
+        deltaBalanceCents += totalCents;
+      }
+
+      // Ensure there are payment rows when header paidAmountCents was used.
+      var payments = await getPurchasePayments(purchaseId);
+      if (payments.isEmpty) {
+        final headerPaidCents = purchase.paidAmountCents.toBigInt().toInt();
+        if (headerPaidCents > 0) {
+          final backfilledPaymentId = await into(purchasePayments).insert(
+            PurchasePaymentsCompanion.insert(
+              purchaseId: purchaseId,
+              amountCents: Decimal.fromInt(headerPaidCents),
+              currencyId: currencyId,
+              paymentMethod: purchase.paymentMethod ?? 'cash',
+              reference: const Value(null),
+              notes: const Value('Backfilled legacy payment'),
+              paymentDate: Value(purchase.purchaseDate),
+            ),
+          );
+
+          payments = await getPurchasePayments(purchaseId);
+
+          // If we created a payment row, ensure its supplier transaction exists too.
+          final existingPaymentTx = await (select(supplierTransactions)
+                ..where((t) => t.referenceType.equals('purchase_payment') &
+                    t.referenceId.equals(backfilledPaymentId) &
+                    t.transactionType.equals('payment')))
+              .getSingleOrNull();
+
+          if (existingPaymentTx == null) {
+            await into(supplierTransactions).insert(
+              SupplierTransactionsCompanion.insert(
+                supplierId: supplierId,
+                transactionType: 'payment',
+                amountCents: Decimal.fromInt(-headerPaidCents),
+                currencyId: currencyId,
+                description: Value('Payment for ${purchase.purchaseNumber} (backfilled)'),
+                referenceId: Value(backfilledPaymentId),
+                referenceType: const Value('purchase_payment'),
+              ),
+            );
+            deltaBalanceCents -= headerPaidCents;
+          }
+        }
+      }
+
+      // Ensure each payment row has a matching supplier transaction.
+      for (final p in payments) {
+        final payId = p.id;
+        final payCents = p.amountCents.toBigInt().toInt();
+
+        final existingPaymentTx = await (select(supplierTransactions)
+              ..where((t) => t.referenceType.equals('purchase_payment') &
+                  t.referenceId.equals(payId) &
+                  t.transactionType.equals('payment')))
+            .getSingleOrNull();
+
+        if (existingPaymentTx == null) {
+          await into(supplierTransactions).insert(
+            SupplierTransactionsCompanion.insert(
+              supplierId: supplierId,
+              transactionType: 'payment',
+              amountCents: Decimal.fromInt(-payCents),
+              currencyId: currencyId,
+              description: Value('Payment for ${purchase.purchaseNumber} (backfilled)'),
+              referenceId: Value(payId),
+              referenceType: const Value('purchase_payment'),
+            ),
+          );
+          deltaBalanceCents -= payCents;
+        }
+      }
+
+      if (deltaBalanceCents != 0) {
+        final supplier = await (select(suppliers)..where((s) => s.id.equals(supplierId)))
+            .getSingleOrNull();
+        if (supplier != null) {
+          final oldBalance = supplier.balanceCents.toBigInt().toInt();
+          final newBalance = oldBalance + deltaBalanceCents;
+          await (update(suppliers)..where((s) => s.id.equals(supplierId)))
+              .write(SuppliersCompanion(
+                balanceCents: Value(Decimal.fromInt(newBalance)),
+                updatedAt: Value(DateTime.now()),
+              ));
+        }
+      }
     });
   }
 
@@ -313,6 +536,61 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
               'UPDATE product_variants SET stock_quantity = stock_quantity - ?, updated_at = ? WHERE id = ?',
               [item.quantity, DateTime.now().toIso8601String(), variantId],
             );
+          }
+        }
+
+        // Reverse supplier balance: undo the net delta that was applied on posting.
+        // On posting: balance += (totalCents - paidCents).
+        // Each subsequent payment also reduced balance.
+        // To fully reverse: credit back totalCents, then debit back all payments.
+        final totalCents = purchase.totalCents.toBigInt().toInt();
+        final payments = await getPurchasePayments(purchaseId);
+        final totalPaidCents = payments.fold<int>(
+          0, (sum, p) => sum + p.amountCents.toBigInt().toInt(),
+        );
+
+        // Record reversal transaction for the purchase
+        await into(supplierTransactions).insert(
+          SupplierTransactionsCompanion.insert(
+            supplierId: purchase.supplierId,
+            transactionType: 'purchase_void',
+            amountCents: Decimal.fromInt(-totalCents),
+            currencyId: purchase.currencyId,
+            description: Value('Voided purchase ${purchase.purchaseNumber}'),
+            referenceId: Value(purchaseId),
+            referenceType: const Value('purchase'),
+          ),
+        );
+
+        // Record reversal transactions for each payment
+        if (totalPaidCents > 0) {
+          await into(supplierTransactions).insert(
+            SupplierTransactionsCompanion.insert(
+              supplierId: purchase.supplierId,
+              transactionType: 'payment_reversal',
+              amountCents: Decimal.fromInt(totalPaidCents),
+              currencyId: purchase.currencyId,
+              description: Value('Reversed payments for voided purchase ${purchase.purchaseNumber}'),
+              referenceId: Value(purchaseId),
+              referenceType: const Value('purchase'),
+            ),
+          );
+        }
+
+        // Net balance change: -(totalCents - totalPaidCents)
+        final netReversalCents = totalCents - totalPaidCents;
+        if (netReversalCents != 0) {
+          final supplier = await (select(suppliers)
+                ..where((s) => s.id.equals(purchase.supplierId)))
+              .getSingleOrNull();
+          if (supplier != null) {
+            final oldBalance = supplier.balanceCents.toBigInt().toInt();
+            final newBalance = oldBalance - netReversalCents;
+            await (update(suppliers)..where((s) => s.id.equals(purchase.supplierId)))
+                .write(SuppliersCompanion(
+                  balanceCents: Value(Decimal.fromInt(newBalance)),
+                  updatedAt: Value(DateTime.now()),
+                ));
           }
         }
       }
@@ -376,23 +654,30 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
     final postedCount = allPurchases.where((p) => p.status == 'posted').length;
     final totalCount = allPurchases.where((p) => p.status != 'voided').length;
 
-    // Calculate total payable (total - paid) from non-voided purchases
-    int totalPayable = 0;
-    int totalPaid = 0;
+    // Calculate totals only from posted purchases.
+    // Drafts/pending should not affect accounting payables.
+    int totalPostedCents = 0;
+    int totalPostedPaidCents = 0;
     int overdueCount = 0;
     final now = DateTime.now();
 
     for (final p in allPurchases) {
       if (p.status == 'voided') continue;
-      final total = p.totalCents.toBigInt().toInt();
-      final paid = p.paidAmountCents.toBigInt().toInt();
-      totalPayable += total;
-      totalPaid += paid;
+      if (p.status == 'posted') {
+        final total = p.totalCents.toBigInt().toInt();
+        final paid = p.paidAmountCents.toBigInt().toInt();
+        totalPostedCents += total;
+        totalPostedPaidCents += paid;
+      }
 
       // Overdue: posted, not fully paid, past due date
-      if (p.status == 'posted' && paid < total && p.dueDate != null) {
+      if (p.status == 'posted' && p.dueDate != null) {
+        final total = p.totalCents.toBigInt().toInt();
+        final paid = p.paidAmountCents.toBigInt().toInt();
+        if (paid < total) {
         if (p.dueDate!.isBefore(now)) {
           overdueCount++;
+        }
         }
       }
     }
@@ -404,8 +689,8 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
       totalCount: totalCount,
       draftCount: draftCount,
       postedCount: postedCount,
-      totalPayableCents: totalPayable - totalPaid,
-      totalPaidCents: totalPaid,
+      totalPayableCents: (totalPostedCents - totalPostedPaidCents).clamp(0, 1 << 62),
+      totalPaidCents: totalPostedPaidCents,
       overdueCount: overdueCount,
       returnsCount: returnsCount,
     );
@@ -591,44 +876,102 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
       await (update(purchaseReturns)..where((r) => r.id.equals(returnId)))
           .write(const PurchaseReturnsCompanion(status: Value('posted')));
 
-      // Create supplier credit note transaction and adjust balance
+      // Create supplier transaction and adjust balance based on refund method
       final purchase = await getPurchaseById(returnData.purchaseId);
       if (purchase != null) {
         final refundCents = returnData.totalCents.toBigInt().toInt();
+        final refundMethod = returnData.refundMethod;
 
-        // Record supplier transaction (credit note)
+        // Determine transaction type based on refund method
+        // - credit: supplier owes us → deduct from balance (credit note)
+        // - cash/cheque: supplier already paid us back → no balance change
+        final isCreditRefund = refundMethod == 'credit';
+        final txType = isCreditRefund ? 'credit_note' : 'refund';
+
+        // Record supplier transaction for audit trail
         await into(supplierTransactions).insert(
           SupplierTransactionsCompanion.insert(
             supplierId: purchase.supplierId,
-            transactionType: 'credit_note',
+            transactionType: txType,
             amountCents: Decimal.fromInt(-refundCents),
             currencyId: purchase.currencyId,
-            description: Value('Purchase return ${returnData.returnNumber}'),
+            description: Value('Purchase return ${returnData.returnNumber} ($refundMethod)'),
             referenceId: Value(returnId),
             referenceType: const Value('purchase_return'),
           ),
         );
 
-        // Decrease supplier balance (they owe us)
-        final supplier = await (select(suppliers)
-              ..where((s) => s.id.equals(purchase.supplierId)))
-            .getSingleOrNull();
-        if (supplier != null) {
-          final oldBalance = supplier.balanceCents.toBigInt().toInt();
-          final newBalance = oldBalance - refundCents;
-          await (update(suppliers)..where((s) => s.id.equals(purchase.supplierId)))
-              .write(SuppliersCompanion(
-                balanceCents: Value(Decimal.fromInt(newBalance)),
-                updatedAt: Value(DateTime.now()),
-              ));
+        // Only adjust supplier balance for credit refunds.
+        // Cash/cheque means the supplier already gave us the money back,
+        // so the balance (what we owe them) doesn't change.
+        if (isCreditRefund) {
+          final supplier = await (select(suppliers)
+                ..where((s) => s.id.equals(purchase.supplierId)))
+              .getSingleOrNull();
+          if (supplier != null) {
+            final oldBalance = supplier.balanceCents.toBigInt().toInt();
+            final newBalance = oldBalance - refundCents;
+            await (update(suppliers)..where((s) => s.id.equals(purchase.supplierId)))
+                .write(SuppliersCompanion(
+                  balanceCents: Value(Decimal.fromInt(newBalance)),
+                  updatedAt: Value(DateTime.now()),
+                ));
+          }
         }
       }
     });
   }
 
-  /// Watch purchase return items
+  /// Watch purchase return items (raw)
   Stream<List<PurchaseReturnItem>> watchPurchaseReturnItems(int returnId) {
     return (select(purchaseReturnItems)..where((i) => i.returnId.equals(returnId))).watch();
+  }
+
+  /// Watch purchase return items with full product details (name, color, size, SKU)
+  Stream<List<PurchaseReturnItemWithDetails>> watchPurchaseReturnItemsWithDetails(int returnId) {
+    final query = select(purchaseReturnItems).join([
+      innerJoin(purchaseItems, purchaseItems.id.equalsExp(purchaseReturnItems.purchaseItemId)),
+      innerJoin(products, products.id.equalsExp(purchaseItems.productId)),
+      leftOuterJoin(productVariants, productVariants.id.equalsExp(purchaseItems.variantId)),
+      leftOuterJoin(productColors, productColors.id.equalsExp(productVariants.colorId)),
+      leftOuterJoin(sizes, sizes.id.equalsExp(productVariants.sizeId)),
+    ])
+      ..where(purchaseReturnItems.returnId.equals(returnId));
+
+    return query.watch().map((rows) => rows.map((row) {
+      return PurchaseReturnItemWithDetails(
+        returnItem: row.readTable(purchaseReturnItems),
+        product: row.readTable(products),
+        variant: row.readTableOrNull(productVariants),
+        colorName: row.readTableOrNull(productColors)?.name,
+        colorHex: row.readTableOrNull(productColors)?.hexCode,
+        sizeName: row.readTableOrNull(sizes)?.name,
+      );
+    }).toList());
+  }
+
+  /// Get purchase return items with full product details
+  Future<List<PurchaseReturnItemWithDetails>> getPurchaseReturnItemsWithDetails(int returnId) async {
+    final query = select(purchaseReturnItems).join([
+      innerJoin(purchaseItems, purchaseItems.id.equalsExp(purchaseReturnItems.purchaseItemId)),
+      innerJoin(products, products.id.equalsExp(purchaseItems.productId)),
+      leftOuterJoin(productVariants, productVariants.id.equalsExp(purchaseItems.variantId)),
+      leftOuterJoin(productColors, productColors.id.equalsExp(productVariants.colorId)),
+      leftOuterJoin(sizes, sizes.id.equalsExp(productVariants.sizeId)),
+    ])
+      ..where(purchaseReturnItems.returnId.equals(returnId));
+
+    final rows = await query.get();
+    return rows.map((row) {
+      return PurchaseReturnItemWithDetails(
+        returnItem: row.readTable(purchaseReturnItems),
+        product: row.readTable(products),
+        variant: row.readTableOrNull(productVariants),
+        colorName: row.readTableOrNull(productColors)?.name,
+        colorHex: row.readTableOrNull(productColors)?.hexCode,
+        sizeName: row.readTableOrNull(sizes)?.name,
+      );
+    }).toList();
   }
 
   /// Void a purchase return
@@ -664,17 +1007,19 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
         }
       }
 
-      // Reverse supplier credit note if return was posted
+      // Reverse supplier accounting if return was posted
       if (returnData.status == 'posted') {
         final purchase = await getPurchaseById(returnData.purchaseId);
         if (purchase != null) {
           final refundCents = returnData.totalCents.toBigInt().toInt();
+          final isCreditRefund = returnData.refundMethod == 'credit';
 
-          // Record reversal transaction
+          // Record reversal transaction for audit trail (always)
+          final reversalType = isCreditRefund ? 'credit_note_reversal' : 'refund_reversal';
           await into(supplierTransactions).insert(
             SupplierTransactionsCompanion.insert(
               supplierId: purchase.supplierId,
-              transactionType: 'credit_note_reversal',
+              transactionType: reversalType,
               amountCents: Decimal.fromInt(refundCents),
               currencyId: purchase.currencyId,
               description: Value('Voided purchase return ${returnData.returnNumber}'),
@@ -683,18 +1028,22 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
             ),
           );
 
-          // Restore supplier balance
-          final supplier = await (select(suppliers)
-                ..where((s) => s.id.equals(purchase.supplierId)))
-              .getSingleOrNull();
-          if (supplier != null) {
-            final oldBalance = supplier.balanceCents.toBigInt().toInt();
-            final newBalance = oldBalance + refundCents;
-            await (update(suppliers)..where((s) => s.id.equals(purchase.supplierId)))
-                .write(SuppliersCompanion(
-                  balanceCents: Value(Decimal.fromInt(newBalance)),
-                  updatedAt: Value(DateTime.now()),
-                ));
+          // Only restore supplier balance for credit refunds.
+          // Cash/cheque refunds did not change the balance on posting,
+          // so voiding them should not change it either.
+          if (isCreditRefund) {
+            final supplier = await (select(suppliers)
+                  ..where((s) => s.id.equals(purchase.supplierId)))
+                .getSingleOrNull();
+            if (supplier != null) {
+              final oldBalance = supplier.balanceCents.toBigInt().toInt();
+              final newBalance = oldBalance + refundCents;
+              await (update(suppliers)..where((s) => s.id.equals(purchase.supplierId)))
+                  .write(SuppliersCompanion(
+                    balanceCents: Value(Decimal.fromInt(newBalance)),
+                    updatedAt: Value(DateTime.now()),
+                  ));
+            }
           }
         }
       }
@@ -727,6 +1076,11 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
     return transaction(() async {
       final paymentId = await into(purchasePayments).insert(payment);
 
+      final purchase = await getPurchaseById(payment.purchaseId.value);
+      if (purchase == null) {
+        throw Exception('Purchase not found');
+      }
+
       // Recalculate total paid
       final payments = await getPurchasePayments(payment.purchaseId.value);
       final totalPaid = payments.fold<int>(
@@ -739,6 +1093,36 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
             updatedAt: Value(DateTime.now()),
           ));
 
+      // Supplier accounting: only posted purchases affect supplier balance.
+      if (purchase.status == 'posted') {
+        final amountCents = payment.amountCents.value.toBigInt().toInt();
+
+        await into(supplierTransactions).insert(
+          SupplierTransactionsCompanion.insert(
+            supplierId: purchase.supplierId,
+            transactionType: 'payment',
+            amountCents: Decimal.fromInt(-amountCents),
+            currencyId: purchase.currencyId,
+            description: Value('Payment for ${purchase.purchaseNumber}'),
+            referenceId: Value(paymentId),
+            referenceType: const Value('purchase_payment'),
+          ),
+        );
+
+        final supplier = await (select(suppliers)
+              ..where((s) => s.id.equals(purchase.supplierId)))
+            .getSingleOrNull();
+        if (supplier != null) {
+          final oldBalance = supplier.balanceCents.toBigInt().toInt();
+          final newBalance = oldBalance - amountCents;
+          await (update(suppliers)..where((s) => s.id.equals(purchase.supplierId)))
+              .write(SuppliersCompanion(
+                balanceCents: Value(Decimal.fromInt(newBalance)),
+                updatedAt: Value(DateTime.now()),
+              ));
+        }
+      }
+
       return paymentId;
     });
   }
@@ -748,6 +1132,8 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
     return transaction(() async {
       final payment = await (select(purchasePayments)..where((p) => p.id.equals(paymentId))).getSingleOrNull();
       if (payment == null) return;
+
+      final purchase = await getPurchaseById(payment.purchaseId);
 
       await (delete(purchasePayments)..where((p) => p.id.equals(paymentId))).go();
 
@@ -762,6 +1148,36 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
             paidAmountCents: Value(Decimal.fromInt(totalPaid)),
             updatedAt: Value(DateTime.now()),
           ));
+
+      // Reverse supplier balance effect if purchase is posted.
+      if (purchase != null && purchase.status == 'posted') {
+        final amountCents = payment.amountCents.toBigInt().toInt();
+
+        await into(supplierTransactions).insert(
+          SupplierTransactionsCompanion.insert(
+            supplierId: purchase.supplierId,
+            transactionType: 'payment_reversal',
+            amountCents: Decimal.fromInt(amountCents),
+            currencyId: purchase.currencyId,
+            description: Value('Deleted payment for ${purchase.purchaseNumber}'),
+            referenceId: Value(paymentId),
+            referenceType: const Value('purchase_payment'),
+          ),
+        );
+
+        final supplier = await (select(suppliers)
+              ..where((s) => s.id.equals(purchase.supplierId)))
+            .getSingleOrNull();
+        if (supplier != null) {
+          final oldBalance = supplier.balanceCents.toBigInt().toInt();
+          final newBalance = oldBalance + amountCents;
+          await (update(suppliers)..where((s) => s.id.equals(purchase.supplierId)))
+              .write(SuppliersCompanion(
+                balanceCents: Value(Decimal.fromInt(newBalance)),
+                updatedAt: Value(DateTime.now()),
+              ));
+        }
+      }
     });
   }
 

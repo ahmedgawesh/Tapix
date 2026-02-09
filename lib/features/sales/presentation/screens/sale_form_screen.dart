@@ -14,8 +14,13 @@ import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../../products/domain/entities/product_entity.dart';
 import '../../../products/domain/entities/product_variant_entity.dart';
+import '../../../products/domain/entities/category_entity.dart';
 import '../../../products/domain/repositories/product_color_repository.dart';
+import '../../../products/domain/repositories/product_repository.dart';
+import '../../../products/domain/repositories/product_variant_repository.dart';
 import '../../../products/domain/repositories/size_repository.dart';
+import '../../../products/presentation/bloc/categories_bloc.dart';
+import '../../../products/presentation/bloc/categories_event.dart';
 import '../../../products/presentation/bloc/products_bloc.dart';
 import '../../../products/presentation/bloc/variant_previews_bloc.dart';
 import '../../../products/presentation/bloc/product_variants_bloc.dart';
@@ -23,6 +28,7 @@ import '../../../customers/domain/repositories/customer_repository.dart';
 import '../../../customers/presentation/bloc/customers_bloc.dart';
 import '../../../employees/domain/repositories/employee_repository.dart';
 import '../bloc/sale_form_bloc.dart';
+import '../services/sale_pdf_service.dart';
 
 part 'sale_form_dialogs.dart';
 
@@ -67,17 +73,16 @@ class _SaleFormViewState extends State<_SaleFormView> {
       listenWhen: (p, c) => p.isSuccess != c.isSuccess || p.error != c.error,
       listener: (context, state) {
         if (state.isSuccess) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('sales.saved_success'.tr())));
-          if (context.canPop()) {
-            context.pop();
-          } else {
-            context.go('/sales');
-          }
+          _showSaveConfirmationDialog(context, state);
         }
         if (state.error != null) {
+          final key = state.error!;
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(state.error!), backgroundColor: cs.error));
+            SnackBar(
+              content: Text(key.tr() == key ? key : key.tr()),
+              backgroundColor: cs.error,
+            ),
+          );
         }
       },
       builder: (context, state) {
@@ -101,11 +106,13 @@ class _SaleFormViewState extends State<_SaleFormView> {
                 child: ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
-                    _customerCard(context, state, theme, cs),
+                    _invoiceHeaderCard(context, state, theme, cs),
                     const SizedBox(height: 12),
-                    _employeeCard(context, state, theme, cs),
+                    _searchBarWithScan(context, theme, cs),
                     const SizedBox(height: 12),
-                    _dateCard(context, state, theme, cs),
+                    _customerEmployeeRow(context, state, theme, cs),
+                    const SizedBox(height: 8),
+                    _salespersonModeToggle(context, state, theme, cs),
                     const SizedBox(height: 12),
                     _discountToggle(context, state, theme, cs),
                     const SizedBox(height: 16),
@@ -127,7 +134,37 @@ class _SaleFormViewState extends State<_SaleFormView> {
     );
   }
 
-  Widget _pickerCard(ColorScheme cs, ThemeData theme, {
+  Widget _customerEmployeeRow(BuildContext ctx, SaleFormState s, ThemeData t, ColorScheme cs) {
+    final hasEmp = s.employeeId != null && s.employeeId != 0;
+    final isPerInvoice = s.salespersonMode == SalespersonMode.perInvoice;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: _compactPickerCard(cs, t,
+            bgColor: cs.primaryContainer, icon: LucideIcons.user,
+            iconColor: cs.onPrimaryContainer, label: 'sales.customer'.tr(),
+            value: s.customerName ?? 'sales.walk_in'.tr(), hasValue: s.customerId != null,
+            onClear: s.customerId != null ? () => ctx.read<SaleFormBloc>().add(const SaleCustomerChanged()) : null,
+            onTap: () => _showCustomerPicker(ctx)),
+        ),
+        // Only show invoice-level salesperson when mode is per-invoice
+        if (isPerInvoice) ...[
+          const SizedBox(width: 8),
+          Expanded(
+            child: _compactPickerCard(cs, t,
+              bgColor: cs.tertiaryContainer, icon: LucideIcons.userCheck,
+              iconColor: cs.onTertiaryContainer, label: 'sales.salesperson'.tr(),
+              value: hasEmp ? (s.employeeName ?? '') : 'sales.select_salesperson'.tr(), hasValue: hasEmp,
+              onClear: hasEmp ? () => ctx.read<SaleFormBloc>().add(const SaleEmployeeChanged()) : null,
+              onTap: () => _showEmployeePicker(ctx)),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _compactPickerCard(ColorScheme cs, ThemeData theme, {
     required Color bgColor, required IconData icon, required Color iconColor,
     required String label, required String value, bool hasValue = false,
     VoidCallback? onClear, required VoidCallback onTap,
@@ -142,54 +179,245 @@ class _SaleFormViewState extends State<_SaleFormView> {
         borderRadius: BorderRadius.circular(14),
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           child: Row(children: [
-            Container(width: 40, height: 40,
-              decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(10)),
-              child: Icon(icon, color: iconColor, size: 20)),
-            const SizedBox(width: 12),
+            Container(width: 32, height: 32,
+              decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(8)),
+              child: Icon(icon, color: iconColor, size: 16)),
+            const SizedBox(width: 8),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(label, style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
-              const SizedBox(height: 2),
-              Text(value, style: theme.textTheme.bodyLarge?.copyWith(
+              Text(label, style: theme.textTheme.labelSmall?.copyWith(
+                color: cs.onSurfaceVariant, fontSize: 10)),
+              Text(value, style: theme.textTheme.bodySmall?.copyWith(
                 fontWeight: hasValue ? FontWeight.w600 : FontWeight.normal,
-                color: hasValue ? null : cs.onSurfaceVariant)),
+                color: hasValue ? null : cs.onSurfaceVariant),
+                maxLines: 1, overflow: TextOverflow.ellipsis),
             ])),
-            if (onClear != null) IconButton(
-              icon: Icon(LucideIcons.x, size: 16, color: cs.onSurfaceVariant),
-              onPressed: onClear, visualDensity: VisualDensity.compact),
-            Icon(LucideIcons.chevronRight, size: 18, color: cs.onSurfaceVariant),
+            if (onClear != null)
+              GestureDetector(
+                onTap: onClear,
+                child: Icon(LucideIcons.x, size: 14, color: cs.onSurfaceVariant)),
           ]),
         ),
       ),
     );
   }
 
-  Widget _customerCard(BuildContext ctx, SaleFormState s, ThemeData t, ColorScheme cs) =>
-    _pickerCard(cs, t, bgColor: cs.primaryContainer, icon: LucideIcons.user,
-      iconColor: cs.onPrimaryContainer, label: 'sales.customer'.tr(),
-      value: s.customerName ?? 'sales.walk_in'.tr(), hasValue: s.customerId != null,
-      onClear: s.customerId != null ? () => ctx.read<SaleFormBloc>().add(const SaleCustomerChanged()) : null,
-      onTap: () => _showCustomerPicker(ctx));
+  Widget _salespersonModeToggle(BuildContext ctx, SaleFormState s, ThemeData t, ColorScheme cs) => Row(
+    children: [
+      Icon(LucideIcons.userCheck, size: 16, color: cs.tertiary), const SizedBox(width: 8),
+      Text('sales.salesperson_mode'.tr(), style: t.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+      const Spacer(),
+      SegmentedButton<SalespersonMode>(
+        segments: [
+          ButtonSegment(value: SalespersonMode.perInvoice, label: Text('sales.per_invoice'.tr(), style: const TextStyle(fontSize: 12))),
+          ButtonSegment(value: SalespersonMode.perItem, label: Text('sales.per_item'.tr(), style: const TextStyle(fontSize: 12))),
+        ],
+        selected: {s.salespersonMode},
+        onSelectionChanged: (v) => ctx.read<SaleFormBloc>().add(SaleSalespersonModeChanged(v.first)),
+        style: const ButtonStyle(visualDensity: VisualDensity.compact, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+      ),
+    ],
+  );
 
-  Widget _employeeCard(BuildContext ctx, SaleFormState s, ThemeData t, ColorScheme cs) {
-    final has = s.employeeId != null && s.employeeId != 0;
-    return _pickerCard(cs, t, bgColor: cs.tertiaryContainer, icon: LucideIcons.userCheck,
-      iconColor: cs.onTertiaryContainer, label: 'sales.salesperson'.tr(),
-      value: has ? (s.employeeName ?? '') : 'sales.select_salesperson'.tr(), hasValue: has,
-      onClear: has ? () => ctx.read<SaleFormBloc>().add(const SaleEmployeeChanged()) : null,
-      onTap: () => _showEmployeePicker(ctx));
+  // ═══════════════════════════════════════════════════════
+  // INVOICE HEADER CARD (Invoice # + Date)
+  // ═══════════════════════════════════════════════════════
+  Widget _invoiceHeaderCard(BuildContext ctx, SaleFormState s, ThemeData t, ColorScheme cs) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: cs.primary.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: cs.primary.withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        children: [
+          // Invoice Number
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('sales.invoice_number'.tr(),
+                    style: t.textTheme.labelSmall?.copyWith(
+                        color: cs.onSurfaceVariant, letterSpacing: 0.5)),
+                const SizedBox(height: 4),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: cs.surface,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: cs.outlineVariant),
+                  ),
+                  child: Text(
+                    s.saleNumber ?? '—',
+                    style: t.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold, color: cs.primary),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 16),
+          // Invoice Date
+          Expanded(
+            child: InkWell(
+              borderRadius: BorderRadius.circular(8),
+              onTap: () async {
+                final date = await showDatePicker(
+                  context: ctx,
+                  initialDate: s.saleDate,
+                  firstDate: DateTime(2020),
+                  lastDate: DateTime.now().add(const Duration(days: 30)),
+                );
+                if (date != null && ctx.mounted) {
+                  ctx.read<SaleFormBloc>().add(SaleDateChanged(date));
+                }
+              },
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('sales.invoice_date'.tr(),
+                      style: t.textTheme.labelSmall?.copyWith(
+                          color: cs.onSurfaceVariant, letterSpacing: 0.5)),
+                  const SizedBox(height: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: cs.surface,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: cs.outlineVariant),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(LucideIcons.calendar, size: 14, color: cs.primary),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            DateFormat.yMd().format(s.saleDate),
+                            style: t.textTheme.bodyMedium?.copyWith(
+                                fontWeight: FontWeight.w500),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
-  Widget _dateCard(BuildContext ctx, SaleFormState s, ThemeData t, ColorScheme cs) =>
-    _pickerCard(cs, t, bgColor: cs.secondaryContainer, icon: LucideIcons.calendar,
-      iconColor: cs.onSecondaryContainer, label: 'sales.date'.tr(),
-      value: DateFormat.yMMMd().format(s.saleDate), hasValue: true,
-      onTap: () async {
-        final d = await showDatePicker(context: ctx, initialDate: s.saleDate,
-          firstDate: DateTime(2020), lastDate: DateTime.now().add(const Duration(days: 30)));
-        if (d != null && ctx.mounted) ctx.read<SaleFormBloc>().add(SaleDateChanged(d));
-      });
+  // ═══════════════════════════════════════════════════════
+  // SEARCH BAR WITH BARCODE SCAN BUTTON
+  // ═══════════════════════════════════════════════════════
+  Widget _searchBarWithScan(BuildContext ctx, ThemeData t, ColorScheme cs) {
+    return Row(
+      children: [
+        Expanded(
+          child: InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () => _showAddItemSheet(ctx),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
+              ),
+              child: Row(
+                children: [
+                  Icon(LucideIcons.search, size: 18, color: cs.onSurfaceVariant),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'sales.search_or_scan'.tr(),
+                      style: t.textTheme.bodyMedium?.copyWith(
+                          color: cs.onSurfaceVariant),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => _openBarcodeScanner(ctx),
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
+            ),
+            child: Icon(LucideIcons.scanLine, size: 22, color: cs.onSurfaceVariant),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // BARCODE SCANNER
+  // ═══════════════════════════════════════════════════════
+  void _openBarcodeScanner(BuildContext context) async {
+    final result = await context.push<String>('/barcode-scanner', extra: {'returnOnScan': true});
+    if (result != null && result.isNotEmpty && context.mounted) {
+      final productRepo = sl<ProductRepository>();
+      final variantRepo = sl<ProductVariantRepository>();
+
+      try {
+        // Try to find variant by barcode first
+        final variant = await variantRepo.getVariantByBarcode(result);
+        if (variant != null && context.mounted) {
+          final product = await productRepo.watchProduct(variant.productId).first;
+          if (product != null && context.mounted) {
+            context.read<SaleFormBloc>().add(SaleLineItemAdded(
+                  product: product,
+                  variant: variant,
+                  quantity: 1,
+                  unitPriceCents: variant.priceCents,
+                ));
+            return;
+          }
+        }
+
+        // Try product barcode
+        final product = await productRepo.findByBarcode(result);
+        if (product != null && context.mounted) {
+          context.read<SaleFormBloc>().add(SaleLineItemAdded(
+                product: product,
+                quantity: 1,
+                unitPriceCents: product.priceCents,
+              ));
+          return;
+        }
+
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('sales.no_products'.tr()),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      } catch (_) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('sales.no_products'.tr()),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+    }
+  }
 
   Widget _discountToggle(BuildContext ctx, SaleFormState s, ThemeData t, ColorScheme cs) => Row(
     children: [
@@ -216,12 +444,6 @@ class _SaleFormViewState extends State<_SaleFormView> {
         Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
           decoration: BoxDecoration(color: cs.primaryContainer, borderRadius: BorderRadius.circular(10)),
           child: Text('${s.items.length}', style: t.textTheme.labelSmall?.copyWith(color: cs.onPrimaryContainer, fontWeight: FontWeight.bold)))],
-      const Spacer(),
-      FilledButton.tonalIcon(
-        onPressed: () => _showAddItemSheet(ctx),
-        icon: const Icon(LucideIcons.plus, size: 16),
-        label: Text('sales.add_item'.tr()),
-        style: FilledButton.styleFrom(visualDensity: VisualDensity.compact, tapTargetSize: MaterialTapTargetSize.shrinkWrap)),
     ],
   );
 
@@ -283,6 +505,13 @@ class _SaleFormViewState extends State<_SaleFormView> {
           Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
             Text(curr.format(item.totalCents.toBigInt().toInt()),
               style: t.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold, color: cs.primary)),
+            if (item.employeeName != null && item.employeeName!.isNotEmpty) ...[const SizedBox(height: 2),
+              Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(color: cs.tertiaryContainer, borderRadius: BorderRadius.circular(6)),
+                child: Text(item.employeeName!, style: t.textTheme.labelSmall?.copyWith(
+                  color: cs.onTertiaryContainer, fontSize: 9)))],
+            if (item.itemNote != null && item.itemNote!.isNotEmpty) ...[const SizedBox(height: 2),
+              Icon(LucideIcons.stickyNote, size: 12, color: cs.onSurfaceVariant)],
             const SizedBox(height: 4),
             InkWell(onTap: () => ctx.read<SaleFormBloc>().add(SaleLineItemRemoved(item.tempId)),
               borderRadius: BorderRadius.circular(8),
@@ -436,6 +665,7 @@ class _SaleFormViewState extends State<_SaleFormView> {
         providers: [
           BlocProvider(create: (_) => sl<ProductsBloc>()..add(const ProductSearchRequested(''))),
           BlocProvider(create: (_) => sl<VariantPreviewsBloc>()),
+          BlocProvider(create: (_) => sl<CategoriesBloc>()..add(const LoadCategories())),
         ],
         child: _AddItemSheet(onItemAdded: (product, variant, qty, price) {
           bloc.add(SaleLineItemAdded(product: product, variant: variant, quantity: qty, unitPriceCents: price));
@@ -445,14 +675,118 @@ class _SaleFormViewState extends State<_SaleFormView> {
 
   void _showEditItemSheet(BuildContext ctx, SaleLineItem item) {
     final bloc = ctx.read<SaleFormBloc>();
+    final isPerItem = bloc.state.salespersonMode == SalespersonMode.perItem;
     showModalBottomSheet<void>(context: ctx, isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (sc) => _EditItemSheet(item: item,
-        onUpdated: (qty, price, discount) {
-          bloc.add(SaleLineItemUpdated(tempId: item.tempId, quantity: qty, unitPriceCents: price, discountCents: discount));
+        showSalesperson: isPerItem,
+        onUpdated: (qty, price, discount, {int? employeeId, String? employeeName, String? itemNote, bool clearEmployee = false}) {
+          bloc.add(SaleLineItemUpdated(
+            tempId: item.tempId, quantity: qty, unitPriceCents: price, discountCents: discount,
+            employeeId: employeeId, employeeName: employeeName, itemNote: itemNote, clearEmployee: clearEmployee));
           Navigator.pop(sc);
         },
         onRemoved: () { bloc.add(SaleLineItemRemoved(item.tempId)); Navigator.pop(sc); }));
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // SAVE CONFIRMATION DIALOG (Print / Share / Finish)
+  // ═══════════════════════════════════════════════════════
+  void _showSaveConfirmationDialog(BuildContext context, SaleFormState state) {
+    final theme = Theme.of(context);
+    final invoiceNumber = state.saleNumber ?? '${state.saleId ?? ''}';
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return AlertDialog(
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.green.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(LucideIcons.checkCircle2, size: 48, color: Colors.green),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'sales.invoice_saved_message'.tr(args: [invoiceNumber]),
+                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+          actionsAlignment: MainAxisAlignment.center,
+          actions: [
+            TextButton.icon(
+              icon: const Icon(LucideIcons.printer, size: 18),
+              label: Text('sales.print_invoice'.tr()),
+              onPressed: () async {
+                Navigator.pop(ctx);
+                try {
+                  await SalePdfService.printFromFormState(
+                    context: context,
+                    state: state,
+                  );
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('sales.print_error'.tr()),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
+                }
+                if (context.mounted) {
+                  if (context.canPop()) {
+                    context.pop();
+                  } else {
+                    context.go('/sales');
+                  }
+                }
+              },
+            ),
+            TextButton.icon(
+              icon: const Icon(LucideIcons.share2, size: 18),
+              label: Text('sales.share_invoice'.tr()),
+              onPressed: () async {
+                Navigator.pop(ctx);
+                try {
+                  await SalePdfService.shareFromFormState(
+                    context: context,
+                    state: state,
+                  );
+                } catch (_) {}
+                if (context.mounted) {
+                  if (context.canPop()) {
+                    context.pop();
+                  } else {
+                    context.go('/sales');
+                  }
+                }
+              },
+            ),
+            FilledButton.icon(
+              icon: const Icon(LucideIcons.checkCircle, size: 18),
+              label: Text('sales.finish'.tr()),
+              onPressed: () {
+                Navigator.pop(ctx);
+                if (context.canPop()) {
+                  context.pop();
+                } else {
+                  context.go('/sales');
+                }
+              },
+            ),
+          ],
+        );
+      },
+    );
   }
 
   void _showCheckoutDialog(BuildContext ctx, SaleFormState s, CurrencyService curr) {

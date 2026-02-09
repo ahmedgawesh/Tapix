@@ -180,7 +180,7 @@ class _ReceivePaymentScreenState extends State<ReceivePaymentScreen> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final currencyService = sl<CurrencyService>();
-    final balanceCents = customer.balanceCents.toDouble().round();
+    final balanceCents = customer.balanceCents.toBigInt().toInt();
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -421,7 +421,7 @@ class _ReceivePaymentScreenState extends State<ReceivePaymentScreen> {
                           itemCount: customers.length,
                           itemBuilder: (context, index) {
                             final customer = customers[index];
-                            final balanceCents = customer.balanceCents.toDouble().round();
+                            final balanceCents = customer.balanceCents.toBigInt().toInt();
 
                             return ListTile(
                               leading: CircleAvatar(
@@ -505,13 +505,6 @@ class _ReceivePaymentScreenState extends State<ReceivePaymentScreen> {
         description: _descriptionController.text.isEmpty
             ? null
             : _descriptionController.text,
-      );
-
-      // Update balance
-      final currentBalance = customer.balanceCents.toDouble().round();
-      await sl<CustomerRepository>().updateCustomerBalance(
-        customer.id,
-        currentBalance - amountCents,
       );
 
       if (mounted) {

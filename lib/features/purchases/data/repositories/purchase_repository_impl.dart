@@ -67,6 +67,7 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
     required Decimal discountCents,
     required Decimal taxCents,
     required Decimal totalCents,
+    required Decimal paidAmountCents,
     required List<PurchaseItemInput> items,
     String? paymentMethod,
     String? supplierInvoiceRef,
@@ -84,6 +85,7 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
       discountCents: Value(discountCents),
       taxCents: Value(taxCents),
       totalCents: Value(totalCents),
+      paidAmountCents: Value(paidAmountCents),
       status: const Value('draft'),
       paymentMethod: Value(paymentMethod),
       supplierInvoiceRef: Value(supplierInvoiceRef),
@@ -132,6 +134,7 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
     required Decimal discountCents,
     required Decimal taxCents,
     required Decimal totalCents,
+    required Decimal paidAmountCents,
     required List<PurchaseItemInput> items,
     String? paymentMethod,
     String? supplierInvoiceRef,
@@ -146,6 +149,7 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
       discountCents: Value(discountCents),
       taxCents: Value(taxCents),
       totalCents: Value(totalCents),
+      paidAmountCents: Value(paidAmountCents),
       paymentMethod: Value(paymentMethod),
       supplierInvoiceRef: Value(supplierInvoiceRef),
       notes: Value(notes),
@@ -264,6 +268,11 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
   }
 
   @override
+  Stream<List<PurchaseReturnItemEntity>> watchPurchaseReturnItemsWithDetails(int returnId) {
+    return _datasource.watchPurchaseReturnItemsWithDetails(returnId);
+  }
+
+  @override
   Future<String> generateReturnNumber() {
     return _datasource.generateReturnNumber();
   }
@@ -275,6 +284,7 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
     required Decimal totalCents,
     required List<PurchaseReturnItemInput> items,
     String dispositionType = 'restock',
+    String refundMethod = 'credit',
     String? reason,
     DateTime? returnDate,
   }) async {
@@ -287,6 +297,7 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
       currencyId: Value(currencyId),
       status: const Value('draft'),
       dispositionType: Value(dispositionType),
+      refundMethod: Value(refundMethod),
       reason: Value(reason),
       returnDate: Value(returnDate ?? DateTime.now()),
     );

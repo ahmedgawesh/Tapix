@@ -180,7 +180,7 @@ class CustomerFormBloc extends Bloc<CustomerFormEvent, CustomerFormState> {
             phone: customer.phone ?? '',
             address: customer.address ?? '',
             segment: customer.segment,
-            balance: (customer.balanceCents.toDouble() / 100).toStringAsFixed(2),
+            balance: (customer.balanceCents.toBigInt().toInt() / 100).toStringAsFixed(2),
             loyaltyEnabled: customer.loyaltyEnabled,
             currencyId: customer.currencyId,
             isEditing: true,
@@ -328,7 +328,7 @@ class CustomerFormBloc extends Bloc<CustomerFormEvent, CustomerFormState> {
           );
           await _repository.updateCustomer(updatedCustomer);
 
-          final currentBalanceCents = existingCustomer.balanceCents.toDouble().round();
+          final currentBalanceCents = existingCustomer.balanceCents.toBigInt().toInt();
           if (desiredBalanceCents != currentBalanceCents) {
             final deltaCents = desiredBalanceCents - currentBalanceCents;
             await _repository.recordTransaction(
@@ -338,7 +338,6 @@ class CustomerFormBloc extends Bloc<CustomerFormEvent, CustomerFormState> {
               currencyId: existingCustomer.currencyId,
               description: null,
             );
-            await _repository.updateCustomerBalance(existingCustomer.id, desiredBalanceCents);
           }
 
           emit(CustomerFormSuccess(

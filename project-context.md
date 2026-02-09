@@ -2871,6 +2871,155 @@ This ensures accurate supplier settlements and maintains accounting integrity ac
 
 ---
 
-**Last Updated**: 2026-02-08 
+## 📊 Financial Reports System
+
+### Architecture Overview
+
+The reports system follows the same Clean Architecture + RealtimeBloc pattern as the rest of Tapix. All financial reports are **date-range aware** and update in **real-time** via Drift stream subscriptions. There are **no manual refresh buttons** — data flows reactively from the database.
+
+### Key Components
+
+| Component | File | Purpose |
+|-----------|------|---------|
+| **ReportsBloc** | `lib/features/reports/presentation/bloc/reports_bloc.dart` | Central RealtimeBloc for all financial reports. Watches posted journal entry lines within a date range, computes trial balance, and supports reconciliation. |
+| **ReportDateRange** | `lib/features/reports/presentation/widgets/report_date_range.dart` | Model class representing a date range with preset periods (today, this week, this month, last month, this quarter, this year, last year, all time, custom). |
+| **DateRangeSelector** | `lib/features/reports/presentation/widgets/date_range_selector.dart` | Reusable widget with preset FilterChips + custom date range picker. Used on every report screen. |
+| **JournalPdfService** | `lib/features/accounting/presentation/services/journal_pdf_service.dart` | PDF generation, print, and share for Trial Balance, Profit & Loss, and Balance Sheet. Supports multi-language (EN/AR/FR) with RTL for Arabic. |
+
+### Report Screens
+
+All screens are under `lib/features/reports/presentation/screens/`:
+
+| Screen | File | Features |
+|--------|------|----------|
+| **Reports Hub** | `reports_hub_screen.dart` | Dashboard with health banner, navigation cards to sub-reports, settings gear icon |
+| **Trial Balance** | `trial_balance_screen.dart` | Date range selector, balance status banner, account table, totals footer, print/share + audit |
+| **Profit & Loss** | `profit_loss_screen.dart` | Date range selector, net profit/loss card, revenue/expense sections, summary card, print/share + audit |
+| **Balance Sheet** | `balance_sheet_screen.dart` | Date range selector, balance indicator, asset/liability/equity sections with retained earnings, print/share + audit |
+| **General Ledger** | `general_ledger_screen.dart` | Date range selector, account dropdown (AccountsBloc), running balance table with stream subscription per account |
+| **Accounting Health** | `accounting_health_screen.dart` | Date range selector, health status card, trial balance check, journal entries check, issues list |
+
+### How Date Range Filtering Works
+
+1. **Data Layer**: `AccountingDao` has two join queries:
+   - `watchPostedLinesByDateRange(start, end)` — joins `journal_entry_lines` with `journal_entries`, filters by `status='posted'` and `entry_date` within range
+   - `watchPostedLinesByAccountAndDateRange(accountId, start, end)` — same but also filters by account (for General Ledger)
+
+2. **Repository Layer**: `JournalRepository` exposes these as streams through the datasource.
+
+3. **Bloc Layer**: `ReportsBloc` subscribes to `watchPostedLinesByDateRange` using the current `_dateRange`. When the user changes the date range:
+   - `ReportsDateRangeChanged` event is dispatched
+   - Bloc updates `_dateRange` and calls `refresh()` (from `RealtimeBloc`)
+   - `refresh()` re-subscribes to `dataStream`, which now reads the new `_dateRange`
+   - Trial balance is recomputed from the new set of journal entry lines
+
+4. **UI Layer**: Each report screen wraps its body with `BlocBuilder<ReportsBloc, RealtimeState<ReportsData>>` and places a `DateRangeSelector` widget at the top. The selector dispatches `ReportsDateRangeChanged` on change.
+
+### ReportsBloc Data Flow
+
+```
+User selects date range
+  → ReportsDateRangeChanged event
+    → _dateRange updated
+      → refresh() → re-subscribe to dataStream
+        → watchPostedLinesByDateRange(start, end)
+          → Drift emits List<JournalEntryLine>
+            → _computeFromLines() aggregates per account
+              → TrialBalance built
+                → RealtimeSuccess<ReportsData> emitted
+                  → UI rebuilds with new data
+```
+
+### ReportsData Model
+
+```dart
+class ReportsData {
+  final TrialBalance trialBalance;       // Computed from lines in date range
+  final ReconciliationResult? reconciliation; // Optional health check result
+  final ReportDateRange dateRange;       // Current date range
+  bool get isHealthy;                    // TB balanced + reconciliation OK
+  int get issueCount;                    // Number of reconciliation issues
+}
+```
+
+### Trial Balance Computation from Lines
+
+Unlike the cumulative `account.balanceCents` approach, the date-range system computes trial balance by:
+1. Fetching all posted journal entry lines within the date range
+2. Aggregating `debitCents` and `creditCents` per `accountId`
+3. Computing net balance per account
+4. Assigning to debit/credit column based on account type (asset/expense = debit-normal, liability/equity/revenue = credit-normal)
+
+This ensures reports reflect **only the activity within the selected period**.
+
+### PDF Export / Print / Share
+
+`JournalPdfService` provides static methods:
+- `printTrialBalance()` / `shareTrialBalance()` — takes raw `Account` list
+- `printProfitLoss()` / `shareProfitLoss()` — takes `PnlSection` list with revenue/expense breakdown
+- `printBalanceSheet()` / `shareBalanceSheet()` — takes `BalanceSheetSection` list
+
+All methods:
+- Accept `BuildContext` for locale detection
+- Load IBM Plex Sans Arabic font for RTL support
+- Use `pdf` package for document generation
+- Use `printing` package for print dialog
+- Use `share_plus` for sharing (writes temp file, shares via platform sheet)
+
+### Audit Logging
+
+Every print/share action logs to `AuditLogService`:
+```dart
+sl<AuditLogService>().log(
+  entityType: 'report',
+  entityId: 0,
+  action: 'print_trial_balance', // or share_trial_balance, print_profit_loss, etc.
+);
+```
+General Ledger logs `view_general_ledger` with the selected `accountId`.
+
+### Translation Keys
+
+Date range keys are under `reports.date_range.*` in all 3 language files:
+- `today`, `this_week`, `this_month`, `last_month`, `this_quarter`, `this_year`, `last_year`, `all_time`, `custom`, `select_period`
+
+Print/share use `common.print` and `common.share` (already existed).
+
+### DI Registration
+
+`ReportsBloc` is registered in `lib/core/di/injection_container.dart`:
+```dart
+sl.registerFactory(() => ReportsBloc(sl<JournalRepository>()));
+```
+
+### Adding a New Report
+
+To add a new financial report:
+1. Add any needed DAO query methods in `accounting_dao.dart`
+2. Expose through datasource → repository layers
+3. Create a new screen under `lib/features/reports/presentation/screens/`
+4. Use `BlocProvider(create: (_) => sl<ReportsBloc>())` as the wrapper
+5. Add `DateRangeSelector` at the top of the body
+6. Use `BlocBuilder<ReportsBloc, RealtimeState<ReportsData>>` for state handling
+7. Add print/share if needed via `JournalPdfService`
+8. Add audit logging for all export actions
+9. Add route in GoRouter
+10. Add navigation card in Reports Hub
+11. Add translation keys in all 3 language files
+
+### Important Notes for Future AI Models
+
+- **Never add manual refresh buttons** — the RealtimeBloc pattern handles all updates automatically via Drift streams
+- **Always use integer cents** for money math — never use `double` or `Decimal` in UI calculations
+- **Always include DateRangeSelector** on every report screen — it's the standard UX pattern
+- **Always log to AuditLogService** when generating/exporting reports
+- **Default date range is "This Month"** — set in `ReportsBloc._dateRange`
+- **General Ledger is special** — it uses `AccountsBloc` for the account list + a manual `StreamSubscription` for lines (not `ReportsBloc`), because it needs per-account filtering
+- **Reports Hub uses ReportsBloc** for the health banner but doesn't show date range selector (it's a navigation hub, not a report)
+- The `_accountsCache` in `ReportsBloc` keeps a live subscription to all accounts for name/type lookups when computing trial balance from lines
+
+---
+
+**Last Updated**: 2026-02-09 
 **Version**: 1.0.0  
 **Status**: ACTIVE - Follow strictly for all implementations

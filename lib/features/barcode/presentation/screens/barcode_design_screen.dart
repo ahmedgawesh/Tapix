@@ -10,6 +10,7 @@ import '../../../../core/database/daos/product_variant_dao.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../products/domain/entities/product_entity.dart';
 import '../../domain/models/barcode_design_state.dart';
+import '../../data/models/invoice_print_data.dart';
 import '../bloc/barcode_design_bloc.dart';
 import '../bloc/barcode_design_event.dart';
 import '../widgets/a4_preview_widget.dart';
@@ -20,23 +21,33 @@ import '../widgets/product_selection_widget.dart';
 class BarcodeDesignScreen extends StatelessWidget {
   final List<Product>? initialProducts;
   final Map<int, String>? variantInfoByProductId;
+  final InvoicePrintData? invoiceData;
 
   const BarcodeDesignScreen({
     super.key,
     this.initialProducts,
     this.variantInfoByProductId,
+    this.invoiceData,
   });
 
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (context) => sl<BarcodeDesignBloc>()
-        ..add(
-          LoadBarcodeDesignData(
-            initialProducts: initialProducts,
-            variantInfoByProductId: variantInfoByProductId,
-          ),
-        ),
+      create: (context) {
+        final bloc = sl<BarcodeDesignBloc>()
+          ..add(
+            LoadBarcodeDesignData(
+              initialProducts: initialProducts,
+              variantInfoByProductId: variantInfoByProductId,
+            ),
+          );
+
+        final invoice = invoiceData;
+        if (invoice != null) {
+          bloc.add(LoadInvoicePrintData(invoice));
+        }
+        return bloc;
+      },
       child: const _BarcodeDesignScreenContent(),
     );
   }

@@ -23751,6 +23751,18 @@ class $SaleReturnsTable extends SaleReturns
     requiredDuringInsert: false,
     defaultValue: const Constant('restock'),
   );
+  static const VerificationMeta _refundMethodMeta = const VerificationMeta(
+    'refundMethod',
+  );
+  @override
+  late final GeneratedColumn<String> refundMethod = GeneratedColumn<String>(
+    'refund_method',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('cash'),
+  );
   static const VerificationMeta _reasonMeta = const VerificationMeta('reason');
   @override
   late final GeneratedColumn<String> reason = GeneratedColumn<String>(
@@ -23793,6 +23805,7 @@ class $SaleReturnsTable extends SaleReturns
     currencyId,
     status,
     dispositionType,
+    refundMethod,
     reason,
     returnDate,
     createdAt,
@@ -23854,6 +23867,15 @@ class $SaleReturnsTable extends SaleReturns
         ),
       );
     }
+    if (data.containsKey('refund_method')) {
+      context.handle(
+        _refundMethodMeta,
+        refundMethod.isAcceptableOrUnknown(
+          data['refund_method']!,
+          _refundMethodMeta,
+        ),
+      );
+    }
     if (data.containsKey('reason')) {
       context.handle(
         _reasonMeta,
@@ -23911,6 +23933,10 @@ class $SaleReturnsTable extends SaleReturns
         DriftSqlType.string,
         data['${effectivePrefix}disposition_type'],
       )!,
+      refundMethod: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}refund_method'],
+      )!,
       reason: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}reason'],
@@ -23947,6 +23973,9 @@ class SaleReturn extends DataClass implements Insertable<SaleReturn> {
 
   /// restock, write_off, exchange, store_credit, refund
   final String dispositionType;
+
+  /// cash, credit, cheque
+  final String refundMethod;
   final String? reason;
   final DateTime returnDate;
   final DateTime createdAt;
@@ -23958,6 +23987,7 @@ class SaleReturn extends DataClass implements Insertable<SaleReturn> {
     required this.currencyId,
     required this.status,
     required this.dispositionType,
+    required this.refundMethod,
     this.reason,
     required this.returnDate,
     required this.createdAt,
@@ -23976,6 +24006,7 @@ class SaleReturn extends DataClass implements Insertable<SaleReturn> {
     map['currency_id'] = Variable<int>(currencyId);
     map['status'] = Variable<String>(status);
     map['disposition_type'] = Variable<String>(dispositionType);
+    map['refund_method'] = Variable<String>(refundMethod);
     if (!nullToAbsent || reason != null) {
       map['reason'] = Variable<String>(reason);
     }
@@ -23993,6 +24024,7 @@ class SaleReturn extends DataClass implements Insertable<SaleReturn> {
       currencyId: Value(currencyId),
       status: Value(status),
       dispositionType: Value(dispositionType),
+      refundMethod: Value(refundMethod),
       reason: reason == null && nullToAbsent
           ? const Value.absent()
           : Value(reason),
@@ -24014,6 +24046,7 @@ class SaleReturn extends DataClass implements Insertable<SaleReturn> {
       currencyId: serializer.fromJson<int>(json['currencyId']),
       status: serializer.fromJson<String>(json['status']),
       dispositionType: serializer.fromJson<String>(json['dispositionType']),
+      refundMethod: serializer.fromJson<String>(json['refundMethod']),
       reason: serializer.fromJson<String?>(json['reason']),
       returnDate: serializer.fromJson<DateTime>(json['returnDate']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
@@ -24030,6 +24063,7 @@ class SaleReturn extends DataClass implements Insertable<SaleReturn> {
       'currencyId': serializer.toJson<int>(currencyId),
       'status': serializer.toJson<String>(status),
       'dispositionType': serializer.toJson<String>(dispositionType),
+      'refundMethod': serializer.toJson<String>(refundMethod),
       'reason': serializer.toJson<String?>(reason),
       'returnDate': serializer.toJson<DateTime>(returnDate),
       'createdAt': serializer.toJson<DateTime>(createdAt),
@@ -24044,6 +24078,7 @@ class SaleReturn extends DataClass implements Insertable<SaleReturn> {
     int? currencyId,
     String? status,
     String? dispositionType,
+    String? refundMethod,
     Value<String?> reason = const Value.absent(),
     DateTime? returnDate,
     DateTime? createdAt,
@@ -24055,6 +24090,7 @@ class SaleReturn extends DataClass implements Insertable<SaleReturn> {
     currencyId: currencyId ?? this.currencyId,
     status: status ?? this.status,
     dispositionType: dispositionType ?? this.dispositionType,
+    refundMethod: refundMethod ?? this.refundMethod,
     reason: reason.present ? reason.value : this.reason,
     returnDate: returnDate ?? this.returnDate,
     createdAt: createdAt ?? this.createdAt,
@@ -24076,6 +24112,9 @@ class SaleReturn extends DataClass implements Insertable<SaleReturn> {
       dispositionType: data.dispositionType.present
           ? data.dispositionType.value
           : this.dispositionType,
+      refundMethod: data.refundMethod.present
+          ? data.refundMethod.value
+          : this.refundMethod,
       reason: data.reason.present ? data.reason.value : this.reason,
       returnDate: data.returnDate.present
           ? data.returnDate.value
@@ -24094,6 +24133,7 @@ class SaleReturn extends DataClass implements Insertable<SaleReturn> {
           ..write('currencyId: $currencyId, ')
           ..write('status: $status, ')
           ..write('dispositionType: $dispositionType, ')
+          ..write('refundMethod: $refundMethod, ')
           ..write('reason: $reason, ')
           ..write('returnDate: $returnDate, ')
           ..write('createdAt: $createdAt')
@@ -24110,6 +24150,7 @@ class SaleReturn extends DataClass implements Insertable<SaleReturn> {
     currencyId,
     status,
     dispositionType,
+    refundMethod,
     reason,
     returnDate,
     createdAt,
@@ -24125,6 +24166,7 @@ class SaleReturn extends DataClass implements Insertable<SaleReturn> {
           other.currencyId == this.currencyId &&
           other.status == this.status &&
           other.dispositionType == this.dispositionType &&
+          other.refundMethod == this.refundMethod &&
           other.reason == this.reason &&
           other.returnDate == this.returnDate &&
           other.createdAt == this.createdAt);
@@ -24138,6 +24180,7 @@ class SaleReturnsCompanion extends UpdateCompanion<SaleReturn> {
   final Value<int> currencyId;
   final Value<String> status;
   final Value<String> dispositionType;
+  final Value<String> refundMethod;
   final Value<String?> reason;
   final Value<DateTime> returnDate;
   final Value<DateTime> createdAt;
@@ -24149,6 +24192,7 @@ class SaleReturnsCompanion extends UpdateCompanion<SaleReturn> {
     this.currencyId = const Value.absent(),
     this.status = const Value.absent(),
     this.dispositionType = const Value.absent(),
+    this.refundMethod = const Value.absent(),
     this.reason = const Value.absent(),
     this.returnDate = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -24161,6 +24205,7 @@ class SaleReturnsCompanion extends UpdateCompanion<SaleReturn> {
     required int currencyId,
     this.status = const Value.absent(),
     this.dispositionType = const Value.absent(),
+    this.refundMethod = const Value.absent(),
     this.reason = const Value.absent(),
     this.returnDate = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -24176,6 +24221,7 @@ class SaleReturnsCompanion extends UpdateCompanion<SaleReturn> {
     Expression<int>? currencyId,
     Expression<String>? status,
     Expression<String>? dispositionType,
+    Expression<String>? refundMethod,
     Expression<String>? reason,
     Expression<DateTime>? returnDate,
     Expression<DateTime>? createdAt,
@@ -24188,6 +24234,7 @@ class SaleReturnsCompanion extends UpdateCompanion<SaleReturn> {
       if (currencyId != null) 'currency_id': currencyId,
       if (status != null) 'status': status,
       if (dispositionType != null) 'disposition_type': dispositionType,
+      if (refundMethod != null) 'refund_method': refundMethod,
       if (reason != null) 'reason': reason,
       if (returnDate != null) 'return_date': returnDate,
       if (createdAt != null) 'created_at': createdAt,
@@ -24202,6 +24249,7 @@ class SaleReturnsCompanion extends UpdateCompanion<SaleReturn> {
     Value<int>? currencyId,
     Value<String>? status,
     Value<String>? dispositionType,
+    Value<String>? refundMethod,
     Value<String?>? reason,
     Value<DateTime>? returnDate,
     Value<DateTime>? createdAt,
@@ -24214,6 +24262,7 @@ class SaleReturnsCompanion extends UpdateCompanion<SaleReturn> {
       currencyId: currencyId ?? this.currencyId,
       status: status ?? this.status,
       dispositionType: dispositionType ?? this.dispositionType,
+      refundMethod: refundMethod ?? this.refundMethod,
       reason: reason ?? this.reason,
       returnDate: returnDate ?? this.returnDate,
       createdAt: createdAt ?? this.createdAt,
@@ -24246,6 +24295,9 @@ class SaleReturnsCompanion extends UpdateCompanion<SaleReturn> {
     if (dispositionType.present) {
       map['disposition_type'] = Variable<String>(dispositionType.value);
     }
+    if (refundMethod.present) {
+      map['refund_method'] = Variable<String>(refundMethod.value);
+    }
     if (reason.present) {
       map['reason'] = Variable<String>(reason.value);
     }
@@ -24268,6 +24320,7 @@ class SaleReturnsCompanion extends UpdateCompanion<SaleReturn> {
           ..write('currencyId: $currencyId, ')
           ..write('status: $status, ')
           ..write('dispositionType: $dispositionType, ')
+          ..write('refundMethod: $refundMethod, ')
           ..write('reason: $reason, ')
           ..write('returnDate: $returnDate, ')
           ..write('createdAt: $createdAt')
@@ -27089,6 +27142,18 @@ class $PurchaseReturnsTable extends PurchaseReturns
     requiredDuringInsert: false,
     defaultValue: const Constant('restock'),
   );
+  static const VerificationMeta _refundMethodMeta = const VerificationMeta(
+    'refundMethod',
+  );
+  @override
+  late final GeneratedColumn<String> refundMethod = GeneratedColumn<String>(
+    'refund_method',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('credit'),
+  );
   static const VerificationMeta _reasonMeta = const VerificationMeta('reason');
   @override
   late final GeneratedColumn<String> reason = GeneratedColumn<String>(
@@ -27131,6 +27196,7 @@ class $PurchaseReturnsTable extends PurchaseReturns
     currencyId,
     status,
     dispositionType,
+    refundMethod,
     reason,
     returnDate,
     createdAt,
@@ -27192,6 +27258,15 @@ class $PurchaseReturnsTable extends PurchaseReturns
         ),
       );
     }
+    if (data.containsKey('refund_method')) {
+      context.handle(
+        _refundMethodMeta,
+        refundMethod.isAcceptableOrUnknown(
+          data['refund_method']!,
+          _refundMethodMeta,
+        ),
+      );
+    }
     if (data.containsKey('reason')) {
       context.handle(
         _reasonMeta,
@@ -27249,6 +27324,10 @@ class $PurchaseReturnsTable extends PurchaseReturns
         DriftSqlType.string,
         data['${effectivePrefix}disposition_type'],
       )!,
+      refundMethod: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}refund_method'],
+      )!,
       reason: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}reason'],
@@ -27285,6 +27364,9 @@ class PurchaseReturn extends DataClass implements Insertable<PurchaseReturn> {
 
   /// restock, write_off, repair, replace, refund
   final String dispositionType;
+
+  /// cash, credit, cheque
+  final String refundMethod;
   final String? reason;
   final DateTime returnDate;
   final DateTime createdAt;
@@ -27296,6 +27378,7 @@ class PurchaseReturn extends DataClass implements Insertable<PurchaseReturn> {
     required this.currencyId,
     required this.status,
     required this.dispositionType,
+    required this.refundMethod,
     this.reason,
     required this.returnDate,
     required this.createdAt,
@@ -27314,6 +27397,7 @@ class PurchaseReturn extends DataClass implements Insertable<PurchaseReturn> {
     map['currency_id'] = Variable<int>(currencyId);
     map['status'] = Variable<String>(status);
     map['disposition_type'] = Variable<String>(dispositionType);
+    map['refund_method'] = Variable<String>(refundMethod);
     if (!nullToAbsent || reason != null) {
       map['reason'] = Variable<String>(reason);
     }
@@ -27331,6 +27415,7 @@ class PurchaseReturn extends DataClass implements Insertable<PurchaseReturn> {
       currencyId: Value(currencyId),
       status: Value(status),
       dispositionType: Value(dispositionType),
+      refundMethod: Value(refundMethod),
       reason: reason == null && nullToAbsent
           ? const Value.absent()
           : Value(reason),
@@ -27352,6 +27437,7 @@ class PurchaseReturn extends DataClass implements Insertable<PurchaseReturn> {
       currencyId: serializer.fromJson<int>(json['currencyId']),
       status: serializer.fromJson<String>(json['status']),
       dispositionType: serializer.fromJson<String>(json['dispositionType']),
+      refundMethod: serializer.fromJson<String>(json['refundMethod']),
       reason: serializer.fromJson<String?>(json['reason']),
       returnDate: serializer.fromJson<DateTime>(json['returnDate']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
@@ -27368,6 +27454,7 @@ class PurchaseReturn extends DataClass implements Insertable<PurchaseReturn> {
       'currencyId': serializer.toJson<int>(currencyId),
       'status': serializer.toJson<String>(status),
       'dispositionType': serializer.toJson<String>(dispositionType),
+      'refundMethod': serializer.toJson<String>(refundMethod),
       'reason': serializer.toJson<String?>(reason),
       'returnDate': serializer.toJson<DateTime>(returnDate),
       'createdAt': serializer.toJson<DateTime>(createdAt),
@@ -27382,6 +27469,7 @@ class PurchaseReturn extends DataClass implements Insertable<PurchaseReturn> {
     int? currencyId,
     String? status,
     String? dispositionType,
+    String? refundMethod,
     Value<String?> reason = const Value.absent(),
     DateTime? returnDate,
     DateTime? createdAt,
@@ -27393,6 +27481,7 @@ class PurchaseReturn extends DataClass implements Insertable<PurchaseReturn> {
     currencyId: currencyId ?? this.currencyId,
     status: status ?? this.status,
     dispositionType: dispositionType ?? this.dispositionType,
+    refundMethod: refundMethod ?? this.refundMethod,
     reason: reason.present ? reason.value : this.reason,
     returnDate: returnDate ?? this.returnDate,
     createdAt: createdAt ?? this.createdAt,
@@ -27416,6 +27505,9 @@ class PurchaseReturn extends DataClass implements Insertable<PurchaseReturn> {
       dispositionType: data.dispositionType.present
           ? data.dispositionType.value
           : this.dispositionType,
+      refundMethod: data.refundMethod.present
+          ? data.refundMethod.value
+          : this.refundMethod,
       reason: data.reason.present ? data.reason.value : this.reason,
       returnDate: data.returnDate.present
           ? data.returnDate.value
@@ -27434,6 +27526,7 @@ class PurchaseReturn extends DataClass implements Insertable<PurchaseReturn> {
           ..write('currencyId: $currencyId, ')
           ..write('status: $status, ')
           ..write('dispositionType: $dispositionType, ')
+          ..write('refundMethod: $refundMethod, ')
           ..write('reason: $reason, ')
           ..write('returnDate: $returnDate, ')
           ..write('createdAt: $createdAt')
@@ -27450,6 +27543,7 @@ class PurchaseReturn extends DataClass implements Insertable<PurchaseReturn> {
     currencyId,
     status,
     dispositionType,
+    refundMethod,
     reason,
     returnDate,
     createdAt,
@@ -27465,6 +27559,7 @@ class PurchaseReturn extends DataClass implements Insertable<PurchaseReturn> {
           other.currencyId == this.currencyId &&
           other.status == this.status &&
           other.dispositionType == this.dispositionType &&
+          other.refundMethod == this.refundMethod &&
           other.reason == this.reason &&
           other.returnDate == this.returnDate &&
           other.createdAt == this.createdAt);
@@ -27478,6 +27573,7 @@ class PurchaseReturnsCompanion extends UpdateCompanion<PurchaseReturn> {
   final Value<int> currencyId;
   final Value<String> status;
   final Value<String> dispositionType;
+  final Value<String> refundMethod;
   final Value<String?> reason;
   final Value<DateTime> returnDate;
   final Value<DateTime> createdAt;
@@ -27489,6 +27585,7 @@ class PurchaseReturnsCompanion extends UpdateCompanion<PurchaseReturn> {
     this.currencyId = const Value.absent(),
     this.status = const Value.absent(),
     this.dispositionType = const Value.absent(),
+    this.refundMethod = const Value.absent(),
     this.reason = const Value.absent(),
     this.returnDate = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -27501,6 +27598,7 @@ class PurchaseReturnsCompanion extends UpdateCompanion<PurchaseReturn> {
     required int currencyId,
     this.status = const Value.absent(),
     this.dispositionType = const Value.absent(),
+    this.refundMethod = const Value.absent(),
     this.reason = const Value.absent(),
     this.returnDate = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -27516,6 +27614,7 @@ class PurchaseReturnsCompanion extends UpdateCompanion<PurchaseReturn> {
     Expression<int>? currencyId,
     Expression<String>? status,
     Expression<String>? dispositionType,
+    Expression<String>? refundMethod,
     Expression<String>? reason,
     Expression<DateTime>? returnDate,
     Expression<DateTime>? createdAt,
@@ -27528,6 +27627,7 @@ class PurchaseReturnsCompanion extends UpdateCompanion<PurchaseReturn> {
       if (currencyId != null) 'currency_id': currencyId,
       if (status != null) 'status': status,
       if (dispositionType != null) 'disposition_type': dispositionType,
+      if (refundMethod != null) 'refund_method': refundMethod,
       if (reason != null) 'reason': reason,
       if (returnDate != null) 'return_date': returnDate,
       if (createdAt != null) 'created_at': createdAt,
@@ -27542,6 +27642,7 @@ class PurchaseReturnsCompanion extends UpdateCompanion<PurchaseReturn> {
     Value<int>? currencyId,
     Value<String>? status,
     Value<String>? dispositionType,
+    Value<String>? refundMethod,
     Value<String?>? reason,
     Value<DateTime>? returnDate,
     Value<DateTime>? createdAt,
@@ -27554,6 +27655,7 @@ class PurchaseReturnsCompanion extends UpdateCompanion<PurchaseReturn> {
       currencyId: currencyId ?? this.currencyId,
       status: status ?? this.status,
       dispositionType: dispositionType ?? this.dispositionType,
+      refundMethod: refundMethod ?? this.refundMethod,
       reason: reason ?? this.reason,
       returnDate: returnDate ?? this.returnDate,
       createdAt: createdAt ?? this.createdAt,
@@ -27586,6 +27688,9 @@ class PurchaseReturnsCompanion extends UpdateCompanion<PurchaseReturn> {
     if (dispositionType.present) {
       map['disposition_type'] = Variable<String>(dispositionType.value);
     }
+    if (refundMethod.present) {
+      map['refund_method'] = Variable<String>(refundMethod.value);
+    }
     if (reason.present) {
       map['reason'] = Variable<String>(reason.value);
     }
@@ -27608,6 +27713,7 @@ class PurchaseReturnsCompanion extends UpdateCompanion<PurchaseReturn> {
           ..write('currencyId: $currencyId, ')
           ..write('status: $status, ')
           ..write('dispositionType: $dispositionType, ')
+          ..write('refundMethod: $refundMethod, ')
           ..write('reason: $reason, ')
           ..write('returnDate: $returnDate, ')
           ..write('createdAt: $createdAt')
@@ -56772,6 +56878,7 @@ typedef $$SaleReturnsTableCreateCompanionBuilder =
       required int currencyId,
       Value<String> status,
       Value<String> dispositionType,
+      Value<String> refundMethod,
       Value<String?> reason,
       Value<DateTime> returnDate,
       Value<DateTime> createdAt,
@@ -56785,6 +56892,7 @@ typedef $$SaleReturnsTableUpdateCompanionBuilder =
       Value<int> currencyId,
       Value<String> status,
       Value<String> dispositionType,
+      Value<String> refundMethod,
       Value<String?> reason,
       Value<DateTime> returnDate,
       Value<DateTime> createdAt,
@@ -56887,6 +56995,11 @@ class $$SaleReturnsTableFilterComposer
 
   ColumnFilters<String> get dispositionType => $composableBuilder(
     column: $table.dispositionType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get refundMethod => $composableBuilder(
+    column: $table.refundMethod,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -57011,6 +57124,11 @@ class $$SaleReturnsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get refundMethod => $composableBuilder(
+    column: $table.refundMethod,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get reason => $composableBuilder(
     column: $table.reason,
     builder: (column) => ColumnOrderings(column),
@@ -57101,6 +57219,11 @@ class $$SaleReturnsTableAnnotationComposer
 
   GeneratedColumn<String> get dispositionType => $composableBuilder(
     column: $table.dispositionType,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get refundMethod => $composableBuilder(
+    column: $table.refundMethod,
     builder: (column) => column,
   );
 
@@ -57226,6 +57349,7 @@ class $$SaleReturnsTableTableManager
                 Value<int> currencyId = const Value.absent(),
                 Value<String> status = const Value.absent(),
                 Value<String> dispositionType = const Value.absent(),
+                Value<String> refundMethod = const Value.absent(),
                 Value<String?> reason = const Value.absent(),
                 Value<DateTime> returnDate = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -57237,6 +57361,7 @@ class $$SaleReturnsTableTableManager
                 currencyId: currencyId,
                 status: status,
                 dispositionType: dispositionType,
+                refundMethod: refundMethod,
                 reason: reason,
                 returnDate: returnDate,
                 createdAt: createdAt,
@@ -57250,6 +57375,7 @@ class $$SaleReturnsTableTableManager
                 required int currencyId,
                 Value<String> status = const Value.absent(),
                 Value<String> dispositionType = const Value.absent(),
+                Value<String> refundMethod = const Value.absent(),
                 Value<String?> reason = const Value.absent(),
                 Value<DateTime> returnDate = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -57261,6 +57387,7 @@ class $$SaleReturnsTableTableManager
                 currencyId: currencyId,
                 status: status,
                 dispositionType: dispositionType,
+                refundMethod: refundMethod,
                 reason: reason,
                 returnDate: returnDate,
                 createdAt: createdAt,
@@ -60056,6 +60183,7 @@ typedef $$PurchaseReturnsTableCreateCompanionBuilder =
       required int currencyId,
       Value<String> status,
       Value<String> dispositionType,
+      Value<String> refundMethod,
       Value<String?> reason,
       Value<DateTime> returnDate,
       Value<DateTime> createdAt,
@@ -60069,6 +60197,7 @@ typedef $$PurchaseReturnsTableUpdateCompanionBuilder =
       Value<int> currencyId,
       Value<String> status,
       Value<String> dispositionType,
+      Value<String> refundMethod,
       Value<String?> reason,
       Value<DateTime> returnDate,
       Value<DateTime> createdAt,
@@ -60181,6 +60310,11 @@ class $$PurchaseReturnsTableFilterComposer
 
   ColumnFilters<String> get dispositionType => $composableBuilder(
     column: $table.dispositionType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get refundMethod => $composableBuilder(
+    column: $table.refundMethod,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -60305,6 +60439,11 @@ class $$PurchaseReturnsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get refundMethod => $composableBuilder(
+    column: $table.refundMethod,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get reason => $composableBuilder(
     column: $table.reason,
     builder: (column) => ColumnOrderings(column),
@@ -60395,6 +60534,11 @@ class $$PurchaseReturnsTableAnnotationComposer
 
   GeneratedColumn<String> get dispositionType => $composableBuilder(
     column: $table.dispositionType,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get refundMethod => $composableBuilder(
+    column: $table.refundMethod,
     builder: (column) => column,
   );
 
@@ -60523,6 +60667,7 @@ class $$PurchaseReturnsTableTableManager
                 Value<int> currencyId = const Value.absent(),
                 Value<String> status = const Value.absent(),
                 Value<String> dispositionType = const Value.absent(),
+                Value<String> refundMethod = const Value.absent(),
                 Value<String?> reason = const Value.absent(),
                 Value<DateTime> returnDate = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -60534,6 +60679,7 @@ class $$PurchaseReturnsTableTableManager
                 currencyId: currencyId,
                 status: status,
                 dispositionType: dispositionType,
+                refundMethod: refundMethod,
                 reason: reason,
                 returnDate: returnDate,
                 createdAt: createdAt,
@@ -60547,6 +60693,7 @@ class $$PurchaseReturnsTableTableManager
                 required int currencyId,
                 Value<String> status = const Value.absent(),
                 Value<String> dispositionType = const Value.absent(),
+                Value<String> refundMethod = const Value.absent(),
                 Value<String?> reason = const Value.absent(),
                 Value<DateTime> returnDate = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -60558,6 +60705,7 @@ class $$PurchaseReturnsTableTableManager
                 currencyId: currencyId,
                 status: status,
                 dispositionType: dispositionType,
+                refundMethod: refundMethod,
                 reason: reason,
                 returnDate: returnDate,
                 createdAt: createdAt,
