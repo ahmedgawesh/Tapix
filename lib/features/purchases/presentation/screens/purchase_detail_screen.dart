@@ -10,6 +10,8 @@ import '../../../../core/services/currency_service.dart';
 import '../../domain/entities/purchase_entity.dart';
 import '../../domain/repositories/purchase_repository.dart';
 import '../../../products/domain/repositories/product_variant_repository.dart';
+import '../services/purchase_pdf_service.dart';
+import '../../../barcode/data/models/invoice_print_data.dart';
 
 class PurchaseDetailScreen extends StatefulWidget {
   final int purchaseId;
@@ -169,6 +171,31 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
           icon: const Icon(LucideIcons.moreVertical),
           onSelected: (v) => _handleAction(v, context),
           itemBuilder: (_) => [
+            PopupMenuItem(
+              value: 'print',
+              child: ListTile(
+                leading: const Icon(LucideIcons.printer),
+                title: Text('purchases.print_invoice'.tr()),
+                dense: true, contentPadding: EdgeInsets.zero,
+              ),
+            ),
+            PopupMenuItem(
+              value: 'share',
+              child: ListTile(
+                leading: const Icon(LucideIcons.share2),
+                title: Text('purchases.share_pdf'.tr()),
+                dense: true, contentPadding: EdgeInsets.zero,
+              ),
+            ),
+            PopupMenuItem(
+              value: 'print_labels',
+              child: ListTile(
+                leading: const Icon(LucideIcons.scanLine),
+                title: Text('purchases.print_labels'.tr()),
+                dense: true, contentPadding: EdgeInsets.zero,
+              ),
+            ),
+            const PopupMenuDivider(),
             PopupMenuItem(
               value: 'void',
               child: ListTile(
@@ -1262,6 +1289,82 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
                   backgroundColor: errorColor, behavior: SnackBarBehavior.floating),
             );
           }
+        }
+        break;
+      case 'print':
+        if (_purchase != null) {
+          try {
+            await PurchasePdfService.printPurchaseInvoice(
+              context: context,
+              purchase: _purchase!,
+              items: _items,
+            );
+          } catch (e) {
+            if (!mounted) return;
+            messenger.showSnackBar(
+              SnackBar(content: Text(e.toString()),
+                  backgroundColor: errorColor, behavior: SnackBarBehavior.floating),
+            );
+          }
+        }
+        break;
+      case 'share':
+        if (_purchase != null) {
+          try {
+            await PurchasePdfService.sharePurchaseInvoice(
+              context: context,
+              purchase: _purchase!,
+              items: _items,
+            );
+          } catch (e) {
+            if (!mounted) return;
+            messenger.showSnackBar(
+              SnackBar(content: Text(e.toString()),
+                  backgroundColor: errorColor, behavior: SnackBarBehavior.floating),
+            );
+          }
+        }
+        break;
+      case 'print_labels':
+        // Navigate to barcode design screen with invoice data for label printing
+        if (_items.isNotEmpty && _purchase != null) {
+          final lines = <InvoiceLinePrintData>[];
+          for (final item in _items) {
+            // Use variant barcode or generate a fallback
+            final barcode = item.variantSku ?? '${item.variantId ?? item.productId}';
+            // Try to get the actual barcode from the variant
+            String? actualBarcode;
+            if (item.variantId != null) {
+              final variant = await sl<ProductVariantRepository>().getVariantById(item.variantId!);
+              actualBarcode = variant?.barcode;
+            }
+            if (actualBarcode == null || actualBarcode.trim().isEmpty) {
+              // Skip items without barcodes
+              continue;
+            }
+            lines.add(InvoiceLinePrintData(
+              variantId: item.variantId ?? item.productId,
+              quantity: item.quantity,
+              productName: item.productName ?? 'Product #${item.productId}',
+              barcode: actualBarcode,
+              sku: item.variantSku ?? barcode,
+              unitPriceCents: item.unitCostCents.toBigInt().toInt(),
+              isActive: true,
+            ));
+          }
+          final invoiceData = InvoicePrintData(
+            lines: lines,
+            invoiceType: 'purchase',
+            invoiceId: _purchase!.id,
+            invoiceNumber: _purchase!.purchaseNumber,
+            invoiceDate: _purchase!.purchaseDate,
+          );
+          router.push(
+            '/products/barcode-design',
+            extra: {
+              'invoiceData': invoiceData,
+            },
+          );
         }
         break;
       case 'return':

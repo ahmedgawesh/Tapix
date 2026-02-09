@@ -69,6 +69,13 @@ import '../../features/reports/presentation/screens/profit_loss_screen.dart';
 import '../../features/reports/presentation/screens/balance_sheet_screen.dart';
 import '../../features/reports/presentation/screens/general_ledger_screen.dart';
 import '../../features/reports/presentation/screens/accounting_health_screen.dart';
+import '../../features/reports/presentation/screens/inventory_reports_screen.dart';
+import '../../features/reports/presentation/screens/customer_reports_screen.dart';
+import '../../features/reports/presentation/screens/customer_sales_returns_reports_screen.dart';
+import '../../features/reports/presentation/screens/top_customers_screen.dart';
+import '../../features/reports/presentation/screens/customer_payment_reports_screen.dart';
+import '../../features/reports/presentation/screens/customer_sales_report_screen.dart';
+import '../../features/reports/presentation/screens/customer_aging_report_screen.dart';
 import '../di/injection_container.dart';
 import 'route_permissions.dart';
 
@@ -526,6 +533,34 @@ class AppRouter {
           GoRoute(
             path: 'health',
             builder: (context, state) => const AccountingHealthScreen(),
+          ),
+          GoRoute(
+            path: 'inventory',
+            builder: (context, state) => const InventoryReportsScreen(),
+          ),
+          GoRoute(
+            path: 'customers',
+            builder: (context, state) => const CustomerReportsScreen(),
+          ),
+          GoRoute(
+            path: 'customer-returns',
+            builder: (context, state) => const CustomerSalesReturnsReportsScreen(),
+          ),
+          GoRoute(
+            path: 'top-customers',
+            builder: (context, state) => const TopCustomersScreen(),
+          ),
+          GoRoute(
+            path: 'customer-payments',
+            builder: (context, state) => const CustomerPaymentReportsScreen(),
+          ),
+          GoRoute(
+            path: 'customer-sales',
+            builder: (context, state) => const CustomerSalesReportScreen(),
+          ),
+          GoRoute(
+            path: 'customer-aging',
+            builder: (context, state) => const CustomerAgingReportScreen(),
           ),
         ],
       ),

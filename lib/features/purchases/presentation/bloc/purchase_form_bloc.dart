@@ -26,6 +26,7 @@ class PurchaseFormState extends Equatable {
   final List<PurchaseLineItem> items;
   final DiscountMode discountMode;
   final Decimal invoiceDiscountCents;
+  final Decimal invoiceDiscountPercent;
   final String? supplierInvoiceRef;
   final String? notes;
   final DateTime purchaseDate;
@@ -47,6 +48,7 @@ class PurchaseFormState extends Equatable {
     this.items = const [],
     this.discountMode = DiscountMode.perItem,
     Decimal? invoiceDiscountCents,
+    Decimal? invoiceDiscountPercent,
     this.supplierInvoiceRef,
     this.notes,
     required this.purchaseDate,
@@ -59,6 +61,7 @@ class PurchaseFormState extends Equatable {
     this.isSuccess = false,
     this.hasUnsavedChanges = false,
   }) : invoiceDiscountCents = invoiceDiscountCents ?? Decimal.zero,
+       invoiceDiscountPercent = invoiceDiscountPercent ?? Decimal.zero,
        taxRatePercent = taxRatePercent ?? Decimal.zero,
        paidAmountCents = paidAmountCents ?? Decimal.zero;
 
@@ -72,9 +75,18 @@ class PurchaseFormState extends Equatable {
         (sum, item) => sum + item.discountCents,
       );
 
+  Decimal get effectiveInvoiceDiscountCents {
+    if (invoiceDiscountPercent > Decimal.zero) {
+      final raw = subtotalCents * invoiceDiscountPercent / Decimal.fromInt(100);
+      final computed = Decimal.fromBigInt(raw.round());
+      return computed > subtotalCents ? subtotalCents : computed;
+    }
+    return invoiceDiscountCents;
+  }
+
   Decimal get totalDiscountCents {
     if (discountMode == DiscountMode.invoice) {
-      return invoiceDiscountCents;
+      return effectiveInvoiceDiscountCents;
     }
     return itemDiscountCents;
   }
@@ -121,6 +133,7 @@ class PurchaseFormState extends Equatable {
     List<PurchaseLineItem>? items,
     DiscountMode? discountMode,
     Decimal? invoiceDiscountCents,
+    Decimal? invoiceDiscountPercent,
     String? supplierInvoiceRef,
     String? notes,
     DateTime? purchaseDate,
@@ -143,6 +156,7 @@ class PurchaseFormState extends Equatable {
       items: items ?? this.items,
       discountMode: discountMode ?? this.discountMode,
       invoiceDiscountCents: invoiceDiscountCents ?? this.invoiceDiscountCents,
+      invoiceDiscountPercent: invoiceDiscountPercent ?? this.invoiceDiscountPercent,
       supplierInvoiceRef: supplierInvoiceRef ?? this.supplierInvoiceRef,
       notes: notes ?? this.notes,
       purchaseDate: purchaseDate ?? this.purchaseDate,
@@ -160,7 +174,7 @@ class PurchaseFormState extends Equatable {
   @override
   List<Object?> get props => [
         purchaseId, purchaseNumber, supplierId, supplierName, currencyId, items,
-        discountMode, invoiceDiscountCents, supplierInvoiceRef,
+        discountMode, invoiceDiscountCents, invoiceDiscountPercent, supplierInvoiceRef,
         notes, purchaseDate, dueDate,
         paymentMethod, taxRatePercent, paidAmountCents,
         isSubmitting, error, isSuccess, hasUnsavedChanges,
@@ -320,10 +334,12 @@ class PurchaseDiscountModeChanged extends PurchaseFormEvent {
 
 class PurchaseInvoiceDiscountChanged extends PurchaseFormEvent {
   final Decimal discountCents;
-  const PurchaseInvoiceDiscountChanged(this.discountCents);
+  final Decimal discountPercent;
+  PurchaseInvoiceDiscountChanged(this.discountCents, {Decimal? discountPercent})
+      : discountPercent = discountPercent ?? Decimal.zero;
 
   @override
-  List<Object?> get props => [discountCents];
+  List<Object?> get props => [discountCents, discountPercent];
 }
 
 class PurchaseLineItemAdded extends PurchaseFormEvent {
@@ -680,6 +696,7 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
     emit(state.copyWith(
       discountMode: event.mode,
       invoiceDiscountCents: Decimal.zero,
+      invoiceDiscountPercent: Decimal.zero,
     ));
   }
 
@@ -687,7 +704,10 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
     PurchaseInvoiceDiscountChanged event,
     Emitter<PurchaseFormState> emit,
   ) {
-    emit(state.copyWith(invoiceDiscountCents: event.discountCents));
+    emit(state.copyWith(
+      invoiceDiscountCents: event.discountCents,
+      invoiceDiscountPercent: event.discountPercent,
+    ));
   }
 
   Future<void> _onLineItemAdded(
@@ -783,13 +803,14 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
       // Determine effective paid amount:
       // - cash: user-entered paid amount
       // - card: auto-set to total (fully settled)
-      // - credit/cheque/purchaseOrder: 0 (full amount goes to supplier balance)
+      // - credit/cheque: 0 (full amount goes to supplier balance)
+      // - purchaseOrder: auto-set to total (no balance impact, just a reminder)
       final effectivePaidCents = switch (state.paymentMethod) {
         PurchasePaymentMethod.cash => state.paidAmountCents,
         PurchasePaymentMethod.card => state.totalCents,
         PurchasePaymentMethod.credit => Decimal.zero,
         PurchasePaymentMethod.cheque => Decimal.zero,
-        PurchasePaymentMethod.purchaseOrder => Decimal.zero,
+        PurchasePaymentMethod.purchaseOrder => state.totalCents,
       };
 
       if (state.purchaseId == null) {

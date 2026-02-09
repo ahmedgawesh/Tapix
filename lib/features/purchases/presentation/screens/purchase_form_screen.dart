@@ -207,7 +207,6 @@ class _PurchaseFormView extends StatelessWidget {
               const SizedBox(height: 12),
               _buildDiscountModeCard(context, state, cs),
               const SizedBox(height: 12),
-              _buildNotesCard(context, state),
             ],
           ),
         ),
@@ -251,9 +250,16 @@ class _PurchaseFormView extends StatelessWidget {
               const SizedBox(height: 12),
               _buildItemsCard(context, state, cs),
               const SizedBox(height: 12),
-              _buildDiscountModeCard(context, state, cs),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: _buildDueDateCard(context, state)),
+                  const SizedBox(width: 8),
+                  Expanded(child: _buildRefCard(context, state)),
+                ],
+              ),
               const SizedBox(height: 12),
-              _buildNotesCard(context, state),
+              _buildDiscountModeCard(context, state, cs),
               const SizedBox(height: 12),
               _buildTotalsCard(context, state, cs),
               const SizedBox(height: 80),
@@ -1027,28 +1033,19 @@ class _PurchaseFormView extends StatelessWidget {
               ),
             ),
             if (state.discountMode == DiscountMode.invoice) ...[
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: state.invoiceDiscountCents > Decimal.zero
-                        ? Text(
-                            cs.format(state.invoiceDiscountCents.toBigInt().toInt()),
-                            style: theme.textTheme.titleMedium?.copyWith(
-                                color: colorScheme.tertiary,
-                                fontWeight: FontWeight.w600),
-                          )
-                        : Text('purchases.no_discount'.tr(),
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                                color: colorScheme.onSurfaceVariant)),
-                  ),
-                  FilledButton.tonalIcon(
-                    onPressed: () => _showInvoiceDiscountDialog(context, state),
-                    icon: const Icon(LucideIcons.edit3, size: 16),
-                    label: Text('purchases.set_discount'.tr()),
-                  ),
-                ],
-              ),
+              const SizedBox(height: 8),
+              state.effectiveInvoiceDiscountCents > Decimal.zero
+                  ? Text(
+                      cs.format(state.effectiveInvoiceDiscountCents.toBigInt().toInt()),
+                      style: theme.textTheme.titleMedium?.copyWith(
+                          color: colorScheme.tertiary,
+                          fontWeight: FontWeight.w600),
+                    )
+                  : Text(
+                      'purchases.invoice_discount_checkout_hint'.tr(),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant),
+                    ),
             ],
             if (state.discountMode == DiscountMode.perItem &&
                 state.itemDiscountCents > Decimal.zero) ...[
@@ -1059,51 +1056,6 @@ class _PurchaseFormView extends StatelessWidget {
                     color: colorScheme.tertiary),
               ),
             ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ═══════════════════════════════════════════════════════
-  // NOTES CARD
-  // ═══════════════════════════════════════════════════════
-  Widget _buildNotesCard(BuildContext context, PurchaseFormState state) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: cs.outlineVariant),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(LucideIcons.stickyNote, size: 20, color: cs.primary),
-                const SizedBox(width: 8),
-                Text('purchases.notes'.tr(),
-                    style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w600)),
-              ],
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              decoration: InputDecoration(
-                hintText: 'purchases.notes_hint'.tr(),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                isDense: true,
-              ),
-              maxLines: 3,
-              onChanged: (v) => context
-                  .read<PurchaseFormBloc>()
-                  .add(PurchaseNotesChanged(v)),
-            ),
           ],
         ),
       ),
@@ -1390,146 +1342,6 @@ class _PurchaseFormView extends StatelessWidget {
   // ═══════════════════════════════════════════════════════
   // DIALOGS & SHEETS
   // ═══════════════════════════════════════════════════════
-
-  void _showInvoiceDiscountDialog(BuildContext context, PurchaseFormState state) {
-    final subtotalCents = state.subtotalCents;
-    final subtotalIntCents = subtotalCents.toBigInt().toInt();
-    final initialDiscountCents = state.invoiceDiscountCents.toBigInt().toInt();
-
-    final initialDiscountAmount = initialDiscountCents > 0
-        ? (initialDiscountCents / 100).toStringAsFixed(2)
-        : '';
-    final initialDiscountPercent = (subtotalIntCents > 0 && initialDiscountCents > 0)
-        ? ((initialDiscountCents / subtotalIntCents) * 100).toStringAsFixed(2)
-        : '';
-
-    final amountController = TextEditingController(text: initialDiscountAmount);
-    final percentController = TextEditingController(text: initialDiscountPercent);
-
-    showDialog<void>(
-      context: context,
-      builder: (dialogCtx) {
-        bool updating = false;
-
-        int clampDiscountCents(int cents) {
-          if (cents < 0) return 0;
-          if (subtotalIntCents <= 0) return 0;
-          return cents > subtotalIntCents ? subtotalIntCents : cents;
-        }
-
-        int amountTextToCents(String text) {
-          final value = double.tryParse(text) ?? 0;
-          return (value * 100).round();
-        }
-
-        double percentTextToPercent(String text) {
-          return double.tryParse(text) ?? 0;
-        }
-
-        void syncFromAmount() {
-          if (updating) return;
-          updating = true;
-          final cents = clampDiscountCents(amountTextToCents(amountController.text));
-
-          if (subtotalIntCents > 0) {
-            final pct = (cents / subtotalIntCents) * 100;
-            percentController.text = cents == 0 ? '' : pct.toStringAsFixed(2);
-          } else {
-            percentController.text = '';
-          }
-          updating = false;
-        }
-
-        void syncFromPercent() {
-          if (updating) return;
-          updating = true;
-          final pct = percentTextToPercent(percentController.text);
-
-          if (subtotalIntCents > 0) {
-            final raw = (subtotalIntCents * (pct / 100));
-            final cents = clampDiscountCents(raw.round());
-            amountController.text = cents == 0 ? '' : (cents / 100).toStringAsFixed(2);
-          } else {
-            amountController.text = '';
-          }
-          updating = false;
-        }
-
-        amountController.addListener(syncFromAmount);
-        percentController.addListener(syncFromPercent);
-
-        return AlertDialog(
-          title: Row(
-            children: [
-              const Icon(LucideIcons.percent, size: 20),
-              const SizedBox(width: 8),
-              Text('purchases.invoice_discount'.tr()),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: percentController,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'[\d.]')),
-                ],
-                decoration: InputDecoration(
-                  labelText: 'purchases.discount'.tr(),
-                  border: const OutlineInputBorder(),
-                  prefixIcon: const Icon(LucideIcons.percent),
-                  suffixText: '%',
-                ),
-                autofocus: true,
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: amountController,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'[\d.]')),
-                ],
-                decoration: InputDecoration(
-                  labelText: 'purchases.discount_amount'.tr(),
-                  border: const OutlineInputBorder(),
-                  prefixIcon: const Icon(LucideIcons.coins),
-                ),
-              ),
-              if (subtotalIntCents <= 0) ...[
-                const SizedBox(height: 8),
-                Align(
-                  alignment: AlignmentDirectional.centerStart,
-                  child: Text(
-                    'purchases.no_items'.tr(),
-                    style: Theme.of(dialogCtx).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(dialogCtx).colorScheme.onSurfaceVariant,
-                        ),
-                  ),
-                ),
-              ],
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogCtx),
-              child: Text('common.cancel'.tr()),
-            ),
-            FilledButton(
-              onPressed: () {
-                final cents = clampDiscountCents(amountTextToCents(amountController.text));
-                context.read<PurchaseFormBloc>().add(
-                      PurchaseInvoiceDiscountChanged(Decimal.fromInt(cents)),
-                    );
-                Navigator.pop(dialogCtx);
-              },
-              child: Text('common.apply'.tr()),
-            ),
-          ],
-        );
-      },
-    );
-  }
 
   void _showAddItemSheet(BuildContext context) {
     showModalBottomSheet<void>(
@@ -2092,7 +1904,7 @@ class _EditItemSheetState extends State<_EditItemSheet> {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final item = widget.item;
-    final oldCostCents = item.product.costCents.toBigInt().toInt();
+    final oldCostCents = item.variant?.costCents.toBigInt().toInt() ?? item.product.costCents.toBigInt().toInt();
     final sellPriceCents = item.variant?.priceCents.toBigInt().toInt() ?? item.product.priceCents.toBigInt().toInt();
     final currentStock = item.variant?.stockQuantity ?? item.product.stockQuantity;
 
@@ -2550,12 +2362,15 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
       if (_paidCtrl.text != paidText) _paidCtrl.text = paidText;
       if (_notesCtrl.text != notesText) _notesCtrl.text = notesText;
 
-      final discCents = state.invoiceDiscountCents.toBigInt().toInt();
+      final storedPct = state.invoiceDiscountPercent;
+      final discCents = state.effectiveInvoiceDiscountCents.toBigInt().toInt();
       final subtotalCents = state.subtotalCents.toBigInt().toInt();
       final fixedText = discCents > 0 ? (discCents / 100).toStringAsFixed(2) : '';
-      final pctText = discCents > 0 && subtotalCents > 0
-          ? ((discCents / subtotalCents) * 100).toStringAsFixed(2)
-          : '';
+      final pctText = storedPct > Decimal.zero
+          ? double.parse(storedPct.toString()).toStringAsFixed(2)
+          : (discCents > 0 && subtotalCents > 0
+              ? ((discCents / subtotalCents) * 100).toStringAsFixed(2)
+              : '');
 
       if (_discountFixedCtrl.text != fixedText) _discountFixedCtrl.text = fixedText;
       if (_discountPercentCtrl.text != pctText) _discountPercentCtrl.text = pctText;
@@ -2598,8 +2413,15 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
   void _applyInvoiceDiscount() {
     final fixedVal = double.tryParse(_discountFixedCtrl.text) ?? 0;
     final cents = (fixedVal * 100).round();
+    final pct = double.tryParse(_discountPercentCtrl.text) ?? 0;
+    final discountPercent = pct > 0
+        ? Decimal.parse(pct.toStringAsFixed(4))
+        : Decimal.zero;
     context.read<PurchaseFormBloc>().add(
-          PurchaseInvoiceDiscountChanged(Decimal.fromInt(cents)),
+          PurchaseInvoiceDiscountChanged(
+            Decimal.fromInt(cents),
+            discountPercent: discountPercent,
+          ),
         );
   }
 
@@ -2731,6 +2553,7 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                             supplierId: state.supplierId!,
                             invoiceTotalCents: state.totalCents.toBigInt().toInt(),
                             paidAmountCents: state.paidAmountCents.toBigInt().toInt(),
+                            paymentMethod: state.paymentMethod,
                             currencyService: widget.currencyService,
                           ),
                         ),
@@ -2806,30 +2629,51 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                         ),
                         const SizedBox(height: 16),
                       ],
-                      // ── Credit/Cheque info message ──
-                      if (state.paymentMethod == PurchasePaymentMethod.credit ||
-                          state.paymentMethod == PurchasePaymentMethod.cheque ||
-                          state.paymentMethod == PurchasePaymentMethod.purchaseOrder) ...[
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: cs.tertiaryContainer.withValues(alpha: 0.3),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: cs.tertiary.withValues(alpha: 0.3)),
-                          ),
-                          child: Row(children: [
-                            Icon(LucideIcons.info, size: 16, color: cs.tertiary),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'purchases.credit_balance_info'.tr(),
-                                style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
-                              ),
+                      // ── Payment method info message ──
+                      Builder(builder: (_) {
+                        final infoKey = switch (state.paymentMethod) {
+                          PurchasePaymentMethod.cash => 'purchases.balance_explain_cash',
+                          PurchasePaymentMethod.card => 'purchases.balance_explain_card',
+                          PurchasePaymentMethod.credit => 'purchases.balance_explain_credit',
+                          PurchasePaymentMethod.cheque => 'purchases.balance_explain_cheque',
+                          PurchasePaymentMethod.purchaseOrder => 'purchases.balance_explain_po',
+                        };
+                        final isPo = state.paymentMethod == PurchasePaymentMethod.purchaseOrder;
+                        final containerColor = isPo
+                            ? cs.surfaceContainerHighest.withValues(alpha: 0.5)
+                            : cs.tertiaryContainer.withValues(alpha: 0.3);
+                        final borderColor = isPo
+                            ? cs.outlineVariant.withValues(alpha: 0.3)
+                            : cs.tertiary.withValues(alpha: 0.3);
+                        final iconColor = isPo ? cs.onSurfaceVariant : cs.tertiary;
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 16),
+                          child: Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: containerColor,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: borderColor),
                             ),
-                          ]),
-                        ),
-                        const SizedBox(height: 16),
-                      ],
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Icon(LucideIcons.info, size: 16, color: iconColor),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    infoKey.tr(),
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: cs.onSurfaceVariant,
+                                      height: 1.4,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }),
                       // ── Tax Rate ──
                       _buildCheckoutSection(
                         theme: theme,
@@ -3164,14 +3008,36 @@ class _SupplierBalanceInfo extends StatelessWidget {
   final int supplierId;
   final int invoiceTotalCents;
   final int paidAmountCents;
+  final PurchasePaymentMethod paymentMethod;
   final CurrencyService currencyService;
 
   const _SupplierBalanceInfo({
     required this.supplierId,
     required this.invoiceTotalCents,
     required this.paidAmountCents,
+    required this.paymentMethod,
     required this.currencyService,
   });
+
+  /// Calculate the balance delta based on payment method.
+  /// - Cash: balance += (total - paidAmount)  [partial payment possible]
+  /// - Card: balance unchanged (fully paid immediately)
+  /// - Credit: balance += total (full amount owed to supplier)
+  /// - Cheque: balance += total (owed until cheque clears)
+  /// - Purchase Order: balance unchanged (just a reminder, no financial impact)
+  int _computeBalanceDelta() {
+    switch (paymentMethod) {
+      case PurchasePaymentMethod.cash:
+        return invoiceTotalCents - paidAmountCents;
+      case PurchasePaymentMethod.card:
+        return 0; // Fully paid immediately
+      case PurchasePaymentMethod.credit:
+      case PurchasePaymentMethod.cheque:
+        return invoiceTotalCents; // Full amount goes to supplier balance
+      case PurchasePaymentMethod.purchaseOrder:
+        return 0; // No financial impact, just a reminder
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -3186,9 +3052,8 @@ class _SupplierBalanceInfo extends StatelessWidget {
         }
         final supplier = snapshot.data!;
         final currentBalanceCents = supplier.balanceCents.toBigInt().toInt();
-        // After this invoice: balance changes by (invoice total - paid now).
-        // This supports overpayment (paid > total) which should reduce payable or create credit.
-        final projectedBalanceCents = currentBalanceCents + invoiceTotalCents - paidAmountCents;
+        final balanceDelta = _computeBalanceDelta();
+        final projectedBalanceCents = currentBalanceCents + balanceDelta;
 
         final isCurrentPayable = currentBalanceCents > 0;
         final isProjectedPayable = projectedBalanceCents > 0;
@@ -3200,6 +3065,7 @@ class _SupplierBalanceInfo extends StatelessWidget {
             supplier: supplier,
             currentBalanceCents: currentBalanceCents,
             projectedBalanceCents: projectedBalanceCents,
+            balanceDelta: balanceDelta,
           ),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -3245,11 +3111,27 @@ class _SupplierBalanceInfo extends StatelessWidget {
     );
   }
 
+  String _paymentMethodExplanation() {
+    switch (paymentMethod) {
+      case PurchasePaymentMethod.cash:
+        return 'purchases.balance_explain_cash'.tr();
+      case PurchasePaymentMethod.card:
+        return 'purchases.balance_explain_card'.tr();
+      case PurchasePaymentMethod.credit:
+        return 'purchases.balance_explain_credit'.tr();
+      case PurchasePaymentMethod.cheque:
+        return 'purchases.balance_explain_cheque'.tr();
+      case PurchasePaymentMethod.purchaseOrder:
+        return 'purchases.balance_explain_po'.tr();
+    }
+  }
+
   void _showBalanceDetailDialog(
     BuildContext context, {
     required Supplier supplier,
     required int currentBalanceCents,
     required int projectedBalanceCents,
+    required int balanceDelta,
   }) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
@@ -3323,17 +3205,43 @@ class _SupplierBalanceInfo extends StatelessWidget {
                   : 'purchases.balance_credit'.tr(),
             ),
             const SizedBox(height: 12),
-            // Invoice amount
+            // Invoice impact
             _balanceRow(
               theme: theme,
               cs: cs,
               icon: LucideIcons.fileText,
               label: 'purchases.this_invoice'.tr(),
-              amount: '+ ${currencyService.format(invoiceTotalCents)}',
-              amountColor: cs.error,
-              subtitle: paidAmountCents > 0
-                  ? '${'purchases.paid_now'.tr()}: - ${currencyService.format(paidAmountCents)}'
-                  : null,
+              amount: balanceDelta == 0
+                  ? currencyService.format(0)
+                  : '+ ${currencyService.format(balanceDelta)}',
+              amountColor: balanceDelta > 0 ? cs.error : Colors.green,
+            ),
+            const SizedBox(height: 8),
+            // Payment method explanation
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: cs.tertiaryContainer.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: cs.tertiary.withValues(alpha: 0.2)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(LucideIcons.info, size: 14, color: cs.tertiary),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      _paymentMethodExplanation(),
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: cs.onSurfaceVariant,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
             Divider(height: 24, color: cs.outlineVariant.withValues(alpha: 0.5)),
             // Projected balance

@@ -251,12 +251,54 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
 
       // 1. Deduct stock
       final items = await getSaleItems(saleId);
+      final affectedProductIds = <int>{};
       for (final item in items) {
         final variantId = item.variantId;
+        final productId = item.productId;
+        affectedProductIds.add(productId);
+        final now = DateTime.now().toIso8601String();
+
         if (variantId != null) {
-          await customStatement(
+          await customUpdate(
             'UPDATE product_variants SET stock_quantity = stock_quantity - ?, updated_at = ? WHERE id = ?',
-            [item.quantity, DateTime.now().toIso8601String(), variantId],
+            variables: [Variable.withInt(item.quantity), Variable.withString(now), Variable.withInt(variantId)],
+            updates: {productVariants},
+            updateKind: UpdateKind.update,
+          );
+        } else {
+          // Non-variant product: deduct from products table
+          await customUpdate(
+            'UPDATE products SET stock_quantity = stock_quantity - ?, updated_at = ? WHERE id = ?',
+            variables: [Variable.withInt(item.quantity), Variable.withString(now), Variable.withInt(productId)],
+            updates: {products},
+            updateKind: UpdateKind.update,
+          );
+          // Also deduct from the default variant
+          await customUpdate(
+            'UPDATE product_variants SET stock_quantity = stock_quantity - ?, updated_at = ? '
+            'WHERE product_id = ? AND color_id IS NULL AND size_id IS NULL AND stock_quantity >= ?',
+            variables: [Variable.withInt(item.quantity), Variable.withString(now), Variable.withInt(productId), Variable.withInt(item.quantity)],
+            updates: {productVariants},
+            updateKind: UpdateKind.update,
+          );
+        }
+      }
+
+      // 1b. Sync products.stock_quantity from variants for products with variants
+      for (final productId in affectedProductIds) {
+        final now = DateTime.now().toIso8601String();
+        final stockRow = await customSelect(
+          'SELECT COALESCE(SUM(stock_quantity), 0) AS total_stock '
+          'FROM product_variants WHERE product_id = ? AND is_active = 1',
+          variables: [Variable.withInt(productId)],
+        ).getSingleOrNull();
+        if (stockRow != null) {
+          final totalStock = stockRow.read<int>('total_stock');
+          await customUpdate(
+            'UPDATE products SET stock_quantity = ?, updated_at = ? WHERE id = ?',
+            variables: [Variable.withInt(totalStock), Variable.withString(now), Variable.withInt(productId)],
+            updates: {products},
+            updateKind: UpdateKind.update,
           );
         }
       }
@@ -360,12 +402,54 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
       if (sale.status == 'completed') {
         // 1. Reverse stock
         final items = await getSaleItems(saleId);
+        final voidAffectedProductIds = <int>{};
         for (final item in items) {
           final variantId = item.variantId;
+          final productId = item.productId;
+          voidAffectedProductIds.add(productId);
+          final now = DateTime.now().toIso8601String();
+
           if (variantId != null) {
-            await customStatement(
+            await customUpdate(
               'UPDATE product_variants SET stock_quantity = stock_quantity + ?, updated_at = ? WHERE id = ?',
-              [item.quantity, DateTime.now().toIso8601String(), variantId],
+              variables: [Variable.withInt(item.quantity), Variable.withString(now), Variable.withInt(variantId)],
+              updates: {productVariants},
+              updateKind: UpdateKind.update,
+            );
+          } else {
+            // Non-variant product: restore stock on products table
+            await customUpdate(
+              'UPDATE products SET stock_quantity = stock_quantity + ?, updated_at = ? WHERE id = ?',
+              variables: [Variable.withInt(item.quantity), Variable.withString(now), Variable.withInt(productId)],
+              updates: {products},
+              updateKind: UpdateKind.update,
+            );
+            // Also restore the default variant
+            await customUpdate(
+              'UPDATE product_variants SET stock_quantity = stock_quantity + ?, updated_at = ? '
+              'WHERE product_id = ? AND color_id IS NULL AND size_id IS NULL',
+              variables: [Variable.withInt(item.quantity), Variable.withString(now), Variable.withInt(productId)],
+              updates: {productVariants},
+              updateKind: UpdateKind.update,
+            );
+          }
+        }
+
+        // 1b. Sync products.stock_quantity from variants for products with variants
+        for (final productId in voidAffectedProductIds) {
+          final now = DateTime.now().toIso8601String();
+          final stockRow = await customSelect(
+            'SELECT COALESCE(SUM(stock_quantity), 0) AS total_stock '
+            'FROM product_variants WHERE product_id = ? AND is_active = 1',
+            variables: [Variable.withInt(productId)],
+          ).getSingleOrNull();
+          if (stockRow != null) {
+            final totalStock = stockRow.read<int>('total_stock');
+            await customUpdate(
+              'UPDATE products SET stock_quantity = ?, updated_at = ? WHERE id = ?',
+              variables: [Variable.withInt(totalStock), Variable.withString(now), Variable.withInt(productId)],
+              updates: {products},
+              updateKind: UpdateKind.update,
             );
           }
         }
@@ -578,15 +662,58 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
           ..where(saleReturnItems.returnId.equals(returnId));
 
         final items = await query.get();
+        final returnAffectedProductIds = <int>{};
         for (final row in items) {
           final returnItem = row.readTable(saleReturnItems);
           final saleItem = row.readTable(saleItems);
           final variantId = saleItem.variantId;
-          if (variantId == null) continue;
-          await customStatement(
-            'UPDATE product_variants SET stock_quantity = stock_quantity + ?, updated_at = ? WHERE id = ?',
-            [returnItem.quantity, DateTime.now().toIso8601String(), variantId],
-          );
+          final productId = saleItem.productId;
+          returnAffectedProductIds.add(productId);
+          final now = DateTime.now().toIso8601String();
+
+          if (variantId != null) {
+            await customUpdate(
+              'UPDATE product_variants SET stock_quantity = stock_quantity + ?, updated_at = ? WHERE id = ?',
+              variables: [Variable.withInt(returnItem.quantity), Variable.withString(now), Variable.withInt(variantId)],
+              updates: {productVariants},
+              updateKind: UpdateKind.update,
+            );
+          } else {
+            // Non-variant product: restore stock on products table
+            await customUpdate(
+              'UPDATE products SET stock_quantity = stock_quantity + ?, updated_at = ? WHERE id = ?',
+              variables: [Variable.withInt(returnItem.quantity), Variable.withString(now), Variable.withInt(productId)],
+              updates: {products},
+              updateKind: UpdateKind.update,
+            );
+            // Also restore the default variant
+            await customUpdate(
+              'UPDATE product_variants SET stock_quantity = stock_quantity + ?, updated_at = ? '
+              'WHERE product_id = ? AND color_id IS NULL AND size_id IS NULL',
+              variables: [Variable.withInt(returnItem.quantity), Variable.withString(now), Variable.withInt(productId)],
+              updates: {productVariants},
+              updateKind: UpdateKind.update,
+            );
+          }
+        }
+
+        // Sync products.stock_quantity from variants for products with variants
+        for (final productId in returnAffectedProductIds) {
+          final now = DateTime.now().toIso8601String();
+          final stockRow = await customSelect(
+            'SELECT COALESCE(SUM(stock_quantity), 0) AS total_stock '
+            'FROM product_variants WHERE product_id = ? AND is_active = 1',
+            variables: [Variable.withInt(productId)],
+          ).getSingleOrNull();
+          if (stockRow != null) {
+            final totalStock = stockRow.read<int>('total_stock');
+            await customUpdate(
+              'UPDATE products SET stock_quantity = ?, updated_at = ? WHERE id = ?',
+              variables: [Variable.withInt(totalStock), Variable.withString(now), Variable.withInt(productId)],
+              updates: {products},
+              updateKind: UpdateKind.update,
+            );
+          }
         }
       }
 
@@ -662,15 +789,58 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
             ..where(saleReturnItems.returnId.equals(returnId));
 
           final items = await query.get();
+          final voidReturnAffectedProductIds = <int>{};
           for (final row in items) {
             final returnItem = row.readTable(saleReturnItems);
             final saleItem = row.readTable(saleItems);
             final variantId = saleItem.variantId;
-            if (variantId == null) continue;
-            await customStatement(
-              'UPDATE product_variants SET stock_quantity = stock_quantity - ?, updated_at = ? WHERE id = ?',
-              [returnItem.quantity, DateTime.now().toIso8601String(), variantId],
-            );
+            final productId = saleItem.productId;
+            voidReturnAffectedProductIds.add(productId);
+            final now = DateTime.now().toIso8601String();
+
+            if (variantId != null) {
+              await customUpdate(
+                'UPDATE product_variants SET stock_quantity = stock_quantity - ?, updated_at = ? WHERE id = ?',
+                variables: [Variable.withInt(returnItem.quantity), Variable.withString(now), Variable.withInt(variantId)],
+                updates: {productVariants},
+                updateKind: UpdateKind.update,
+              );
+            } else {
+              // Non-variant product: deduct stock from products table
+              await customUpdate(
+                'UPDATE products SET stock_quantity = stock_quantity - ?, updated_at = ? WHERE id = ?',
+                variables: [Variable.withInt(returnItem.quantity), Variable.withString(now), Variable.withInt(productId)],
+                updates: {products},
+                updateKind: UpdateKind.update,
+              );
+              // Also deduct from the default variant
+              await customUpdate(
+                'UPDATE product_variants SET stock_quantity = stock_quantity - ?, updated_at = ? '
+                'WHERE product_id = ? AND color_id IS NULL AND size_id IS NULL AND stock_quantity >= ?',
+                variables: [Variable.withInt(returnItem.quantity), Variable.withString(now), Variable.withInt(productId), Variable.withInt(returnItem.quantity)],
+                updates: {productVariants},
+                updateKind: UpdateKind.update,
+              );
+            }
+          }
+
+          // Sync products.stock_quantity from variants for products with variants
+          for (final productId in voidReturnAffectedProductIds) {
+            final now = DateTime.now().toIso8601String();
+            final stockRow = await customSelect(
+              'SELECT COALESCE(SUM(stock_quantity), 0) AS total_stock '
+              'FROM product_variants WHERE product_id = ? AND is_active = 1',
+              variables: [Variable.withInt(productId)],
+            ).getSingleOrNull();
+            if (stockRow != null) {
+              final totalStock = stockRow.read<int>('total_stock');
+              await customUpdate(
+                'UPDATE products SET stock_quantity = ?, updated_at = ? WHERE id = ?',
+                variables: [Variable.withInt(totalStock), Variable.withString(now), Variable.withInt(productId)],
+                updates: {products},
+                updateKind: UpdateKind.update,
+              );
+            }
           }
         }
 

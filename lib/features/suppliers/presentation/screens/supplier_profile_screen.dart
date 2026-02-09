@@ -208,6 +208,11 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
                       onSeasonalDiscountPressed: () => _showSeasonalDiscountDialog(context, supplier),
                     ),
                     const SizedBox(height: 16),
+                    _UpcomingDueDatesSection(
+                      supplierId: widget.supplierId,
+                      currencyService: currencyService,
+                    ),
+                    const SizedBox(height: 16),
                     _ContactInformationSection(supplier: supplier),
                     const SizedBox(height: 16),
                     _RecentTransactionsSection(supplierId: widget.supplierId),
@@ -937,6 +942,204 @@ class _QuickActionButton extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _UpcomingDueDatesSection extends StatelessWidget {
+  final int supplierId;
+  final CurrencyService currencyService;
+
+  const _UpcomingDueDatesSection({
+    required this.supplierId,
+    required this.currencyService,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final db = sl<AppDatabase>();
+
+    return StreamBuilder<List<Purchase>>(
+      stream: db.purchaseDao.watchUpcomingDuePurchases(supplierId),
+      builder: (context, snapshot) {
+        final purchases = snapshot.data ?? [];
+        if (purchases.isEmpty) return const SizedBox.shrink();
+
+        final now = DateTime.now();
+        final today = DateTime(now.year, now.month, now.day);
+
+        return Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.3)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: Row(
+                  children: [
+                    Icon(LucideIcons.calendarClock, size: 18, color: cs.primary),
+                    const SizedBox(width: 8),
+                    Text(
+                      'suppliers.upcoming_due_dates'.tr(),
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const Spacer(),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: cs.primaryContainer.withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        '${purchases.length}',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: cs.primary,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              ...purchases.map((p) {
+                final dueDate = p.dueDate!;
+                final dueDateOnly = DateTime(dueDate.year, dueDate.month, dueDate.day);
+                final daysUntilDue = dueDateOnly.difference(today).inDays;
+                final isOverdue = daysUntilDue < 0;
+                final isDueToday = daysUntilDue == 0;
+                final isDueSoon = daysUntilDue > 0 && daysUntilDue <= 7;
+
+                final totalCents = p.totalCents.toBigInt().toInt();
+                final paidCents = p.paidAmountCents.toBigInt().toInt();
+                final remainingCents = totalCents - paidCents;
+
+                final isCheque = p.paymentMethod == 'cheque';
+
+                final Color statusColor;
+                final String statusText;
+                final IconData statusIcon;
+
+                if (isOverdue) {
+                  statusColor = cs.error;
+                  statusText = 'suppliers.overdue_days'.tr(args: ['${-daysUntilDue}']);
+                  statusIcon = LucideIcons.alertTriangle;
+                } else if (isDueToday) {
+                  statusColor = const Color(0xFFFF9800);
+                  statusText = 'suppliers.due_today'.tr();
+                  statusIcon = LucideIcons.clock;
+                } else if (isDueSoon) {
+                  statusColor = const Color(0xFFFF9800);
+                  statusText = 'suppliers.due_in_days'.tr(args: ['$daysUntilDue']);
+                  statusIcon = LucideIcons.clock;
+                } else {
+                  statusColor = cs.onSurfaceVariant;
+                  statusText = 'suppliers.due_in_days'.tr(args: ['$daysUntilDue']);
+                  statusIcon = LucideIcons.calendar;
+                }
+
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: isOverdue
+                          ? cs.errorContainer.withValues(alpha: 0.15)
+                          : isDueSoon || isDueToday
+                              ? const Color(0xFFFF9800).withValues(alpha: 0.08)
+                              : cs.surfaceContainerHighest.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: isOverdue
+                            ? cs.error.withValues(alpha: 0.3)
+                            : isDueSoon || isDueToday
+                                ? const Color(0xFFFF9800).withValues(alpha: 0.3)
+                                : cs.outlineVariant.withValues(alpha: 0.2),
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              isCheque ? LucideIcons.fileText : LucideIcons.receipt,
+                              size: 14,
+                              color: cs.primary,
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                p.purchaseNumber,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            if (isCheque)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: cs.secondaryContainer.withValues(alpha: 0.5),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  'suppliers.cheque'.tr(),
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: cs.secondary,
+                                    fontSize: 10,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Icon(statusIcon, size: 12, color: statusColor),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${dueDate.year}-${dueDate.month.toString().padLeft(2, '0')}-${dueDate.day.toString().padLeft(2, '0')}',
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: statusColor,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              statusText,
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: statusColor,
+                                fontWeight: isOverdue ? FontWeight.bold : FontWeight.normal,
+                              ),
+                            ),
+                            const Spacer(),
+                            Text(
+                              currencyService.format(remainingCents),
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: isOverdue ? cs.error : cs.primary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
     );
   }
 }

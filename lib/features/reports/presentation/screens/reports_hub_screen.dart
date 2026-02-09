@@ -77,6 +77,58 @@ class _ReportsHubView extends StatelessWidget {
               ),
               const SizedBox(height: 24),
 
+              // Inventory Reports Section
+              _SectionHeader(title: 'reports.inventory_reports'.tr()),
+              const SizedBox(height: 8),
+              _ReportTile(
+                icon: LucideIcons.warehouse,
+                title: 'reports.inventory_reports'.tr(),
+                subtitle: 'reports.inventory_reports_desc'.tr(),
+                onTap: () => context.push('/reports/inventory'),
+              ),
+              const SizedBox(height: 24),
+
+              // Customer Reports Section
+              _SectionHeader(title: 'reports.customer_reports'.tr()),
+              const SizedBox(height: 8),
+              _ReportTile(
+                icon: LucideIcons.users,
+                title: 'reports.customer_reports'.tr(),
+                subtitle: 'reports.customer_reports_desc'.tr(),
+                onTap: () => context.push('/reports/customers'),
+              ),
+              _ReportTile(
+                icon: LucideIcons.undo2,
+                title: 'reports.customer_returns'.tr(),
+                subtitle: 'reports.customer_returns_desc'.tr(),
+                onTap: () => context.push('/reports/customer-returns'),
+              ),
+              _ReportTile(
+                icon: LucideIcons.trophy,
+                title: 'reports.top_customers'.tr(),
+                subtitle: 'reports.top_customers_desc'.tr(),
+                onTap: () => context.push('/reports/top-customers'),
+              ),
+              _ReportTile(
+                icon: LucideIcons.banknote,
+                title: 'reports.customer_payments'.tr(),
+                subtitle: 'reports.customer_payments_desc'.tr(),
+                onTap: () => context.push('/reports/customer-payments'),
+              ),
+              _ReportTile(
+                icon: LucideIcons.shoppingCart,
+                title: 'reports.customer_sales'.tr(),
+                subtitle: 'reports.customer_sales_desc'.tr(),
+                onTap: () => context.push('/reports/customer-sales'),
+              ),
+              _ReportTile(
+                icon: LucideIcons.clock,
+                title: 'reports.customer_aging_report'.tr(),
+                subtitle: 'reports.customer_aging_report_desc'.tr(),
+                onTap: () => context.push('/reports/customer-aging'),
+              ),
+              const SizedBox(height: 24),
+
               // Diagnostics Section
               _SectionHeader(title: 'reports.diagnostics'.tr()),
               const SizedBox(height: 8),

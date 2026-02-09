@@ -166,9 +166,12 @@ class _SupplierHubContentState extends State<_SupplierHubContent> {
 
     // Calculate metrics
     final activeCount = data.suppliers.length;
-    final totalBalanceCents = data.suppliers.fold<int>(
+    final totalPayableCents = data.suppliers.fold<int>(
       0,
-      (sum, s) => sum + s.balanceCents.toBigInt().toInt(),
+      (sum, s) {
+        final balance = s.balanceCents.toBigInt().toInt();
+        return balance > 0 ? sum + balance : sum;
+      },
     );
     final withBalanceCount = data.suppliers.where((s) => s.balanceCents.toBigInt().toInt() > 0).length;
 
@@ -209,7 +212,7 @@ class _SupplierHubContentState extends State<_SupplierHubContent> {
                         iconColor: colorScheme.secondary,
                         backgroundColor: colorScheme.secondaryContainer.withValues(alpha: 0.5),
                         label: 'suppliers.total_payables'.tr(),
-                        value: currencyService.format(totalBalanceCents),
+                        value: currencyService.format(totalPayableCents),
                       );
 
                       final withBalanceCard = _StatCard(

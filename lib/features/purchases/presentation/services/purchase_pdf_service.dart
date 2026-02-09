@@ -40,6 +40,33 @@ class PurchasePdfService {
     );
   }
 
+  /// Generate and share a purchase invoice PDF from saved purchase data
+  static Future<void> sharePurchaseInvoice({
+    required BuildContext context,
+    required PurchaseEntity purchase,
+    required List<PurchaseItemEntity> items,
+  }) async {
+    final cs = sl<CurrencyService>();
+    final locale = context.locale;
+    final isRtl = locale.languageCode == 'ar';
+    final company = await sl<CompanyProfileService>().getProfile();
+
+    final pdf = await _buildPurchaseInvoicePdf(
+      purchase: purchase,
+      items: items,
+      cs: cs,
+      locale: locale,
+      isRtl: isRtl,
+      company: company,
+    );
+
+    final bytes = await pdf.save();
+    await Printing.sharePdf(
+      bytes: bytes,
+      filename: 'Purchase_${purchase.purchaseNumber}.pdf',
+    );
+  }
+
   /// Generate and print a purchase invoice PDF from current form state
   static Future<void> printFromFormState({
     required BuildContext context,

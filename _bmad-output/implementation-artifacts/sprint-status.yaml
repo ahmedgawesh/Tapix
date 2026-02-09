@@ -150,16 +150,16 @@ development_status:
   # EPIC-08: Reporting
   epic-8: in-progress
   8-1-financial-reports: done
-  8-2-inventory-reports: ready-for-dev
-  8-3-customer-relationship-reports: backlog
+  8-2-inventory-reports: done
+  8-3-customer-relationship-reports: done  # CR fixes completed 2026-02-09
   8-4-supplier-performance-reports: backlog
   8-5-salespeople-commission-reports: backlog
   8-6-expense-reports: backlog
-  8-7-customer-sales-returns-reports: backlog
-  8-8-top-customers-reports: backlog
-  8-9-customer-payment-reports: backlog
-  8-10-customer-sales-reports: backlog
-  8-11-customer-aging-reports: backlog
+  8-7-customer-sales-returns-reports: done  # CR fixes completed 2026-02-09
+  8-8-top-customers-reports: done  # Implementation completed 2026-02-09, CR review completed 2026-02-09
+  8-9-customer-payment-reports: done  # CR completed 2026-02-09
+  8-10-customer-sales-reports: done  # Implementation verified perfect - all tests passing, 0 analyze issues
+  8-11-customer-aging-reports: review
   8-12-customer-statement-reports: backlog
   8-13-customer-analysis-reports: backlog
   8-14-supplier-balance-reports: backlog
@@ -170,7 +170,7 @@ development_status:
   8-19-supplier-statement-reports: backlog
   8-20-supplier-stocktake-reports: backlog
   8-21-supplier-balance-drilldown-reports: backlog
-  8-22-inventory-stock-reports: backlog
+  8-22-inventory-stock-reports: done
   8-23-low-stock-reports: backlog
   8-24-out-of-stock-reports: backlog
   8-25-dead-stock-reports: backlog

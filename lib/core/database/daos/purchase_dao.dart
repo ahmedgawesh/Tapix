@@ -249,18 +249,28 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
 
       final items = await getPurchaseItems(purchaseId);
 
+      // Track which products were affected so we can sync them afterwards
+      final affectedProductIds = <int>{};
+      // Check if the purchase has any tax (to update product taxable flag)
+      final purchaseTaxCents = purchase.taxCents.toBigInt().toInt();
+
       for (final item in items) {
         final variantId = item.variantId;
+        final productId = item.productId;
+        affectedProductIds.add(productId);
+        final newCostCents = item.unitCostCents.toBigInt().toInt();
+        final now = DateTime.now().toIso8601String();
+
         if (variantId != null) {
           // Increase variant stock
-          await customStatement(
+          await customUpdate(
             'UPDATE product_variants SET stock_quantity = stock_quantity + ?, updated_at = ? WHERE id = ?',
-            [item.quantity, DateTime.now().toIso8601String(), variantId],
+            variables: [Variable.withInt(item.quantity), Variable.withString(now), Variable.withInt(variantId)],
+            updates: {productVariants},
+            updateKind: UpdateKind.update,
           );
 
           // Update cost based on strategy
-          final newCostCents = item.unitCostCents.toBigInt().toInt();
-          final now = DateTime.now().toIso8601String();
           if (costStrategy == 'weighted_average') {
             // Weighted average: (oldCost * oldQty + newCost * newQty) / (oldQty + newQty)
             final variantRow = await customSelect(
@@ -274,19 +284,106 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
               final oldQty = currentStock - item.quantity;
               if (oldQty + item.quantity > 0) {
                 final avgCost = ((oldCost * oldQty) + (newCostCents * item.quantity)) ~/ (oldQty + item.quantity);
-                await customStatement(
+                await customUpdate(
                   'UPDATE product_variants SET cost_cents = ?, updated_at = ? WHERE id = ?',
-                  [avgCost, now, variantId],
+                  variables: [Variable.withInt(avgCost), Variable.withString(now), Variable.withInt(variantId)],
+                  updates: {productVariants},
+                  updateKind: UpdateKind.update,
                 );
               }
             }
           } else {
             // last_cost (default)
-            await customStatement(
+            await customUpdate(
               'UPDATE product_variants SET cost_cents = ?, updated_at = ? WHERE id = ?',
-              [newCostCents, now, variantId],
+              variables: [Variable.withInt(newCostCents), Variable.withString(now), Variable.withInt(variantId)],
+              updates: {productVariants},
+              updateKind: UpdateKind.update,
             );
           }
+        } else {
+          // Non-variant product: update the products table directly
+          if (costStrategy == 'weighted_average') {
+            final productRow = await customSelect(
+              'SELECT cost_cents, stock_quantity FROM products WHERE id = ?',
+              variables: [Variable.withInt(productId)],
+            ).getSingleOrNull();
+            if (productRow != null) {
+              final oldCost = productRow.read<int>('cost_cents');
+              final oldQty = productRow.read<int>('stock_quantity');
+              if (oldQty + item.quantity > 0) {
+                final avgCost = ((oldCost * oldQty) + (newCostCents * item.quantity)) ~/ (oldQty + item.quantity);
+                await customUpdate(
+                  'UPDATE products SET cost_cents = ?, stock_quantity = stock_quantity + ?, updated_at = ? WHERE id = ?',
+                  variables: [Variable.withInt(avgCost), Variable.withInt(item.quantity), Variable.withString(now), Variable.withInt(productId)],
+                  updates: {products},
+                  updateKind: UpdateKind.update,
+                );
+              } else {
+                await customUpdate(
+                  'UPDATE products SET cost_cents = ?, stock_quantity = stock_quantity + ?, updated_at = ? WHERE id = ?',
+                  variables: [Variable.withInt(newCostCents), Variable.withInt(item.quantity), Variable.withString(now), Variable.withInt(productId)],
+                  updates: {products},
+                  updateKind: UpdateKind.update,
+                );
+              }
+            }
+          } else {
+            // last_cost (default)
+            await customUpdate(
+              'UPDATE products SET cost_cents = ?, stock_quantity = stock_quantity + ?, updated_at = ? WHERE id = ?',
+              variables: [Variable.withInt(newCostCents), Variable.withInt(item.quantity), Variable.withString(now), Variable.withInt(productId)],
+              updates: {products},
+              updateKind: UpdateKind.update,
+            );
+          }
+
+          // Also sync the default variant if one exists
+          await customUpdate(
+            'UPDATE product_variants SET cost_cents = ?, stock_quantity = stock_quantity + ?, updated_at = ? '
+            'WHERE product_id = ? AND color_id IS NULL AND size_id IS NULL',
+            variables: [Variable.withInt(newCostCents), Variable.withInt(item.quantity), Variable.withString(now), Variable.withInt(productId)],
+            updates: {productVariants},
+            updateKind: UpdateKind.update,
+          );
+        }
+      }
+
+      // Sync products table from variants for ALL affected products
+      // This keeps the product card display (price, stock, cost) up to date.
+      // Both has_variants=true AND has_variants=false products need syncing
+      // because non-variant products also have a default variant whose stock
+      // is updated during purchase posting.
+      for (final productId in affectedProductIds) {
+        final now = DateTime.now().toIso8601String();
+        // Aggregate stock from all active variants
+        final stockRow = await customSelect(
+          'SELECT COALESCE(SUM(stock_quantity), 0) AS total_stock, '
+          'COALESCE(MAX(cost_cents), 0) AS latest_cost '
+          'FROM product_variants WHERE product_id = ? AND is_active = 1',
+          variables: [Variable.withInt(productId)],
+        ).getSingleOrNull();
+        if (stockRow != null) {
+          final totalStock = stockRow.read<int>('total_stock');
+          final latestCost = stockRow.read<int>('latest_cost');
+          await customUpdate(
+            'UPDATE products SET stock_quantity = ?, cost_cents = ?, updated_at = ? WHERE id = ?',
+            variables: [Variable.withInt(totalStock), Variable.withInt(latestCost), Variable.withString(now), Variable.withInt(productId)],
+            updates: {products},
+            updateKind: UpdateKind.update,
+          );
+        }
+      }
+
+      // Update isTaxable flag on affected products when purchase has tax
+      if (purchaseTaxCents > 0) {
+        for (final productId in affectedProductIds) {
+          await customUpdate(
+            'UPDATE products SET is_taxable = 1, updated_at = ? WHERE id = ? AND is_taxable = 0',
+            variables: [Variable.withString(DateTime.now().toIso8601String()), Variable.withInt(productId)],
+            updates: {products},
+            updateKind: UpdateKind.update,
+          );
         }
       }
 
@@ -514,8 +611,14 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
       // If posted, reverse stock changes with negative-stock guard
       if (purchase.status == 'posted') {
         final items = await getPurchaseItems(purchaseId);
+        final voidAffectedProductIds = <int>{};
+
         for (final item in items) {
           final variantId = item.variantId;
+          final productId = item.productId;
+          voidAffectedProductIds.add(productId);
+          final now = DateTime.now().toIso8601String();
+
           if (variantId != null) {
             // Check current stock before deducting
             final variantRow = await customSelect(
@@ -532,9 +635,62 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
                 );
               }
             }
-            await customStatement(
+            await customUpdate(
               'UPDATE product_variants SET stock_quantity = stock_quantity - ?, updated_at = ? WHERE id = ?',
-              [item.quantity, DateTime.now().toIso8601String(), variantId],
+              variables: [Variable.withInt(item.quantity), Variable.withString(now), Variable.withInt(variantId)],
+              updates: {productVariants},
+              updateKind: UpdateKind.update,
+            );
+          } else {
+            // Non-variant product: check and reverse stock on products table
+            final productRow = await customSelect(
+              'SELECT stock_quantity FROM products WHERE id = ?',
+              variables: [Variable.withInt(productId)],
+            ).getSingleOrNull();
+            if (productRow != null) {
+              final currentStock = productRow.read<int>('stock_quantity');
+              if (currentStock < item.quantity) {
+                throw Exception(
+                  'Cannot void: product #$productId stock ($currentStock) '
+                  'is less than purchased quantity (${item.quantity}). '
+                  'Some items may have been sold or returned.',
+                );
+              }
+            }
+            await customUpdate(
+              'UPDATE products SET stock_quantity = stock_quantity - ?, updated_at = ? WHERE id = ?',
+              variables: [Variable.withInt(item.quantity), Variable.withString(now), Variable.withInt(productId)],
+              updates: {products},
+              updateKind: UpdateKind.update,
+            );
+            // Also reverse the default variant
+            await customUpdate(
+              'UPDATE product_variants SET stock_quantity = stock_quantity - ?, updated_at = ? '
+              'WHERE product_id = ? AND color_id IS NULL AND size_id IS NULL AND stock_quantity >= ?',
+              variables: [Variable.withInt(item.quantity), Variable.withString(now), Variable.withInt(productId), Variable.withInt(item.quantity)],
+              updates: {productVariants},
+              updateKind: UpdateKind.update,
+            );
+          }
+        }
+
+        // Sync products table from variants for ALL affected products
+        for (final productId in voidAffectedProductIds) {
+          final now = DateTime.now().toIso8601String();
+          final stockRow = await customSelect(
+            'SELECT COALESCE(SUM(stock_quantity), 0) AS total_stock, '
+            'COALESCE(MAX(cost_cents), 0) AS latest_cost '
+            'FROM product_variants WHERE product_id = ? AND is_active = 1',
+            variables: [Variable.withInt(productId)],
+          ).getSingleOrNull();
+          if (stockRow != null) {
+            final totalStock = stockRow.read<int>('total_stock');
+            final latestCost = stockRow.read<int>('latest_cost');
+            await customUpdate(
+              'UPDATE products SET stock_quantity = ?, cost_cents = ?, updated_at = ? WHERE id = ?',
+              variables: [Variable.withInt(totalStock), Variable.withInt(latestCost), Variable.withString(now), Variable.withInt(productId)],
+              updates: {products},
+              updateKind: UpdateKind.update,
             );
           }
         }
@@ -626,6 +782,22 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
           ..where((p) => p.supplierId.equals(supplierId))
           ..orderBy([(p) => OrderingTerm.desc(p.purchaseDate)]))
         .watch();
+  }
+
+  /// Watch upcoming due purchases for a supplier (posted, not fully paid, with due date)
+  Stream<List<Purchase>> watchUpcomingDuePurchases(int supplierId) {
+    return (select(purchases)
+          ..where((p) =>
+              p.supplierId.equals(supplierId) &
+              p.status.equals('posted') &
+              p.dueDate.isNotNull())
+          ..orderBy([(p) => OrderingTerm.asc(p.dueDate)]))
+        .watch()
+        .map((list) => list.where((p) {
+              final total = p.totalCents.toBigInt().toInt();
+              final paid = p.paidAmountCents.toBigInt().toInt();
+              return paid < total;
+            }).toList());
   }
 
   /// Search purchases by number or supplier name
@@ -743,11 +915,13 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
     final subtotalCents = totalsRow.read<int>('subtotal');
     final taxCents = totalsRow.read<int>('tax');
 
-    await customStatement(
+    await customUpdate(
       'UPDATE purchase_returns '
       'SET subtotal_cents = ?, tax_cents = ? '
       'WHERE id = ?',
-      [subtotalCents, taxCents, returnId],
+      variables: [Variable.withInt(subtotalCents), Variable.withInt(taxCents), Variable.withInt(returnId)],
+      updates: {purchaseReturns},
+      updateKind: UpdateKind.update,
     );
   }
 
@@ -844,31 +1018,86 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
           returnData.dispositionType == 'replace';
 
       if (shouldDeductStock) {
+        final returnAffectedProductIds = <int>{};
         for (final row in returnItemRows) {
           final returnItem = row.readTable(purchaseReturnItems);
           final purchaseItem = row.readTable(purchaseItems);
           final variantId = purchaseItem.variantId;
-          if (variantId == null) continue;
+          final productId = purchaseItem.productId;
+          returnAffectedProductIds.add(productId);
+          final now = DateTime.now().toIso8601String();
 
-          // Guard against negative stock
-          final variantRow = await customSelect(
-            'SELECT stock_quantity FROM product_variants WHERE id = ?',
-            variables: [Variable.withInt(variantId)],
-          ).getSingleOrNull();
-          if (variantRow != null) {
-            final currentStock = variantRow.read<int>('stock_quantity');
-            if (currentStock < returnItem.quantity) {
-              throw Exception(
-                'Cannot return: variant #$variantId stock ($currentStock) '
-                'is less than return quantity (${returnItem.quantity}).',
-              );
+          if (variantId != null) {
+            // Guard against negative stock
+            final variantRow = await customSelect(
+              'SELECT stock_quantity FROM product_variants WHERE id = ?',
+              variables: [Variable.withInt(variantId)],
+            ).getSingleOrNull();
+            if (variantRow != null) {
+              final currentStock = variantRow.read<int>('stock_quantity');
+              if (currentStock < returnItem.quantity) {
+                throw Exception(
+                  'Cannot return: variant #$variantId stock ($currentStock) '
+                  'is less than return quantity (${returnItem.quantity}).',
+                );
+              }
             }
-          }
 
-          await customStatement(
-            'UPDATE product_variants SET stock_quantity = stock_quantity - ?, updated_at = ? WHERE id = ?',
-            [returnItem.quantity, DateTime.now().toIso8601String(), variantId],
-          );
+            await customUpdate(
+              'UPDATE product_variants SET stock_quantity = stock_quantity - ?, updated_at = ? WHERE id = ?',
+              variables: [Variable.withInt(returnItem.quantity), Variable.withString(now), Variable.withInt(variantId)],
+              updates: {productVariants},
+              updateKind: UpdateKind.update,
+            );
+          } else {
+            // Non-variant product: deduct from products table
+            final productRow = await customSelect(
+              'SELECT stock_quantity FROM products WHERE id = ?',
+              variables: [Variable.withInt(productId)],
+            ).getSingleOrNull();
+            if (productRow != null) {
+              final currentStock = productRow.read<int>('stock_quantity');
+              if (currentStock < returnItem.quantity) {
+                throw Exception(
+                  'Cannot return: product #$productId stock ($currentStock) '
+                  'is less than return quantity (${returnItem.quantity}).',
+                );
+              }
+            }
+            await customUpdate(
+              'UPDATE products SET stock_quantity = stock_quantity - ?, updated_at = ? WHERE id = ?',
+              variables: [Variable.withInt(returnItem.quantity), Variable.withString(now), Variable.withInt(productId)],
+              updates: {products},
+              updateKind: UpdateKind.update,
+            );
+            // Also deduct from the default variant
+            await customUpdate(
+              'UPDATE product_variants SET stock_quantity = stock_quantity - ?, updated_at = ? '
+              'WHERE product_id = ? AND color_id IS NULL AND size_id IS NULL AND stock_quantity >= ?',
+              variables: [Variable.withInt(returnItem.quantity), Variable.withString(now), Variable.withInt(productId), Variable.withInt(returnItem.quantity)],
+              updates: {productVariants},
+              updateKind: UpdateKind.update,
+            );
+          }
+        }
+
+        // Sync products.stock_quantity from variants for products with variants
+        for (final productId in returnAffectedProductIds) {
+          final now = DateTime.now().toIso8601String();
+          final stockRow = await customSelect(
+            'SELECT COALESCE(SUM(stock_quantity), 0) AS total_stock '
+            'FROM product_variants WHERE product_id = ? AND is_active = 1',
+            variables: [Variable.withInt(productId)],
+          ).getSingleOrNull();
+          if (stockRow != null) {
+            final totalStock = stockRow.read<int>('total_stock');
+            await customUpdate(
+              'UPDATE products SET stock_quantity = ?, updated_at = ? WHERE id = ?',
+              variables: [Variable.withInt(totalStock), Variable.withString(now), Variable.withInt(productId)],
+              updates: {products},
+              updateKind: UpdateKind.update,
+            );
+          }
         }
       }
 
@@ -994,15 +1223,58 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
             ..where(purchaseReturnItems.returnId.equals(returnId));
 
           final items = await query.get();
+          final voidReturnAffectedProductIds = <int>{};
           for (final row in items) {
             final returnItem = row.readTable(purchaseReturnItems);
             final purchaseItem = row.readTable(purchaseItems);
             final variantId = purchaseItem.variantId;
-            if (variantId == null) continue;
-            await customStatement(
-              'UPDATE product_variants SET stock_quantity = stock_quantity + ?, updated_at = ? WHERE id = ?',
-              [returnItem.quantity, DateTime.now().toIso8601String(), variantId],
-            );
+            final productId = purchaseItem.productId;
+            voidReturnAffectedProductIds.add(productId);
+            final now = DateTime.now().toIso8601String();
+
+            if (variantId != null) {
+              await customUpdate(
+                'UPDATE product_variants SET stock_quantity = stock_quantity + ?, updated_at = ? WHERE id = ?',
+                variables: [Variable.withInt(returnItem.quantity), Variable.withString(now), Variable.withInt(variantId)],
+                updates: {productVariants},
+                updateKind: UpdateKind.update,
+              );
+            } else {
+              // Non-variant product: restore stock on products table
+              await customUpdate(
+                'UPDATE products SET stock_quantity = stock_quantity + ?, updated_at = ? WHERE id = ?',
+                variables: [Variable.withInt(returnItem.quantity), Variable.withString(now), Variable.withInt(productId)],
+                updates: {products},
+                updateKind: UpdateKind.update,
+              );
+              // Also restore the default variant
+              await customUpdate(
+                'UPDATE product_variants SET stock_quantity = stock_quantity + ?, updated_at = ? '
+                'WHERE product_id = ? AND color_id IS NULL AND size_id IS NULL',
+                variables: [Variable.withInt(returnItem.quantity), Variable.withString(now), Variable.withInt(productId)],
+                updates: {productVariants},
+                updateKind: UpdateKind.update,
+              );
+            }
+          }
+
+          // Sync products.stock_quantity from variants for products with variants
+          for (final productId in voidReturnAffectedProductIds) {
+            final now = DateTime.now().toIso8601String();
+            final stockRow = await customSelect(
+              'SELECT COALESCE(SUM(stock_quantity), 0) AS total_stock '
+              'FROM product_variants WHERE product_id = ? AND is_active = 1',
+              variables: [Variable.withInt(productId)],
+            ).getSingleOrNull();
+            if (stockRow != null) {
+              final totalStock = stockRow.read<int>('total_stock');
+              await customUpdate(
+                'UPDATE products SET stock_quantity = ?, updated_at = ? WHERE id = ?',
+                variables: [Variable.withInt(totalStock), Variable.withString(now), Variable.withInt(productId)],
+                updates: {products},
+                updateKind: UpdateKind.update,
+              );
+            }
           }
         }
       }
