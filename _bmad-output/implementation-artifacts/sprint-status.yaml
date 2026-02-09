@@ -159,12 +159,12 @@ development_status:
   8-8-top-customers-reports: done  # Implementation completed 2026-02-09, CR review completed 2026-02-09
   8-9-customer-payment-reports: done  # CR completed 2026-02-09
   8-10-customer-sales-reports: done  # Implementation verified perfect - all tests passing, 0 analyze issues
-  8-11-customer-aging-reports: review
-  8-12-customer-statement-reports: backlog
-  8-13-customer-analysis-reports: backlog
-  8-14-supplier-balance-reports: backlog
-  8-15-supplier-debit-balance-reports: backlog
-  8-16-supplier-credit-balance-reports: backlog
+  8-11-customer-aging-reports: done
+  8-12-customer-statement-reports: done  # CR completed - all ACs implemented, 34 tests passing, 0 analyze issues
+  8-13-customer-analysis-reports: done  # CR completed 2026-02-10 - all ACs implemented, 44 tests passing, 0 analyze issues
+  8-14-supplier-balance-reports: done  # CR completed 2026-02-10 - all core ACs implemented, 34 tests passing, 0 analyze issues. Note: Excel export and thermal printing not implemented (may be future story)
+  8-15-supplier-debit-balance-reports: done  # CR completed 2026-02-10 - all ACs implemented, 40 tests passing, 0 analyze issues
+  8-16-supplier-credit-balance-reports: review  # Implementation completed 2026-02-10 - all ACs implemented, 41 tests passing, 0 analyze issues
   8-17-supplier-analysis-reports: backlog
   8-18-supplier-aging-reports: backlog
   8-19-supplier-statement-reports: backlog

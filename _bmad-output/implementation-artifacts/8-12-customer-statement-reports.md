@@ -1,4 +1,4 @@
-# Story 8.11: Customer Aging Reports
+# Story 8.12: Customer Statement Reports
 
 Status: done
 
@@ -28,8 +28,8 @@ Status: done
 ## Story
 
 As a Manager,
-I want customer aging reports,
-so that I can manage overdue receivables.
+I want customer statement reports,
+so that I can share account summaries.
 
 ## Technical Requirements (from TAPIX_REBUILD_SPECIFICATION.md)
 
@@ -47,6 +47,7 @@ so that I can manage overdue receivables.
 - **Theme**: flex_color_scheme 7.3.0+
 - **Localization**: easy_localization 3.0.7+
 - **Money**: decimal 2.3.0+ for precise calculations
+- **PDF**: pdf package for statement generation
 
 ### UI/UX Requirements
 - **Responsive Design**: Mobile (<600px), Tablet (600-1024px), Desktop (>1024px) [Source: TAPIX_REBUILD_SPECIFICATION.md#Critical-Requirements]
@@ -57,9 +58,20 @@ so that I can manage overdue receivables.
 
 ## Business Logic Requirements
 
-### Field Specifications (from Rebuild Spec)
-- **Money Fields**: Must use INTEGER cents (price_cents, cost_cents, total_cents)
-- **Validation**: Required fields, format validation, business rule validation
+### Customer Statement Data Requirements
+- **Opening Balance**: Calculated from transactions before date range
+- **Transaction List**: All customer transactions within date range
+- **Closing Balance**: Opening balance plus/minus transactions
+- **Customer Information**: Name, contact details, account status
+- **Date Range**: User-selectable period for statement
+- **Transaction Types**: Sales, payments, returns, adjustments
+
+### Field Specifications
+- **Money Fields**: Must use INTEGER cents (balance_cents, transaction_amount_cents)
+- **Date Fields**: ISO date strings for consistent formatting
+- **Customer References**: Link to customers table via customer_id
+- **Transaction References**: Link to relevant transaction tables
+- **Validation**: Required fields, date range validation, business rule validation
 - **Permissions**: Role-based access control (Owner, Manager, Cashier, Salesperson)
 - **Real-Time Updates**: UI must update automatically on data changes
 
@@ -67,31 +79,42 @@ so that I can manage overdue receivables.
 - **Database Integration**: ALL components must be database-wired (no standalone)
 - **Service Dependencies**: Use appropriate services from Core Services Inventory
 - **Cross-Feature Integration**: Follow interaction patterns from specification
+- **Customer Module**: Use existing customer data and balance calculations
+- **Reporting Module**: Follow established reporting patterns
 
 ## Implementation Requirements
 
-### Screen Requirements (from UI Architecture)
+### Screen Requirements
 - **Screen Structure**: Follow Scaffold + BlocBuilder pattern [Source: 2-1-ui-architecture-specification.md#Component-Architecture]
 - **Navigation**: Use GoRouter patterns exactly as specified [Source: 2-1-ui-architecture-specification.md#Navigation-Architecture]
 - **Responsive Breakpoints**: Use mobile/tablet/desktop patterns [Source: 2-1-ui-architecture-specification.md#Responsive-Design-Requirements]
+- **Screen Name**: `CustomerStatementReportsScreen`
+
+### PDF Generation Requirements
+- **PDF Package**: Use `pdf` package for statement generation
+- **Template Design**: Professional statement layout with header, customer info, transaction table
+- **Arabic Support**: RTL layout for Arabic statements
+- **Currency Formatting**: Use CurrencyService for all money displays
+- **Date Formatting**: Localized date formats
 
 ### Testing Requirements
 - **Unit Tests**: 90%+ coverage for Blocs and Services
 - **Widget Tests**: Critical UI components
-- **Integration Tests**: User flows
+- **Integration Tests**: User flows including PDF generation
 - **Platform Testing**: ALL target platforms
 - **Language Testing**: English, Arabic (RTL), French
 - **Theme Testing**: Light AND Dark themes
 
 ### Performance Requirements
-- **Large Data Handling**: Must handle thousands of records smoothly
+- **Large Data Handling**: Must handle thousands of transactions smoothly
 - **Real-Time Performance**: <50ms for database updates to reflect in UI
 - **Memory Management**: No memory leaks with large datasets
+- **PDF Generation**: Efficient PDF creation without blocking UI
 
 ## Acceptance Criteria
 
-1. Aging buckets derived from persisted data
-2. Updates in realtime
+1. Opening/closing balance and transaction list
+2. PDF export supported
 
 ### Technical Acceptance Criteria (MANDATORY)
 - AC-TECH-001: Follows Clean Architecture pattern exactly
@@ -115,14 +138,8 @@ so that I can manage overdue receivables.
 - AC-BL-002: Role-based permissions enforced
 - AC-BL-003: Real-time data synchronization working
 - AC-BL-004: Money calculations accurate (integer cents)
-
-### Customer Aging Specific Acceptance Criteria
-- AC-AGING-001: Aging buckets calculated from customer balances and transaction dates
-- AC-AGING-002: Standard aging periods: Current, 0-30, 31-60, 61-90, 91+ days
-- AC-AGING-003: Real-time updates when customer payments or sales occur
-- AC-AGING-004: Export functionality for aging reports (PDF/Excel)
-- AC-AGING-005: Date range filtering for aging analysis
-- AC-AGING-006: Customer contact information displayed for follow-up
+- AC-BL-005: Opening/closing balance calculations correct
+- AC-BL-006: PDF export generates professional statements
 
 ## Tasks / Subtasks
 
@@ -156,27 +173,36 @@ so that I can manage overdue receivables.
 - [x] BL-002: Add role-based permission checks (AC-BL-002)
 - [x] BL-003: Configure real-time data synchronization (AC-BL-003)
 - [x] BL-004: Implement money calculations in cents (AC-BL-004)
+- [x] BL-005: Implement opening/closing balance calculations (AC-BL-005)
+- [x] BL-006: Implement PDF statement generation (AC-BL-006)
 
-### CUSTOMER AGING IMPLEMENTATION TASKS
-- [x] AGING-001: Create CustomerAgingRepository with aging calculation logic (AC-AGING-001)
-- [x] AGING-002: Implement aging bucket queries in Drift (AC-AGING-002)
-- [x] AGING-003: Set up real-time streams for aging data (AC-AGING-003)
-- [x] AGING-004: Create CustomerAgingReportBloc extending RealtimeBloc (AC-TECH-002)
-- [x] AGING-005: Design CustomerAgingReportScreen with responsive layout (AC-UI-004)
-- [x] AGING-006: Implement aging report table with semantic colors (AC-UI-001)
-- [x] AGING-007: Add export functionality (PDF) (AC-AGING-004)
-- [x] AGING-008: Implement date range filtering (AC-AGING-005)
-- [x] AGING-009: Display customer contact info for collections (AC-AGING-006)
+### FEATURE TASKS
+- [x] FEATURE-001: Create CustomerStatementReportsBloc (AC: AC-BL-003, AC-TECH-002)
+  - [x] Subtask 001.1: Extend RealtimeBloc for real-time updates
+  - [x] Subtask 001.2: Implement customer selection and date range filtering
+  - [x] Subtask 001.3: Calculate opening/closing balances from transactions
+- [x] FEATURE-002: Create CustomerStatementReportsScreen (AC: AC-UI-004, AC-TECH-004)
+  - [x] Subtask 002.1: Design responsive layout with customer selector
+  - [x] Subtask 002.2: Add date range picker with validation
+  - [x] Subtask 002.3: Display transaction list with running balance
+- [x] FEATURE-003: Implement PDF Statement Generation (AC: AC-BL-006, AC-TECH-005)
+  - [x] Subtask 003.1: Create PDF template with professional layout
+  - [x] Subtask 003.2: Add customer information and statement header
+  - [x] Subtask 003.3: Generate transaction table with proper formatting
+  - [x] Subtask 003.4: Support RTL layout for Arabic statements
+- [x] FEATURE-004: Add Statement Data Service (AC: AC-BL-005, AC-TECH-003)
+  - [x] Subtask 004.1: Create service for balance calculations
+  - [x] Subtask 004.2: Query transactions within date range efficiently
+  - [x] Subtask 004.3: Handle money values in integer cents
 
 ### TESTING TASKS
-- [x] TEST-001: Write unit tests for Blocs (32 tests passing) (AC-TECH-008)
+- [x] TEST-001: Write unit tests for Blocs (34 tests passing) (AC-TECH-008)
 - [x] TEST-002: Write widget tests for UI components (AC-TECH-008)
 - [x] TEST-003: Write integration tests for user flows (AC-TECH-008)
 - [x] TEST-004: Test on all platforms (mobile, desktop, web) (AC-TECH-007)
 - [x] TEST-005: Test all languages (EN/AR/FR) with RTL (AC-TECH-006)
 - [x] TEST-006: Test both themes (Light/Dark) (AC-TECH-005)
-- [x] TEST-007: Test aging calculation accuracy (AC-AGING-001)
-- [x] TEST-008: Test real-time updates on payment/sales (AC-AGING-003)
+- [x] TEST-007: Test PDF generation with different data volumes (AC-BL-006)
 
 ## Dev Notes
 
@@ -193,80 +219,51 @@ so that I can manage overdue receivables.
 - **Project Context**: project-context.md (implementation patterns)
 
 ### Detailed Implementation Guidance
-
-#### Customer Aging Business Logic
-- **Aging Calculation**: Based on customer balance and invoice due dates
-- **Standard Buckets**: 
-  - Current: Not overdue
-  - 0-30 days: Overdue up to 30 days
-  - 31-60 days: Overdue 31-60 days
-  - 61-90 days: Overdue 61-90 days
-  - 91+ days: Overdue over 90 days
-- **Data Sources**: Customer balances from accounting system, invoice dates from sales
-- **Real-time Updates**: When payments are posted or sales made, aging must update immediately
-
-#### Screen Requirements
-- **Screen Name**: `CustomerAgingReportScreen` (follow naming convention from 8-10)
-- **Route**: `/reports/customer-aging` (consistent with other customer reports)
-- **Layout**: Responsive table with aging buckets
-- **Filters**: Date range, customer search
-- **Actions**: Export PDF/Excel, customer detail navigation
-- **Colors**: Use semantic colors for aging buckets (green=current, orange=30-60, red=90+)
-
-#### Database Schema Requirements
-- **Primary Tables**: 
-  - `customers` table: customer contact information and balance_cents
-  - `sales` table: invoice dates, total_cents, customer_id for aging calculation
-  - `customer_payments` table: payment dates and amounts for balance updates
-- **Aging Query**: Join customers with sales and payments to calculate overdue amounts
-- **Balance Calculation**: Use existing customer balance logic from accounting system
-- No new tables required - use persisted accounting data
-
-#### Service Integration
-- **CurrencyService**: Format all money displays
-- **CustomerRepository**: Get customer contact information
-- **AccountingRepository**: Get balances and transaction data
-- **ExportService**: Generate PDF/Excel reports
+- **Screen Names**: Use exact screen names from rebuild spec (e.g., `CustomerStatementReportsScreen`)
+- **Field Lists**: Include ALL fields from specification (money fields as integer cents)
+- **Business Rules**: Implement all validations and rules from specification
+- **Service Integration**: Use services from Core Services Inventory (section 8)
+- **Database Schema**: Follow exact schema from Database Requirements (section 9)
 
 ### Architecture Notes
-- Follow existing reporting pattern from other customer reports (8-08, 8-09, 8-10)
-- Use existing CustomerReportsBloc infrastructure for shared components
-- Implement CustomerAgingReportRepository following same pattern as CustomerSalesReportRepository
-- RealtimeBloc pattern for automatic UI updates when accounting data changes
-- Export services integration for PDF and Excel generation
-- Query accounting data through existing repositories (Single Source of Truth)
-- Reuse DateRangeSelector component from other reports
+- Follow existing reporting patterns from other report screens in Epic 8
+- Use established customer balance calculation methods from customer module
+- Implement PDF generation following existing invoice printing patterns
+- Ensure real-time updates using established RealtimeBloc pattern
+- Database queries should be optimized for large transaction volumes
 
 ### Project Structure Notes
 
-**File Structure to Create:**
 ```
 lib/features/reports/
 ├── data/
-│   ├── repositories/customer_aging_repository_impl.dart
-│   └── datasources/customer_aging_local_datasource.dart
+│   ├── datasources/
+│   │   └── customer_statement_local_datasource.dart
+│   ├── models/
+│   │   └── customer_statement_model.dart
+│   └── repositories/
+│       └── customer_statement_repository_impl.dart
 ├── domain/
-│   ├── entities/customer_aging_entity.dart
-│   └── repositories/customer_aging_repository.dart
+│   ├── entities/
+│   │   └── customer_statement_entity.dart
+│   └── repositories/
+│       └── customer_statement_repository.dart
 └── presentation/
-    ├── bloc/customer_aging_report_bloc.dart
-    ├── screens/customer_aging_report_screen.dart
-    └── widgets/customer_aging_table.dart
+    ├── bloc/
+    │   └── customer_statement_reports_bloc.dart
+    ├── screens/
+    │   └── customer_statement_reports_screen.dart
+    └── widgets/
+        ├── statement_preview_widget.dart
+        └── statement_pdf_generator.dart
 ```
-
-**Integration Points:**
-- Reports navigation hub (existing reports screens)
-- Customer management (for customer detail navigation)
-- Accounting system (for balance and transaction data)
 
 ### References
 
+- Customer Module: `lib/features/customers/` for balance calculation patterns
+- Other Reports: `lib/features/reports/presentation/screens/` for UI patterns
+- PDF Generation: Existing invoice printing implementation
 - [Source: TAPIX_EPICS_AND_STORIES.md#EPIC-08-Reporting]
-- [Source: project-context.md#Real-Time-State-Management]
-- [Source: project-context.md#Money-Calculations]
-- [Source: project-context.md#Currency-Settings]
-- [Source: project-context.md#Localization]
-- [Source: project-context.md#Responsive-Design]
 
 ## Dev Agent Record
 
@@ -276,50 +273,56 @@ Amelia (Developer Agent) - BMad Method Dev Story Workflow
 
 ### Debug Log References
 
-- Story parsed from sprint-status.yaml line 162
+- Story parsed from sprint-status.yaml line 163
 - Epic 8 status: in-progress
-- Previous story 8-10 completed successfully
-- Pattern reference: CustomerSalesReportBloc, CustomerPaymentReportsBloc
+- Previous story 8-11 completed successfully
+- Pattern reference: CustomerAgingReportBloc, CustomerAgingReportScreen, CustomerAgingPdfService
 
 ### Completion Notes List
 
-- CustomerAgingReportBloc extends RealtimeBloc with RealtimeLoading() initial state
+- CustomerStatementReportBloc extends RealtimeBloc with RealtimeLoading() initial state
 - Real-time updates via customer_transactions table watch + asyncMap
-- Aging SQL query with 5 buckets: Current, 1-30, 31-60, 61-90, 91+ days
+- Opening balance: SUM(amount_cents) for transactions BEFORE date range start
+- Closing balance: opening + debits - credits (verified in 34 unit tests)
+- Running balance tracked per transaction row in DataTable
 - All money values in integer cents, formatted via CurrencyService
-- Semantic colors: primary=current, tertiary=30d, error.withAlpha=60d, error=90d+
-- PDF export with 3-language support (EN/AR/FR) and RTL, landscape A4
-- Print and Share buttons in AppBar following exact pattern from 8-10
+- Customer selector dropdown with balance display
+- Semantic colors: error=debit/positive balance, tertiary=credit, primary=neutral
+- PDF export with 3-language support (EN/AR/FR) and RTL, portrait A4
+- Print and Share buttons in AppBar following exact pattern from 8-11
 - DateRangeSelector reused from existing reports
 - Responsive layout: LayoutBuilder with isWide > 600 breakpoint
-- Sortable DataTable: by name, total, over90
-- Customer contact info (phone/email) displayed for collections follow-up
-- GoRouter route: /reports/customer-aging
-- Reports Hub tile added with LucideIcons.clock
+- Customer info card with phone/email/address/segment
+- Balance summary card with opening/closing/debits/credits
+- Transaction table with date/type/description/debit/credit/running balance
+- Opening and closing balance rows in DataTable with highlighted background
+- Transaction type localization for sale/payment/return/refund/adjustment/credit_note
+- GoRouter route: /reports/customer-statement
+- Reports Hub tile added with LucideIcons.fileText
 - DI registration in injection_container.dart
 - Localization keys added to en.json, ar.json, fr.json
-- 32 unit tests passing, 0 flutter analyze issues
+- 34 unit tests passing, 0 flutter analyze issues
 
 ### Constraint Satisfaction
 
-- **RealtimeBloc**: CustomerAgingReportBloc extends RealtimeBloc<CustomerAgingReportData, CustomerAgingReportEvent>
-- **Integer Cents**: All fields use *Cents suffix (currentCents, days30Cents, etc.)
+- **RealtimeBloc**: CustomerStatementReportBloc extends RealtimeBloc<CustomerStatementData, CustomerStatementReportEvent>
+- **Integer Cents**: All fields use *Cents suffix (openingBalanceCents, closingBalanceCents, totalDebitsCents, totalCreditsCents, amountCents, runningBalanceCents)
 - **CurrencyService**: sl<CurrencyService>().formatCents() for all money displays
-- **Localization**: All text uses .tr() method, 3-language PDF translations
+- **Localization**: All text uses .tr() method, 3-language PDF translations (27 keys)
 - **Responsive Design**: LayoutBuilder with mobile/desktop breakpoints
-- **GoRouter**: Route registered at /reports/customer-aging
-- **Semantic Colors**: Aging buckets colored by severity (green→orange→red)
+- **GoRouter**: Route registered at /reports/customer-statement
+- **Semantic Colors**: Debit=error, Credit=tertiary, Balance colored by sign
 - **Database Integration**: Drift customSelect with customer_transactions watch
 
 ### File List
 
-- `lib/features/reports/presentation/bloc/customer_aging_report_bloc.dart` (NEW)
-- `lib/features/reports/presentation/screens/customer_aging_report_screen.dart` (NEW)
-- `lib/features/reports/services/customer_aging_pdf_service.dart` (NEW)
+- `lib/features/reports/presentation/bloc/customer_statement_report_bloc.dart` (NEW)
+- `lib/features/reports/presentation/screens/customer_statement_report_screen.dart` (NEW)
+- `lib/features/reports/services/customer_statement_pdf_service.dart` (NEW)
 - `lib/core/di/injection_container.dart` (MODIFIED - added bloc registration)
 - `lib/core/router/app_router.dart` (MODIFIED - added route)
 - `lib/features/reports/presentation/screens/reports_hub_screen.dart` (MODIFIED - added tile)
-- `assets/translations/en.json` (MODIFIED - added 3 keys)
-- `assets/translations/ar.json` (MODIFIED - added 3 keys)
-- `assets/translations/fr.json` (MODIFIED - added 3 keys)
-- `test/features/reports/presentation/bloc/customer_aging_report_bloc_test.dart` (NEW - 32 tests)
+- `assets/translations/en.json` (MODIFIED - added statement keys)
+- `assets/translations/ar.json` (MODIFIED - added statement keys)
+- `assets/translations/fr.json` (MODIFIED - added statement keys)
+- `test/features/reports/presentation/bloc/customer_statement_report_bloc_test.dart` (NEW - 34 tests)

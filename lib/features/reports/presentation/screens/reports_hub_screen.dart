@@ -127,6 +127,43 @@ class _ReportsHubView extends StatelessWidget {
                 subtitle: 'reports.customer_aging_report_desc'.tr(),
                 onTap: () => context.push('/reports/customer-aging'),
               ),
+              _ReportTile(
+                icon: LucideIcons.fileText,
+                title: 'reports.customer_statement_report'.tr(),
+                subtitle: 'reports.customer_statement_report_desc'.tr(),
+                onTap: () => context.push('/reports/customer-statement'),
+              ),
+              _ReportTile(
+                icon: LucideIcons.barChart3,
+                title: 'reports.customer_analysis'.tr(),
+                subtitle: 'reports.customer_analysis_desc'.tr(),
+                onTap: () => context.push('/reports/customer-analysis'),
+              ),
+              const SizedBox(height: 24),
+
+              // Supplier Reports Section
+              _SectionHeader(title: 'reports.supplier_reports'.tr()),
+              const SizedBox(height: 8),
+              _ReportTile(
+                icon: LucideIcons.truck,
+                title: 'reports.supplier_balance'.tr(),
+                subtitle: 'reports.supplier_balance_desc'.tr(),
+                onTap: () => context.push('/reports/supplier-balance'),
+              ),
+              const SizedBox(height: 8),
+              _ReportTile(
+                icon: LucideIcons.arrowUpRight,
+                title: 'reports.supplier_debit_balance'.tr(),
+                subtitle: 'reports.supplier_debit_balance_desc'.tr(),
+                onTap: () => context.push('/reports/supplier-debit-balance'),
+              ),
+              const SizedBox(height: 8),
+              _ReportTile(
+                icon: LucideIcons.arrowDownLeft,
+                title: 'reports.supplier_credit_balance'.tr(),
+                subtitle: 'reports.supplier_credit_balance_desc'.tr(),
+                onTap: () => context.push('/reports/supplier-credit-balance'),
+              ),
               const SizedBox(height: 24),
 
               // Diagnostics Section

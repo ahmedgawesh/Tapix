@@ -76,6 +76,11 @@ import '../../features/reports/presentation/screens/top_customers_screen.dart';
 import '../../features/reports/presentation/screens/customer_payment_reports_screen.dart';
 import '../../features/reports/presentation/screens/customer_sales_report_screen.dart';
 import '../../features/reports/presentation/screens/customer_aging_report_screen.dart';
+import '../../features/reports/presentation/screens/customer_statement_report_screen.dart';
+import '../../features/reports/presentation/screens/customer_analysis_report_screen.dart';
+import '../../features/reports/presentation/screens/supplier_balance_report_screen.dart';
+import '../../features/reports/presentation/screens/supplier_debit_balance_report_screen.dart';
+import '../../features/reports/presentation/screens/supplier_credit_balance_report_screen.dart';
 import '../di/injection_container.dart';
 import 'route_permissions.dart';
 
@@ -561,6 +566,26 @@ class AppRouter {
           GoRoute(
             path: 'customer-aging',
             builder: (context, state) => const CustomerAgingReportScreen(),
+          ),
+          GoRoute(
+            path: 'customer-statement',
+            builder: (context, state) => const CustomerStatementReportScreen(),
+          ),
+          GoRoute(
+            path: 'customer-analysis',
+            builder: (context, state) => const CustomerAnalysisReportScreen(),
+          ),
+          GoRoute(
+            path: 'supplier-balance',
+            builder: (context, state) => const SupplierBalanceReportScreen(),
+          ),
+          GoRoute(
+            path: 'supplier-debit-balance',
+            builder: (context, state) => const SupplierDebitBalanceReportScreen(),
+          ),
+          GoRoute(
+            path: 'supplier-credit-balance',
+            builder: (context, state) => const SupplierCreditBalanceReportScreen(),
           ),
         ],
       ),

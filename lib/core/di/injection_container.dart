@@ -116,6 +116,11 @@ import '../../features/reports/presentation/bloc/top_customers_bloc.dart';
 import '../../features/reports/presentation/bloc/customer_payment_reports_bloc.dart';
 import '../../features/reports/presentation/bloc/customer_sales_report_bloc.dart';
 import '../../features/reports/presentation/bloc/customer_aging_report_bloc.dart';
+import '../../features/reports/presentation/bloc/customer_statement_report_bloc.dart';
+import '../../features/reports/presentation/bloc/customer_analysis_report_bloc.dart';
+import '../../features/reports/presentation/bloc/supplier_balance_report_bloc.dart';
+import '../../features/reports/presentation/bloc/supplier_debit_balance_report_bloc.dart';
+import '../../features/reports/presentation/bloc/supplier_credit_balance_report_bloc.dart';
 
 final sl = GetIt.instance;
 
@@ -355,6 +360,11 @@ Future<void> init() async {
   sl.registerFactory(() => CustomerPaymentReportsBloc(sl<AppDatabase>()));
   sl.registerFactory(() => CustomerSalesReportBloc(sl<AppDatabase>()));
   sl.registerFactory(() => CustomerAgingReportBloc(sl<AppDatabase>()));
+  sl.registerFactory(() => CustomerStatementReportBloc(sl<AppDatabase>()));
+  sl.registerFactory(() => CustomerAnalysisReportBloc(sl<AppDatabase>()));
+  sl.registerFactory(() => SupplierBalanceReportBloc(sl<AppDatabase>()));
+  sl.registerFactory(() => SupplierDebitBalanceReportBloc(sl<AppDatabase>()));
+  sl.registerFactory(() => SupplierCreditBalanceReportBloc(sl<AppDatabase>()));
 
   // Barcode Services
   sl.registerLazySingleton(() => BarcodeValidationService());
