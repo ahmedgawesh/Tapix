@@ -259,8 +259,22 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
         final productId = item.productId;
         affectedProductIds.add(productId);
         final newCostCents = item.unitCostCents.toBigInt().toInt();
+        final newSellPrice = item.newSellPriceCents?.toBigInt().toInt();
+        final newWholesalePrice = item.newWholesalePriceCents?.toBigInt().toInt();
         final now = DateTime.now().toIso8601String();
         if (variantId != null) {
+          // Save current prices as previous before any update
+          await customUpdate(
+            'UPDATE product_variants SET '
+            'previous_cost_cents = cost_cents, '
+            'previous_price_cents = price_cents, '
+            'previous_wholesale_price_cents = wholesale_price_cents '
+            'WHERE id = ?',
+            variables: [Variable.withInt(variantId)],
+            updates: {productVariants},
+            updateKind: UpdateKind.update,
+          );
+
           // Increase variant stock
           await customUpdate(
             'UPDATE product_variants SET stock_quantity = stock_quantity + ?, updated_at = ? WHERE id = ?',
@@ -300,7 +314,50 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
               updateKind: UpdateKind.update,
             );
           }
+
+          // Update sell price on variant if user specified a new one
+          if (newSellPrice != null) {
+            await customUpdate(
+              'UPDATE product_variants SET price_cents = ?, updated_at = ? WHERE id = ?',
+              variables: [Variable.withInt(newSellPrice), Variable.withString(now), Variable.withInt(variantId)],
+              updates: {productVariants},
+              updateKind: UpdateKind.update,
+            );
+          }
+
+          // Update wholesale price on variant if user specified a new one
+          if (newWholesalePrice != null) {
+            await customUpdate(
+              'UPDATE product_variants SET wholesale_price_cents = ?, updated_at = ? WHERE id = ?',
+              variables: [Variable.withInt(newWholesalePrice), Variable.withString(now), Variable.withInt(variantId)],
+              updates: {productVariants},
+              updateKind: UpdateKind.update,
+            );
+          }
         } else {
+          // Save current prices as previous before any update on the product
+          await customUpdate(
+            'UPDATE products SET '
+            'previous_cost_cents = cost_cents, '
+            'previous_price_cents = price_cents, '
+            'previous_wholesale_price_cents = wholesale_price_cents '
+            'WHERE id = ?',
+            variables: [Variable.withInt(productId)],
+            updates: {products},
+            updateKind: UpdateKind.update,
+          );
+          // Also save previous on the default variant
+          await customUpdate(
+            'UPDATE product_variants SET '
+            'previous_cost_cents = cost_cents, '
+            'previous_price_cents = price_cents, '
+            'previous_wholesale_price_cents = wholesale_price_cents '
+            'WHERE product_id = ? AND color_id IS NULL AND size_id IS NULL',
+            variables: [Variable.withInt(productId)],
+            updates: {productVariants},
+            updateKind: UpdateKind.update,
+          );
+
           // Non-variant product: update the products table directly
           if (costStrategy == 'weighted_average') {
             final productRow = await customSelect(
@@ -337,6 +394,26 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
             );
           }
 
+          // Update sell price on product if user specified a new one
+          if (newSellPrice != null) {
+            await customUpdate(
+              'UPDATE products SET price_cents = ?, updated_at = ? WHERE id = ?',
+              variables: [Variable.withInt(newSellPrice), Variable.withString(now), Variable.withInt(productId)],
+              updates: {products},
+              updateKind: UpdateKind.update,
+            );
+          }
+
+          // Update wholesale price on product if user specified a new one
+          if (newWholesalePrice != null) {
+            await customUpdate(
+              'UPDATE products SET wholesale_price_cents = ?, updated_at = ? WHERE id = ?',
+              variables: [Variable.withInt(newWholesalePrice), Variable.withString(now), Variable.withInt(productId)],
+              updates: {products},
+              updateKind: UpdateKind.update,
+            );
+          }
+
           // Also sync the default variant if one exists
           await customUpdate(
             'UPDATE product_variants SET cost_cents = ?, stock_quantity = stock_quantity + ?, updated_at = ? '
@@ -345,6 +422,26 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
             updates: {productVariants},
             updateKind: UpdateKind.update,
           );
+
+          // Sync sell/wholesale prices to default variant too
+          if (newSellPrice != null) {
+            await customUpdate(
+              'UPDATE product_variants SET price_cents = ?, updated_at = ? '
+              'WHERE product_id = ? AND color_id IS NULL AND size_id IS NULL',
+              variables: [Variable.withInt(newSellPrice), Variable.withString(now), Variable.withInt(productId)],
+              updates: {productVariants},
+              updateKind: UpdateKind.update,
+            );
+          }
+          if (newWholesalePrice != null) {
+            await customUpdate(
+              'UPDATE product_variants SET wholesale_price_cents = ?, updated_at = ? '
+              'WHERE product_id = ? AND color_id IS NULL AND size_id IS NULL',
+              variables: [Variable.withInt(newWholesalePrice), Variable.withString(now), Variable.withInt(productId)],
+              updates: {productVariants},
+              updateKind: UpdateKind.update,
+            );
+          }
         }
       }
 
@@ -355,19 +452,26 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
       // is updated during purchase posting.
       for (final productId in affectedProductIds) {
         final now = DateTime.now().toIso8601String();
-        // Aggregate stock from all active variants
+        // Aggregate stock and get latest prices from all active variants
         final stockRow = await customSelect(
           'SELECT COALESCE(SUM(stock_quantity), 0) AS total_stock, '
-          'COALESCE(MAX(cost_cents), 0) AS latest_cost '
+          'COALESCE(MAX(cost_cents), 0) AS latest_cost, '
+          'COALESCE(MAX(price_cents), 0) AS latest_price, '
+          'MAX(wholesale_price_cents) AS latest_wholesale '
           'FROM product_variants WHERE product_id = ? AND is_active = 1',
           variables: [Variable.withInt(productId)],
         ).getSingleOrNull();
         if (stockRow != null) {
           final totalStock = stockRow.read<int>('total_stock');
           final latestCost = stockRow.read<int>('latest_cost');
+          final latestPrice = stockRow.read<int>('latest_price');
+          final latestWholesale = stockRow.readNullable<int>('latest_wholesale');
+          final wholesaleClause = latestWholesale != null
+              ? ', wholesale_price_cents = $latestWholesale'
+              : '';
           await customUpdate(
-            'UPDATE products SET stock_quantity = ?, cost_cents = ?, updated_at = ? WHERE id = ?',
-            variables: [Variable.withInt(totalStock), Variable.withInt(latestCost), Variable.withString(now), Variable.withInt(productId)],
+            'UPDATE products SET stock_quantity = ?, cost_cents = ?, price_cents = ?$wholesaleClause, updated_at = ? WHERE id = ?',
+            variables: [Variable.withInt(totalStock), Variable.withInt(latestCost), Variable.withInt(latestPrice), Variable.withString(now), Variable.withInt(productId)],
             updates: {products},
             updateKind: UpdateKind.update,
           );
@@ -903,9 +1007,31 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
 
   /// Get items with expiry dates approaching (within days)
   Stream<List<PurchaseItemWithDetails>> watchExpiringItems(int withinDays) {
-    // Current schema doesn't track expiry dates on purchase items.
-    // Return empty stream to keep API stable.
-    return const Stream.empty();
+    final cutoff = DateTime.now().add(Duration(days: withinDays));
+    final query = select(purchaseItems).join([
+      innerJoin(products, products.id.equalsExp(purchaseItems.productId)),
+      leftOuterJoin(productVariants, productVariants.id.equalsExp(purchaseItems.variantId)),
+    ])
+      ..where(purchaseItems.expiryDate.isNotNull() &
+          purchaseItems.expiryDate.isSmallerOrEqualValue(cutoff));
+
+    return query.watch().map((rows) => rows.map((row) {
+          return PurchaseItemWithDetails(
+            item: row.readTable(purchaseItems),
+            product: row.readTable(products),
+            variant: row.readTableOrNull(productVariants),
+          );
+        }).toList());
+  }
+
+  /// Get expiry info for a specific product (all purchase items with expiry dates)
+  Future<List<({int quantity, DateTime expiryDate})>> getProductExpiryInfo(int productId) async {
+    final query = select(purchaseItems)
+      ..where((i) => i.productId.equals(productId) & i.expiryDate.isNotNull())
+      ..orderBy([(i) => OrderingTerm.asc(i.expiryDate)]);
+
+    final rows = await query.get();
+    return rows.map((r) => (quantity: r.quantity, expiryDate: r.expiryDate!)).toList();
   }
 
   // ==================== PURCHASE RETURNS ====================

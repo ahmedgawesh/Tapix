@@ -11,6 +11,9 @@ class ProductVariant extends Equatable {
   final Decimal costCents;
   final Decimal priceCents;
   final Decimal? wholesalePriceCents;
+  final Decimal? previousCostCents;
+  final Decimal? previousPriceCents;
+  final Decimal? previousWholesalePriceCents;
   final Decimal priceAdjustmentCents;
   final int stockQuantity;
   final bool isActive;
@@ -25,6 +28,9 @@ class ProductVariant extends Equatable {
     required this.costCents,
     required this.priceCents,
     this.wholesalePriceCents,
+    this.previousCostCents,
+    this.previousPriceCents,
+    this.previousWholesalePriceCents,
     required this.priceAdjustmentCents,
     required this.stockQuantity,
     required this.isActive,
@@ -40,6 +46,9 @@ class ProductVariant extends Equatable {
     Decimal? costCents,
     Decimal? priceCents,
     Decimal? wholesalePriceCents,
+    Decimal? previousCostCents,
+    Decimal? previousPriceCents,
+    Decimal? previousWholesalePriceCents,
     Decimal? priceAdjustmentCents,
     int? stockQuantity,
     bool? isActive,
@@ -54,6 +63,9 @@ class ProductVariant extends Equatable {
       costCents: costCents ?? this.costCents,
       priceCents: priceCents ?? this.priceCents,
       wholesalePriceCents: wholesalePriceCents ?? this.wholesalePriceCents,
+      previousCostCents: previousCostCents ?? this.previousCostCents,
+      previousPriceCents: previousPriceCents ?? this.previousPriceCents,
+      previousWholesalePriceCents: previousWholesalePriceCents ?? this.previousWholesalePriceCents,
       priceAdjustmentCents: priceAdjustmentCents ?? this.priceAdjustmentCents,
       stockQuantity: stockQuantity ?? this.stockQuantity,
       isActive: isActive ?? this.isActive,
@@ -71,6 +83,9 @@ class ProductVariant extends Equatable {
         costCents,
         priceCents,
         wholesalePriceCents,
+        previousCostCents,
+        previousPriceCents,
+        previousWholesalePriceCents,
         priceAdjustmentCents,
         stockQuantity,
         isActive,

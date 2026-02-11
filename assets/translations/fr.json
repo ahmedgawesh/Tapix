@@ -121,6 +121,7 @@
     "hasVariants_hint": "Activer si le produit a plusieurs variantes (couleurs, tailles)",
     "color_size_disabled_when_has_variants": "La couleur et la taille sont gérées dans la section des variantes lorsque ce produit a des variantes.",
     "stock_is_sum_of_variants": "Le stock est calculé à partir des variantes. Modifiez le stock sur chaque variante.",
+    "expiry_info": "{} unités expirent le {}",
     "isActive": "Actif",
     "variants": "Variantes de Produit",
     "addVariant": "Ajouter une Variante",
@@ -510,7 +511,8 @@
     "submit": "Soumettre",
     "create": "Créer",
     "just_now": "À l'instant",
-    "no_results": "Aucun résultat trouvé"
+    "no_results": "Aucun résultat trouvé",
+    "ok": "OK"
   },
   "edit_prices": {
     "title": "Modifier les Prix",
@@ -870,8 +872,10 @@
     "old_cost": "Ancien coût",
     "new_cost": "Nouveau coût",
     "sell_price": "Prix de vente",
+    "old_sell_price": "Ancien prix de vente",
     "new_sell_price": "Nouveau prix de vente",
     "new_wholesale_price": "Nouveau prix de gros",
+    "old_wholesale_price": "Ancien prix de gros",
     "discount_percent": "Remise %",
     "discount_fixed": "Montant fixe",
     "checkout": "Finaliser",

@@ -103,6 +103,11 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
           subtotalCents: Value(item.subtotalCents),
           taxCents: Value(item.taxCents),
           totalCents: Value(item.totalCents),
+          originalCostCents: Value(item.originalCostCents),
+          originalPriceCents: Value(item.originalPriceCents),
+          originalWholesalePriceCents: Value(item.originalWholesalePriceCents),
+          newSellPriceCents: Value(item.newSellPriceCents),
+          newWholesalePriceCents: Value(item.newWholesalePriceCents),
           expiryDate: Value(item.expiryDate),
         )).toList();
 
@@ -166,6 +171,11 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
           subtotalCents: Value(item.subtotalCents),
           taxCents: Value(item.taxCents),
           totalCents: Value(item.totalCents),
+          originalCostCents: Value(item.originalCostCents),
+          originalPriceCents: Value(item.originalPriceCents),
+          originalWholesalePriceCents: Value(item.originalWholesalePriceCents),
+          newSellPriceCents: Value(item.newSellPriceCents),
+          newWholesalePriceCents: Value(item.newWholesalePriceCents),
           expiryDate: Value(item.expiryDate),
         )).toList();
 

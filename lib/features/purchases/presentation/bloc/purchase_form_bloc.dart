@@ -194,6 +194,11 @@ class PurchaseLineItem extends Equatable {
   final String? colorName;
   final String? colorHex;
   final String? sizeName;
+  final int originalCostCents;
+  final int originalPriceCents;
+  final int? originalWholesalePriceCents;
+  final Decimal? newSellPriceCents;
+  final Decimal? newWholesalePriceCents;
 
   PurchaseLineItem({
     required this.tempId,
@@ -207,6 +212,11 @@ class PurchaseLineItem extends Equatable {
     this.colorName,
     this.colorHex,
     this.sizeName,
+    required this.originalCostCents,
+    required this.originalPriceCents,
+    this.originalWholesalePriceCents,
+    this.newSellPriceCents,
+    this.newWholesalePriceCents,
   })  : discountCents = discountCents ?? Decimal.zero,
         taxCents = taxCents ?? Decimal.zero;
 
@@ -240,6 +250,13 @@ class PurchaseLineItem extends Equatable {
     String? colorName,
     String? colorHex,
     String? sizeName,
+    int? originalCostCents,
+    int? originalPriceCents,
+    int? originalWholesalePriceCents,
+    Decimal? newSellPriceCents,
+    Decimal? newWholesalePriceCents,
+    bool clearNewSellPrice = false,
+    bool clearNewWholesalePrice = false,
   }) {
     return PurchaseLineItem(
       tempId: tempId ?? this.tempId,
@@ -253,6 +270,11 @@ class PurchaseLineItem extends Equatable {
       colorName: colorName ?? this.colorName,
       colorHex: colorHex ?? this.colorHex,
       sizeName: sizeName ?? this.sizeName,
+      originalCostCents: originalCostCents ?? this.originalCostCents,
+      originalPriceCents: originalPriceCents ?? this.originalPriceCents,
+      originalWholesalePriceCents: originalWholesalePriceCents ?? this.originalWholesalePriceCents,
+      newSellPriceCents: clearNewSellPrice ? null : (newSellPriceCents ?? this.newSellPriceCents),
+      newWholesalePriceCents: clearNewWholesalePrice ? null : (newWholesalePriceCents ?? this.newWholesalePriceCents),
     );
   }
 
@@ -261,6 +283,8 @@ class PurchaseLineItem extends Equatable {
         tempId, product, variant, quantity,
         unitCostCents, discountCents, taxCents, expiryDate,
         colorName, colorHex, sizeName,
+        originalCostCents, originalPriceCents, originalWholesalePriceCents,
+        newSellPriceCents, newWholesalePriceCents,
       ];
 }
 
@@ -370,6 +394,8 @@ class PurchaseLineItemUpdated extends PurchaseFormEvent {
   final Decimal? discountCents;
   final DateTime? expiryDate;
   final bool clearExpiry;
+  final Decimal? newSellPriceCents;
+  final Decimal? newWholesalePriceCents;
 
   const PurchaseLineItemUpdated({
     required this.tempId,
@@ -378,10 +404,12 @@ class PurchaseLineItemUpdated extends PurchaseFormEvent {
     this.discountCents,
     this.expiryDate,
     this.clearExpiry = false,
+    this.newSellPriceCents,
+    this.newWholesalePriceCents,
   });
 
   @override
-  List<Object?> get props => [tempId, quantity, unitCostCents, discountCents, expiryDate, clearExpiry];
+  List<Object?> get props => [tempId, quantity, unitCostCents, discountCents, expiryDate, clearExpiry, newSellPriceCents, newWholesalePriceCents];
 }
 
 class PurchaseLineItemRemoved extends PurchaseFormEvent {
@@ -587,6 +615,18 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
                 isActive: true,
               ));
 
+        // Use stored original prices from DB if available (persisted when purchase was saved).
+        // Fall back to variant/product prices only for legacy items that don't have stored originals.
+        final origCost = i.originalCostCents?.toBigInt().toInt()
+            ?? variant?.costCents.toBigInt().toInt()
+            ?? product.costCents.toBigInt().toInt();
+        final origPrice = i.originalPriceCents?.toBigInt().toInt()
+            ?? variant?.priceCents.toBigInt().toInt()
+            ?? product.priceCents.toBigInt().toInt();
+        final origWholesale = i.originalWholesalePriceCents?.toBigInt().toInt()
+            ?? variant?.wholesalePriceCents?.toBigInt().toInt()
+            ?? product.wholesalePriceCents?.toBigInt().toInt();
+
         return PurchaseLineItem(
           tempId: _generateTempId(),
           product: product,
@@ -599,6 +639,11 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
           colorName: _resolveColorName(variant?.colorId),
           colorHex: _resolveColorHex(variant?.colorId),
           sizeName: _resolveSizeName(variant?.sizeId),
+          originalCostCents: origCost,
+          originalPriceCents: origPrice,
+          originalWholesalePriceCents: origWholesale,
+          newSellPriceCents: i.newSellPriceCents,
+          newWholesalePriceCents: i.newWholesalePriceCents,
         );
       }).toList();
 
@@ -723,6 +768,21 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
       } catch (_) {}
     }
 
+    // Use previous prices (price before last purchase update) as "old prices".
+    // Fall back to current prices if no previous prices exist yet (first purchase).
+    final origCost = resolvedVariant?.previousCostCents?.toBigInt().toInt()
+        ?? event.product.previousCostCents?.toBigInt().toInt()
+        ?? resolvedVariant?.costCents.toBigInt().toInt()
+        ?? event.product.costCents.toBigInt().toInt();
+    final origPrice = resolvedVariant?.previousPriceCents?.toBigInt().toInt()
+        ?? event.product.previousPriceCents?.toBigInt().toInt()
+        ?? resolvedVariant?.priceCents.toBigInt().toInt()
+        ?? event.product.priceCents.toBigInt().toInt();
+    final origWholesale = resolvedVariant?.previousWholesalePriceCents?.toBigInt().toInt()
+        ?? event.product.previousWholesalePriceCents?.toBigInt().toInt()
+        ?? resolvedVariant?.wholesalePriceCents?.toBigInt().toInt()
+        ?? event.product.wholesalePriceCents?.toBigInt().toInt();
+
     final newItem = PurchaseLineItem(
       tempId: _generateTempId(),
       product: event.product,
@@ -734,6 +794,9 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
       colorName: _resolveColorName(resolvedVariant?.colorId),
       colorHex: _resolveColorHex(resolvedVariant?.colorId),
       sizeName: _resolveSizeName(resolvedVariant?.sizeId),
+      originalCostCents: origCost,
+      originalPriceCents: origPrice,
+      originalWholesalePriceCents: origWholesale,
     );
     emit(state.copyWith(items: [...state.items, newItem], hasUnsavedChanges: true));
   }
@@ -750,6 +813,8 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
           discountCents: event.discountCents,
           expiryDate: event.expiryDate,
           clearExpiry: event.clearExpiry,
+          newSellPriceCents: event.newSellPriceCents,
+          newWholesalePriceCents: event.newWholesalePriceCents,
         );
       }
       return item;
@@ -827,6 +892,13 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
           taxCents: effectiveTax,
           totalCents: effectiveTotal,
           expiryDate: item.expiryDate,
+          originalCostCents: Decimal.fromInt(item.originalCostCents),
+          originalPriceCents: Decimal.fromInt(item.originalPriceCents),
+          originalWholesalePriceCents: item.originalWholesalePriceCents != null
+              ? Decimal.fromInt(item.originalWholesalePriceCents!)
+              : null,
+          newSellPriceCents: item.newSellPriceCents,
+          newWholesalePriceCents: item.newWholesalePriceCents,
         ));
       }
 

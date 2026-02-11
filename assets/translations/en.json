@@ -123,6 +123,7 @@
     "hasVariants_hint": "Enable if product has multiple variants (colors, sizes)",
     "color_size_disabled_when_has_variants": "Color and size are managed in the variants section when this product has variants.",
     "stock_is_sum_of_variants": "Stock is calculated from variants. Edit stock on each variant.",
+    "expiry_info": "{} units expire on {}",
     "isActive": "Active",
     "variants": "Product Variants",
     "addVariant": "Add Variant",
@@ -429,7 +430,8 @@
     "submit": "Submit",
     "create": "Create",
     "just_now": "Just now",
-    "no_results": "No results found"
+    "no_results": "No results found",
+    "ok": "OK"
   },
   "import_products": {
     "title": "Import Products",
@@ -865,8 +867,10 @@
     "old_cost": "Old Cost",
     "new_cost": "New Cost",
     "sell_price": "Sell Price",
+    "old_sell_price": "Old Sell Price",
     "new_sell_price": "New Sell Price",
     "new_wholesale_price": "New Wholesale Price",
+    "old_wholesale_price": "Old Wholesale Price",
     "discount_percent": "Discount %",
     "discount_fixed": "Fixed Amount",
     "checkout": "Checkout",

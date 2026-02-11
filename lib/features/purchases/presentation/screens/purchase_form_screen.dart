@@ -1382,7 +1382,7 @@ class _PurchaseFormView extends StatelessWidget {
         item: item,
         currencyService: sl<CurrencyService>(),
         discountMode: context.read<PurchaseFormBloc>().state.discountMode,
-        onSave: (qty, cost, discount, expiry, clearExpiry) {
+        onSave: (qty, cost, discount, expiry, clearExpiry, sellPriceCents, wholesalePriceCents) {
           context.read<PurchaseFormBloc>().add(PurchaseLineItemUpdated(
                 tempId: item.tempId,
                 quantity: qty,
@@ -1390,6 +1390,8 @@ class _PurchaseFormView extends StatelessWidget {
                 discountCents: discount,
                 expiryDate: expiry,
                 clearExpiry: clearExpiry,
+                newSellPriceCents: sellPriceCents,
+                newWholesalePriceCents: wholesalePriceCents,
               ));
           Navigator.pop(sheetCtx);
         },
@@ -1769,7 +1771,7 @@ class _EditItemSheet extends StatefulWidget {
   final PurchaseLineItem item;
   final CurrencyService currencyService;
   final DiscountMode discountMode;
-  final void Function(int qty, Decimal cost, Decimal? discount, DateTime? expiry, bool clearExpiry) onSave;
+  final void Function(int qty, Decimal cost, Decimal? discount, DateTime? expiry, bool clearExpiry, Decimal? sellPriceCents, Decimal? wholesalePriceCents) onSave;
 
   const _EditItemSheet({
     required this.item,
@@ -1815,10 +1817,13 @@ class _EditItemSheetState extends State<_EditItemSheet> {
     _costCtrl = TextEditingController(
         text: (widget.item.unitCostCents.toBigInt().toInt() / 100).toStringAsFixed(2));
 
-    final sellPriceCents = widget.item.variant?.priceCents.toBigInt().toInt() ??
-        widget.item.product.priceCents.toBigInt().toInt();
-    final wholesaleCents = widget.item.variant?.wholesalePriceCents?.toBigInt().toInt() ??
-        widget.item.product.wholesalePriceCents?.toBigInt().toInt();
+    // Use previously-set new prices if available, otherwise fall back to variant/product prices
+    final sellPriceCents = widget.item.newSellPriceCents?.toBigInt().toInt()
+        ?? widget.item.variant?.priceCents.toBigInt().toInt()
+        ?? widget.item.product.priceCents.toBigInt().toInt();
+    final wholesaleCents = widget.item.newWholesalePriceCents?.toBigInt().toInt()
+        ?? widget.item.variant?.wholesalePriceCents?.toBigInt().toInt()
+        ?? widget.item.product.wholesalePriceCents?.toBigInt().toInt();
     _sellPriceCtrl = TextEditingController(
         text: (sellPriceCents / 100).toStringAsFixed(2));
     _wholesalePriceCtrl = TextEditingController(
@@ -1904,8 +1909,9 @@ class _EditItemSheetState extends State<_EditItemSheet> {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final item = widget.item;
-    final oldCostCents = item.variant?.costCents.toBigInt().toInt() ?? item.product.costCents.toBigInt().toInt();
-    final sellPriceCents = item.variant?.priceCents.toBigInt().toInt() ?? item.product.priceCents.toBigInt().toInt();
+    final oldCostCents = item.originalCostCents;
+    final sellPriceCents = item.originalPriceCents;
+    final oldWholesaleCents = item.originalWholesalePriceCents;
     final currentStock = item.variant?.stockQuantity ?? item.product.stockQuantity;
 
     return Padding(
@@ -2003,32 +2009,58 @@ class _EditItemSheetState extends State<_EditItemSheet> {
                         color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Row(
+                      child: Wrap(
+                        spacing: 0,
+                        runSpacing: 8,
                         children: [
-                          Expanded(
-                            child: _InfoCell(
-                              icon: LucideIcons.warehouse,
-                              label: 'purchases.current_stock'.tr(),
-                              value: '$currentStock',
-                              iconColor: cs.primary,
+                          SizedBox(
+                            width: double.infinity,
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: _InfoCell(
+                                    icon: LucideIcons.warehouse,
+                                    label: 'purchases.current_stock'.tr(),
+                                    value: '$currentStock',
+                                    iconColor: cs.primary,
+                                  ),
+                                ),
+                                Container(width: 1, height: 36, color: cs.outlineVariant.withValues(alpha: 0.3)),
+                                Expanded(
+                                  child: _InfoCell(
+                                    icon: LucideIcons.history,
+                                    label: 'purchases.old_cost'.tr(),
+                                    value: widget.currencyService.format(oldCostCents),
+                                    iconColor: cs.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          Container(width: 1, height: 36, color: cs.outlineVariant.withValues(alpha: 0.3)),
-                          Expanded(
-                            child: _InfoCell(
-                              icon: LucideIcons.history,
-                              label: 'purchases.old_cost'.tr(),
-                              value: widget.currencyService.format(oldCostCents),
-                              iconColor: cs.onSurfaceVariant,
-                            ),
-                          ),
-                          Container(width: 1, height: 36, color: cs.outlineVariant.withValues(alpha: 0.3)),
-                          Expanded(
-                            child: _InfoCell(
-                              icon: LucideIcons.tag,
-                              label: 'purchases.sell_price'.tr(),
-                              value: widget.currencyService.format(sellPriceCents),
-                              iconColor: cs.tertiary,
+                          SizedBox(
+                            width: double.infinity,
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: _InfoCell(
+                                    icon: LucideIcons.tag,
+                                    label: 'purchases.old_sell_price'.tr(),
+                                    value: widget.currencyService.format(sellPriceCents),
+                                    iconColor: cs.tertiary,
+                                  ),
+                                ),
+                                Container(width: 1, height: 36, color: cs.outlineVariant.withValues(alpha: 0.3)),
+                                Expanded(
+                                  child: _InfoCell(
+                                    icon: LucideIcons.badgePercent,
+                                    label: 'purchases.old_wholesale_price'.tr(),
+                                    value: oldWholesaleCents != null
+                                        ? widget.currencyService.format(oldWholesaleCents)
+                                        : '-',
+                                    iconColor: cs.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
@@ -2194,7 +2226,7 @@ class _EditItemSheetState extends State<_EditItemSheet> {
                       label: Text('common.save'.tr()),
                       onPressed: _saving
                           ? null
-                          : () async {
+                          : () {
                               setState(() => _saving = true);
                               try {
                                 final qty = int.tryParse(_qtyCtrl.text) ?? 1;
@@ -2213,26 +2245,14 @@ class _EditItemSheetState extends State<_EditItemSheet> {
                                     ? null
                                     : Decimal.fromInt((wholesaleVal * 100).round());
 
-                                if (item.variant != null) {
-                                  final updatedVariant = item.variant!.copyWith(
-                                    priceCents: sellCents,
-                                    wholesalePriceCents: wholesaleCents,
-                                  );
-                                  await sl<ProductVariantRepository>().updateVariant(updatedVariant);
-                                } else {
-                                  final updatedProduct = item.product.copyWith(
-                                    priceCents: sellCents,
-                                    wholesalePriceCents: wholesaleCents,
-                                  );
-                                  await sl<ProductRepository>().updateProduct(updatedProduct);
-                                }
-
                                 widget.onSave(
                                   qty < 1 ? 1 : qty,
                                   costCents,
                                   discountCents,
                                   _expiryDate,
                                   _expiryDate == null && widget.item.expiryDate != null,
+                                  sellCents,
+                                  wholesaleCents,
                                 );
                               } catch (e) {
                                 if (context.mounted) {

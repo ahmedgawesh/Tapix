@@ -162,6 +162,11 @@ class PurchaseItemInput {
   final Decimal taxCents;
   final Decimal totalCents;
   final DateTime? expiryDate;
+  final Decimal? originalCostCents;
+  final Decimal? originalPriceCents;
+  final Decimal? originalWholesalePriceCents;
+  final Decimal? newSellPriceCents;
+  final Decimal? newWholesalePriceCents;
 
   PurchaseItemInput({
     required this.productId,
@@ -173,6 +178,11 @@ class PurchaseItemInput {
     required this.taxCents,
     required this.totalCents,
     this.expiryDate,
+    this.originalCostCents,
+    this.originalPriceCents,
+    this.originalWholesalePriceCents,
+    this.newSellPriceCents,
+    this.newWholesalePriceCents,
   }) : discountCents = discountCents ?? Decimal.zero;
 }
 

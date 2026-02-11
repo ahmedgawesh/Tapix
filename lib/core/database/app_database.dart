@@ -576,6 +576,23 @@ CREATE TABLE IF NOT EXISTS loyalty_settings (
 );
 ''');
 
+    // Purchase item price update columns (v10023)
+    await _safeAddColumn('purchase_items', 'new_sell_price_cents', 'INTEGER');
+    await _safeAddColumn('purchase_items', 'new_wholesale_price_cents', 'INTEGER');
+
+    // Purchase item original price snapshot columns (v10024)
+    await _safeAddColumn('purchase_items', 'original_cost_cents', 'INTEGER');
+    await _safeAddColumn('purchase_items', 'original_price_cents', 'INTEGER');
+    await _safeAddColumn('purchase_items', 'original_wholesale_price_cents', 'INTEGER');
+
+    // Previous price tracking on variants and products (v10025)
+    await _safeAddColumn('product_variants', 'previous_cost_cents', 'INTEGER');
+    await _safeAddColumn('product_variants', 'previous_price_cents', 'INTEGER');
+    await _safeAddColumn('product_variants', 'previous_wholesale_price_cents', 'INTEGER');
+    await _safeAddColumn('products', 'previous_cost_cents', 'INTEGER');
+    await _safeAddColumn('products', 'previous_price_cents', 'INTEGER');
+    await _safeAddColumn('products', 'previous_wholesale_price_cents', 'INTEGER');
+
     // Purchase enhancements (v10015)
     await _safeAddColumn('purchases', 'discount_cents', 'INTEGER NOT NULL DEFAULT 0');
     await _safeAddColumn('purchases', 'paid_amount_cents', 'INTEGER NOT NULL DEFAULT 0');
@@ -631,7 +648,7 @@ CREATE TABLE IF NOT EXISTS sale_payments (
   }
 
   @override
-  int get schemaVersion => 10022;
+  int get schemaVersion => 10025;
 
   @override
   MigrationStrategy get migration {
@@ -856,6 +873,29 @@ CREATE TABLE IF NOT EXISTS sale_payments (
         if (from < 10022) {
           await _safeAddColumn('supplier_transactions', 'transaction_number', 'TEXT');
           await _safeAddColumn('supplier_transactions', 'discount_type', 'TEXT');
+        }
+
+        // Migration 10022 -> 10023: Purchase item price update columns
+        if (from < 10023) {
+          await _safeAddColumn('purchase_items', 'new_sell_price_cents', 'INTEGER');
+          await _safeAddColumn('purchase_items', 'new_wholesale_price_cents', 'INTEGER');
+        }
+
+        // Migration 10023 -> 10024: Original price snapshot columns
+        if (from < 10024) {
+          await _safeAddColumn('purchase_items', 'original_cost_cents', 'INTEGER');
+          await _safeAddColumn('purchase_items', 'original_price_cents', 'INTEGER');
+          await _safeAddColumn('purchase_items', 'original_wholesale_price_cents', 'INTEGER');
+        }
+
+        // Migration 10024 -> 10025: Previous price tracking on variants and products
+        if (from < 10025) {
+          await _safeAddColumn('product_variants', 'previous_cost_cents', 'INTEGER');
+          await _safeAddColumn('product_variants', 'previous_price_cents', 'INTEGER');
+          await _safeAddColumn('product_variants', 'previous_wholesale_price_cents', 'INTEGER');
+          await _safeAddColumn('products', 'previous_cost_cents', 'INTEGER');
+          await _safeAddColumn('products', 'previous_price_cents', 'INTEGER');
+          await _safeAddColumn('products', 'previous_wholesale_price_cents', 'INTEGER');
         }
 
         await _createIndexes();

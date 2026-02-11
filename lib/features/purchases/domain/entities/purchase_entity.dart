@@ -82,6 +82,11 @@ class PurchaseItemEntity extends Equatable {
   final Decimal subtotalCents;
   final Decimal taxCents;
   final Decimal totalCents;
+  final Decimal? originalCostCents;
+  final Decimal? originalPriceCents;
+  final Decimal? originalWholesalePriceCents;
+  final Decimal? newSellPriceCents;
+  final Decimal? newWholesalePriceCents;
   final DateTime? expiryDate;
   final DateTime createdAt;
 
@@ -98,6 +103,11 @@ class PurchaseItemEntity extends Equatable {
     required this.subtotalCents,
     required this.taxCents,
     required this.totalCents,
+    this.originalCostCents,
+    this.originalPriceCents,
+    this.originalWholesalePriceCents,
+    this.newSellPriceCents,
+    this.newWholesalePriceCents,
     this.expiryDate,
     required this.createdAt,
   }) : discountCents = discountCents ?? Decimal.zero;
@@ -106,7 +116,8 @@ class PurchaseItemEntity extends Equatable {
   List<Object?> get props => [
         id, purchaseId, productId, variantId, productName, variantSku,
         quantity, unitCostCents, discountCents, subtotalCents, taxCents,
-        totalCents, expiryDate, createdAt,
+        totalCents, originalCostCents, originalPriceCents, originalWholesalePriceCents,
+        newSellPriceCents, newWholesalePriceCents, expiryDate, createdAt,
       ];
 }
 

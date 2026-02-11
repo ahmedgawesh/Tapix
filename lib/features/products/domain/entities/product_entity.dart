@@ -12,6 +12,9 @@ class Product extends Equatable {
   final Decimal costCents;
   final Decimal priceCents;
   final Decimal? wholesalePriceCents;
+  final Decimal? previousCostCents;
+  final Decimal? previousPriceCents;
+  final Decimal? previousWholesalePriceCents;
   final int stockQuantity;
   final int minQuantity;
   final int? categoryId;
@@ -35,6 +38,9 @@ class Product extends Equatable {
     required this.costCents,
     required this.priceCents,
     this.wholesalePriceCents,
+    this.previousCostCents,
+    this.previousPriceCents,
+    this.previousWholesalePriceCents,
     required this.stockQuantity,
     required this.minQuantity,
     this.categoryId,
@@ -59,6 +65,9 @@ class Product extends Equatable {
     Decimal? costCents,
     Decimal? priceCents,
     Decimal? wholesalePriceCents,
+    Decimal? previousCostCents,
+    Decimal? previousPriceCents,
+    Decimal? previousWholesalePriceCents,
     int? stockQuantity,
     int? minQuantity,
     int? categoryId,
@@ -82,6 +91,9 @@ class Product extends Equatable {
       costCents: costCents ?? this.costCents,
       priceCents: priceCents ?? this.priceCents,
       wholesalePriceCents: wholesalePriceCents ?? this.wholesalePriceCents,
+      previousCostCents: previousCostCents ?? this.previousCostCents,
+      previousPriceCents: previousPriceCents ?? this.previousPriceCents,
+      previousWholesalePriceCents: previousWholesalePriceCents ?? this.previousWholesalePriceCents,
       stockQuantity: stockQuantity ?? this.stockQuantity,
       minQuantity: minQuantity ?? this.minQuantity,
       categoryId: categoryId ?? this.categoryId,
@@ -108,6 +120,9 @@ class Product extends Equatable {
         costCents,
         priceCents,
         wholesalePriceCents,
+        previousCostCents,
+        previousPriceCents,
+        previousWholesalePriceCents,
         stockQuantity,
         minQuantity,
         categoryId,

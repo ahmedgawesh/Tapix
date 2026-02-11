@@ -47,6 +47,9 @@ class Products extends Table {
   IntColumn get costCents => integer().map(const MoneyConverter())();
   IntColumn get priceCents => integer().map(const MoneyConverter())();
   IntColumn get wholesalePriceCents => integer().nullable().map(const MoneyConverter())();
+  IntColumn get previousCostCents => integer().nullable().map(const MoneyConverter())();
+  IntColumn get previousPriceCents => integer().nullable().map(const MoneyConverter())();
+  IntColumn get previousWholesalePriceCents => integer().nullable().map(const MoneyConverter())();
   IntColumn get currencyId => integer().nullable().references(Currencies, #id, onDelete: KeyAction.restrict)();
   BoolColumn get trackInventory => boolean().withDefault(const Constant(true))();
   IntColumn get stockQuantity => integer().withDefault(const Constant(0))(); // quantity in requirements
@@ -71,6 +74,9 @@ class ProductVariants extends Table {
   IntColumn get costCents => integer().map(const MoneyConverter())();
   IntColumn get priceCents => integer().map(const MoneyConverter())();
   IntColumn get wholesalePriceCents => integer().nullable().map(const MoneyConverter())();
+  IntColumn get previousCostCents => integer().nullable().map(const MoneyConverter())();
+  IntColumn get previousPriceCents => integer().nullable().map(const MoneyConverter())();
+  IntColumn get previousWholesalePriceCents => integer().nullable().map(const MoneyConverter())();
   IntColumn get priceAdjustmentCents => integer().map(const MoneyConverter()).withDefault(const Constant(0))();
   IntColumn get stockQuantity => integer().withDefault(const Constant(0))(); // quantity in requirements
   BoolColumn get isActive => boolean().withDefault(const Constant(true))();

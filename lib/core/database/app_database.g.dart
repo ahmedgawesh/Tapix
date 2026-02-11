@@ -4152,6 +4152,36 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
     type: DriftSqlType.int,
     requiredDuringInsert: false,
   ).withConverter<Decimal?>($ProductsTable.$converterwholesalePriceCentsn);
+  @override
+  late final GeneratedColumnWithTypeConverter<Decimal?, int> previousCostCents =
+      GeneratedColumn<int>(
+        'previous_cost_cents',
+        aliasedName,
+        true,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+      ).withConverter<Decimal?>($ProductsTable.$converterpreviousCostCentsn);
+  @override
+  late final GeneratedColumnWithTypeConverter<Decimal?, int>
+  previousPriceCents = GeneratedColumn<int>(
+    'previous_price_cents',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  ).withConverter<Decimal?>($ProductsTable.$converterpreviousPriceCentsn);
+  @override
+  late final GeneratedColumnWithTypeConverter<Decimal?, int>
+  previousWholesalePriceCents =
+      GeneratedColumn<int>(
+        'previous_wholesale_price_cents',
+        aliasedName,
+        true,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+      ).withConverter<Decimal?>(
+        $ProductsTable.$converterpreviousWholesalePriceCentsn,
+      );
   static const VerificationMeta _currencyIdMeta = const VerificationMeta(
     'currencyId',
   );
@@ -4311,6 +4341,9 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
     costCents,
     priceCents,
     wholesalePriceCents,
+    previousCostCents,
+    previousPriceCents,
+    previousWholesalePriceCents,
     currencyId,
     trackInventory,
     stockQuantity,
@@ -4536,6 +4569,26 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
               data['${effectivePrefix}wholesale_price_cents'],
             ),
           ),
+      previousCostCents: $ProductsTable.$converterpreviousCostCentsn.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}previous_cost_cents'],
+        ),
+      ),
+      previousPriceCents: $ProductsTable.$converterpreviousPriceCentsn.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}previous_price_cents'],
+        ),
+      ),
+      previousWholesalePriceCents: $ProductsTable
+          .$converterpreviousWholesalePriceCentsn
+          .fromSql(
+            attachedDatabase.typeMapping.read(
+              DriftSqlType.int,
+              data['${effectivePrefix}previous_wholesale_price_cents'],
+            ),
+          ),
       currencyId: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}currency_id'],
@@ -4596,6 +4649,18 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
       const MoneyConverter();
   static TypeConverter<Decimal?, int?> $converterwholesalePriceCentsn =
       NullAwareTypeConverter.wrap($converterwholesalePriceCents);
+  static TypeConverter<Decimal, int> $converterpreviousCostCents =
+      const MoneyConverter();
+  static TypeConverter<Decimal?, int?> $converterpreviousCostCentsn =
+      NullAwareTypeConverter.wrap($converterpreviousCostCents);
+  static TypeConverter<Decimal, int> $converterpreviousPriceCents =
+      const MoneyConverter();
+  static TypeConverter<Decimal?, int?> $converterpreviousPriceCentsn =
+      NullAwareTypeConverter.wrap($converterpreviousPriceCents);
+  static TypeConverter<Decimal, int> $converterpreviousWholesalePriceCents =
+      const MoneyConverter();
+  static TypeConverter<Decimal?, int?> $converterpreviousWholesalePriceCentsn =
+      NullAwareTypeConverter.wrap($converterpreviousWholesalePriceCents);
 }
 
 class Product extends DataClass implements Insertable<Product> {
@@ -4611,6 +4676,9 @@ class Product extends DataClass implements Insertable<Product> {
   final Decimal costCents;
   final Decimal priceCents;
   final Decimal? wholesalePriceCents;
+  final Decimal? previousCostCents;
+  final Decimal? previousPriceCents;
+  final Decimal? previousWholesalePriceCents;
   final int? currencyId;
   final bool trackInventory;
   final int stockQuantity;
@@ -4635,6 +4703,9 @@ class Product extends DataClass implements Insertable<Product> {
     required this.costCents,
     required this.priceCents,
     this.wholesalePriceCents,
+    this.previousCostCents,
+    this.previousPriceCents,
+    this.previousWholesalePriceCents,
     this.currencyId,
     required this.trackInventory,
     required this.stockQuantity,
@@ -4690,6 +4761,23 @@ class Product extends DataClass implements Insertable<Product> {
         ),
       );
     }
+    if (!nullToAbsent || previousCostCents != null) {
+      map['previous_cost_cents'] = Variable<int>(
+        $ProductsTable.$converterpreviousCostCentsn.toSql(previousCostCents),
+      );
+    }
+    if (!nullToAbsent || previousPriceCents != null) {
+      map['previous_price_cents'] = Variable<int>(
+        $ProductsTable.$converterpreviousPriceCentsn.toSql(previousPriceCents),
+      );
+    }
+    if (!nullToAbsent || previousWholesalePriceCents != null) {
+      map['previous_wholesale_price_cents'] = Variable<int>(
+        $ProductsTable.$converterpreviousWholesalePriceCentsn.toSql(
+          previousWholesalePriceCents,
+        ),
+      );
+    }
     if (!nullToAbsent || currencyId != null) {
       map['currency_id'] = Variable<int>(currencyId);
     }
@@ -4736,6 +4824,16 @@ class Product extends DataClass implements Insertable<Product> {
       wholesalePriceCents: wholesalePriceCents == null && nullToAbsent
           ? const Value.absent()
           : Value(wholesalePriceCents),
+      previousCostCents: previousCostCents == null && nullToAbsent
+          ? const Value.absent()
+          : Value(previousCostCents),
+      previousPriceCents: previousPriceCents == null && nullToAbsent
+          ? const Value.absent()
+          : Value(previousPriceCents),
+      previousWholesalePriceCents:
+          previousWholesalePriceCents == null && nullToAbsent
+          ? const Value.absent()
+          : Value(previousWholesalePriceCents),
       currencyId: currencyId == null && nullToAbsent
           ? const Value.absent()
           : Value(currencyId),
@@ -4774,6 +4872,15 @@ class Product extends DataClass implements Insertable<Product> {
       wholesalePriceCents: serializer.fromJson<Decimal?>(
         json['wholesalePriceCents'],
       ),
+      previousCostCents: serializer.fromJson<Decimal?>(
+        json['previousCostCents'],
+      ),
+      previousPriceCents: serializer.fromJson<Decimal?>(
+        json['previousPriceCents'],
+      ),
+      previousWholesalePriceCents: serializer.fromJson<Decimal?>(
+        json['previousWholesalePriceCents'],
+      ),
       currencyId: serializer.fromJson<int?>(json['currencyId']),
       trackInventory: serializer.fromJson<bool>(json['trackInventory']),
       stockQuantity: serializer.fromJson<int>(json['stockQuantity']),
@@ -4803,6 +4910,11 @@ class Product extends DataClass implements Insertable<Product> {
       'costCents': serializer.toJson<Decimal>(costCents),
       'priceCents': serializer.toJson<Decimal>(priceCents),
       'wholesalePriceCents': serializer.toJson<Decimal?>(wholesalePriceCents),
+      'previousCostCents': serializer.toJson<Decimal?>(previousCostCents),
+      'previousPriceCents': serializer.toJson<Decimal?>(previousPriceCents),
+      'previousWholesalePriceCents': serializer.toJson<Decimal?>(
+        previousWholesalePriceCents,
+      ),
       'currencyId': serializer.toJson<int?>(currencyId),
       'trackInventory': serializer.toJson<bool>(trackInventory),
       'stockQuantity': serializer.toJson<int>(stockQuantity),
@@ -4830,6 +4942,9 @@ class Product extends DataClass implements Insertable<Product> {
     Decimal? costCents,
     Decimal? priceCents,
     Value<Decimal?> wholesalePriceCents = const Value.absent(),
+    Value<Decimal?> previousCostCents = const Value.absent(),
+    Value<Decimal?> previousPriceCents = const Value.absent(),
+    Value<Decimal?> previousWholesalePriceCents = const Value.absent(),
     Value<int?> currencyId = const Value.absent(),
     bool? trackInventory,
     int? stockQuantity,
@@ -4856,6 +4971,15 @@ class Product extends DataClass implements Insertable<Product> {
     wholesalePriceCents: wholesalePriceCents.present
         ? wholesalePriceCents.value
         : this.wholesalePriceCents,
+    previousCostCents: previousCostCents.present
+        ? previousCostCents.value
+        : this.previousCostCents,
+    previousPriceCents: previousPriceCents.present
+        ? previousPriceCents.value
+        : this.previousPriceCents,
+    previousWholesalePriceCents: previousWholesalePriceCents.present
+        ? previousWholesalePriceCents.value
+        : this.previousWholesalePriceCents,
     currencyId: currencyId.present ? currencyId.value : this.currencyId,
     trackInventory: trackInventory ?? this.trackInventory,
     stockQuantity: stockQuantity ?? this.stockQuantity,
@@ -4892,6 +5016,15 @@ class Product extends DataClass implements Insertable<Product> {
       wholesalePriceCents: data.wholesalePriceCents.present
           ? data.wholesalePriceCents.value
           : this.wholesalePriceCents,
+      previousCostCents: data.previousCostCents.present
+          ? data.previousCostCents.value
+          : this.previousCostCents,
+      previousPriceCents: data.previousPriceCents.present
+          ? data.previousPriceCents.value
+          : this.previousPriceCents,
+      previousWholesalePriceCents: data.previousWholesalePriceCents.present
+          ? data.previousWholesalePriceCents.value
+          : this.previousWholesalePriceCents,
       currencyId: data.currencyId.present
           ? data.currencyId.value
           : this.currencyId,
@@ -4933,6 +5066,9 @@ class Product extends DataClass implements Insertable<Product> {
           ..write('costCents: $costCents, ')
           ..write('priceCents: $priceCents, ')
           ..write('wholesalePriceCents: $wholesalePriceCents, ')
+          ..write('previousCostCents: $previousCostCents, ')
+          ..write('previousPriceCents: $previousPriceCents, ')
+          ..write('previousWholesalePriceCents: $previousWholesalePriceCents, ')
           ..write('currencyId: $currencyId, ')
           ..write('trackInventory: $trackInventory, ')
           ..write('stockQuantity: $stockQuantity, ')
@@ -4962,6 +5098,9 @@ class Product extends DataClass implements Insertable<Product> {
     costCents,
     priceCents,
     wholesalePriceCents,
+    previousCostCents,
+    previousPriceCents,
+    previousWholesalePriceCents,
     currencyId,
     trackInventory,
     stockQuantity,
@@ -4990,6 +5129,10 @@ class Product extends DataClass implements Insertable<Product> {
           other.costCents == this.costCents &&
           other.priceCents == this.priceCents &&
           other.wholesalePriceCents == this.wholesalePriceCents &&
+          other.previousCostCents == this.previousCostCents &&
+          other.previousPriceCents == this.previousPriceCents &&
+          other.previousWholesalePriceCents ==
+              this.previousWholesalePriceCents &&
           other.currencyId == this.currencyId &&
           other.trackInventory == this.trackInventory &&
           other.stockQuantity == this.stockQuantity &&
@@ -5016,6 +5159,9 @@ class ProductsCompanion extends UpdateCompanion<Product> {
   final Value<Decimal> costCents;
   final Value<Decimal> priceCents;
   final Value<Decimal?> wholesalePriceCents;
+  final Value<Decimal?> previousCostCents;
+  final Value<Decimal?> previousPriceCents;
+  final Value<Decimal?> previousWholesalePriceCents;
   final Value<int?> currencyId;
   final Value<bool> trackInventory;
   final Value<int> stockQuantity;
@@ -5040,6 +5186,9 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     this.costCents = const Value.absent(),
     this.priceCents = const Value.absent(),
     this.wholesalePriceCents = const Value.absent(),
+    this.previousCostCents = const Value.absent(),
+    this.previousPriceCents = const Value.absent(),
+    this.previousWholesalePriceCents = const Value.absent(),
     this.currencyId = const Value.absent(),
     this.trackInventory = const Value.absent(),
     this.stockQuantity = const Value.absent(),
@@ -5065,6 +5214,9 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     required Decimal costCents,
     required Decimal priceCents,
     this.wholesalePriceCents = const Value.absent(),
+    this.previousCostCents = const Value.absent(),
+    this.previousPriceCents = const Value.absent(),
+    this.previousWholesalePriceCents = const Value.absent(),
     this.currencyId = const Value.absent(),
     this.trackInventory = const Value.absent(),
     this.stockQuantity = const Value.absent(),
@@ -5092,6 +5244,9 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     Expression<int>? costCents,
     Expression<int>? priceCents,
     Expression<int>? wholesalePriceCents,
+    Expression<int>? previousCostCents,
+    Expression<int>? previousPriceCents,
+    Expression<int>? previousWholesalePriceCents,
     Expression<int>? currencyId,
     Expression<bool>? trackInventory,
     Expression<int>? stockQuantity,
@@ -5118,6 +5273,11 @@ class ProductsCompanion extends UpdateCompanion<Product> {
       if (priceCents != null) 'price_cents': priceCents,
       if (wholesalePriceCents != null)
         'wholesale_price_cents': wholesalePriceCents,
+      if (previousCostCents != null) 'previous_cost_cents': previousCostCents,
+      if (previousPriceCents != null)
+        'previous_price_cents': previousPriceCents,
+      if (previousWholesalePriceCents != null)
+        'previous_wholesale_price_cents': previousWholesalePriceCents,
       if (currencyId != null) 'currency_id': currencyId,
       if (trackInventory != null) 'track_inventory': trackInventory,
       if (stockQuantity != null) 'stock_quantity': stockQuantity,
@@ -5145,6 +5305,9 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     Value<Decimal>? costCents,
     Value<Decimal>? priceCents,
     Value<Decimal?>? wholesalePriceCents,
+    Value<Decimal?>? previousCostCents,
+    Value<Decimal?>? previousPriceCents,
+    Value<Decimal?>? previousWholesalePriceCents,
     Value<int?>? currencyId,
     Value<bool>? trackInventory,
     Value<int>? stockQuantity,
@@ -5170,6 +5333,10 @@ class ProductsCompanion extends UpdateCompanion<Product> {
       costCents: costCents ?? this.costCents,
       priceCents: priceCents ?? this.priceCents,
       wholesalePriceCents: wholesalePriceCents ?? this.wholesalePriceCents,
+      previousCostCents: previousCostCents ?? this.previousCostCents,
+      previousPriceCents: previousPriceCents ?? this.previousPriceCents,
+      previousWholesalePriceCents:
+          previousWholesalePriceCents ?? this.previousWholesalePriceCents,
       currencyId: currencyId ?? this.currencyId,
       trackInventory: trackInventory ?? this.trackInventory,
       stockQuantity: stockQuantity ?? this.stockQuantity,
@@ -5231,6 +5398,27 @@ class ProductsCompanion extends UpdateCompanion<Product> {
         ),
       );
     }
+    if (previousCostCents.present) {
+      map['previous_cost_cents'] = Variable<int>(
+        $ProductsTable.$converterpreviousCostCentsn.toSql(
+          previousCostCents.value,
+        ),
+      );
+    }
+    if (previousPriceCents.present) {
+      map['previous_price_cents'] = Variable<int>(
+        $ProductsTable.$converterpreviousPriceCentsn.toSql(
+          previousPriceCents.value,
+        ),
+      );
+    }
+    if (previousWholesalePriceCents.present) {
+      map['previous_wholesale_price_cents'] = Variable<int>(
+        $ProductsTable.$converterpreviousWholesalePriceCentsn.toSql(
+          previousWholesalePriceCents.value,
+        ),
+      );
+    }
     if (currencyId.present) {
       map['currency_id'] = Variable<int>(currencyId.value);
     }
@@ -5282,6 +5470,9 @@ class ProductsCompanion extends UpdateCompanion<Product> {
           ..write('costCents: $costCents, ')
           ..write('priceCents: $priceCents, ')
           ..write('wholesalePriceCents: $wholesalePriceCents, ')
+          ..write('previousCostCents: $previousCostCents, ')
+          ..write('previousPriceCents: $previousPriceCents, ')
+          ..write('previousWholesalePriceCents: $previousWholesalePriceCents, ')
           ..write('currencyId: $currencyId, ')
           ..write('trackInventory: $trackInventory, ')
           ..write('stockQuantity: $stockQuantity, ')
@@ -5410,6 +5601,41 @@ class $ProductVariantsTable extends ProductVariants
         $ProductVariantsTable.$converterwholesalePriceCentsn,
       );
   @override
+  late final GeneratedColumnWithTypeConverter<Decimal?, int> previousCostCents =
+      GeneratedColumn<int>(
+        'previous_cost_cents',
+        aliasedName,
+        true,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+      ).withConverter<Decimal?>(
+        $ProductVariantsTable.$converterpreviousCostCentsn,
+      );
+  @override
+  late final GeneratedColumnWithTypeConverter<Decimal?, int>
+  previousPriceCents =
+      GeneratedColumn<int>(
+        'previous_price_cents',
+        aliasedName,
+        true,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+      ).withConverter<Decimal?>(
+        $ProductVariantsTable.$converterpreviousPriceCentsn,
+      );
+  @override
+  late final GeneratedColumnWithTypeConverter<Decimal?, int>
+  previousWholesalePriceCents =
+      GeneratedColumn<int>(
+        'previous_wholesale_price_cents',
+        aliasedName,
+        true,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+      ).withConverter<Decimal?>(
+        $ProductVariantsTable.$converterpreviousWholesalePriceCentsn,
+      );
+  @override
   late final GeneratedColumnWithTypeConverter<Decimal, int>
   priceAdjustmentCents =
       GeneratedColumn<int>(
@@ -5484,6 +5710,9 @@ class $ProductVariantsTable extends ProductVariants
     costCents,
     priceCents,
     wholesalePriceCents,
+    previousCostCents,
+    previousPriceCents,
+    previousWholesalePriceCents,
     priceAdjustmentCents,
     stockQuantity,
     isActive,
@@ -5616,6 +5845,28 @@ class $ProductVariantsTable extends ProductVariants
               data['${effectivePrefix}wholesale_price_cents'],
             ),
           ),
+      previousCostCents: $ProductVariantsTable.$converterpreviousCostCentsn
+          .fromSql(
+            attachedDatabase.typeMapping.read(
+              DriftSqlType.int,
+              data['${effectivePrefix}previous_cost_cents'],
+            ),
+          ),
+      previousPriceCents: $ProductVariantsTable.$converterpreviousPriceCentsn
+          .fromSql(
+            attachedDatabase.typeMapping.read(
+              DriftSqlType.int,
+              data['${effectivePrefix}previous_price_cents'],
+            ),
+          ),
+      previousWholesalePriceCents: $ProductVariantsTable
+          .$converterpreviousWholesalePriceCentsn
+          .fromSql(
+            attachedDatabase.typeMapping.read(
+              DriftSqlType.int,
+              data['${effectivePrefix}previous_wholesale_price_cents'],
+            ),
+          ),
       priceAdjustmentCents: $ProductVariantsTable.$converterpriceAdjustmentCents
           .fromSql(
             attachedDatabase.typeMapping.read(
@@ -5655,6 +5906,18 @@ class $ProductVariantsTable extends ProductVariants
       const MoneyConverter();
   static TypeConverter<Decimal?, int?> $converterwholesalePriceCentsn =
       NullAwareTypeConverter.wrap($converterwholesalePriceCents);
+  static TypeConverter<Decimal, int> $converterpreviousCostCents =
+      const MoneyConverter();
+  static TypeConverter<Decimal?, int?> $converterpreviousCostCentsn =
+      NullAwareTypeConverter.wrap($converterpreviousCostCents);
+  static TypeConverter<Decimal, int> $converterpreviousPriceCents =
+      const MoneyConverter();
+  static TypeConverter<Decimal?, int?> $converterpreviousPriceCentsn =
+      NullAwareTypeConverter.wrap($converterpreviousPriceCents);
+  static TypeConverter<Decimal, int> $converterpreviousWholesalePriceCents =
+      const MoneyConverter();
+  static TypeConverter<Decimal?, int?> $converterpreviousWholesalePriceCentsn =
+      NullAwareTypeConverter.wrap($converterpreviousWholesalePriceCents);
   static TypeConverter<Decimal, int> $converterpriceAdjustmentCents =
       const MoneyConverter();
 }
@@ -5669,6 +5932,9 @@ class ProductVariant extends DataClass implements Insertable<ProductVariant> {
   final Decimal costCents;
   final Decimal priceCents;
   final Decimal? wholesalePriceCents;
+  final Decimal? previousCostCents;
+  final Decimal? previousPriceCents;
+  final Decimal? previousWholesalePriceCents;
   final Decimal priceAdjustmentCents;
   final int stockQuantity;
   final bool isActive;
@@ -5684,6 +5950,9 @@ class ProductVariant extends DataClass implements Insertable<ProductVariant> {
     required this.costCents,
     required this.priceCents,
     this.wholesalePriceCents,
+    this.previousCostCents,
+    this.previousPriceCents,
+    this.previousWholesalePriceCents,
     required this.priceAdjustmentCents,
     required this.stockQuantity,
     required this.isActive,
@@ -5724,6 +5993,27 @@ class ProductVariant extends DataClass implements Insertable<ProductVariant> {
         ),
       );
     }
+    if (!nullToAbsent || previousCostCents != null) {
+      map['previous_cost_cents'] = Variable<int>(
+        $ProductVariantsTable.$converterpreviousCostCentsn.toSql(
+          previousCostCents,
+        ),
+      );
+    }
+    if (!nullToAbsent || previousPriceCents != null) {
+      map['previous_price_cents'] = Variable<int>(
+        $ProductVariantsTable.$converterpreviousPriceCentsn.toSql(
+          previousPriceCents,
+        ),
+      );
+    }
+    if (!nullToAbsent || previousWholesalePriceCents != null) {
+      map['previous_wholesale_price_cents'] = Variable<int>(
+        $ProductVariantsTable.$converterpreviousWholesalePriceCentsn.toSql(
+          previousWholesalePriceCents,
+        ),
+      );
+    }
     {
       map['price_adjustment_cents'] = Variable<int>(
         $ProductVariantsTable.$converterpriceAdjustmentCents.toSql(
@@ -5757,6 +6047,16 @@ class ProductVariant extends DataClass implements Insertable<ProductVariant> {
       wholesalePriceCents: wholesalePriceCents == null && nullToAbsent
           ? const Value.absent()
           : Value(wholesalePriceCents),
+      previousCostCents: previousCostCents == null && nullToAbsent
+          ? const Value.absent()
+          : Value(previousCostCents),
+      previousPriceCents: previousPriceCents == null && nullToAbsent
+          ? const Value.absent()
+          : Value(previousPriceCents),
+      previousWholesalePriceCents:
+          previousWholesalePriceCents == null && nullToAbsent
+          ? const Value.absent()
+          : Value(previousWholesalePriceCents),
       priceAdjustmentCents: Value(priceAdjustmentCents),
       stockQuantity: Value(stockQuantity),
       isActive: Value(isActive),
@@ -5782,6 +6082,15 @@ class ProductVariant extends DataClass implements Insertable<ProductVariant> {
       wholesalePriceCents: serializer.fromJson<Decimal?>(
         json['wholesalePriceCents'],
       ),
+      previousCostCents: serializer.fromJson<Decimal?>(
+        json['previousCostCents'],
+      ),
+      previousPriceCents: serializer.fromJson<Decimal?>(
+        json['previousPriceCents'],
+      ),
+      previousWholesalePriceCents: serializer.fromJson<Decimal?>(
+        json['previousWholesalePriceCents'],
+      ),
       priceAdjustmentCents: serializer.fromJson<Decimal>(
         json['priceAdjustmentCents'],
       ),
@@ -5804,6 +6113,11 @@ class ProductVariant extends DataClass implements Insertable<ProductVariant> {
       'costCents': serializer.toJson<Decimal>(costCents),
       'priceCents': serializer.toJson<Decimal>(priceCents),
       'wholesalePriceCents': serializer.toJson<Decimal?>(wholesalePriceCents),
+      'previousCostCents': serializer.toJson<Decimal?>(previousCostCents),
+      'previousPriceCents': serializer.toJson<Decimal?>(previousPriceCents),
+      'previousWholesalePriceCents': serializer.toJson<Decimal?>(
+        previousWholesalePriceCents,
+      ),
       'priceAdjustmentCents': serializer.toJson<Decimal>(priceAdjustmentCents),
       'stockQuantity': serializer.toJson<int>(stockQuantity),
       'isActive': serializer.toJson<bool>(isActive),
@@ -5822,6 +6136,9 @@ class ProductVariant extends DataClass implements Insertable<ProductVariant> {
     Decimal? costCents,
     Decimal? priceCents,
     Value<Decimal?> wholesalePriceCents = const Value.absent(),
+    Value<Decimal?> previousCostCents = const Value.absent(),
+    Value<Decimal?> previousPriceCents = const Value.absent(),
+    Value<Decimal?> previousWholesalePriceCents = const Value.absent(),
     Decimal? priceAdjustmentCents,
     int? stockQuantity,
     bool? isActive,
@@ -5839,6 +6156,15 @@ class ProductVariant extends DataClass implements Insertable<ProductVariant> {
     wholesalePriceCents: wholesalePriceCents.present
         ? wholesalePriceCents.value
         : this.wholesalePriceCents,
+    previousCostCents: previousCostCents.present
+        ? previousCostCents.value
+        : this.previousCostCents,
+    previousPriceCents: previousPriceCents.present
+        ? previousPriceCents.value
+        : this.previousPriceCents,
+    previousWholesalePriceCents: previousWholesalePriceCents.present
+        ? previousWholesalePriceCents.value
+        : this.previousWholesalePriceCents,
     priceAdjustmentCents: priceAdjustmentCents ?? this.priceAdjustmentCents,
     stockQuantity: stockQuantity ?? this.stockQuantity,
     isActive: isActive ?? this.isActive,
@@ -5860,6 +6186,15 @@ class ProductVariant extends DataClass implements Insertable<ProductVariant> {
       wholesalePriceCents: data.wholesalePriceCents.present
           ? data.wholesalePriceCents.value
           : this.wholesalePriceCents,
+      previousCostCents: data.previousCostCents.present
+          ? data.previousCostCents.value
+          : this.previousCostCents,
+      previousPriceCents: data.previousPriceCents.present
+          ? data.previousPriceCents.value
+          : this.previousPriceCents,
+      previousWholesalePriceCents: data.previousWholesalePriceCents.present
+          ? data.previousWholesalePriceCents.value
+          : this.previousWholesalePriceCents,
       priceAdjustmentCents: data.priceAdjustmentCents.present
           ? data.priceAdjustmentCents.value
           : this.priceAdjustmentCents,
@@ -5884,6 +6219,9 @@ class ProductVariant extends DataClass implements Insertable<ProductVariant> {
           ..write('costCents: $costCents, ')
           ..write('priceCents: $priceCents, ')
           ..write('wholesalePriceCents: $wholesalePriceCents, ')
+          ..write('previousCostCents: $previousCostCents, ')
+          ..write('previousPriceCents: $previousPriceCents, ')
+          ..write('previousWholesalePriceCents: $previousWholesalePriceCents, ')
           ..write('priceAdjustmentCents: $priceAdjustmentCents, ')
           ..write('stockQuantity: $stockQuantity, ')
           ..write('isActive: $isActive, ')
@@ -5904,6 +6242,9 @@ class ProductVariant extends DataClass implements Insertable<ProductVariant> {
     costCents,
     priceCents,
     wholesalePriceCents,
+    previousCostCents,
+    previousPriceCents,
+    previousWholesalePriceCents,
     priceAdjustmentCents,
     stockQuantity,
     isActive,
@@ -5923,6 +6264,10 @@ class ProductVariant extends DataClass implements Insertable<ProductVariant> {
           other.costCents == this.costCents &&
           other.priceCents == this.priceCents &&
           other.wholesalePriceCents == this.wholesalePriceCents &&
+          other.previousCostCents == this.previousCostCents &&
+          other.previousPriceCents == this.previousPriceCents &&
+          other.previousWholesalePriceCents ==
+              this.previousWholesalePriceCents &&
           other.priceAdjustmentCents == this.priceAdjustmentCents &&
           other.stockQuantity == this.stockQuantity &&
           other.isActive == this.isActive &&
@@ -5940,6 +6285,9 @@ class ProductVariantsCompanion extends UpdateCompanion<ProductVariant> {
   final Value<Decimal> costCents;
   final Value<Decimal> priceCents;
   final Value<Decimal?> wholesalePriceCents;
+  final Value<Decimal?> previousCostCents;
+  final Value<Decimal?> previousPriceCents;
+  final Value<Decimal?> previousWholesalePriceCents;
   final Value<Decimal> priceAdjustmentCents;
   final Value<int> stockQuantity;
   final Value<bool> isActive;
@@ -5955,6 +6303,9 @@ class ProductVariantsCompanion extends UpdateCompanion<ProductVariant> {
     this.costCents = const Value.absent(),
     this.priceCents = const Value.absent(),
     this.wholesalePriceCents = const Value.absent(),
+    this.previousCostCents = const Value.absent(),
+    this.previousPriceCents = const Value.absent(),
+    this.previousWholesalePriceCents = const Value.absent(),
     this.priceAdjustmentCents = const Value.absent(),
     this.stockQuantity = const Value.absent(),
     this.isActive = const Value.absent(),
@@ -5971,6 +6322,9 @@ class ProductVariantsCompanion extends UpdateCompanion<ProductVariant> {
     required Decimal costCents,
     required Decimal priceCents,
     this.wholesalePriceCents = const Value.absent(),
+    this.previousCostCents = const Value.absent(),
+    this.previousPriceCents = const Value.absent(),
+    this.previousWholesalePriceCents = const Value.absent(),
     this.priceAdjustmentCents = const Value.absent(),
     this.stockQuantity = const Value.absent(),
     this.isActive = const Value.absent(),
@@ -5989,6 +6343,9 @@ class ProductVariantsCompanion extends UpdateCompanion<ProductVariant> {
     Expression<int>? costCents,
     Expression<int>? priceCents,
     Expression<int>? wholesalePriceCents,
+    Expression<int>? previousCostCents,
+    Expression<int>? previousPriceCents,
+    Expression<int>? previousWholesalePriceCents,
     Expression<int>? priceAdjustmentCents,
     Expression<int>? stockQuantity,
     Expression<bool>? isActive,
@@ -6006,6 +6363,11 @@ class ProductVariantsCompanion extends UpdateCompanion<ProductVariant> {
       if (priceCents != null) 'price_cents': priceCents,
       if (wholesalePriceCents != null)
         'wholesale_price_cents': wholesalePriceCents,
+      if (previousCostCents != null) 'previous_cost_cents': previousCostCents,
+      if (previousPriceCents != null)
+        'previous_price_cents': previousPriceCents,
+      if (previousWholesalePriceCents != null)
+        'previous_wholesale_price_cents': previousWholesalePriceCents,
       if (priceAdjustmentCents != null)
         'price_adjustment_cents': priceAdjustmentCents,
       if (stockQuantity != null) 'stock_quantity': stockQuantity,
@@ -6025,6 +6387,9 @@ class ProductVariantsCompanion extends UpdateCompanion<ProductVariant> {
     Value<Decimal>? costCents,
     Value<Decimal>? priceCents,
     Value<Decimal?>? wholesalePriceCents,
+    Value<Decimal?>? previousCostCents,
+    Value<Decimal?>? previousPriceCents,
+    Value<Decimal?>? previousWholesalePriceCents,
     Value<Decimal>? priceAdjustmentCents,
     Value<int>? stockQuantity,
     Value<bool>? isActive,
@@ -6041,6 +6406,10 @@ class ProductVariantsCompanion extends UpdateCompanion<ProductVariant> {
       costCents: costCents ?? this.costCents,
       priceCents: priceCents ?? this.priceCents,
       wholesalePriceCents: wholesalePriceCents ?? this.wholesalePriceCents,
+      previousCostCents: previousCostCents ?? this.previousCostCents,
+      previousPriceCents: previousPriceCents ?? this.previousPriceCents,
+      previousWholesalePriceCents:
+          previousWholesalePriceCents ?? this.previousWholesalePriceCents,
       priceAdjustmentCents: priceAdjustmentCents ?? this.priceAdjustmentCents,
       stockQuantity: stockQuantity ?? this.stockQuantity,
       isActive: isActive ?? this.isActive,
@@ -6087,6 +6456,27 @@ class ProductVariantsCompanion extends UpdateCompanion<ProductVariant> {
         ),
       );
     }
+    if (previousCostCents.present) {
+      map['previous_cost_cents'] = Variable<int>(
+        $ProductVariantsTable.$converterpreviousCostCentsn.toSql(
+          previousCostCents.value,
+        ),
+      );
+    }
+    if (previousPriceCents.present) {
+      map['previous_price_cents'] = Variable<int>(
+        $ProductVariantsTable.$converterpreviousPriceCentsn.toSql(
+          previousPriceCents.value,
+        ),
+      );
+    }
+    if (previousWholesalePriceCents.present) {
+      map['previous_wholesale_price_cents'] = Variable<int>(
+        $ProductVariantsTable.$converterpreviousWholesalePriceCentsn.toSql(
+          previousWholesalePriceCents.value,
+        ),
+      );
+    }
     if (priceAdjustmentCents.present) {
       map['price_adjustment_cents'] = Variable<int>(
         $ProductVariantsTable.$converterpriceAdjustmentCents.toSql(
@@ -6121,6 +6511,9 @@ class ProductVariantsCompanion extends UpdateCompanion<ProductVariant> {
           ..write('costCents: $costCents, ')
           ..write('priceCents: $priceCents, ')
           ..write('wholesalePriceCents: $wholesalePriceCents, ')
+          ..write('previousCostCents: $previousCostCents, ')
+          ..write('previousPriceCents: $previousPriceCents, ')
+          ..write('previousWholesalePriceCents: $previousWholesalePriceCents, ')
           ..write('priceAdjustmentCents: $priceAdjustmentCents, ')
           ..write('stockQuantity: $stockQuantity, ')
           ..write('isActive: $isActive, ')
@@ -26870,6 +27263,61 @@ class $PurchaseItemsTable extends PurchaseItems
         type: DriftSqlType.int,
         requiredDuringInsert: true,
       ).withConverter<Decimal>($PurchaseItemsTable.$convertertotalCents);
+  @override
+  late final GeneratedColumnWithTypeConverter<Decimal?, int> originalCostCents =
+      GeneratedColumn<int>(
+        'original_cost_cents',
+        aliasedName,
+        true,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+      ).withConverter<Decimal?>(
+        $PurchaseItemsTable.$converteroriginalCostCentsn,
+      );
+  @override
+  late final GeneratedColumnWithTypeConverter<Decimal?, int>
+  originalPriceCents = GeneratedColumn<int>(
+    'original_price_cents',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  ).withConverter<Decimal?>($PurchaseItemsTable.$converteroriginalPriceCentsn);
+  @override
+  late final GeneratedColumnWithTypeConverter<Decimal?, int>
+  originalWholesalePriceCents =
+      GeneratedColumn<int>(
+        'original_wholesale_price_cents',
+        aliasedName,
+        true,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+      ).withConverter<Decimal?>(
+        $PurchaseItemsTable.$converteroriginalWholesalePriceCentsn,
+      );
+  @override
+  late final GeneratedColumnWithTypeConverter<Decimal?, int> newSellPriceCents =
+      GeneratedColumn<int>(
+        'new_sell_price_cents',
+        aliasedName,
+        true,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+      ).withConverter<Decimal?>(
+        $PurchaseItemsTable.$converternewSellPriceCentsn,
+      );
+  @override
+  late final GeneratedColumnWithTypeConverter<Decimal?, int>
+  newWholesalePriceCents =
+      GeneratedColumn<int>(
+        'new_wholesale_price_cents',
+        aliasedName,
+        true,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+      ).withConverter<Decimal?>(
+        $PurchaseItemsTable.$converternewWholesalePriceCentsn,
+      );
   static const VerificationMeta _expiryDateMeta = const VerificationMeta(
     'expiryDate',
   );
@@ -26905,6 +27353,11 @@ class $PurchaseItemsTable extends PurchaseItems
     subtotalCents,
     taxCents,
     totalCents,
+    originalCostCents,
+    originalPriceCents,
+    originalWholesalePriceCents,
+    newSellPriceCents,
+    newWholesalePriceCents,
     expiryDate,
     createdAt,
   ];
@@ -27024,6 +27477,43 @@ class $PurchaseItemsTable extends PurchaseItems
           data['${effectivePrefix}total_cents'],
         )!,
       ),
+      originalCostCents: $PurchaseItemsTable.$converteroriginalCostCentsn
+          .fromSql(
+            attachedDatabase.typeMapping.read(
+              DriftSqlType.int,
+              data['${effectivePrefix}original_cost_cents'],
+            ),
+          ),
+      originalPriceCents: $PurchaseItemsTable.$converteroriginalPriceCentsn
+          .fromSql(
+            attachedDatabase.typeMapping.read(
+              DriftSqlType.int,
+              data['${effectivePrefix}original_price_cents'],
+            ),
+          ),
+      originalWholesalePriceCents: $PurchaseItemsTable
+          .$converteroriginalWholesalePriceCentsn
+          .fromSql(
+            attachedDatabase.typeMapping.read(
+              DriftSqlType.int,
+              data['${effectivePrefix}original_wholesale_price_cents'],
+            ),
+          ),
+      newSellPriceCents: $PurchaseItemsTable.$converternewSellPriceCentsn
+          .fromSql(
+            attachedDatabase.typeMapping.read(
+              DriftSqlType.int,
+              data['${effectivePrefix}new_sell_price_cents'],
+            ),
+          ),
+      newWholesalePriceCents: $PurchaseItemsTable
+          .$converternewWholesalePriceCentsn
+          .fromSql(
+            attachedDatabase.typeMapping.read(
+              DriftSqlType.int,
+              data['${effectivePrefix}new_wholesale_price_cents'],
+            ),
+          ),
       expiryDate: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}expiry_date'],
@@ -27050,6 +27540,26 @@ class $PurchaseItemsTable extends PurchaseItems
       const MoneyConverter();
   static TypeConverter<Decimal, int> $convertertotalCents =
       const MoneyConverter();
+  static TypeConverter<Decimal, int> $converteroriginalCostCents =
+      const MoneyConverter();
+  static TypeConverter<Decimal?, int?> $converteroriginalCostCentsn =
+      NullAwareTypeConverter.wrap($converteroriginalCostCents);
+  static TypeConverter<Decimal, int> $converteroriginalPriceCents =
+      const MoneyConverter();
+  static TypeConverter<Decimal?, int?> $converteroriginalPriceCentsn =
+      NullAwareTypeConverter.wrap($converteroriginalPriceCents);
+  static TypeConverter<Decimal, int> $converteroriginalWholesalePriceCents =
+      const MoneyConverter();
+  static TypeConverter<Decimal?, int?> $converteroriginalWholesalePriceCentsn =
+      NullAwareTypeConverter.wrap($converteroriginalWholesalePriceCents);
+  static TypeConverter<Decimal, int> $converternewSellPriceCents =
+      const MoneyConverter();
+  static TypeConverter<Decimal?, int?> $converternewSellPriceCentsn =
+      NullAwareTypeConverter.wrap($converternewSellPriceCents);
+  static TypeConverter<Decimal, int> $converternewWholesalePriceCents =
+      const MoneyConverter();
+  static TypeConverter<Decimal?, int?> $converternewWholesalePriceCentsn =
+      NullAwareTypeConverter.wrap($converternewWholesalePriceCents);
 }
 
 class PurchaseItem extends DataClass implements Insertable<PurchaseItem> {
@@ -27063,6 +27573,11 @@ class PurchaseItem extends DataClass implements Insertable<PurchaseItem> {
   final Decimal subtotalCents;
   final Decimal taxCents;
   final Decimal totalCents;
+  final Decimal? originalCostCents;
+  final Decimal? originalPriceCents;
+  final Decimal? originalWholesalePriceCents;
+  final Decimal? newSellPriceCents;
+  final Decimal? newWholesalePriceCents;
   final DateTime? expiryDate;
   final DateTime createdAt;
   const PurchaseItem({
@@ -27076,6 +27591,11 @@ class PurchaseItem extends DataClass implements Insertable<PurchaseItem> {
     required this.subtotalCents,
     required this.taxCents,
     required this.totalCents,
+    this.originalCostCents,
+    this.originalPriceCents,
+    this.originalWholesalePriceCents,
+    this.newSellPriceCents,
+    this.newWholesalePriceCents,
     this.expiryDate,
     required this.createdAt,
   });
@@ -27114,6 +27634,41 @@ class PurchaseItem extends DataClass implements Insertable<PurchaseItem> {
         $PurchaseItemsTable.$convertertotalCents.toSql(totalCents),
       );
     }
+    if (!nullToAbsent || originalCostCents != null) {
+      map['original_cost_cents'] = Variable<int>(
+        $PurchaseItemsTable.$converteroriginalCostCentsn.toSql(
+          originalCostCents,
+        ),
+      );
+    }
+    if (!nullToAbsent || originalPriceCents != null) {
+      map['original_price_cents'] = Variable<int>(
+        $PurchaseItemsTable.$converteroriginalPriceCentsn.toSql(
+          originalPriceCents,
+        ),
+      );
+    }
+    if (!nullToAbsent || originalWholesalePriceCents != null) {
+      map['original_wholesale_price_cents'] = Variable<int>(
+        $PurchaseItemsTable.$converteroriginalWholesalePriceCentsn.toSql(
+          originalWholesalePriceCents,
+        ),
+      );
+    }
+    if (!nullToAbsent || newSellPriceCents != null) {
+      map['new_sell_price_cents'] = Variable<int>(
+        $PurchaseItemsTable.$converternewSellPriceCentsn.toSql(
+          newSellPriceCents,
+        ),
+      );
+    }
+    if (!nullToAbsent || newWholesalePriceCents != null) {
+      map['new_wholesale_price_cents'] = Variable<int>(
+        $PurchaseItemsTable.$converternewWholesalePriceCentsn.toSql(
+          newWholesalePriceCents,
+        ),
+      );
+    }
     if (!nullToAbsent || expiryDate != null) {
       map['expiry_date'] = Variable<DateTime>(expiryDate);
     }
@@ -27135,6 +27690,22 @@ class PurchaseItem extends DataClass implements Insertable<PurchaseItem> {
       subtotalCents: Value(subtotalCents),
       taxCents: Value(taxCents),
       totalCents: Value(totalCents),
+      originalCostCents: originalCostCents == null && nullToAbsent
+          ? const Value.absent()
+          : Value(originalCostCents),
+      originalPriceCents: originalPriceCents == null && nullToAbsent
+          ? const Value.absent()
+          : Value(originalPriceCents),
+      originalWholesalePriceCents:
+          originalWholesalePriceCents == null && nullToAbsent
+          ? const Value.absent()
+          : Value(originalWholesalePriceCents),
+      newSellPriceCents: newSellPriceCents == null && nullToAbsent
+          ? const Value.absent()
+          : Value(newSellPriceCents),
+      newWholesalePriceCents: newWholesalePriceCents == null && nullToAbsent
+          ? const Value.absent()
+          : Value(newWholesalePriceCents),
       expiryDate: expiryDate == null && nullToAbsent
           ? const Value.absent()
           : Value(expiryDate),
@@ -27158,6 +27729,21 @@ class PurchaseItem extends DataClass implements Insertable<PurchaseItem> {
       subtotalCents: serializer.fromJson<Decimal>(json['subtotalCents']),
       taxCents: serializer.fromJson<Decimal>(json['taxCents']),
       totalCents: serializer.fromJson<Decimal>(json['totalCents']),
+      originalCostCents: serializer.fromJson<Decimal?>(
+        json['originalCostCents'],
+      ),
+      originalPriceCents: serializer.fromJson<Decimal?>(
+        json['originalPriceCents'],
+      ),
+      originalWholesalePriceCents: serializer.fromJson<Decimal?>(
+        json['originalWholesalePriceCents'],
+      ),
+      newSellPriceCents: serializer.fromJson<Decimal?>(
+        json['newSellPriceCents'],
+      ),
+      newWholesalePriceCents: serializer.fromJson<Decimal?>(
+        json['newWholesalePriceCents'],
+      ),
       expiryDate: serializer.fromJson<DateTime?>(json['expiryDate']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
@@ -27176,6 +27762,15 @@ class PurchaseItem extends DataClass implements Insertable<PurchaseItem> {
       'subtotalCents': serializer.toJson<Decimal>(subtotalCents),
       'taxCents': serializer.toJson<Decimal>(taxCents),
       'totalCents': serializer.toJson<Decimal>(totalCents),
+      'originalCostCents': serializer.toJson<Decimal?>(originalCostCents),
+      'originalPriceCents': serializer.toJson<Decimal?>(originalPriceCents),
+      'originalWholesalePriceCents': serializer.toJson<Decimal?>(
+        originalWholesalePriceCents,
+      ),
+      'newSellPriceCents': serializer.toJson<Decimal?>(newSellPriceCents),
+      'newWholesalePriceCents': serializer.toJson<Decimal?>(
+        newWholesalePriceCents,
+      ),
       'expiryDate': serializer.toJson<DateTime?>(expiryDate),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
@@ -27192,6 +27787,11 @@ class PurchaseItem extends DataClass implements Insertable<PurchaseItem> {
     Decimal? subtotalCents,
     Decimal? taxCents,
     Decimal? totalCents,
+    Value<Decimal?> originalCostCents = const Value.absent(),
+    Value<Decimal?> originalPriceCents = const Value.absent(),
+    Value<Decimal?> originalWholesalePriceCents = const Value.absent(),
+    Value<Decimal?> newSellPriceCents = const Value.absent(),
+    Value<Decimal?> newWholesalePriceCents = const Value.absent(),
     Value<DateTime?> expiryDate = const Value.absent(),
     DateTime? createdAt,
   }) => PurchaseItem(
@@ -27205,6 +27805,21 @@ class PurchaseItem extends DataClass implements Insertable<PurchaseItem> {
     subtotalCents: subtotalCents ?? this.subtotalCents,
     taxCents: taxCents ?? this.taxCents,
     totalCents: totalCents ?? this.totalCents,
+    originalCostCents: originalCostCents.present
+        ? originalCostCents.value
+        : this.originalCostCents,
+    originalPriceCents: originalPriceCents.present
+        ? originalPriceCents.value
+        : this.originalPriceCents,
+    originalWholesalePriceCents: originalWholesalePriceCents.present
+        ? originalWholesalePriceCents.value
+        : this.originalWholesalePriceCents,
+    newSellPriceCents: newSellPriceCents.present
+        ? newSellPriceCents.value
+        : this.newSellPriceCents,
+    newWholesalePriceCents: newWholesalePriceCents.present
+        ? newWholesalePriceCents.value
+        : this.newWholesalePriceCents,
     expiryDate: expiryDate.present ? expiryDate.value : this.expiryDate,
     createdAt: createdAt ?? this.createdAt,
   );
@@ -27230,6 +27845,21 @@ class PurchaseItem extends DataClass implements Insertable<PurchaseItem> {
       totalCents: data.totalCents.present
           ? data.totalCents.value
           : this.totalCents,
+      originalCostCents: data.originalCostCents.present
+          ? data.originalCostCents.value
+          : this.originalCostCents,
+      originalPriceCents: data.originalPriceCents.present
+          ? data.originalPriceCents.value
+          : this.originalPriceCents,
+      originalWholesalePriceCents: data.originalWholesalePriceCents.present
+          ? data.originalWholesalePriceCents.value
+          : this.originalWholesalePriceCents,
+      newSellPriceCents: data.newSellPriceCents.present
+          ? data.newSellPriceCents.value
+          : this.newSellPriceCents,
+      newWholesalePriceCents: data.newWholesalePriceCents.present
+          ? data.newWholesalePriceCents.value
+          : this.newWholesalePriceCents,
       expiryDate: data.expiryDate.present
           ? data.expiryDate.value
           : this.expiryDate,
@@ -27250,6 +27880,11 @@ class PurchaseItem extends DataClass implements Insertable<PurchaseItem> {
           ..write('subtotalCents: $subtotalCents, ')
           ..write('taxCents: $taxCents, ')
           ..write('totalCents: $totalCents, ')
+          ..write('originalCostCents: $originalCostCents, ')
+          ..write('originalPriceCents: $originalPriceCents, ')
+          ..write('originalWholesalePriceCents: $originalWholesalePriceCents, ')
+          ..write('newSellPriceCents: $newSellPriceCents, ')
+          ..write('newWholesalePriceCents: $newWholesalePriceCents, ')
           ..write('expiryDate: $expiryDate, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
@@ -27268,6 +27903,11 @@ class PurchaseItem extends DataClass implements Insertable<PurchaseItem> {
     subtotalCents,
     taxCents,
     totalCents,
+    originalCostCents,
+    originalPriceCents,
+    originalWholesalePriceCents,
+    newSellPriceCents,
+    newWholesalePriceCents,
     expiryDate,
     createdAt,
   );
@@ -27285,6 +27925,12 @@ class PurchaseItem extends DataClass implements Insertable<PurchaseItem> {
           other.subtotalCents == this.subtotalCents &&
           other.taxCents == this.taxCents &&
           other.totalCents == this.totalCents &&
+          other.originalCostCents == this.originalCostCents &&
+          other.originalPriceCents == this.originalPriceCents &&
+          other.originalWholesalePriceCents ==
+              this.originalWholesalePriceCents &&
+          other.newSellPriceCents == this.newSellPriceCents &&
+          other.newWholesalePriceCents == this.newWholesalePriceCents &&
           other.expiryDate == this.expiryDate &&
           other.createdAt == this.createdAt);
 }
@@ -27300,6 +27946,11 @@ class PurchaseItemsCompanion extends UpdateCompanion<PurchaseItem> {
   final Value<Decimal> subtotalCents;
   final Value<Decimal> taxCents;
   final Value<Decimal> totalCents;
+  final Value<Decimal?> originalCostCents;
+  final Value<Decimal?> originalPriceCents;
+  final Value<Decimal?> originalWholesalePriceCents;
+  final Value<Decimal?> newSellPriceCents;
+  final Value<Decimal?> newWholesalePriceCents;
   final Value<DateTime?> expiryDate;
   final Value<DateTime> createdAt;
   const PurchaseItemsCompanion({
@@ -27313,6 +27964,11 @@ class PurchaseItemsCompanion extends UpdateCompanion<PurchaseItem> {
     this.subtotalCents = const Value.absent(),
     this.taxCents = const Value.absent(),
     this.totalCents = const Value.absent(),
+    this.originalCostCents = const Value.absent(),
+    this.originalPriceCents = const Value.absent(),
+    this.originalWholesalePriceCents = const Value.absent(),
+    this.newSellPriceCents = const Value.absent(),
+    this.newWholesalePriceCents = const Value.absent(),
     this.expiryDate = const Value.absent(),
     this.createdAt = const Value.absent(),
   });
@@ -27327,6 +27983,11 @@ class PurchaseItemsCompanion extends UpdateCompanion<PurchaseItem> {
     required Decimal subtotalCents,
     this.taxCents = const Value.absent(),
     required Decimal totalCents,
+    this.originalCostCents = const Value.absent(),
+    this.originalPriceCents = const Value.absent(),
+    this.originalWholesalePriceCents = const Value.absent(),
+    this.newSellPriceCents = const Value.absent(),
+    this.newWholesalePriceCents = const Value.absent(),
     this.expiryDate = const Value.absent(),
     this.createdAt = const Value.absent(),
   }) : purchaseId = Value(purchaseId),
@@ -27346,6 +28007,11 @@ class PurchaseItemsCompanion extends UpdateCompanion<PurchaseItem> {
     Expression<int>? subtotalCents,
     Expression<int>? taxCents,
     Expression<int>? totalCents,
+    Expression<int>? originalCostCents,
+    Expression<int>? originalPriceCents,
+    Expression<int>? originalWholesalePriceCents,
+    Expression<int>? newSellPriceCents,
+    Expression<int>? newWholesalePriceCents,
     Expression<DateTime>? expiryDate,
     Expression<DateTime>? createdAt,
   }) {
@@ -27360,6 +28026,14 @@ class PurchaseItemsCompanion extends UpdateCompanion<PurchaseItem> {
       if (subtotalCents != null) 'subtotal_cents': subtotalCents,
       if (taxCents != null) 'tax_cents': taxCents,
       if (totalCents != null) 'total_cents': totalCents,
+      if (originalCostCents != null) 'original_cost_cents': originalCostCents,
+      if (originalPriceCents != null)
+        'original_price_cents': originalPriceCents,
+      if (originalWholesalePriceCents != null)
+        'original_wholesale_price_cents': originalWholesalePriceCents,
+      if (newSellPriceCents != null) 'new_sell_price_cents': newSellPriceCents,
+      if (newWholesalePriceCents != null)
+        'new_wholesale_price_cents': newWholesalePriceCents,
       if (expiryDate != null) 'expiry_date': expiryDate,
       if (createdAt != null) 'created_at': createdAt,
     });
@@ -27376,6 +28050,11 @@ class PurchaseItemsCompanion extends UpdateCompanion<PurchaseItem> {
     Value<Decimal>? subtotalCents,
     Value<Decimal>? taxCents,
     Value<Decimal>? totalCents,
+    Value<Decimal?>? originalCostCents,
+    Value<Decimal?>? originalPriceCents,
+    Value<Decimal?>? originalWholesalePriceCents,
+    Value<Decimal?>? newSellPriceCents,
+    Value<Decimal?>? newWholesalePriceCents,
     Value<DateTime?>? expiryDate,
     Value<DateTime>? createdAt,
   }) {
@@ -27390,6 +28069,13 @@ class PurchaseItemsCompanion extends UpdateCompanion<PurchaseItem> {
       subtotalCents: subtotalCents ?? this.subtotalCents,
       taxCents: taxCents ?? this.taxCents,
       totalCents: totalCents ?? this.totalCents,
+      originalCostCents: originalCostCents ?? this.originalCostCents,
+      originalPriceCents: originalPriceCents ?? this.originalPriceCents,
+      originalWholesalePriceCents:
+          originalWholesalePriceCents ?? this.originalWholesalePriceCents,
+      newSellPriceCents: newSellPriceCents ?? this.newSellPriceCents,
+      newWholesalePriceCents:
+          newWholesalePriceCents ?? this.newWholesalePriceCents,
       expiryDate: expiryDate ?? this.expiryDate,
       createdAt: createdAt ?? this.createdAt,
     );
@@ -27438,6 +28124,41 @@ class PurchaseItemsCompanion extends UpdateCompanion<PurchaseItem> {
         $PurchaseItemsTable.$convertertotalCents.toSql(totalCents.value),
       );
     }
+    if (originalCostCents.present) {
+      map['original_cost_cents'] = Variable<int>(
+        $PurchaseItemsTable.$converteroriginalCostCentsn.toSql(
+          originalCostCents.value,
+        ),
+      );
+    }
+    if (originalPriceCents.present) {
+      map['original_price_cents'] = Variable<int>(
+        $PurchaseItemsTable.$converteroriginalPriceCentsn.toSql(
+          originalPriceCents.value,
+        ),
+      );
+    }
+    if (originalWholesalePriceCents.present) {
+      map['original_wholesale_price_cents'] = Variable<int>(
+        $PurchaseItemsTable.$converteroriginalWholesalePriceCentsn.toSql(
+          originalWholesalePriceCents.value,
+        ),
+      );
+    }
+    if (newSellPriceCents.present) {
+      map['new_sell_price_cents'] = Variable<int>(
+        $PurchaseItemsTable.$converternewSellPriceCentsn.toSql(
+          newSellPriceCents.value,
+        ),
+      );
+    }
+    if (newWholesalePriceCents.present) {
+      map['new_wholesale_price_cents'] = Variable<int>(
+        $PurchaseItemsTable.$converternewWholesalePriceCentsn.toSql(
+          newWholesalePriceCents.value,
+        ),
+      );
+    }
     if (expiryDate.present) {
       map['expiry_date'] = Variable<DateTime>(expiryDate.value);
     }
@@ -27460,6 +28181,11 @@ class PurchaseItemsCompanion extends UpdateCompanion<PurchaseItem> {
           ..write('subtotalCents: $subtotalCents, ')
           ..write('taxCents: $taxCents, ')
           ..write('totalCents: $totalCents, ')
+          ..write('originalCostCents: $originalCostCents, ')
+          ..write('originalPriceCents: $originalPriceCents, ')
+          ..write('originalWholesalePriceCents: $originalWholesalePriceCents, ')
+          ..write('newSellPriceCents: $newSellPriceCents, ')
+          ..write('newWholesalePriceCents: $newWholesalePriceCents, ')
           ..write('expiryDate: $expiryDate, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
@@ -41767,6 +42493,9 @@ typedef $$ProductsTableCreateCompanionBuilder =
       required Decimal costCents,
       required Decimal priceCents,
       Value<Decimal?> wholesalePriceCents,
+      Value<Decimal?> previousCostCents,
+      Value<Decimal?> previousPriceCents,
+      Value<Decimal?> previousWholesalePriceCents,
       Value<int?> currencyId,
       Value<bool> trackInventory,
       Value<int> stockQuantity,
@@ -41793,6 +42522,9 @@ typedef $$ProductsTableUpdateCompanionBuilder =
       Value<Decimal> costCents,
       Value<Decimal> priceCents,
       Value<Decimal?> wholesalePriceCents,
+      Value<Decimal?> previousCostCents,
+      Value<Decimal?> previousPriceCents,
+      Value<Decimal?> previousWholesalePriceCents,
       Value<int?> currencyId,
       Value<bool> trackInventory,
       Value<int> stockQuantity,
@@ -42028,6 +42760,24 @@ class $$ProductsTableFilterComposer
   ColumnWithTypeConverterFilters<Decimal?, Decimal, int>
   get wholesalePriceCents => $composableBuilder(
     column: $table.wholesalePriceCents,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<Decimal?, Decimal, int>
+  get previousCostCents => $composableBuilder(
+    column: $table.previousCostCents,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<Decimal?, Decimal, int>
+  get previousPriceCents => $composableBuilder(
+    column: $table.previousPriceCents,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<Decimal?, Decimal, int>
+  get previousWholesalePriceCents => $composableBuilder(
+    column: $table.previousWholesalePriceCents,
     builder: (column) => ColumnWithTypeConverterFilters(column),
   );
 
@@ -42335,6 +43085,21 @@ class $$ProductsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get previousCostCents => $composableBuilder(
+    column: $table.previousCostCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get previousPriceCents => $composableBuilder(
+    column: $table.previousPriceCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get previousWholesalePriceCents => $composableBuilder(
+    column: $table.previousWholesalePriceCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get trackInventory => $composableBuilder(
     column: $table.trackInventory,
     builder: (column) => ColumnOrderings(column),
@@ -42501,6 +43266,24 @@ class $$ProductsTableAnnotationComposer
         column: $table.wholesalePriceCents,
         builder: (column) => column,
       );
+
+  GeneratedColumnWithTypeConverter<Decimal?, int> get previousCostCents =>
+      $composableBuilder(
+        column: $table.previousCostCents,
+        builder: (column) => column,
+      );
+
+  GeneratedColumnWithTypeConverter<Decimal?, int> get previousPriceCents =>
+      $composableBuilder(
+        column: $table.previousPriceCents,
+        builder: (column) => column,
+      );
+
+  GeneratedColumnWithTypeConverter<Decimal?, int>
+  get previousWholesalePriceCents => $composableBuilder(
+    column: $table.previousWholesalePriceCents,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<bool> get trackInventory => $composableBuilder(
     column: $table.trackInventory,
@@ -42787,6 +43570,10 @@ class $$ProductsTableTableManager
                 Value<Decimal> costCents = const Value.absent(),
                 Value<Decimal> priceCents = const Value.absent(),
                 Value<Decimal?> wholesalePriceCents = const Value.absent(),
+                Value<Decimal?> previousCostCents = const Value.absent(),
+                Value<Decimal?> previousPriceCents = const Value.absent(),
+                Value<Decimal?> previousWholesalePriceCents =
+                    const Value.absent(),
                 Value<int?> currencyId = const Value.absent(),
                 Value<bool> trackInventory = const Value.absent(),
                 Value<int> stockQuantity = const Value.absent(),
@@ -42811,6 +43598,9 @@ class $$ProductsTableTableManager
                 costCents: costCents,
                 priceCents: priceCents,
                 wholesalePriceCents: wholesalePriceCents,
+                previousCostCents: previousCostCents,
+                previousPriceCents: previousPriceCents,
+                previousWholesalePriceCents: previousWholesalePriceCents,
                 currencyId: currencyId,
                 trackInventory: trackInventory,
                 stockQuantity: stockQuantity,
@@ -42837,6 +43627,10 @@ class $$ProductsTableTableManager
                 required Decimal costCents,
                 required Decimal priceCents,
                 Value<Decimal?> wholesalePriceCents = const Value.absent(),
+                Value<Decimal?> previousCostCents = const Value.absent(),
+                Value<Decimal?> previousPriceCents = const Value.absent(),
+                Value<Decimal?> previousWholesalePriceCents =
+                    const Value.absent(),
                 Value<int?> currencyId = const Value.absent(),
                 Value<bool> trackInventory = const Value.absent(),
                 Value<int> stockQuantity = const Value.absent(),
@@ -42861,6 +43655,9 @@ class $$ProductsTableTableManager
                 costCents: costCents,
                 priceCents: priceCents,
                 wholesalePriceCents: wholesalePriceCents,
+                previousCostCents: previousCostCents,
+                previousPriceCents: previousPriceCents,
+                previousWholesalePriceCents: previousWholesalePriceCents,
                 currencyId: currencyId,
                 trackInventory: trackInventory,
                 stockQuantity: stockQuantity,
@@ -43108,6 +43905,9 @@ typedef $$ProductVariantsTableCreateCompanionBuilder =
       required Decimal costCents,
       required Decimal priceCents,
       Value<Decimal?> wholesalePriceCents,
+      Value<Decimal?> previousCostCents,
+      Value<Decimal?> previousPriceCents,
+      Value<Decimal?> previousWholesalePriceCents,
       Value<Decimal> priceAdjustmentCents,
       Value<int> stockQuantity,
       Value<bool> isActive,
@@ -43125,6 +43925,9 @@ typedef $$ProductVariantsTableUpdateCompanionBuilder =
       Value<Decimal> costCents,
       Value<Decimal> priceCents,
       Value<Decimal?> wholesalePriceCents,
+      Value<Decimal?> previousCostCents,
+      Value<Decimal?> previousPriceCents,
+      Value<Decimal?> previousWholesalePriceCents,
       Value<Decimal> priceAdjustmentCents,
       Value<int> stockQuantity,
       Value<bool> isActive,
@@ -43321,6 +44124,24 @@ class $$ProductVariantsTableFilterComposer
   ColumnWithTypeConverterFilters<Decimal?, Decimal, int>
   get wholesalePriceCents => $composableBuilder(
     column: $table.wholesalePriceCents,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<Decimal?, Decimal, int>
+  get previousCostCents => $composableBuilder(
+    column: $table.previousCostCents,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<Decimal?, Decimal, int>
+  get previousPriceCents => $composableBuilder(
+    column: $table.previousPriceCents,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<Decimal?, Decimal, int>
+  get previousWholesalePriceCents => $composableBuilder(
+    column: $table.previousWholesalePriceCents,
     builder: (column) => ColumnWithTypeConverterFilters(column),
   );
 
@@ -43559,6 +44380,21 @@ class $$ProductVariantsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get previousCostCents => $composableBuilder(
+    column: $table.previousCostCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get previousPriceCents => $composableBuilder(
+    column: $table.previousPriceCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get previousWholesalePriceCents => $composableBuilder(
+    column: $table.previousWholesalePriceCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get priceAdjustmentCents => $composableBuilder(
     column: $table.priceAdjustmentCents,
     builder: (column) => ColumnOrderings(column),
@@ -43686,6 +44522,24 @@ class $$ProductVariantsTableAnnotationComposer
         column: $table.wholesalePriceCents,
         builder: (column) => column,
       );
+
+  GeneratedColumnWithTypeConverter<Decimal?, int> get previousCostCents =>
+      $composableBuilder(
+        column: $table.previousCostCents,
+        builder: (column) => column,
+      );
+
+  GeneratedColumnWithTypeConverter<Decimal?, int> get previousPriceCents =>
+      $composableBuilder(
+        column: $table.previousPriceCents,
+        builder: (column) => column,
+      );
+
+  GeneratedColumnWithTypeConverter<Decimal?, int>
+  get previousWholesalePriceCents => $composableBuilder(
+    column: $table.previousWholesalePriceCents,
+    builder: (column) => column,
+  );
 
   GeneratedColumnWithTypeConverter<Decimal, int> get priceAdjustmentCents =>
       $composableBuilder(
@@ -43924,6 +44778,10 @@ class $$ProductVariantsTableTableManager
                 Value<Decimal> costCents = const Value.absent(),
                 Value<Decimal> priceCents = const Value.absent(),
                 Value<Decimal?> wholesalePriceCents = const Value.absent(),
+                Value<Decimal?> previousCostCents = const Value.absent(),
+                Value<Decimal?> previousPriceCents = const Value.absent(),
+                Value<Decimal?> previousWholesalePriceCents =
+                    const Value.absent(),
                 Value<Decimal> priceAdjustmentCents = const Value.absent(),
                 Value<int> stockQuantity = const Value.absent(),
                 Value<bool> isActive = const Value.absent(),
@@ -43939,6 +44797,9 @@ class $$ProductVariantsTableTableManager
                 costCents: costCents,
                 priceCents: priceCents,
                 wholesalePriceCents: wholesalePriceCents,
+                previousCostCents: previousCostCents,
+                previousPriceCents: previousPriceCents,
+                previousWholesalePriceCents: previousWholesalePriceCents,
                 priceAdjustmentCents: priceAdjustmentCents,
                 stockQuantity: stockQuantity,
                 isActive: isActive,
@@ -43956,6 +44817,10 @@ class $$ProductVariantsTableTableManager
                 required Decimal costCents,
                 required Decimal priceCents,
                 Value<Decimal?> wholesalePriceCents = const Value.absent(),
+                Value<Decimal?> previousCostCents = const Value.absent(),
+                Value<Decimal?> previousPriceCents = const Value.absent(),
+                Value<Decimal?> previousWholesalePriceCents =
+                    const Value.absent(),
                 Value<Decimal> priceAdjustmentCents = const Value.absent(),
                 Value<int> stockQuantity = const Value.absent(),
                 Value<bool> isActive = const Value.absent(),
@@ -43971,6 +44836,9 @@ class $$ProductVariantsTableTableManager
                 costCents: costCents,
                 priceCents: priceCents,
                 wholesalePriceCents: wholesalePriceCents,
+                previousCostCents: previousCostCents,
+                previousPriceCents: previousPriceCents,
+                previousWholesalePriceCents: previousWholesalePriceCents,
                 priceAdjustmentCents: priceAdjustmentCents,
                 stockQuantity: stockQuantity,
                 isActive: isActive,
@@ -60314,6 +61182,11 @@ typedef $$PurchaseItemsTableCreateCompanionBuilder =
       required Decimal subtotalCents,
       Value<Decimal> taxCents,
       required Decimal totalCents,
+      Value<Decimal?> originalCostCents,
+      Value<Decimal?> originalPriceCents,
+      Value<Decimal?> originalWholesalePriceCents,
+      Value<Decimal?> newSellPriceCents,
+      Value<Decimal?> newWholesalePriceCents,
       Value<DateTime?> expiryDate,
       Value<DateTime> createdAt,
     });
@@ -60329,6 +61202,11 @@ typedef $$PurchaseItemsTableUpdateCompanionBuilder =
       Value<Decimal> subtotalCents,
       Value<Decimal> taxCents,
       Value<Decimal> totalCents,
+      Value<Decimal?> originalCostCents,
+      Value<Decimal?> originalPriceCents,
+      Value<Decimal?> originalWholesalePriceCents,
+      Value<Decimal?> newSellPriceCents,
+      Value<Decimal?> newWholesalePriceCents,
       Value<DateTime?> expiryDate,
       Value<DateTime> createdAt,
     });
@@ -60474,6 +61352,36 @@ class $$PurchaseItemsTableFilterComposer
         column: $table.totalCents,
         builder: (column) => ColumnWithTypeConverterFilters(column),
       );
+
+  ColumnWithTypeConverterFilters<Decimal?, Decimal, int>
+  get originalCostCents => $composableBuilder(
+    column: $table.originalCostCents,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<Decimal?, Decimal, int>
+  get originalPriceCents => $composableBuilder(
+    column: $table.originalPriceCents,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<Decimal?, Decimal, int>
+  get originalWholesalePriceCents => $composableBuilder(
+    column: $table.originalWholesalePriceCents,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<Decimal?, Decimal, int>
+  get newSellPriceCents => $composableBuilder(
+    column: $table.newSellPriceCents,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<Decimal?, Decimal, int>
+  get newWholesalePriceCents => $composableBuilder(
+    column: $table.newWholesalePriceCents,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
+  );
 
   ColumnFilters<DateTime> get expiryDate => $composableBuilder(
     column: $table.expiryDate,
@@ -60624,6 +61532,31 @@ class $$PurchaseItemsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get originalCostCents => $composableBuilder(
+    column: $table.originalCostCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get originalPriceCents => $composableBuilder(
+    column: $table.originalPriceCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get originalWholesalePriceCents => $composableBuilder(
+    column: $table.originalWholesalePriceCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get newSellPriceCents => $composableBuilder(
+    column: $table.newSellPriceCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get newWholesalePriceCents => $composableBuilder(
+    column: $table.newWholesalePriceCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get expiryDate => $composableBuilder(
     column: $table.expiryDate,
     builder: (column) => ColumnOrderings(column),
@@ -60743,6 +61676,36 @@ class $$PurchaseItemsTableAnnotationComposer
   GeneratedColumnWithTypeConverter<Decimal, int> get totalCents =>
       $composableBuilder(
         column: $table.totalCents,
+        builder: (column) => column,
+      );
+
+  GeneratedColumnWithTypeConverter<Decimal?, int> get originalCostCents =>
+      $composableBuilder(
+        column: $table.originalCostCents,
+        builder: (column) => column,
+      );
+
+  GeneratedColumnWithTypeConverter<Decimal?, int> get originalPriceCents =>
+      $composableBuilder(
+        column: $table.originalPriceCents,
+        builder: (column) => column,
+      );
+
+  GeneratedColumnWithTypeConverter<Decimal?, int>
+  get originalWholesalePriceCents => $composableBuilder(
+    column: $table.originalWholesalePriceCents,
+    builder: (column) => column,
+  );
+
+  GeneratedColumnWithTypeConverter<Decimal?, int> get newSellPriceCents =>
+      $composableBuilder(
+        column: $table.newSellPriceCents,
+        builder: (column) => column,
+      );
+
+  GeneratedColumnWithTypeConverter<Decimal?, int> get newWholesalePriceCents =>
+      $composableBuilder(
+        column: $table.newWholesalePriceCents,
         builder: (column) => column,
       );
 
@@ -60893,6 +61856,12 @@ class $$PurchaseItemsTableTableManager
                 Value<Decimal> subtotalCents = const Value.absent(),
                 Value<Decimal> taxCents = const Value.absent(),
                 Value<Decimal> totalCents = const Value.absent(),
+                Value<Decimal?> originalCostCents = const Value.absent(),
+                Value<Decimal?> originalPriceCents = const Value.absent(),
+                Value<Decimal?> originalWholesalePriceCents =
+                    const Value.absent(),
+                Value<Decimal?> newSellPriceCents = const Value.absent(),
+                Value<Decimal?> newWholesalePriceCents = const Value.absent(),
                 Value<DateTime?> expiryDate = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
               }) => PurchaseItemsCompanion(
@@ -60906,6 +61875,11 @@ class $$PurchaseItemsTableTableManager
                 subtotalCents: subtotalCents,
                 taxCents: taxCents,
                 totalCents: totalCents,
+                originalCostCents: originalCostCents,
+                originalPriceCents: originalPriceCents,
+                originalWholesalePriceCents: originalWholesalePriceCents,
+                newSellPriceCents: newSellPriceCents,
+                newWholesalePriceCents: newWholesalePriceCents,
                 expiryDate: expiryDate,
                 createdAt: createdAt,
               ),
@@ -60921,6 +61895,12 @@ class $$PurchaseItemsTableTableManager
                 required Decimal subtotalCents,
                 Value<Decimal> taxCents = const Value.absent(),
                 required Decimal totalCents,
+                Value<Decimal?> originalCostCents = const Value.absent(),
+                Value<Decimal?> originalPriceCents = const Value.absent(),
+                Value<Decimal?> originalWholesalePriceCents =
+                    const Value.absent(),
+                Value<Decimal?> newSellPriceCents = const Value.absent(),
+                Value<Decimal?> newWholesalePriceCents = const Value.absent(),
                 Value<DateTime?> expiryDate = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
               }) => PurchaseItemsCompanion.insert(
@@ -60934,6 +61914,11 @@ class $$PurchaseItemsTableTableManager
                 subtotalCents: subtotalCents,
                 taxCents: taxCents,
                 totalCents: totalCents,
+                originalCostCents: originalCostCents,
+                originalPriceCents: originalPriceCents,
+                originalWholesalePriceCents: originalWholesalePriceCents,
+                newSellPriceCents: newSellPriceCents,
+                newWholesalePriceCents: newWholesalePriceCents,
                 expiryDate: expiryDate,
                 createdAt: createdAt,
               ),

@@ -134,6 +134,11 @@ class PurchaseItems extends Table {
   IntColumn get subtotalCents => integer().map(const MoneyConverter())();
   IntColumn get taxCents => integer().map(const MoneyConverter()).withDefault(const Constant(0))();
   IntColumn get totalCents => integer().map(const MoneyConverter())();
+  IntColumn get originalCostCents => integer().map(const MoneyConverter()).nullable()();
+  IntColumn get originalPriceCents => integer().map(const MoneyConverter()).nullable()();
+  IntColumn get originalWholesalePriceCents => integer().map(const MoneyConverter()).nullable()();
+  IntColumn get newSellPriceCents => integer().map(const MoneyConverter()).nullable()();
+  IntColumn get newWholesalePriceCents => integer().map(const MoneyConverter()).nullable()();
   DateTimeColumn get expiryDate => dateTime().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 }

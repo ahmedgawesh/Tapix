@@ -10,6 +10,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:easy_localization/easy_localization.dart';
 
+import '../../../../core/database/daos/purchase_dao.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/widgets/theme_toggle_button.dart';
@@ -916,6 +917,10 @@ class _ProductFormViewState extends State<_ProductFormView> {
             bloc.add(ProductFormFieldChanged(field: 'trackInventory', value: value));
           },
         ),
+        if (productId != null) ...[
+          const SizedBox(height: 16),
+          _ExpiryInfoWidget(productId: productId),
+        ],
       ],
     );
   }
@@ -1339,5 +1344,87 @@ class _SizePickerField extends StatelessWidget {
     if (selected != null || selectedSizeId != null) {
       onSelected(selected);
     }
+  }
+}
+
+class _ExpiryInfoWidget extends StatelessWidget {
+  final int productId;
+  const _ExpiryInfoWidget({required this.productId});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final purchaseDao = sl<PurchaseDao>();
+
+    return FutureBuilder<List<({int quantity, DateTime expiryDate})>>(
+      future: purchaseDao.getProductExpiryInfo(productId),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return const SizedBox.shrink();
+        }
+
+        final items = snapshot.data!;
+        final now = DateTime.now();
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final item in items)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: item.expiryDate.isBefore(now)
+                        ? cs.errorContainer.withValues(alpha: 0.3)
+                        : item.expiryDate.isBefore(now.add(const Duration(days: 30)))
+                            ? Colors.orange.withValues(alpha: 0.15)
+                            : cs.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: item.expiryDate.isBefore(now)
+                          ? cs.error.withValues(alpha: 0.5)
+                          : item.expiryDate.isBefore(now.add(const Duration(days: 30)))
+                              ? Colors.orange.withValues(alpha: 0.5)
+                              : cs.outline.withValues(alpha: 0.2),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        LucideIcons.calendarClock,
+                        size: 16,
+                        color: item.expiryDate.isBefore(now)
+                            ? cs.error
+                            : item.expiryDate.isBefore(now.add(const Duration(days: 30)))
+                                ? Colors.orange
+                                : cs.onSurfaceVariant,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'product_form.expiry_info'.tr(args: [
+                            '${item.quantity}',
+                            DateFormat.yMMMd().format(item.expiryDate),
+                          ]),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: item.expiryDate.isBefore(now)
+                                ? cs.error
+                                : item.expiryDate.isBefore(now.add(const Duration(days: 30)))
+                                    ? Colors.orange.shade800
+                                    : cs.onSurfaceVariant,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
   }
 }

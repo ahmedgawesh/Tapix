@@ -121,6 +121,7 @@
     "hasVariants_hint": "فعّل إذا كان للمنتج متغيرات متعددة (ألوان، مقاسات)",
     "color_size_disabled_when_has_variants": "يتم إدارة اللون والمقاس من قسم المتغيرات عندما يكون لهذا المنتج متغيرات.",
     "stock_is_sum_of_variants": "يتم احتساب المخزون من المتغيرات. عدّل المخزون داخل كل متغير.",
+    "expiry_info": "{} قطعة تنتهي صلاحيتها في {}",
     "isActive": "نشط",
     "variants": "متغيرات المنتج",
     "addVariant": "إضافة متغير",
@@ -510,7 +511,8 @@
     "submit": "إرسال",
     "create": "إنشاء",
     "just_now": "الآن",
-    "no_results": "لا توجد نتائج"
+    "no_results": "لا توجد نتائج",
+    "ok": "موافق"
   },
   "edit_prices": {
     "title": "تعديل الأسعار",
@@ -865,8 +867,10 @@
     "old_cost": "التكلفة القديمة",
     "new_cost": "التكلفة الجديدة",
     "sell_price": "سعر البيع",
+    "old_sell_price": "سعر البيع القديم",
     "new_sell_price": "سعر البيع الجديد",
     "new_wholesale_price": "سعر الجملة الجديد",
+    "old_wholesale_price": "سعر الجملة القديم",
     "discount_percent": "نسبة الخصم %",
     "discount_fixed": "مبلغ ثابت",
     "checkout": "إتمام",
