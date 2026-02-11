@@ -29,12 +29,18 @@ class SaleItemInput {
 class SaleReturnItemInput {
   final int saleItemId;
   final int quantity;
+  final Decimal subtotalCents;
+  final Decimal discountCents;
+  final Decimal taxCents;
   final Decimal refundCents;
   final String? reason;
 
   const SaleReturnItemInput({
     required this.saleItemId,
     required this.quantity,
+    required this.subtotalCents,
+    required this.discountCents,
+    required this.taxCents,
     required this.refundCents,
     this.reason,
   });
@@ -123,6 +129,9 @@ abstract class SaleRepository {
   Future<int> createSaleReturn({
     required int saleId,
     required int currencyId,
+    required Decimal subtotalCents,
+    required Decimal discountCents,
+    required Decimal taxCents,
     required Decimal totalCents,
     required List<SaleReturnItemInput> items,
     String? reason,

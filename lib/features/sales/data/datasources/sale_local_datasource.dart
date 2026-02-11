@@ -89,21 +89,7 @@ class SaleLocalDatasourceImpl implements SaleLocalDatasource {
   @override
   Stream<List<SaleReturnItemEntity>> watchSaleReturnItemsWithDetails(int returnId) {
     return _dao.watchSaleReturnItemsWithDetails(returnId).map(
-      (list) => list.map((d) => SaleReturnItemEntity(
-        id: d.returnItem.id,
-        returnId: d.returnItem.returnId,
-        saleItemId: d.returnItem.saleItemId,
-        quantity: d.returnItem.quantity,
-        refundCents: d.returnItem.refundCents,
-        reason: d.returnItem.reason,
-        productName: d.product.name,
-        variantSku: d.variant?.sku,
-        variantBarcode: d.variant?.barcode,
-        colorName: d.colorName,
-        colorHex: d.colorHex,
-        sizeName: d.sizeName,
-        createdAt: d.returnItem.createdAt,
-      )).toList(),
+      (list) => list.map((d) => SaleReturnItemModel.fromDriftWithDetails(d)).toList(),
     );
   }
 

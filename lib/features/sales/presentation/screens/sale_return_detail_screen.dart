@@ -702,6 +702,11 @@ class _SaleReturnDetailScreenState extends State<SaleReturnDetailScreen> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
+    final subtotal = ret.subtotalCents.toBigInt().toInt();
+    final discount = ret.discountCents.toBigInt().toInt();
+    final tax = ret.taxCents.toBigInt().toInt();
+    final total = ret.totalCents.toBigInt().toInt();
+
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
@@ -714,17 +719,48 @@ class _SaleReturnDetailScreenState extends State<SaleReturnDetailScreen> {
           color: colorScheme.error.withValues(alpha: 0.06),
           borderRadius: BorderRadius.circular(14),
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        child: Column(
           children: [
-            Text('sales.total_refund'.tr(),
-                style: theme.textTheme.titleSmall
-                    ?.copyWith(fontWeight: FontWeight.bold)),
-            Text(cs.format(ret.totalCents.toBigInt().toInt()),
-                style: theme.textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold, color: colorScheme.error)),
+            if (subtotal != 0 || discount != 0 || tax != 0) ...[
+              _totalRow(theme, 'sales.subtotal'.tr(), cs.format(subtotal)),
+              if (discount != 0)
+                _totalRow(theme, 'sales.discount'.tr(), '- ${cs.format(discount)}',
+                    valueColor: Colors.green),
+              if (tax != 0)
+                _totalRow(theme, 'sales.tax'.tr(), cs.format(tax)),
+              Divider(height: 16, color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
+            ],
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('sales.total_refund'.tr(),
+                    style: theme.textTheme.titleSmall
+                        ?.copyWith(fontWeight: FontWeight.bold)),
+                Text(cs.format(total),
+                    style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold, color: colorScheme.error)),
+              ],
+            ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _totalRow(ThemeData theme, String label, String value, {Color? valueColor}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label,
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+          Text(value,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w500,
+                  color: valueColor)),
+        ],
       ),
     );
   }

@@ -168,6 +168,12 @@ class ImportProductsBloc extends Bloc<ImportProductsEvent, ImportProductsState> 
         hint: 'import_products.field_required_hint'.tr(),
       ),
       ImportFieldDefinition(
+        fieldName: 'description',
+        displayName: 'import_products.field_description'.tr(),
+        isRequired: false,
+        fieldType: ImportFieldType.text,
+      ),
+      ImportFieldDefinition(
         fieldName: 'color',
         displayName: 'import_products.field_color'.tr(),
         isRequired: false,
@@ -242,6 +248,13 @@ class ImportProductsBloc extends Bloc<ImportProductsEvent, ImportProductsState> 
       ImportFieldDefinition(
         fieldName: 'is_active',
         displayName: 'import_products.field_is_active'.tr(),
+        isRequired: false,
+        fieldType: ImportFieldType.boolean,
+        hint: 'true/false or 1/0',
+      ),
+      ImportFieldDefinition(
+        fieldName: 'has_variants',
+        displayName: 'import_products.field_has_variants'.tr(),
         isRequired: false,
         fieldType: ImportFieldType.boolean,
         hint: 'true/false or 1/0',

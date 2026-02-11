@@ -105,6 +105,9 @@ abstract class PurchaseRepository {
   Future<int> createPurchaseReturn({
     required int purchaseId,
     required int currencyId,
+    required Decimal subtotalCents,
+    required Decimal discountCents,
+    required Decimal taxCents,
     required Decimal totalCents,
     required List<PurchaseReturnItemInput> items,
     String dispositionType = 'restock',
@@ -174,12 +177,18 @@ class PurchaseItemInput {
 class PurchaseReturnItemInput {
   final int purchaseItemId;
   final int quantity;
+  final Decimal subtotalCents;
+  final Decimal discountCents;
+  final Decimal taxCents;
   final Decimal refundCents;
   final String? reason;
 
   const PurchaseReturnItemInput({
     required this.purchaseItemId,
     required this.quantity,
+    required this.subtotalCents,
+    required this.discountCents,
+    required this.taxCents,
     required this.refundCents,
     this.reason,
   });

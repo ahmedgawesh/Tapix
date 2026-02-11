@@ -164,6 +164,63 @@ class _ReportsHubView extends StatelessWidget {
                 subtitle: 'reports.supplier_credit_balance_desc'.tr(),
                 onTap: () => context.push('/reports/supplier-credit-balance'),
               ),
+              const SizedBox(height: 8),
+              _ReportTile(
+                icon: LucideIcons.barChart3,
+                title: 'reports.supplier_analysis'.tr(),
+                subtitle: 'reports.supplier_analysis_desc'.tr(),
+                onTap: () => context.push('/reports/supplier-analysis'),
+              ),
+              const SizedBox(height: 8),
+              _ReportTile(
+                icon: LucideIcons.clock,
+                title: 'reports.supplier_aging_report'.tr(),
+                subtitle: 'reports.supplier_aging_report_desc'.tr(),
+                onTap: () => context.push('/reports/supplier-aging'),
+              ),
+              const SizedBox(height: 8),
+              _ReportTile(
+                icon: LucideIcons.fileText,
+                title: 'reports.supplier_statement_report'.tr(),
+                subtitle: 'reports.supplier_statement_report_desc'.tr(),
+                onTap: () => context.push('/reports/supplier-statement'),
+              ),
+              const SizedBox(height: 8),
+              _ReportTile(
+                icon: LucideIcons.warehouse,
+                title: 'reports.supplier_stocktake'.tr(),
+                subtitle: 'reports.supplier_stocktake_desc'.tr(),
+                onTap: () => context.push('/reports/supplier-stocktake'),
+              ),
+              const SizedBox(height: 8),
+              _ReportTile(
+                icon: LucideIcons.searchCode,
+                title: 'reports.supplier_balance_drilldown'.tr(),
+                subtitle: 'reports.supplier_balance_drilldown_desc'.tr(),
+                onTap: () => context.push('/reports/supplier-balance-drilldown'),
+              ),
+              const SizedBox(height: 24),
+
+              // Salespeople Reports Section
+              _SectionHeader(title: 'reports.salespeople_reports'.tr()),
+              const SizedBox(height: 8),
+              _ReportTile(
+                icon: LucideIcons.userCheck,
+                title: 'reports.salespeople_commission'.tr(),
+                subtitle: 'reports.salespeople_commission_desc'.tr(),
+                onTap: () => context.push('/reports/salespeople-commission'),
+              ),
+              const SizedBox(height: 24),
+
+              // Expense Reports Section
+              _SectionHeader(title: 'reports.expense_reports'.tr()),
+              const SizedBox(height: 8),
+              _ReportTile(
+                icon: LucideIcons.receipt,
+                title: 'reports.expense_report'.tr(),
+                subtitle: 'reports.expense_report_desc'.tr(),
+                onTap: () => context.push('/reports/expense-report'),
+              ),
               const SizedBox(height: 24),
 
               // Diagnostics Section

@@ -281,6 +281,9 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
   Future<int> createPurchaseReturn({
     required int purchaseId,
     required int currencyId,
+    required Decimal subtotalCents,
+    required Decimal discountCents,
+    required Decimal taxCents,
     required Decimal totalCents,
     required List<PurchaseReturnItemInput> items,
     String dispositionType = 'restock',
@@ -293,6 +296,9 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
     final returnData = db.PurchaseReturnsCompanion(
       purchaseId: Value(purchaseId),
       returnNumber: Value(returnNumber),
+      subtotalCents: Value(subtotalCents),
+      discountCents: Value(discountCents),
+      taxCents: Value(taxCents),
       totalCents: Value(totalCents),
       currencyId: Value(currencyId),
       status: const Value('draft'),
@@ -305,14 +311,14 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
     final itemCompanions = items.map((item) => db.PurchaseReturnItemsCompanion(
           purchaseItemId: Value(item.purchaseItemId),
           quantity: Value(item.quantity),
+          subtotalCents: Value(item.subtotalCents),
+          discountCents: Value(item.discountCents),
+          taxCents: Value(item.taxCents),
           refundCents: Value(item.refundCents),
           reason: Value(item.reason),
         )).toList();
 
     final returnId = await _datasource.createPurchaseReturn(returnData, itemCompanions);
-
-    // Persist accounting-accurate totals for the return (pre-tax subtotal + tax).
-    await _datasource.updatePurchaseReturnTotals(returnId);
 
     // Auto-post the return (update stock)
     await _datasource.postPurchaseReturn(returnId);

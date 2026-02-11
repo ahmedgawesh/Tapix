@@ -105,6 +105,9 @@ class SaleReturnEntity extends Equatable {
   final String? saleInvoiceNumber;
   final String? customerName;
   final String returnNumber;
+  final Decimal subtotalCents;
+  final Decimal discountCents;
+  final Decimal taxCents;
   final Decimal totalCents;
   final int currencyId;
   final String status;
@@ -114,12 +117,15 @@ class SaleReturnEntity extends Equatable {
   final DateTime returnDate;
   final DateTime createdAt;
 
-  const SaleReturnEntity({
+  SaleReturnEntity({
     required this.id,
     required this.saleId,
     this.saleInvoiceNumber,
     this.customerName,
     required this.returnNumber,
+    Decimal? subtotalCents,
+    Decimal? discountCents,
+    Decimal? taxCents,
     required this.totalCents,
     required this.currencyId,
     this.status = 'draft',
@@ -128,7 +134,9 @@ class SaleReturnEntity extends Equatable {
     this.reason,
     required this.returnDate,
     required this.createdAt,
-  });
+  }) : subtotalCents = subtotalCents ?? Decimal.zero,
+       discountCents = discountCents ?? Decimal.zero,
+       taxCents = taxCents ?? Decimal.zero;
 
   bool get isDraft => status == 'draft';
   bool get isPosted => status == 'posted';
@@ -137,7 +145,8 @@ class SaleReturnEntity extends Equatable {
   @override
   List<Object?> get props => [
         id, saleId, saleInvoiceNumber, customerName, returnNumber,
-        totalCents, currencyId, status, dispositionType, refundMethod, reason,
+        subtotalCents, discountCents, taxCents, totalCents,
+        currencyId, status, dispositionType, refundMethod, reason,
         returnDate, createdAt,
       ];
 }
@@ -147,6 +156,9 @@ class SaleReturnItemEntity extends Equatable {
   final int returnId;
   final int saleItemId;
   final int quantity;
+  final Decimal subtotalCents;
+  final Decimal discountCents;
+  final Decimal taxCents;
   final Decimal refundCents;
   final String? reason;
   final String? productName;
@@ -157,11 +169,14 @@ class SaleReturnItemEntity extends Equatable {
   final String? sizeName;
   final DateTime createdAt;
 
-  const SaleReturnItemEntity({
+  SaleReturnItemEntity({
     required this.id,
     required this.returnId,
     required this.saleItemId,
     required this.quantity,
+    Decimal? subtotalCents,
+    Decimal? discountCents,
+    Decimal? taxCents,
     required this.refundCents,
     this.reason,
     this.productName,
@@ -171,13 +186,16 @@ class SaleReturnItemEntity extends Equatable {
     this.colorHex,
     this.sizeName,
     required this.createdAt,
-  });
+  }) : subtotalCents = subtotalCents ?? Decimal.zero,
+       discountCents = discountCents ?? Decimal.zero,
+       taxCents = taxCents ?? Decimal.zero;
 
   @override
   List<Object?> get props => [
-        id, returnId, saleItemId, quantity, refundCents, reason,
-        productName, variantSku, variantBarcode, colorName, colorHex, sizeName,
-        createdAt,
+        id, returnId, saleItemId, quantity,
+        subtotalCents, discountCents, taxCents, refundCents,
+        reason, productName, variantSku, variantBarcode,
+        colorName, colorHex, sizeName, createdAt,
       ];
 }
 

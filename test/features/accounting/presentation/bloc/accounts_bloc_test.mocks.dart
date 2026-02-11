@@ -3,12 +3,16 @@
 // Do not manually edit this file.
 
 // ignore_for_file: no_leading_underscores_for_library_prefixes
-import 'dart:async' as _i3;
+import 'dart:async' as _i5;
 
 import 'package:mockito/mockito.dart' as _i1;
-import 'package:tapix/core/database/app_database.dart' as _i4;
-import 'package:tapix/features/accounting/domain/repositories/journal_repository.dart'
+import 'package:tapix/core/database/app_database.dart' as _i6;
+import 'package:tapix/features/accounting/domain/models/reconciliation_result.dart'
+    as _i3;
+import 'package:tapix/features/accounting/domain/models/trial_balance.dart'
     as _i2;
+import 'package:tapix/features/accounting/domain/repositories/journal_repository.dart'
+    as _i4;
 
 // ignore_for_file: type=lint
 // ignore_for_file: avoid_redundant_argument_values
@@ -25,64 +29,75 @@ import 'package:tapix/features/accounting/domain/repositories/journal_repository
 // ignore_for_file: subtype_of_sealed_class
 // ignore_for_file: invalid_use_of_internal_member
 
+class _FakeTrialBalance_0 extends _i1.SmartFake implements _i2.TrialBalance {
+  _FakeTrialBalance_0(Object parent, Invocation parentInvocation)
+    : super(parent, parentInvocation);
+}
+
+class _FakeReconciliationResult_1 extends _i1.SmartFake
+    implements _i3.ReconciliationResult {
+  _FakeReconciliationResult_1(Object parent, Invocation parentInvocation)
+    : super(parent, parentInvocation);
+}
+
 /// A class which mocks [JournalRepository].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockJournalRepository extends _i1.Mock implements _i2.JournalRepository {
+class MockJournalRepository extends _i1.Mock implements _i4.JournalRepository {
   MockJournalRepository() {
     _i1.throwOnMissingStub(this);
   }
 
   @override
-  _i3.Stream<List<_i4.Account>> watchAllAccounts() =>
+  _i5.Stream<List<_i6.Account>> watchAllAccounts() =>
       (super.noSuchMethod(
             Invocation.method(#watchAllAccounts, []),
-            returnValue: _i3.Stream<List<_i4.Account>>.empty(),
+            returnValue: _i5.Stream<List<_i6.Account>>.empty(),
           )
-          as _i3.Stream<List<_i4.Account>>);
+          as _i5.Stream<List<_i6.Account>>);
 
   @override
-  _i3.Stream<List<_i4.Account>> watchAccountsByType(String? accountType) =>
+  _i5.Stream<List<_i6.Account>> watchAccountsByType(String? accountType) =>
       (super.noSuchMethod(
             Invocation.method(#watchAccountsByType, [accountType]),
-            returnValue: _i3.Stream<List<_i4.Account>>.empty(),
+            returnValue: _i5.Stream<List<_i6.Account>>.empty(),
           )
-          as _i3.Stream<List<_i4.Account>>);
+          as _i5.Stream<List<_i6.Account>>);
 
   @override
-  _i3.Stream<_i4.Account?> watchAccount(int? id) =>
+  _i5.Stream<_i6.Account?> watchAccount(int? id) =>
       (super.noSuchMethod(
             Invocation.method(#watchAccount, [id]),
-            returnValue: _i3.Stream<_i4.Account?>.empty(),
+            returnValue: _i5.Stream<_i6.Account?>.empty(),
           )
-          as _i3.Stream<_i4.Account?>);
+          as _i5.Stream<_i6.Account?>);
 
   @override
-  _i3.Future<_i4.Account?> getAccount(int? id) =>
+  _i5.Future<_i6.Account?> getAccount(int? id) =>
       (super.noSuchMethod(
             Invocation.method(#getAccount, [id]),
-            returnValue: _i3.Future<_i4.Account?>.value(),
+            returnValue: _i5.Future<_i6.Account?>.value(),
           )
-          as _i3.Future<_i4.Account?>);
+          as _i5.Future<_i6.Account?>);
 
   @override
-  _i3.Future<_i4.Account?> findAccountByCode(String? code) =>
+  _i5.Future<_i6.Account?> findAccountByCode(String? code) =>
       (super.noSuchMethod(
             Invocation.method(#findAccountByCode, [code]),
-            returnValue: _i3.Future<_i4.Account?>.value(),
+            returnValue: _i5.Future<_i6.Account?>.value(),
           )
-          as _i3.Future<_i4.Account?>);
+          as _i5.Future<_i6.Account?>);
 
   @override
-  _i3.Future<List<_i4.Account>> getChildAccounts(int? parentId) =>
+  _i5.Future<List<_i6.Account>> getChildAccounts(int? parentId) =>
       (super.noSuchMethod(
             Invocation.method(#getChildAccounts, [parentId]),
-            returnValue: _i3.Future<List<_i4.Account>>.value(<_i4.Account>[]),
+            returnValue: _i5.Future<List<_i6.Account>>.value(<_i6.Account>[]),
           )
-          as _i3.Future<List<_i4.Account>>);
+          as _i5.Future<List<_i6.Account>>);
 
   @override
-  _i3.Future<int> createAccount({
+  _i5.Future<int> createAccount({
     required String? accountCode,
     required String? accountName,
     required String? accountType,
@@ -103,91 +118,91 @@ class MockJournalRepository extends _i1.Mock implements _i2.JournalRepository {
               #displayOrder: displayOrder,
               #description: description,
             }),
-            returnValue: _i3.Future<int>.value(0),
+            returnValue: _i5.Future<int>.value(0),
           )
-          as _i3.Future<int>);
+          as _i5.Future<int>);
 
   @override
-  _i3.Future<bool> updateAccount(_i4.Account? account) =>
+  _i5.Future<bool> updateAccount(_i6.Account? account) =>
       (super.noSuchMethod(
             Invocation.method(#updateAccount, [account]),
-            returnValue: _i3.Future<bool>.value(false),
+            returnValue: _i5.Future<bool>.value(false),
           )
-          as _i3.Future<bool>);
+          as _i5.Future<bool>);
 
   @override
-  _i3.Future<int> deleteAccount(int? id) =>
+  _i5.Future<int> deleteAccount(int? id) =>
       (super.noSuchMethod(
             Invocation.method(#deleteAccount, [id]),
-            returnValue: _i3.Future<int>.value(0),
+            returnValue: _i5.Future<int>.value(0),
           )
-          as _i3.Future<int>);
+          as _i5.Future<int>);
 
   @override
-  _i3.Stream<int> watchAccountCount({bool? isActive}) =>
+  _i5.Stream<int> watchAccountCount({bool? isActive}) =>
       (super.noSuchMethod(
             Invocation.method(#watchAccountCount, [], {#isActive: isActive}),
-            returnValue: _i3.Stream<int>.empty(),
+            returnValue: _i5.Stream<int>.empty(),
           )
-          as _i3.Stream<int>);
+          as _i5.Stream<int>);
 
   @override
-  _i3.Stream<List<_i4.JournalEntry>> watchAllJournalEntries() =>
+  _i5.Stream<List<_i6.JournalEntry>> watchAllJournalEntries() =>
       (super.noSuchMethod(
             Invocation.method(#watchAllJournalEntries, []),
-            returnValue: _i3.Stream<List<_i4.JournalEntry>>.empty(),
+            returnValue: _i5.Stream<List<_i6.JournalEntry>>.empty(),
           )
-          as _i3.Stream<List<_i4.JournalEntry>>);
+          as _i5.Stream<List<_i6.JournalEntry>>);
 
   @override
-  _i3.Stream<List<_i4.JournalEntry>> watchJournalEntriesByDateRange(
+  _i5.Stream<List<_i6.JournalEntry>> watchJournalEntriesByDateRange(
     DateTime? start,
     DateTime? end,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#watchJournalEntriesByDateRange, [start, end]),
-            returnValue: _i3.Stream<List<_i4.JournalEntry>>.empty(),
+            returnValue: _i5.Stream<List<_i6.JournalEntry>>.empty(),
           )
-          as _i3.Stream<List<_i4.JournalEntry>>);
+          as _i5.Stream<List<_i6.JournalEntry>>);
 
   @override
-  _i3.Stream<List<_i4.JournalEntry>> watchJournalEntriesByType(
+  _i5.Stream<List<_i6.JournalEntry>> watchJournalEntriesByType(
     String? entryType,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#watchJournalEntriesByType, [entryType]),
-            returnValue: _i3.Stream<List<_i4.JournalEntry>>.empty(),
+            returnValue: _i5.Stream<List<_i6.JournalEntry>>.empty(),
           )
-          as _i3.Stream<List<_i4.JournalEntry>>);
+          as _i5.Stream<List<_i6.JournalEntry>>);
 
   @override
-  _i3.Stream<List<_i4.JournalEntry>> watchJournalEntriesByStatus(
+  _i5.Stream<List<_i6.JournalEntry>> watchJournalEntriesByStatus(
     String? status,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#watchJournalEntriesByStatus, [status]),
-            returnValue: _i3.Stream<List<_i4.JournalEntry>>.empty(),
+            returnValue: _i5.Stream<List<_i6.JournalEntry>>.empty(),
           )
-          as _i3.Stream<List<_i4.JournalEntry>>);
+          as _i5.Stream<List<_i6.JournalEntry>>);
 
   @override
-  _i3.Future<_i4.JournalEntry?> getJournalEntry(int? id) =>
+  _i5.Future<_i6.JournalEntry?> getJournalEntry(int? id) =>
       (super.noSuchMethod(
             Invocation.method(#getJournalEntry, [id]),
-            returnValue: _i3.Future<_i4.JournalEntry?>.value(),
+            returnValue: _i5.Future<_i6.JournalEntry?>.value(),
           )
-          as _i3.Future<_i4.JournalEntry?>);
+          as _i5.Future<_i6.JournalEntry?>);
 
   @override
-  _i3.Future<_i4.JournalEntry?> findJournalEntryByNumber(String? entryNumber) =>
+  _i5.Future<_i6.JournalEntry?> findJournalEntryByNumber(String? entryNumber) =>
       (super.noSuchMethod(
             Invocation.method(#findJournalEntryByNumber, [entryNumber]),
-            returnValue: _i3.Future<_i4.JournalEntry?>.value(),
+            returnValue: _i5.Future<_i6.JournalEntry?>.value(),
           )
-          as _i3.Future<_i4.JournalEntry?>);
+          as _i5.Future<_i6.JournalEntry?>);
 
   @override
-  _i3.Future<_i4.JournalEntry?> findJournalEntryBySource(
+  _i5.Future<_i6.JournalEntry?> findJournalEntryBySource(
     String? sourceTable,
     int? sourceId,
   ) =>
@@ -196,26 +211,26 @@ class MockJournalRepository extends _i1.Mock implements _i2.JournalRepository {
               sourceTable,
               sourceId,
             ]),
-            returnValue: _i3.Future<_i4.JournalEntry?>.value(),
+            returnValue: _i5.Future<_i6.JournalEntry?>.value(),
           )
-          as _i3.Future<_i4.JournalEntry?>);
+          as _i5.Future<_i6.JournalEntry?>);
 
   @override
-  _i3.Future<List<_i4.JournalEntry>> searchJournalEntries(String? query) =>
+  _i5.Future<List<_i6.JournalEntry>> searchJournalEntries(String? query) =>
       (super.noSuchMethod(
             Invocation.method(#searchJournalEntries, [query]),
-            returnValue: _i3.Future<List<_i4.JournalEntry>>.value(
-              <_i4.JournalEntry>[],
+            returnValue: _i5.Future<List<_i6.JournalEntry>>.value(
+              <_i6.JournalEntry>[],
             ),
           )
-          as _i3.Future<List<_i4.JournalEntry>>);
+          as _i5.Future<List<_i6.JournalEntry>>);
 
   @override
-  _i3.Future<int> createJournalEntryWithLines({
+  _i5.Future<int> createJournalEntryWithLines({
     required String? description,
     required DateTime? entryDate,
     required String? entryType,
-    required List<_i2.JournalLineInput>? lines,
+    required List<_i4.JournalLineInput>? lines,
     String? sourceTable,
     int? sourceId,
     int? createdBy,
@@ -230,25 +245,25 @@ class MockJournalRepository extends _i1.Mock implements _i2.JournalRepository {
               #sourceId: sourceId,
               #createdBy: createdBy,
             }),
-            returnValue: _i3.Future<int>.value(0),
+            returnValue: _i5.Future<int>.value(0),
           )
-          as _i3.Future<int>);
+          as _i5.Future<int>);
 
   @override
-  _i3.Future<void> postJournalEntry(int? entryId, {int? postedBy}) =>
+  _i5.Future<void> postJournalEntry(int? entryId, {int? postedBy}) =>
       (super.noSuchMethod(
             Invocation.method(
               #postJournalEntry,
               [entryId],
               {#postedBy: postedBy},
             ),
-            returnValue: _i3.Future<void>.value(),
-            returnValueForMissingStub: _i3.Future<void>.value(),
+            returnValue: _i5.Future<void>.value(),
+            returnValueForMissingStub: _i5.Future<void>.value(),
           )
-          as _i3.Future<void>);
+          as _i5.Future<void>);
 
   @override
-  _i3.Future<int> voidJournalEntry(
+  _i5.Future<int> voidJournalEntry(
     int? entryId, {
     required String? reason,
     int? createdBy,
@@ -259,68 +274,124 @@ class MockJournalRepository extends _i1.Mock implements _i2.JournalRepository {
               [entryId],
               {#reason: reason, #createdBy: createdBy},
             ),
-            returnValue: _i3.Future<int>.value(0),
+            returnValue: _i5.Future<int>.value(0),
           )
-          as _i3.Future<int>);
+          as _i5.Future<int>);
 
   @override
-  _i3.Stream<int> watchJournalEntryCount({String? status}) =>
+  _i5.Stream<int> watchJournalEntryCount({String? status}) =>
       (super.noSuchMethod(
             Invocation.method(#watchJournalEntryCount, [], {#status: status}),
-            returnValue: _i3.Stream<int>.empty(),
+            returnValue: _i5.Stream<int>.empty(),
           )
-          as _i3.Stream<int>);
+          as _i5.Stream<int>);
 
   @override
-  _i3.Stream<List<_i4.JournalEntryLine>> watchJournalEntryLines(int? entryId) =>
+  _i5.Stream<List<_i6.JournalEntryLine>> watchJournalEntryLines(int? entryId) =>
       (super.noSuchMethod(
             Invocation.method(#watchJournalEntryLines, [entryId]),
-            returnValue: _i3.Stream<List<_i4.JournalEntryLine>>.empty(),
+            returnValue: _i5.Stream<List<_i6.JournalEntryLine>>.empty(),
           )
-          as _i3.Stream<List<_i4.JournalEntryLine>>);
+          as _i5.Stream<List<_i6.JournalEntryLine>>);
 
   @override
-  _i3.Future<List<_i4.JournalEntryLine>> getJournalEntryLines(int? entryId) =>
+  _i5.Future<List<_i6.JournalEntryLine>> getJournalEntryLines(int? entryId) =>
       (super.noSuchMethod(
             Invocation.method(#getJournalEntryLines, [entryId]),
-            returnValue: _i3.Future<List<_i4.JournalEntryLine>>.value(
-              <_i4.JournalEntryLine>[],
+            returnValue: _i5.Future<List<_i6.JournalEntryLine>>.value(
+              <_i6.JournalEntryLine>[],
             ),
           )
-          as _i3.Future<List<_i4.JournalEntryLine>>);
+          as _i5.Future<List<_i6.JournalEntryLine>>);
 
   @override
-  _i3.Stream<List<_i4.JournalEntryLine>> watchJournalLinesByAccount(
+  _i5.Stream<List<_i6.JournalEntryLine>> watchJournalLinesByAccount(
     int? accountId,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#watchJournalLinesByAccount, [accountId]),
-            returnValue: _i3.Stream<List<_i4.JournalEntryLine>>.empty(),
+            returnValue: _i5.Stream<List<_i6.JournalEntryLine>>.empty(),
           )
-          as _i3.Stream<List<_i4.JournalEntryLine>>);
+          as _i5.Stream<List<_i6.JournalEntryLine>>);
 
   @override
-  _i3.Stream<List<_i4.AccountingPeriod>> watchAccountingPeriods() =>
+  _i5.Stream<List<_i6.AccountingPeriod>> watchAccountingPeriods() =>
       (super.noSuchMethod(
             Invocation.method(#watchAccountingPeriods, []),
-            returnValue: _i3.Stream<List<_i4.AccountingPeriod>>.empty(),
+            returnValue: _i5.Stream<List<_i6.AccountingPeriod>>.empty(),
           )
-          as _i3.Stream<List<_i4.AccountingPeriod>>);
+          as _i5.Stream<List<_i6.AccountingPeriod>>);
 
   @override
-  _i3.Future<_i4.AccountingPeriod?> getActiveAccountingPeriod() =>
+  _i5.Future<_i6.AccountingPeriod?> getActiveAccountingPeriod() =>
       (super.noSuchMethod(
             Invocation.method(#getActiveAccountingPeriod, []),
-            returnValue: _i3.Future<_i4.AccountingPeriod?>.value(),
+            returnValue: _i5.Future<_i6.AccountingPeriod?>.value(),
           )
-          as _i3.Future<_i4.AccountingPeriod?>);
+          as _i5.Future<_i6.AccountingPeriod?>);
 
   @override
-  _i3.Future<void> seedDefaultAccounts(int? currencyId) =>
+  _i5.Future<void> seedDefaultAccounts(int? currencyId) =>
       (super.noSuchMethod(
             Invocation.method(#seedDefaultAccounts, [currencyId]),
-            returnValue: _i3.Future<void>.value(),
-            returnValueForMissingStub: _i3.Future<void>.value(),
+            returnValue: _i5.Future<void>.value(),
+            returnValueForMissingStub: _i5.Future<void>.value(),
           )
-          as _i3.Future<void>);
+          as _i5.Future<void>);
+
+  @override
+  _i5.Future<_i2.TrialBalance> getTrialBalance({DateTime? asOfDate}) =>
+      (super.noSuchMethod(
+            Invocation.method(#getTrialBalance, [], {#asOfDate: asOfDate}),
+            returnValue: _i5.Future<_i2.TrialBalance>.value(
+              _FakeTrialBalance_0(
+                this,
+                Invocation.method(#getTrialBalance, [], {#asOfDate: asOfDate}),
+              ),
+            ),
+          )
+          as _i5.Future<_i2.TrialBalance>);
+
+  @override
+  _i5.Future<_i3.ReconciliationResult> reconcileBalances() =>
+      (super.noSuchMethod(
+            Invocation.method(#reconcileBalances, []),
+            returnValue: _i5.Future<_i3.ReconciliationResult>.value(
+              _FakeReconciliationResult_1(
+                this,
+                Invocation.method(#reconcileBalances, []),
+              ),
+            ),
+          )
+          as _i5.Future<_i3.ReconciliationResult>);
+
+  @override
+  _i5.Stream<List<_i6.JournalEntryLine>> watchPostedLinesByDateRange(
+    DateTime? startDate,
+    DateTime? endDate,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#watchPostedLinesByDateRange, [
+              startDate,
+              endDate,
+            ]),
+            returnValue: _i5.Stream<List<_i6.JournalEntryLine>>.empty(),
+          )
+          as _i5.Stream<List<_i6.JournalEntryLine>>);
+
+  @override
+  _i5.Stream<List<_i6.JournalEntryLine>> watchPostedLinesByAccountAndDateRange(
+    int? accountId,
+    DateTime? startDate,
+    DateTime? endDate,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#watchPostedLinesByAccountAndDateRange, [
+              accountId,
+              startDate,
+              endDate,
+            ]),
+            returnValue: _i5.Stream<List<_i6.JournalEntryLine>>.empty(),
+          )
+          as _i5.Stream<List<_i6.JournalEntryLine>>);
 }

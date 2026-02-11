@@ -631,7 +631,7 @@ CREATE TABLE IF NOT EXISTS sale_payments (
   }
 
   @override
-  int get schemaVersion => 10020;
+  int get schemaVersion => 10021;
 
   @override
   MigrationStrategy get migration {
@@ -832,6 +832,24 @@ CREATE TABLE IF NOT EXISTS sale_payments (
         // Migration 10019 -> 10020: Purchase return refund method
         if (from < 10020) {
           await _safeAddColumn('purchase_returns', 'refund_method', "TEXT NOT NULL DEFAULT 'credit'");
+        }
+
+        // Migration 10020 -> 10021: ERP accounting breakdown on return items & headers
+        if (from < 10021) {
+          // Purchase return items: proportional breakdown
+          await _safeAddColumn('purchase_return_items', 'subtotal_cents', 'INTEGER NOT NULL DEFAULT 0');
+          await _safeAddColumn('purchase_return_items', 'discount_cents', 'INTEGER NOT NULL DEFAULT 0');
+          await _safeAddColumn('purchase_return_items', 'tax_cents', 'INTEGER NOT NULL DEFAULT 0');
+          // Purchase returns header: discount breakdown
+          await _safeAddColumn('purchase_returns', 'discount_cents', 'INTEGER NOT NULL DEFAULT 0');
+          // Sale return items: proportional breakdown
+          await _safeAddColumn('sale_return_items', 'subtotal_cents', 'INTEGER NOT NULL DEFAULT 0');
+          await _safeAddColumn('sale_return_items', 'discount_cents', 'INTEGER NOT NULL DEFAULT 0');
+          await _safeAddColumn('sale_return_items', 'tax_cents', 'INTEGER NOT NULL DEFAULT 0');
+          // Sale returns header: subtotal, discount, tax breakdown
+          await _safeAddColumn('sale_returns', 'subtotal_cents', 'INTEGER NOT NULL DEFAULT 0');
+          await _safeAddColumn('sale_returns', 'discount_cents', 'INTEGER NOT NULL DEFAULT 0');
+          await _safeAddColumn('sale_returns', 'tax_cents', 'INTEGER NOT NULL DEFAULT 0');
         }
 
         await _createIndexes();

@@ -112,23 +112,22 @@ class ExportServiceImpl implements ExportService {
 
     final rows = <List<dynamic>>[
       [
-        'id',
-        'sku',
-        'barcode',
+        'product_id',
         'name',
-        'color',
-        'size',
         'description',
         'category',
-        'category_id',
-        'supplier_id',
+        'sku',
+        'barcode',
+        'color',
+        'size',
         'cost_cents',
         'price_cents',
         'wholesale_price_cents',
-        'currency_id',
-        'track_inventory',
         'stock_quantity',
         'min_quantity',
+        'supplier_id',
+        'currency_id',
+        'track_inventory',
         'has_variants',
         'is_taxable',
         'tax_rate_bps',
@@ -137,47 +136,70 @@ class ExportServiceImpl implements ExportService {
     ];
 
     for (final product in filteredProducts) {
-      String colorName = '';
-      String sizeName = '';
+      final categoryName = product.categoryId == null
+          ? ''
+          : (categoryNameById[product.categoryId!] ?? '');
 
-      try {
+      if (!product.hasVariants) {
+        // Non-variant product: single row with product-level data
+        // Use default variant for stock/cost/price if available, but
+        // always use product-level SKU/barcode/wholesale price
+        final defaultVariant = await _variantRepository.getDefaultVariantByProduct(product.id);
+
+        rows.add([
+          product.id,
+          product.name,
+          product.description ?? '',
+          categoryName,
+          product.sku ?? '',
+          product.barcode ?? '',
+          '',
+          '',
+          (defaultVariant?.costCents ?? product.costCents).toBigInt().toInt(),
+          (defaultVariant?.priceCents ?? product.priceCents).toBigInt().toInt(),
+          product.wholesalePriceCents?.toBigInt().toInt() ?? '',
+          defaultVariant?.stockQuantity ?? product.stockQuantity,
+          product.minQuantity,
+          product.supplierId ?? '',
+          product.currencyId ?? '',
+          product.trackInventory,
+          false,
+          product.isTaxable,
+          product.taxRateBps,
+          product.isActive,
+        ]);
+      } else {
+        // Variant product: one row per variant with variant-level data
         final variants = await _variantRepository.getVariantsByProduct(product.id);
-        if (variants.isNotEmpty) {
-          final v = variants.first;
-          if (v.colorId != null) {
-            colorName = colorNameById[v.colorId!] ?? '';
-          }
-          if (v.sizeId != null) {
-            sizeName = sizeNameById[v.sizeId!] ?? '';
-          }
-        }
-      } catch (_) {
-        // Keep color/size empty on lookup issues
-      }
 
-      rows.add([
-        product.id,
-        product.sku ?? '',
-        product.barcode ?? '',
-        product.name,
-        colorName,
-        sizeName,
-        product.description ?? '',
-        product.categoryId == null ? '' : (categoryNameById[product.categoryId!] ?? ''),
-        product.categoryId ?? '',
-        product.supplierId ?? '',
-        product.costCents.toBigInt().toInt(),
-        product.priceCents.toBigInt().toInt(),
-        product.wholesalePriceCents?.toBigInt().toInt() ?? '',
-        product.currencyId ?? '',
-        product.trackInventory,
-        product.stockQuantity,
-        product.minQuantity,
-        product.hasVariants,
-        product.isTaxable,
-        product.taxRateBps,
-        product.isActive,
-      ]);
+        for (final v in variants) {
+          final colorName = v.colorId != null ? (colorNameById[v.colorId!] ?? '') : '';
+          final sizeName = v.sizeId != null ? (sizeNameById[v.sizeId!] ?? '') : '';
+
+          rows.add([
+            product.id,
+            product.name,
+            product.description ?? '',
+            categoryName,
+            v.sku ?? '',
+            v.barcode ?? '',
+            colorName,
+            sizeName,
+            v.costCents.toBigInt().toInt(),
+            v.priceCents.toBigInt().toInt(),
+            v.wholesalePriceCents?.toBigInt().toInt() ?? '',
+            v.stockQuantity,
+            product.minQuantity,
+            product.supplierId ?? '',
+            product.currencyId ?? '',
+            product.trackInventory,
+            true,
+            product.isTaxable,
+            product.taxRateBps,
+            product.isActive,
+          ]);
+        }
+      }
     }
 
       final csv = const ListToCsvConverter().convert(rows);
@@ -255,23 +277,22 @@ class ExportServiceImpl implements ExportService {
 
     // Header row
     final headers = [
-      'ID',
-      'SKU',
-      'Barcode',
+      'Product ID',
       'Name',
-      'Color',
-      'Size',
       'Description',
       'Category',
-      'Category ID',
-      'Supplier ID',
+      'SKU',
+      'Barcode',
+      'Color',
+      'Size',
       'Cost (Cents)',
       'Price (Cents)',
       'Wholesale Price (Cents)',
-      'Currency ID',
-      'Track Inventory',
       'Stock Quantity',
       'Min Quantity',
+      'Supplier ID',
+      'Currency ID',
+      'Track Inventory',
       'Has Variants',
       'Is Taxable',
       'Tax Rate (BPS)',
@@ -282,51 +303,72 @@ class ExportServiceImpl implements ExportService {
 
     // Data rows
     for (final product in filteredProducts) {
-      String colorName = '';
-      String sizeName = '';
+      final categoryName = product.categoryId == null
+          ? ''
+          : (categoryNameById[product.categoryId!] ?? '');
 
-      try {
+      if (!product.hasVariants) {
+        // Non-variant product: single row with product-level data
+        final defaultVariant = await _variantRepository.getDefaultVariantByProduct(product.id);
+
+        sheet.appendRow([
+          IntCellValue(product.id),
+          TextCellValue(product.name),
+          TextCellValue(product.description ?? ''),
+          TextCellValue(categoryName),
+          TextCellValue(product.sku ?? ''),
+          TextCellValue(product.barcode ?? ''),
+          TextCellValue(''),
+          TextCellValue(''),
+          IntCellValue((defaultVariant?.costCents ?? product.costCents).toBigInt().toInt()),
+          IntCellValue((defaultVariant?.priceCents ?? product.priceCents).toBigInt().toInt()),
+          product.wholesalePriceCents != null
+              ? IntCellValue(product.wholesalePriceCents!.toBigInt().toInt())
+              : TextCellValue(''),
+          IntCellValue(defaultVariant?.stockQuantity ?? product.stockQuantity),
+          IntCellValue(product.minQuantity),
+          product.supplierId != null ? IntCellValue(product.supplierId!) : TextCellValue(''),
+          product.currencyId != null ? IntCellValue(product.currencyId!) : TextCellValue(''),
+          TextCellValue(product.trackInventory.toString()),
+          TextCellValue('false'),
+          TextCellValue(product.isTaxable.toString()),
+          IntCellValue(product.taxRateBps),
+          TextCellValue(product.isActive.toString()),
+        ]);
+      } else {
+        // Variant product: one row per variant with variant-level data
         final variants = await _variantRepository.getVariantsByProduct(product.id);
-        if (variants.isNotEmpty) {
-          final v = variants.first;
-          if (v.colorId != null) {
-            colorName = colorNameById[v.colorId!] ?? '';
-          }
-          if (v.sizeId != null) {
-            sizeName = sizeNameById[v.sizeId!] ?? '';
-          }
+
+        for (final v in variants) {
+          final colorName = v.colorId != null ? (colorNameById[v.colorId!] ?? '') : '';
+          final sizeName = v.sizeId != null ? (sizeNameById[v.sizeId!] ?? '') : '';
+
+          sheet.appendRow([
+            IntCellValue(product.id),
+            TextCellValue(product.name),
+            TextCellValue(product.description ?? ''),
+            TextCellValue(categoryName),
+            TextCellValue(v.sku ?? ''),
+            TextCellValue(v.barcode ?? ''),
+            TextCellValue(colorName),
+            TextCellValue(sizeName),
+            IntCellValue(v.costCents.toBigInt().toInt()),
+            IntCellValue(v.priceCents.toBigInt().toInt()),
+            v.wholesalePriceCents != null
+                ? IntCellValue(v.wholesalePriceCents!.toBigInt().toInt())
+                : TextCellValue(''),
+            IntCellValue(v.stockQuantity),
+            IntCellValue(product.minQuantity),
+            product.supplierId != null ? IntCellValue(product.supplierId!) : TextCellValue(''),
+            product.currencyId != null ? IntCellValue(product.currencyId!) : TextCellValue(''),
+            TextCellValue(product.trackInventory.toString()),
+            TextCellValue('true'),
+            TextCellValue(product.isTaxable.toString()),
+            IntCellValue(product.taxRateBps),
+            TextCellValue(product.isActive.toString()),
+          ]);
         }
-      } catch (_) {
-        // Keep color/size empty on lookup issues
       }
-
-      final categoryName = product.categoryId == null ? '' : (categoryNameById[product.categoryId!] ?? '');
-
-      sheet.appendRow([
-        IntCellValue(product.id),
-        TextCellValue(product.sku ?? ''),
-        TextCellValue(product.barcode ?? ''),
-        TextCellValue(product.name),
-        TextCellValue(colorName),
-        TextCellValue(sizeName),
-        TextCellValue(product.description ?? ''),
-        TextCellValue(categoryName),
-        product.categoryId != null ? IntCellValue(product.categoryId!) : TextCellValue(''),
-        product.supplierId != null ? IntCellValue(product.supplierId!) : TextCellValue(''),
-        IntCellValue(product.costCents.toBigInt().toInt()),
-        IntCellValue(product.priceCents.toBigInt().toInt()),
-        product.wholesalePriceCents != null 
-            ? IntCellValue(product.wholesalePriceCents!.toBigInt().toInt()) 
-            : TextCellValue(''),
-        product.currencyId != null ? IntCellValue(product.currencyId!) : TextCellValue(''),
-        TextCellValue(product.trackInventory.toString()),
-        IntCellValue(product.stockQuantity),
-        IntCellValue(product.minQuantity),
-        TextCellValue(product.hasVariants.toString()),
-        TextCellValue(product.isTaxable.toString()),
-        IntCellValue(product.taxRateBps),
-        TextCellValue(product.isActive.toString()),
-      ]);
     }
 
       final fileBytes = excel.encode();

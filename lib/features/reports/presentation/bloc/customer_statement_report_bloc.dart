@@ -218,7 +218,11 @@ class CustomerStatementReportBloc extends RealtimeBloc<CustomerStatementData,
 
     final cInfo = customerInfoRows.first;
 
-    // Calculate opening balance: sum of all transactions BEFORE start date
+    // Calculate opening balance:
+    // The customers.balance_cents includes an initial balance set at creation
+    // which is NOT recorded as a customer_transaction. So we must derive it:
+    //   initial_balance = balance_cents - SUM(all transactions)
+    //   opening_balance = initial_balance + SUM(transactions before start date)
     final startIso = _dateRange.startDate.toIso8601String();
     final endIso = DateTime(
       _dateRange.endDate.year,
@@ -231,19 +235,40 @@ class CustomerStatementReportBloc extends RealtimeBloc<CustomerStatementData,
 
     final openingRows = await _db.customSelect(
       '''
-      SELECT COALESCE(SUM(amount_cents), 0) AS opening_balance
-      FROM customer_transactions
-      WHERE customer_id = ? AND transaction_date < ?
+      SELECT
+        c.balance_cents AS current_balance,
+        COALESCE(all_txn.total, 0) AS all_txn_total,
+        COALESCE(before_txn.total, 0) AS before_txn_total
+      FROM customers c
+      LEFT JOIN (
+        SELECT COALESCE(SUM(amount_cents), 0) AS total
+        FROM customer_transactions WHERE customer_id = ?
+      ) all_txn ON 1=1
+      LEFT JOIN (
+        SELECT COALESCE(SUM(amount_cents), 0) AS total
+        FROM customer_transactions WHERE customer_id = ? AND transaction_date < ?
+      ) before_txn ON 1=1
+      WHERE c.id = ?
       ''',
       variables: [
         Variable.withInt(_customerId!),
+        Variable.withInt(_customerId!),
         Variable.withString(startIso),
+        Variable.withInt(_customerId!),
       ],
-      readsFrom: {_db.customerTransactions},
+      readsFrom: {_db.customers, _db.customerTransactions},
     ).get();
 
-    final openingBalanceCents =
-        openingRows.isNotEmpty ? openingRows.first.read<int>('opening_balance') : 0;
+    final int openingBalanceCents;
+    if (openingRows.isNotEmpty) {
+      final row = openingRows.first;
+      final currentBalance = row.read<int>('current_balance');
+      final allTxnTotal = row.read<int>('all_txn_total');
+      final beforeTxnTotal = row.read<int>('before_txn_total');
+      openingBalanceCents = (currentBalance - allTxnTotal) + beforeTxnTotal;
+    } else {
+      openingBalanceCents = 0;
+    }
 
     // Load transactions within date range
     final txnRows = await _db.customSelect(

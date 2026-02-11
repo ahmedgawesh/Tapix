@@ -3020,6 +3020,78 @@ To add a new financial report:
 
 ---
 
-**Last Updated**: 2026-02-09 
+## 💰 ERP Accounting Logic (Returns)
+
+### Golden Rule: Proportional Reversal
+
+All return transactions (purchase returns and sale returns) use **proportional reversal** of the original transaction's accounting components. This ensures that discounts and taxes are correctly reversed at the line-item level.
+
+```text
+ReturnRatio = returnQty / originalQty
+
+For each return line item:
+  subtotalCents = (original.subtotalCents * returnQty) ÷ originalQty   (integer division)
+  discountCents = (original.discountCents * returnQty) ÷ originalQty   (integer division)
+  taxCents      = (original.taxCents      * returnQty) ÷ originalQty   (integer division)
+  refundCents   = subtotalCents - discountCents + taxCents             (net value + tax)
+```
+
+### Data Flow
+
+```text
+Original Purchase/Sale (posted)
+  └─ Items: subtotalCents, discountCents, taxCents, totalCents per line
+       │
+       ▼
+Return Form BLoC (_computeProportionalReturn)
+  └─ Computes per-line: subtotalCents, discountCents, taxCents, refundCents
+  └─ Aggregates header: totalSubtotalCents, totalDiscountCents, totalTaxCents, totalRefundCents
+       │
+       ▼
+Repository.createReturn(header breakdown + item breakdowns)
+  └─ Persists to DB: PurchaseReturns/SaleReturns (header) + ReturnItems (per-line)
+       │
+       ▼
+Detail Screen (_buildTotalCard)
+  └─ Displays: Subtotal, -Discount, +Tax, ═ Total Refund
+```
+
+### Database Schema (Return Tables)
+
+| Table | Columns Added |
+|-------|--------------|
+| `purchase_returns` | `subtotal_cents`, `discount_cents`, `tax_cents` (default 0) |
+| `purchase_return_items` | `subtotal_cents`, `discount_cents`, `tax_cents` (default 0) |
+| `sale_returns` | `subtotal_cents`, `discount_cents`, `tax_cents` (default 0) |
+| `sale_return_items` | `subtotal_cents`, `discount_cents`, `tax_cents` (default 0) |
+
+All columns use `MoneyConverter` (integer cents). Migration: schema version `10021`.
+
+### Key Files
+
+| Layer | Purchase Returns | Sale Returns |
+|-------|-----------------|--------------|
+| **Tables** | `lib/core/database/tables/transactions.dart` | same file |
+| **Migration** | `lib/core/database/app_database.dart` (v10021) | same file |
+| **Entities** | `lib/features/purchases/domain/entities/purchase_entity.dart` | `lib/features/sales/domain/entities/sale_entity.dart` |
+| **Repository** | `lib/features/purchases/domain/repositories/purchase_repository.dart` | `lib/features/sales/domain/repositories/sale_repository.dart` |
+| **Repo Impl** | `lib/features/purchases/data/repositories/purchase_repository_impl.dart` | `lib/features/sales/data/repositories/sale_repository_impl.dart` |
+| **Models** | `lib/features/purchases/data/models/purchase_model.dart` | `lib/features/sales/data/models/sale_model.dart` |
+| **BLoC** | `lib/features/purchases/presentation/bloc/purchase_return_form_bloc.dart` | `lib/features/sales/presentation/bloc/sale_return_form_bloc.dart` |
+| **Detail UI** | `lib/features/purchases/presentation/screens/purchase_return_detail_screen.dart` | `lib/features/sales/presentation/screens/sale_return_detail_screen.dart` |
+| **DAO** | `lib/core/database/daos/purchase_dao.dart` | `lib/core/database/daos/sale_dao.dart` |
+
+### Important Notes for Future AI Models
+
+- **Always use integer math** (`~/ ` operator) for proportional calculations — never floating point
+- **refundCents = subtotal - discount + tax** — this is the net refund amount
+- **Header totals are aggregated** from line items, not computed independently
+- The `updatePurchaseReturnTotals` DAO method can recalculate header totals from persisted item-level data if needed
+- **Existing `refundCents` field is preserved** for backward compatibility — it equals `subtotal - discount + tax`
+- Journal entry generation (double-entry bookkeeping) infrastructure exists in `accounting_dao.dart` but is **not yet integrated** with return posting
+
+---
+
+**Last Updated**: 2026-02-10 
 **Version**: 1.0.0  
 **Status**: ACTIVE - Follow strictly for all implementations

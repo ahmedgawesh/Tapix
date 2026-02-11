@@ -242,6 +242,12 @@ class CustomerAgingReportBloc
 
     final rows = await _db.customSelect(
       '''
+      -- Aging buckets based on days overdue (not transaction date)
+      -- Current: 0 days overdue (not due yet)
+      -- 1-30: 1-30 days overdue
+      -- 31-60: 31-60 days overdue  
+      -- 61-90: 61-90 days overdue
+      -- 90+: 91+ days overdue
       SELECT 
         c.id AS customer_id,
         c.name AS customer_name,
@@ -263,13 +269,13 @@ class CustomerAgingReportBloc
       ORDER BY total_cents DESC
       ''',
       variables: [
+        Variable.withString(today.toIso8601String()),
         Variable.withString(days30.toIso8601String()),
+        Variable.withString(today.toIso8601String()),
         Variable.withString(days60.toIso8601String()),
         Variable.withString(days30.toIso8601String()),
         Variable.withString(days90.toIso8601String()),
         Variable.withString(days60.toIso8601String()),
-        Variable.withString(days90.toIso8601String()),
-        Variable.withString(days90.toIso8601String()),
         Variable.withString(days90.toIso8601String()),
         Variable.withString(endIso),
       ],

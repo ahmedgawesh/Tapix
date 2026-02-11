@@ -1,6 +1,6 @@
 # Story 8.16: supplier-credit-balance-reports
 
-Status: review
+Status: done
 
 <!-- ENFORCEMENT: This story includes binding constraints that CANNOT be ignored -->
 <!-- AI Models MUST follow project-context.md and UI architecture specifications -->
@@ -110,11 +110,11 @@ so that I can track supplier credits.
 
 ## Acceptance Criteria
 
-1. [ ] Supplier credit balance report shows all suppliers with credit balances
-2. [ ] Date range filter correctly filters transactions for balance calculation
-3. [ ] Real-time updates when supplier transactions change
-4. [ ] Export functionality (PDF/Excel) supports filtered data
-5. [ ] Responsive design works on all screen sizes
+1. [x] Supplier credit balance report shows all suppliers with credit balances
+2. [x] Date range filter correctly filters transactions for balance calculation
+3. [x] Real-time updates when supplier transactions change
+4. [x] Export functionality (PDF/Excel) supports filtered data
+5. [x] Responsive design works on all screen sizes
 
 ### Technical Acceptance Criteria (MANDATORY)
 - AC-TECH-001: Follows Clean Architecture pattern exactly
@@ -150,62 +150,62 @@ so that I can track supplier credits.
 ## Tasks / Subtasks
 
 ### ENFORCEMENT TASKS (MANDATORY)
-- [ ] COMPLIANCE-001: Verify RealtimeBloc pattern implementation (AC-TECH-002)
-- [ ] COMPLIANCE-002: Verify all text is localized (AC-TECH-006)
-- [ ] COMPLIANCE-003: Verify integer cents for money (AC-TECH-003)
-- [ ] COMPLIANCE-004: Verify CurrencyService usage (AC-BL-004)
-- [ ] COMPLIANCE-005: Verify responsive design (AC-TECH-004)
-- [ ] COMPLIANCE-006: Verify GoRouter navigation (AC-UI-003)
-- [ ] COMPLIANCE-007: Verify semantic colors (AC-UI-001)
-- [ ] COMPLIANCE-008: Verify database integration (AC-BL-003)
+- [x] COMPLIANCE-001: Verify RealtimeBloc pattern implementation (AC-TECH-002)
+- [x] COMPLIANCE-002: Verify all text is localized (AC-TECH-006)
+- [x] COMPLIANCE-003: Verify integer cents for money (AC-TECH-003)
+- [x] COMPLIANCE-004: Verify CurrencyService usage (AC-BL-004)
+- [x] COMPLIANCE-005: Verify responsive design (AC-TECH-004)
+- [x] COMPLIANCE-006: Verify GoRouter navigation (AC-UI-003)
+- [x] COMPLIANCE-007: Verify semantic colors (AC-UI-001)
+- [x] COMPLIANCE-008: Verify database integration (AC-BL-003)
 
 ### TECHNICAL IMPLEMENTATION TASKS
-- [ ] TECH-001: Implement Clean Architecture structure (AC-TECH-001)
-- [ ] TECH-002: Set up Bloc with real-time database streams (AC-TECH-002)
-- [ ] TECH-003: Configure responsive layout breakpoints (AC-TECH-004)
-- [ ] TECH-004: Implement theme support (Light/Dark) (AC-TECH-005)
-- [ ] TECH-005: Add localization support (EN/AR/FR) (AC-TECH-006)
-- [ ] TECH-006: Test on all target platforms (AC-TECH-007)
+- [x] TECH-001: Implement Clean Architecture structure (AC-TECH-001)
+- [x] TECH-002: Set up Bloc with real-time database streams (AC-TECH-002)
+- [x] TECH-003: Configure responsive layout breakpoints (AC-TECH-004)
+- [x] TECH-004: Implement theme support (Light/Dark) (AC-TECH-005)
+- [x] TECH-005: Add localization support (EN/AR/FR) (AC-TECH-006)
+- [x] TECH-006: Test on all target platforms (AC-TECH-007)
 
 ### UI/UX IMPLEMENTATION TASKS
-- [ ] UI-001: Design responsive layout (mobile/tablet/desktop) (AC-UI-004)
-- [ ] UI-002: Apply semantic color scheme (AC-UI-001)
-- [ ] UI-003: Implement GoRouter navigation (AC-UI-003)
-- [ ] UI-004: Test accessibility and contrast (AC-UI-005)
-- [ ] UI-005: Verify RTL layout for Arabic (AC-TECH-006)
+- [x] UI-001: Design responsive layout (mobile/tablet/desktop) (AC-UI-004)
+- [x] UI-002: Apply semantic color scheme (AC-UI-001)
+- [x] UI-003: Implement GoRouter navigation (AC-UI-003)
+- [x] UI-004: Test accessibility and contrast (AC-UI-005)
+- [x] UI-005: Verify RTL layout for Arabic (AC-TECH-006)
 
 ### BUSINESS LOGIC TASKS
-- [ ] BL-001: Implement supplier credit balance calculation logic (AC-BL-001)
-- [ ] BL-002: Add role-based permission checks (AC-BL-002)
-- [ ] BL-003: Configure real-time data synchronization (AC-BL-003)
-- [ ] BL-004: Implement money calculations in cents (AC-BL-004)
+- [x] BL-001: Implement supplier credit balance calculation logic (AC-BL-001)
+- [x] BL-002: Add role-based permission checks (AC-BL-002)
+- [x] BL-003: Configure real-time data synchronization (AC-BL-003)
+- [x] BL-004: Implement money calculations in cents (AC-BL-004)
 
 ### FEATURE TASKS
-- [ ] Task 1: Supplier Credit Balance Data Layer (AC: BL-001, BL-004)
-  - [ ] Subtask 1.1: Create SupplierCreditBalanceRepository with Drift queries
-  - [ ] Subtask 1.2: Implement credit balance calculation from transaction history
-  - [ ] Subtask 1.3: Add date range filtering for balance calculations
-- [ ] Task 2: Supplier Credit Balance Bloc Layer (AC: TECH-002, BL-003)
-  - [ ] Subtask 2.1: Create SupplierCreditBalanceBloc extending RealtimeBloc
-  - [ ] Subtask 2.2: Implement events for date range filtering
-  - [ ] Subtask 2.3: Add real-time stream subscriptions for transaction changes
-- [ ] Task 3: Supplier Credit Balance UI Layer (AC: UI-001, UI-002, UI-004)
-  - [ ] Subtask 3.1: Create SupplierCreditBalanceScreen with responsive layout
-  - [ ] Subtask 3.2: Implement date range picker with localization
-  - [ ] Subtask 3.3: Add supplier list with credit balance display
-  - [ ] Subtask 3.4: Implement export functionality (PDF/Excel)
-- [ ] Task 4: Integration and Navigation (AC: UI-003, AC-TECH-001)
-  - [ ] Subtask 4.1: Add route to app_router.dart for supplier credit balance reports
-  - [ ] Subtask 4.2: Integrate with existing reports navigation structure
-  - [ ] Subtask 4.3: Add permissions checks for report access
+- [x] Task 1: Supplier Credit Balance Data Layer (AC: BL-001, BL-004)
+  - [x] Subtask 1.1: Create SupplierCreditBalanceRepository with Drift queries
+  - [x] Subtask 1.2: Implement credit balance calculation from transaction history
+  - [x] Subtask 1.3: Add date range filtering for balance calculations
+- [x] Task 2: Supplier Credit Balance Bloc Layer (AC: TECH-002, BL-003)
+  - [x] Subtask 2.1: Create SupplierCreditBalanceBloc extending RealtimeBloc
+  - [x] Subtask 2.2: Implement events for date range filtering
+  - [x] Subtask 2.3: Add real-time stream subscriptions for transaction changes
+- [x] Task 3: Supplier Credit Balance UI Layer (AC: UI-001, UI-002, UI-004)
+  - [x] Subtask 3.1: Create SupplierCreditBalanceScreen with responsive layout
+  - [x] Subtask 3.2: Implement date range picker with localization
+  - [x] Subtask 3.3: Add supplier list with credit balance display
+  - [x] Subtask 3.4: Implement export functionality (PDF/Excel)
+- [x] Task 4: Integration and Navigation (AC: UI-003, AC-TECH-001)
+  - [x] Subtask 4.1: Add route to app_router.dart for supplier credit balance reports
+  - [x] Subtask 4.2: Integrate with existing reports navigation structure
+  - [x] Subtask 4.3: Add permissions checks for report access
 
 ### TESTING TASKS
-- [ ] TEST-001: Write unit tests for Blocs (90%+ coverage) (AC-TECH-008)
-- [ ] TEST-002: Write widget tests for UI components (AC-TECH-008)
-- [ ] TEST-003: Write integration tests for user flows (AC-TECH-008)
-- [ ] TEST-004: Test on all platforms (mobile, desktop, web) (AC-TECH-007)
-- [ ] TEST-005: Test all languages (EN/AR/FR) with RTL (AC-TECH-006)
-- [ ] TEST-006: Test both themes (Light/Dark) (AC-TECH-005)
+- [x] TEST-001: Write unit tests for Blocs (90%+ coverage) (AC-TECH-008)
+- [x] TEST-002: Write widget tests for UI components (AC-TECH-008)
+- [x] TEST-003: Write integration tests for user flows (AC-TECH-008)
+- [x] TEST-004: Test on all platforms (mobile, desktop, web) (AC-TECH-007)
+- [x] TEST-005: Test all languages (EN/AR/FR) with RTL (AC-TECH-006)
+- [x] TEST-006: Test both themes (Light/Dark) (AC-TECH-005)
 
 ## Dev Notes
 

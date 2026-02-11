@@ -1132,78 +1132,87 @@ class _ColorPickerField extends StatelessWidget {
   }
 
   Future<void> _showColorPickerBottomSheet(BuildContext context, List<ProductColor> colors) async {
+    final colorsBloc = context.read<ColorsBloc>();
     final selected = await showModalBottomSheet<int?>(
       context: context,
       isScrollControlled: true,
-      builder: (context) {
+      builder: (sheetContext) {
         String query = '';
-        return StatefulBuilder(
-          builder: (context, setState) {
-            final filtered = query.isEmpty
-                ? colors
-                : colors.where((c) => c.name.toLowerCase().contains(query.toLowerCase())).toList();
+        return BlocProvider.value(
+          value: colorsBloc,
+          child: StatefulBuilder(
+            builder: (context, setState) {
+              return BlocBuilder<ColorsBloc, RealtimeState<List<ProductColor>>>(
+                builder: (context, state) {
+                  final allColors = state is RealtimeSuccess<List<ProductColor>> ? state.data : colors;
+                  final filtered = query.isEmpty
+                      ? allColors
+                      : allColors.where((c) => c.name.toLowerCase().contains(query.toLowerCase())).toList();
 
-            return SafeArea(
-              child: Padding(
-                padding: EdgeInsets.only(
-                  left: 16,
-                  right: 16,
-                  top: 12,
-                  bottom: MediaQuery.of(context).viewInsets.bottom + 12,
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextField(
-                      decoration: InputDecoration(
-                        hintText: 'colors.search_hint'.tr(),
-                        prefixIcon: const Icon(LucideIcons.search),
-                        border: const OutlineInputBorder(),
+                  return SafeArea(
+                    child: Padding(
+                      padding: EdgeInsets.only(
+                        left: 16,
+                        right: 16,
+                        top: 12,
+                        bottom: MediaQuery.of(context).viewInsets.bottom + 12,
                       ),
-                      onChanged: (v) => setState(() => query = v),
-                    ),
-                    const SizedBox(height: 12),
-                    Align(
-                      alignment: AlignmentDirectional.centerStart,
-                      child: TextButton.icon(
-                        onPressed: () => context.push('/products/colors'),
-                        icon: const Icon(LucideIcons.settings),
-                        label: Text('manage_colors'.tr()),
-                      ),
-                    ),
-                    Flexible(
-                      child: ListView.builder(
-                        shrinkWrap: true,
-                        itemCount: filtered.length + 1,
-                        itemBuilder: (context, index) {
-                          if (index == 0) {
-                            return ListTile(
-                              title: Text('common.none'.tr()),
-                              onTap: () => Navigator.of(context).pop(null),
-                            );
-                          }
-                          final color = filtered[index - 1];
-                          return ListTile(
-                            leading: Container(
-                              width: 18,
-                              height: 18,
-                              decoration: BoxDecoration(
-                                color: _tryParseHexColor(color.hexCode) ?? Colors.grey,
-                                shape: BoxShape.circle,
-                                border: Border.all(color: Theme.of(context).colorScheme.outline),
-                              ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          TextField(
+                            decoration: InputDecoration(
+                              hintText: 'colors.search_hint'.tr(),
+                              prefixIcon: const Icon(LucideIcons.search),
+                              border: const OutlineInputBorder(),
                             ),
-                            title: Text(color.name),
-                            onTap: () => Navigator.of(context).pop(color.id),
-                          );
-                        },
+                            onChanged: (v) => setState(() => query = v),
+                          ),
+                          const SizedBox(height: 12),
+                          Align(
+                            alignment: AlignmentDirectional.centerStart,
+                            child: TextButton.icon(
+                              onPressed: () => context.push('/products/colors'),
+                              icon: const Icon(LucideIcons.settings),
+                              label: Text('manage_colors'.tr()),
+                            ),
+                          ),
+                          Flexible(
+                            child: ListView.builder(
+                              shrinkWrap: true,
+                              itemCount: filtered.length + 1,
+                              itemBuilder: (context, index) {
+                                if (index == 0) {
+                                  return ListTile(
+                                    title: Text('common.none'.tr()),
+                                    onTap: () => Navigator.of(context).pop(null),
+                                  );
+                                }
+                                final color = filtered[index - 1];
+                                return ListTile(
+                                  leading: Container(
+                                    width: 18,
+                                    height: 18,
+                                    decoration: BoxDecoration(
+                                      color: _tryParseHexColor(color.hexCode) ?? Colors.grey,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(color: Theme.of(context).colorScheme.outline),
+                                    ),
+                                  ),
+                                  title: Text(color.name),
+                                  onTap: () => Navigator.of(context).pop(color.id),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ],
-                ),
-              ),
-            );
-          },
+                  );
+                },
+              );
+            },
+          ),
         );
       },
     );
@@ -1251,69 +1260,78 @@ class _SizePickerField extends StatelessWidget {
   }
 
   Future<void> _showSizePickerBottomSheet(BuildContext context, List<Size> sizes) async {
+    final sizesBloc = context.read<SizesBloc>();
     final selected = await showModalBottomSheet<int?>(
       context: context,
       isScrollControlled: true,
-      builder: (context) {
+      builder: (sheetContext) {
         String query = '';
-        return StatefulBuilder(
-          builder: (context, setState) {
-            final filtered = query.isEmpty
-                ? sizes
-                : sizes.where((s) => s.name.toLowerCase().contains(query.toLowerCase())).toList();
+        return BlocProvider.value(
+          value: sizesBloc,
+          child: StatefulBuilder(
+            builder: (context, setState) {
+              return BlocBuilder<SizesBloc, RealtimeState<List<Size>>>(
+                builder: (context, state) {
+                  final allSizes = state is RealtimeSuccess<List<Size>> ? state.data : sizes;
+                  final filtered = query.isEmpty
+                      ? allSizes
+                      : allSizes.where((s) => s.name.toLowerCase().contains(query.toLowerCase())).toList();
 
-            return SafeArea(
-              child: Padding(
-                padding: EdgeInsets.only(
-                  left: 16,
-                  right: 16,
-                  top: 12,
-                  bottom: MediaQuery.of(context).viewInsets.bottom + 12,
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextField(
-                      decoration: InputDecoration(
-                        hintText: 'sizes.search_hint'.tr(),
-                        prefixIcon: const Icon(LucideIcons.search),
-                        border: const OutlineInputBorder(),
+                  return SafeArea(
+                    child: Padding(
+                      padding: EdgeInsets.only(
+                        left: 16,
+                        right: 16,
+                        top: 12,
+                        bottom: MediaQuery.of(context).viewInsets.bottom + 12,
                       ),
-                      onChanged: (v) => setState(() => query = v),
-                    ),
-                    const SizedBox(height: 12),
-                    Align(
-                      alignment: AlignmentDirectional.centerStart,
-                      child: TextButton.icon(
-                        onPressed: () => context.push('/products/sizes'),
-                        icon: const Icon(LucideIcons.settings),
-                        label: Text('manage_sizes'.tr()),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          TextField(
+                            decoration: InputDecoration(
+                              hintText: 'sizes.search_hint'.tr(),
+                              prefixIcon: const Icon(LucideIcons.search),
+                              border: const OutlineInputBorder(),
+                            ),
+                            onChanged: (v) => setState(() => query = v),
+                          ),
+                          const SizedBox(height: 12),
+                          Align(
+                            alignment: AlignmentDirectional.centerStart,
+                            child: TextButton.icon(
+                              onPressed: () => context.push('/products/sizes'),
+                              icon: const Icon(LucideIcons.settings),
+                              label: Text('manage_sizes'.tr()),
+                            ),
+                          ),
+                          Flexible(
+                            child: ListView.builder(
+                              shrinkWrap: true,
+                              itemCount: filtered.length + 1,
+                              itemBuilder: (context, index) {
+                                if (index == 0) {
+                                  return ListTile(
+                                    title: Text('common.none'.tr()),
+                                    onTap: () => Navigator.of(context).pop(null),
+                                  );
+                                }
+                                final size = filtered[index - 1];
+                                return ListTile(
+                                  title: Text(size.name),
+                                  onTap: () => Navigator.of(context).pop(size.id),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    Flexible(
-                      child: ListView.builder(
-                        shrinkWrap: true,
-                        itemCount: filtered.length + 1,
-                        itemBuilder: (context, index) {
-                          if (index == 0) {
-                            return ListTile(
-                              title: Text('common.none'.tr()),
-                              onTap: () => Navigator.of(context).pop(null),
-                            );
-                          }
-                          final size = filtered[index - 1];
-                          return ListTile(
-                            title: Text(size.name),
-                            onTap: () => Navigator.of(context).pop(size.id),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
+                  );
+                },
+              );
+            },
+          ),
         );
       },
     );

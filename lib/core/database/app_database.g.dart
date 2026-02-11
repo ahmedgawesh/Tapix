@@ -23707,6 +23707,36 @@ class $SaleReturnsTable extends SaleReturns
     defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
   );
   @override
+  late final GeneratedColumnWithTypeConverter<Decimal, int> subtotalCents =
+      GeneratedColumn<int>(
+        'subtotal_cents',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(0),
+      ).withConverter<Decimal>($SaleReturnsTable.$convertersubtotalCents);
+  @override
+  late final GeneratedColumnWithTypeConverter<Decimal, int> discountCents =
+      GeneratedColumn<int>(
+        'discount_cents',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(0),
+      ).withConverter<Decimal>($SaleReturnsTable.$converterdiscountCents);
+  @override
+  late final GeneratedColumnWithTypeConverter<Decimal, int> taxCents =
+      GeneratedColumn<int>(
+        'tax_cents',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(0),
+      ).withConverter<Decimal>($SaleReturnsTable.$convertertaxCents);
+  @override
   late final GeneratedColumnWithTypeConverter<Decimal, int> totalCents =
       GeneratedColumn<int>(
         'total_cents',
@@ -23801,6 +23831,9 @@ class $SaleReturnsTable extends SaleReturns
     id,
     saleId,
     returnNumber,
+    subtotalCents,
+    discountCents,
+    taxCents,
     totalCents,
     currencyId,
     status,
@@ -23915,6 +23948,24 @@ class $SaleReturnsTable extends SaleReturns
         DriftSqlType.string,
         data['${effectivePrefix}return_number'],
       )!,
+      subtotalCents: $SaleReturnsTable.$convertersubtotalCents.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}subtotal_cents'],
+        )!,
+      ),
+      discountCents: $SaleReturnsTable.$converterdiscountCents.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}discount_cents'],
+        )!,
+      ),
+      taxCents: $SaleReturnsTable.$convertertaxCents.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}tax_cents'],
+        )!,
+      ),
       totalCents: $SaleReturnsTable.$convertertotalCents.fromSql(
         attachedDatabase.typeMapping.read(
           DriftSqlType.int,
@@ -23957,6 +24008,12 @@ class $SaleReturnsTable extends SaleReturns
     return $SaleReturnsTable(attachedDatabase, alias);
   }
 
+  static TypeConverter<Decimal, int> $convertersubtotalCents =
+      const MoneyConverter();
+  static TypeConverter<Decimal, int> $converterdiscountCents =
+      const MoneyConverter();
+  static TypeConverter<Decimal, int> $convertertaxCents =
+      const MoneyConverter();
   static TypeConverter<Decimal, int> $convertertotalCents =
       const MoneyConverter();
 }
@@ -23965,6 +24022,9 @@ class SaleReturn extends DataClass implements Insertable<SaleReturn> {
   final int id;
   final int saleId;
   final String returnNumber;
+  final Decimal subtotalCents;
+  final Decimal discountCents;
+  final Decimal taxCents;
   final Decimal totalCents;
   final int currencyId;
 
@@ -23983,6 +24043,9 @@ class SaleReturn extends DataClass implements Insertable<SaleReturn> {
     required this.id,
     required this.saleId,
     required this.returnNumber,
+    required this.subtotalCents,
+    required this.discountCents,
+    required this.taxCents,
     required this.totalCents,
     required this.currencyId,
     required this.status,
@@ -23998,6 +24061,21 @@ class SaleReturn extends DataClass implements Insertable<SaleReturn> {
     map['id'] = Variable<int>(id);
     map['sale_id'] = Variable<int>(saleId);
     map['return_number'] = Variable<String>(returnNumber);
+    {
+      map['subtotal_cents'] = Variable<int>(
+        $SaleReturnsTable.$convertersubtotalCents.toSql(subtotalCents),
+      );
+    }
+    {
+      map['discount_cents'] = Variable<int>(
+        $SaleReturnsTable.$converterdiscountCents.toSql(discountCents),
+      );
+    }
+    {
+      map['tax_cents'] = Variable<int>(
+        $SaleReturnsTable.$convertertaxCents.toSql(taxCents),
+      );
+    }
     {
       map['total_cents'] = Variable<int>(
         $SaleReturnsTable.$convertertotalCents.toSql(totalCents),
@@ -24020,6 +24098,9 @@ class SaleReturn extends DataClass implements Insertable<SaleReturn> {
       id: Value(id),
       saleId: Value(saleId),
       returnNumber: Value(returnNumber),
+      subtotalCents: Value(subtotalCents),
+      discountCents: Value(discountCents),
+      taxCents: Value(taxCents),
       totalCents: Value(totalCents),
       currencyId: Value(currencyId),
       status: Value(status),
@@ -24042,6 +24123,9 @@ class SaleReturn extends DataClass implements Insertable<SaleReturn> {
       id: serializer.fromJson<int>(json['id']),
       saleId: serializer.fromJson<int>(json['saleId']),
       returnNumber: serializer.fromJson<String>(json['returnNumber']),
+      subtotalCents: serializer.fromJson<Decimal>(json['subtotalCents']),
+      discountCents: serializer.fromJson<Decimal>(json['discountCents']),
+      taxCents: serializer.fromJson<Decimal>(json['taxCents']),
       totalCents: serializer.fromJson<Decimal>(json['totalCents']),
       currencyId: serializer.fromJson<int>(json['currencyId']),
       status: serializer.fromJson<String>(json['status']),
@@ -24059,6 +24143,9 @@ class SaleReturn extends DataClass implements Insertable<SaleReturn> {
       'id': serializer.toJson<int>(id),
       'saleId': serializer.toJson<int>(saleId),
       'returnNumber': serializer.toJson<String>(returnNumber),
+      'subtotalCents': serializer.toJson<Decimal>(subtotalCents),
+      'discountCents': serializer.toJson<Decimal>(discountCents),
+      'taxCents': serializer.toJson<Decimal>(taxCents),
       'totalCents': serializer.toJson<Decimal>(totalCents),
       'currencyId': serializer.toJson<int>(currencyId),
       'status': serializer.toJson<String>(status),
@@ -24074,6 +24161,9 @@ class SaleReturn extends DataClass implements Insertable<SaleReturn> {
     int? id,
     int? saleId,
     String? returnNumber,
+    Decimal? subtotalCents,
+    Decimal? discountCents,
+    Decimal? taxCents,
     Decimal? totalCents,
     int? currencyId,
     String? status,
@@ -24086,6 +24176,9 @@ class SaleReturn extends DataClass implements Insertable<SaleReturn> {
     id: id ?? this.id,
     saleId: saleId ?? this.saleId,
     returnNumber: returnNumber ?? this.returnNumber,
+    subtotalCents: subtotalCents ?? this.subtotalCents,
+    discountCents: discountCents ?? this.discountCents,
+    taxCents: taxCents ?? this.taxCents,
     totalCents: totalCents ?? this.totalCents,
     currencyId: currencyId ?? this.currencyId,
     status: status ?? this.status,
@@ -24102,6 +24195,13 @@ class SaleReturn extends DataClass implements Insertable<SaleReturn> {
       returnNumber: data.returnNumber.present
           ? data.returnNumber.value
           : this.returnNumber,
+      subtotalCents: data.subtotalCents.present
+          ? data.subtotalCents.value
+          : this.subtotalCents,
+      discountCents: data.discountCents.present
+          ? data.discountCents.value
+          : this.discountCents,
+      taxCents: data.taxCents.present ? data.taxCents.value : this.taxCents,
       totalCents: data.totalCents.present
           ? data.totalCents.value
           : this.totalCents,
@@ -24129,6 +24229,9 @@ class SaleReturn extends DataClass implements Insertable<SaleReturn> {
           ..write('id: $id, ')
           ..write('saleId: $saleId, ')
           ..write('returnNumber: $returnNumber, ')
+          ..write('subtotalCents: $subtotalCents, ')
+          ..write('discountCents: $discountCents, ')
+          ..write('taxCents: $taxCents, ')
           ..write('totalCents: $totalCents, ')
           ..write('currencyId: $currencyId, ')
           ..write('status: $status, ')
@@ -24146,6 +24249,9 @@ class SaleReturn extends DataClass implements Insertable<SaleReturn> {
     id,
     saleId,
     returnNumber,
+    subtotalCents,
+    discountCents,
+    taxCents,
     totalCents,
     currencyId,
     status,
@@ -24162,6 +24268,9 @@ class SaleReturn extends DataClass implements Insertable<SaleReturn> {
           other.id == this.id &&
           other.saleId == this.saleId &&
           other.returnNumber == this.returnNumber &&
+          other.subtotalCents == this.subtotalCents &&
+          other.discountCents == this.discountCents &&
+          other.taxCents == this.taxCents &&
           other.totalCents == this.totalCents &&
           other.currencyId == this.currencyId &&
           other.status == this.status &&
@@ -24176,6 +24285,9 @@ class SaleReturnsCompanion extends UpdateCompanion<SaleReturn> {
   final Value<int> id;
   final Value<int> saleId;
   final Value<String> returnNumber;
+  final Value<Decimal> subtotalCents;
+  final Value<Decimal> discountCents;
+  final Value<Decimal> taxCents;
   final Value<Decimal> totalCents;
   final Value<int> currencyId;
   final Value<String> status;
@@ -24188,6 +24300,9 @@ class SaleReturnsCompanion extends UpdateCompanion<SaleReturn> {
     this.id = const Value.absent(),
     this.saleId = const Value.absent(),
     this.returnNumber = const Value.absent(),
+    this.subtotalCents = const Value.absent(),
+    this.discountCents = const Value.absent(),
+    this.taxCents = const Value.absent(),
     this.totalCents = const Value.absent(),
     this.currencyId = const Value.absent(),
     this.status = const Value.absent(),
@@ -24201,6 +24316,9 @@ class SaleReturnsCompanion extends UpdateCompanion<SaleReturn> {
     this.id = const Value.absent(),
     required int saleId,
     required String returnNumber,
+    this.subtotalCents = const Value.absent(),
+    this.discountCents = const Value.absent(),
+    this.taxCents = const Value.absent(),
     required Decimal totalCents,
     required int currencyId,
     this.status = const Value.absent(),
@@ -24217,6 +24335,9 @@ class SaleReturnsCompanion extends UpdateCompanion<SaleReturn> {
     Expression<int>? id,
     Expression<int>? saleId,
     Expression<String>? returnNumber,
+    Expression<int>? subtotalCents,
+    Expression<int>? discountCents,
+    Expression<int>? taxCents,
     Expression<int>? totalCents,
     Expression<int>? currencyId,
     Expression<String>? status,
@@ -24230,6 +24351,9 @@ class SaleReturnsCompanion extends UpdateCompanion<SaleReturn> {
       if (id != null) 'id': id,
       if (saleId != null) 'sale_id': saleId,
       if (returnNumber != null) 'return_number': returnNumber,
+      if (subtotalCents != null) 'subtotal_cents': subtotalCents,
+      if (discountCents != null) 'discount_cents': discountCents,
+      if (taxCents != null) 'tax_cents': taxCents,
       if (totalCents != null) 'total_cents': totalCents,
       if (currencyId != null) 'currency_id': currencyId,
       if (status != null) 'status': status,
@@ -24245,6 +24369,9 @@ class SaleReturnsCompanion extends UpdateCompanion<SaleReturn> {
     Value<int>? id,
     Value<int>? saleId,
     Value<String>? returnNumber,
+    Value<Decimal>? subtotalCents,
+    Value<Decimal>? discountCents,
+    Value<Decimal>? taxCents,
     Value<Decimal>? totalCents,
     Value<int>? currencyId,
     Value<String>? status,
@@ -24258,6 +24385,9 @@ class SaleReturnsCompanion extends UpdateCompanion<SaleReturn> {
       id: id ?? this.id,
       saleId: saleId ?? this.saleId,
       returnNumber: returnNumber ?? this.returnNumber,
+      subtotalCents: subtotalCents ?? this.subtotalCents,
+      discountCents: discountCents ?? this.discountCents,
+      taxCents: taxCents ?? this.taxCents,
       totalCents: totalCents ?? this.totalCents,
       currencyId: currencyId ?? this.currencyId,
       status: status ?? this.status,
@@ -24280,6 +24410,21 @@ class SaleReturnsCompanion extends UpdateCompanion<SaleReturn> {
     }
     if (returnNumber.present) {
       map['return_number'] = Variable<String>(returnNumber.value);
+    }
+    if (subtotalCents.present) {
+      map['subtotal_cents'] = Variable<int>(
+        $SaleReturnsTable.$convertersubtotalCents.toSql(subtotalCents.value),
+      );
+    }
+    if (discountCents.present) {
+      map['discount_cents'] = Variable<int>(
+        $SaleReturnsTable.$converterdiscountCents.toSql(discountCents.value),
+      );
+    }
+    if (taxCents.present) {
+      map['tax_cents'] = Variable<int>(
+        $SaleReturnsTable.$convertertaxCents.toSql(taxCents.value),
+      );
     }
     if (totalCents.present) {
       map['total_cents'] = Variable<int>(
@@ -24316,6 +24461,9 @@ class SaleReturnsCompanion extends UpdateCompanion<SaleReturn> {
           ..write('id: $id, ')
           ..write('saleId: $saleId, ')
           ..write('returnNumber: $returnNumber, ')
+          ..write('subtotalCents: $subtotalCents, ')
+          ..write('discountCents: $discountCents, ')
+          ..write('taxCents: $taxCents, ')
           ..write('totalCents: $totalCents, ')
           ..write('currencyId: $currencyId, ')
           ..write('status: $status, ')
@@ -24388,6 +24536,36 @@ class $SaleReturnItemsTable extends SaleReturnItems
     requiredDuringInsert: true,
   );
   @override
+  late final GeneratedColumnWithTypeConverter<Decimal, int> subtotalCents =
+      GeneratedColumn<int>(
+        'subtotal_cents',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(0),
+      ).withConverter<Decimal>($SaleReturnItemsTable.$convertersubtotalCents);
+  @override
+  late final GeneratedColumnWithTypeConverter<Decimal, int> discountCents =
+      GeneratedColumn<int>(
+        'discount_cents',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(0),
+      ).withConverter<Decimal>($SaleReturnItemsTable.$converterdiscountCents);
+  @override
+  late final GeneratedColumnWithTypeConverter<Decimal, int> taxCents =
+      GeneratedColumn<int>(
+        'tax_cents',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(0),
+      ).withConverter<Decimal>($SaleReturnItemsTable.$convertertaxCents);
+  @override
   late final GeneratedColumnWithTypeConverter<Decimal, int> refundCents =
       GeneratedColumn<int>(
         'refund_cents',
@@ -24423,6 +24601,9 @@ class $SaleReturnItemsTable extends SaleReturnItems
     returnId,
     saleItemId,
     quantity,
+    subtotalCents,
+    discountCents,
+    taxCents,
     refundCents,
     reason,
     createdAt,
@@ -24506,6 +24687,24 @@ class $SaleReturnItemsTable extends SaleReturnItems
         DriftSqlType.int,
         data['${effectivePrefix}quantity'],
       )!,
+      subtotalCents: $SaleReturnItemsTable.$convertersubtotalCents.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}subtotal_cents'],
+        )!,
+      ),
+      discountCents: $SaleReturnItemsTable.$converterdiscountCents.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}discount_cents'],
+        )!,
+      ),
+      taxCents: $SaleReturnItemsTable.$convertertaxCents.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}tax_cents'],
+        )!,
+      ),
       refundCents: $SaleReturnItemsTable.$converterrefundCents.fromSql(
         attachedDatabase.typeMapping.read(
           DriftSqlType.int,
@@ -24528,6 +24727,12 @@ class $SaleReturnItemsTable extends SaleReturnItems
     return $SaleReturnItemsTable(attachedDatabase, alias);
   }
 
+  static TypeConverter<Decimal, int> $convertersubtotalCents =
+      const MoneyConverter();
+  static TypeConverter<Decimal, int> $converterdiscountCents =
+      const MoneyConverter();
+  static TypeConverter<Decimal, int> $convertertaxCents =
+      const MoneyConverter();
   static TypeConverter<Decimal, int> $converterrefundCents =
       const MoneyConverter();
 }
@@ -24537,6 +24742,9 @@ class SaleReturnItem extends DataClass implements Insertable<SaleReturnItem> {
   final int returnId;
   final int saleItemId;
   final int quantity;
+  final Decimal subtotalCents;
+  final Decimal discountCents;
+  final Decimal taxCents;
   final Decimal refundCents;
 
   /// wrong_size, defective, wrong_item, changed_mind, other
@@ -24547,6 +24755,9 @@ class SaleReturnItem extends DataClass implements Insertable<SaleReturnItem> {
     required this.returnId,
     required this.saleItemId,
     required this.quantity,
+    required this.subtotalCents,
+    required this.discountCents,
+    required this.taxCents,
     required this.refundCents,
     this.reason,
     required this.createdAt,
@@ -24558,6 +24769,21 @@ class SaleReturnItem extends DataClass implements Insertable<SaleReturnItem> {
     map['return_id'] = Variable<int>(returnId);
     map['sale_item_id'] = Variable<int>(saleItemId);
     map['quantity'] = Variable<int>(quantity);
+    {
+      map['subtotal_cents'] = Variable<int>(
+        $SaleReturnItemsTable.$convertersubtotalCents.toSql(subtotalCents),
+      );
+    }
+    {
+      map['discount_cents'] = Variable<int>(
+        $SaleReturnItemsTable.$converterdiscountCents.toSql(discountCents),
+      );
+    }
+    {
+      map['tax_cents'] = Variable<int>(
+        $SaleReturnItemsTable.$convertertaxCents.toSql(taxCents),
+      );
+    }
     {
       map['refund_cents'] = Variable<int>(
         $SaleReturnItemsTable.$converterrefundCents.toSql(refundCents),
@@ -24576,6 +24802,9 @@ class SaleReturnItem extends DataClass implements Insertable<SaleReturnItem> {
       returnId: Value(returnId),
       saleItemId: Value(saleItemId),
       quantity: Value(quantity),
+      subtotalCents: Value(subtotalCents),
+      discountCents: Value(discountCents),
+      taxCents: Value(taxCents),
       refundCents: Value(refundCents),
       reason: reason == null && nullToAbsent
           ? const Value.absent()
@@ -24594,6 +24823,9 @@ class SaleReturnItem extends DataClass implements Insertable<SaleReturnItem> {
       returnId: serializer.fromJson<int>(json['returnId']),
       saleItemId: serializer.fromJson<int>(json['saleItemId']),
       quantity: serializer.fromJson<int>(json['quantity']),
+      subtotalCents: serializer.fromJson<Decimal>(json['subtotalCents']),
+      discountCents: serializer.fromJson<Decimal>(json['discountCents']),
+      taxCents: serializer.fromJson<Decimal>(json['taxCents']),
       refundCents: serializer.fromJson<Decimal>(json['refundCents']),
       reason: serializer.fromJson<String?>(json['reason']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
@@ -24607,6 +24839,9 @@ class SaleReturnItem extends DataClass implements Insertable<SaleReturnItem> {
       'returnId': serializer.toJson<int>(returnId),
       'saleItemId': serializer.toJson<int>(saleItemId),
       'quantity': serializer.toJson<int>(quantity),
+      'subtotalCents': serializer.toJson<Decimal>(subtotalCents),
+      'discountCents': serializer.toJson<Decimal>(discountCents),
+      'taxCents': serializer.toJson<Decimal>(taxCents),
       'refundCents': serializer.toJson<Decimal>(refundCents),
       'reason': serializer.toJson<String?>(reason),
       'createdAt': serializer.toJson<DateTime>(createdAt),
@@ -24618,6 +24853,9 @@ class SaleReturnItem extends DataClass implements Insertable<SaleReturnItem> {
     int? returnId,
     int? saleItemId,
     int? quantity,
+    Decimal? subtotalCents,
+    Decimal? discountCents,
+    Decimal? taxCents,
     Decimal? refundCents,
     Value<String?> reason = const Value.absent(),
     DateTime? createdAt,
@@ -24626,6 +24864,9 @@ class SaleReturnItem extends DataClass implements Insertable<SaleReturnItem> {
     returnId: returnId ?? this.returnId,
     saleItemId: saleItemId ?? this.saleItemId,
     quantity: quantity ?? this.quantity,
+    subtotalCents: subtotalCents ?? this.subtotalCents,
+    discountCents: discountCents ?? this.discountCents,
+    taxCents: taxCents ?? this.taxCents,
     refundCents: refundCents ?? this.refundCents,
     reason: reason.present ? reason.value : this.reason,
     createdAt: createdAt ?? this.createdAt,
@@ -24638,6 +24879,13 @@ class SaleReturnItem extends DataClass implements Insertable<SaleReturnItem> {
           ? data.saleItemId.value
           : this.saleItemId,
       quantity: data.quantity.present ? data.quantity.value : this.quantity,
+      subtotalCents: data.subtotalCents.present
+          ? data.subtotalCents.value
+          : this.subtotalCents,
+      discountCents: data.discountCents.present
+          ? data.discountCents.value
+          : this.discountCents,
+      taxCents: data.taxCents.present ? data.taxCents.value : this.taxCents,
       refundCents: data.refundCents.present
           ? data.refundCents.value
           : this.refundCents,
@@ -24653,6 +24901,9 @@ class SaleReturnItem extends DataClass implements Insertable<SaleReturnItem> {
           ..write('returnId: $returnId, ')
           ..write('saleItemId: $saleItemId, ')
           ..write('quantity: $quantity, ')
+          ..write('subtotalCents: $subtotalCents, ')
+          ..write('discountCents: $discountCents, ')
+          ..write('taxCents: $taxCents, ')
           ..write('refundCents: $refundCents, ')
           ..write('reason: $reason, ')
           ..write('createdAt: $createdAt')
@@ -24666,6 +24917,9 @@ class SaleReturnItem extends DataClass implements Insertable<SaleReturnItem> {
     returnId,
     saleItemId,
     quantity,
+    subtotalCents,
+    discountCents,
+    taxCents,
     refundCents,
     reason,
     createdAt,
@@ -24678,6 +24932,9 @@ class SaleReturnItem extends DataClass implements Insertable<SaleReturnItem> {
           other.returnId == this.returnId &&
           other.saleItemId == this.saleItemId &&
           other.quantity == this.quantity &&
+          other.subtotalCents == this.subtotalCents &&
+          other.discountCents == this.discountCents &&
+          other.taxCents == this.taxCents &&
           other.refundCents == this.refundCents &&
           other.reason == this.reason &&
           other.createdAt == this.createdAt);
@@ -24688,6 +24945,9 @@ class SaleReturnItemsCompanion extends UpdateCompanion<SaleReturnItem> {
   final Value<int> returnId;
   final Value<int> saleItemId;
   final Value<int> quantity;
+  final Value<Decimal> subtotalCents;
+  final Value<Decimal> discountCents;
+  final Value<Decimal> taxCents;
   final Value<Decimal> refundCents;
   final Value<String?> reason;
   final Value<DateTime> createdAt;
@@ -24696,6 +24956,9 @@ class SaleReturnItemsCompanion extends UpdateCompanion<SaleReturnItem> {
     this.returnId = const Value.absent(),
     this.saleItemId = const Value.absent(),
     this.quantity = const Value.absent(),
+    this.subtotalCents = const Value.absent(),
+    this.discountCents = const Value.absent(),
+    this.taxCents = const Value.absent(),
     this.refundCents = const Value.absent(),
     this.reason = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -24705,6 +24968,9 @@ class SaleReturnItemsCompanion extends UpdateCompanion<SaleReturnItem> {
     required int returnId,
     required int saleItemId,
     required int quantity,
+    this.subtotalCents = const Value.absent(),
+    this.discountCents = const Value.absent(),
+    this.taxCents = const Value.absent(),
     required Decimal refundCents,
     this.reason = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -24717,6 +24983,9 @@ class SaleReturnItemsCompanion extends UpdateCompanion<SaleReturnItem> {
     Expression<int>? returnId,
     Expression<int>? saleItemId,
     Expression<int>? quantity,
+    Expression<int>? subtotalCents,
+    Expression<int>? discountCents,
+    Expression<int>? taxCents,
     Expression<int>? refundCents,
     Expression<String>? reason,
     Expression<DateTime>? createdAt,
@@ -24726,6 +24995,9 @@ class SaleReturnItemsCompanion extends UpdateCompanion<SaleReturnItem> {
       if (returnId != null) 'return_id': returnId,
       if (saleItemId != null) 'sale_item_id': saleItemId,
       if (quantity != null) 'quantity': quantity,
+      if (subtotalCents != null) 'subtotal_cents': subtotalCents,
+      if (discountCents != null) 'discount_cents': discountCents,
+      if (taxCents != null) 'tax_cents': taxCents,
       if (refundCents != null) 'refund_cents': refundCents,
       if (reason != null) 'reason': reason,
       if (createdAt != null) 'created_at': createdAt,
@@ -24737,6 +25009,9 @@ class SaleReturnItemsCompanion extends UpdateCompanion<SaleReturnItem> {
     Value<int>? returnId,
     Value<int>? saleItemId,
     Value<int>? quantity,
+    Value<Decimal>? subtotalCents,
+    Value<Decimal>? discountCents,
+    Value<Decimal>? taxCents,
     Value<Decimal>? refundCents,
     Value<String?>? reason,
     Value<DateTime>? createdAt,
@@ -24746,6 +25021,9 @@ class SaleReturnItemsCompanion extends UpdateCompanion<SaleReturnItem> {
       returnId: returnId ?? this.returnId,
       saleItemId: saleItemId ?? this.saleItemId,
       quantity: quantity ?? this.quantity,
+      subtotalCents: subtotalCents ?? this.subtotalCents,
+      discountCents: discountCents ?? this.discountCents,
+      taxCents: taxCents ?? this.taxCents,
       refundCents: refundCents ?? this.refundCents,
       reason: reason ?? this.reason,
       createdAt: createdAt ?? this.createdAt,
@@ -24766,6 +25044,25 @@ class SaleReturnItemsCompanion extends UpdateCompanion<SaleReturnItem> {
     }
     if (quantity.present) {
       map['quantity'] = Variable<int>(quantity.value);
+    }
+    if (subtotalCents.present) {
+      map['subtotal_cents'] = Variable<int>(
+        $SaleReturnItemsTable.$convertersubtotalCents.toSql(
+          subtotalCents.value,
+        ),
+      );
+    }
+    if (discountCents.present) {
+      map['discount_cents'] = Variable<int>(
+        $SaleReturnItemsTable.$converterdiscountCents.toSql(
+          discountCents.value,
+        ),
+      );
+    }
+    if (taxCents.present) {
+      map['tax_cents'] = Variable<int>(
+        $SaleReturnItemsTable.$convertertaxCents.toSql(taxCents.value),
+      );
     }
     if (refundCents.present) {
       map['refund_cents'] = Variable<int>(
@@ -24788,6 +25085,9 @@ class SaleReturnItemsCompanion extends UpdateCompanion<SaleReturnItem> {
           ..write('returnId: $returnId, ')
           ..write('saleItemId: $saleItemId, ')
           ..write('quantity: $quantity, ')
+          ..write('subtotalCents: $subtotalCents, ')
+          ..write('discountCents: $discountCents, ')
+          ..write('taxCents: $taxCents, ')
           ..write('refundCents: $refundCents, ')
           ..write('reason: $reason, ')
           ..write('createdAt: $createdAt')
@@ -27098,6 +27398,36 @@ class $PurchaseReturnsTable extends PurchaseReturns
     defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
   );
   @override
+  late final GeneratedColumnWithTypeConverter<Decimal, int> subtotalCents =
+      GeneratedColumn<int>(
+        'subtotal_cents',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(0),
+      ).withConverter<Decimal>($PurchaseReturnsTable.$convertersubtotalCents);
+  @override
+  late final GeneratedColumnWithTypeConverter<Decimal, int> discountCents =
+      GeneratedColumn<int>(
+        'discount_cents',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(0),
+      ).withConverter<Decimal>($PurchaseReturnsTable.$converterdiscountCents);
+  @override
+  late final GeneratedColumnWithTypeConverter<Decimal, int> taxCents =
+      GeneratedColumn<int>(
+        'tax_cents',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(0),
+      ).withConverter<Decimal>($PurchaseReturnsTable.$convertertaxCents);
+  @override
   late final GeneratedColumnWithTypeConverter<Decimal, int> totalCents =
       GeneratedColumn<int>(
         'total_cents',
@@ -27192,6 +27522,9 @@ class $PurchaseReturnsTable extends PurchaseReturns
     id,
     purchaseId,
     returnNumber,
+    subtotalCents,
+    discountCents,
+    taxCents,
     totalCents,
     currencyId,
     status,
@@ -27306,6 +27639,24 @@ class $PurchaseReturnsTable extends PurchaseReturns
         DriftSqlType.string,
         data['${effectivePrefix}return_number'],
       )!,
+      subtotalCents: $PurchaseReturnsTable.$convertersubtotalCents.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}subtotal_cents'],
+        )!,
+      ),
+      discountCents: $PurchaseReturnsTable.$converterdiscountCents.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}discount_cents'],
+        )!,
+      ),
+      taxCents: $PurchaseReturnsTable.$convertertaxCents.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}tax_cents'],
+        )!,
+      ),
       totalCents: $PurchaseReturnsTable.$convertertotalCents.fromSql(
         attachedDatabase.typeMapping.read(
           DriftSqlType.int,
@@ -27348,6 +27699,12 @@ class $PurchaseReturnsTable extends PurchaseReturns
     return $PurchaseReturnsTable(attachedDatabase, alias);
   }
 
+  static TypeConverter<Decimal, int> $convertersubtotalCents =
+      const MoneyConverter();
+  static TypeConverter<Decimal, int> $converterdiscountCents =
+      const MoneyConverter();
+  static TypeConverter<Decimal, int> $convertertaxCents =
+      const MoneyConverter();
   static TypeConverter<Decimal, int> $convertertotalCents =
       const MoneyConverter();
 }
@@ -27356,6 +27713,9 @@ class PurchaseReturn extends DataClass implements Insertable<PurchaseReturn> {
   final int id;
   final int purchaseId;
   final String returnNumber;
+  final Decimal subtotalCents;
+  final Decimal discountCents;
+  final Decimal taxCents;
   final Decimal totalCents;
   final int currencyId;
 
@@ -27374,6 +27734,9 @@ class PurchaseReturn extends DataClass implements Insertable<PurchaseReturn> {
     required this.id,
     required this.purchaseId,
     required this.returnNumber,
+    required this.subtotalCents,
+    required this.discountCents,
+    required this.taxCents,
     required this.totalCents,
     required this.currencyId,
     required this.status,
@@ -27389,6 +27752,21 @@ class PurchaseReturn extends DataClass implements Insertable<PurchaseReturn> {
     map['id'] = Variable<int>(id);
     map['purchase_id'] = Variable<int>(purchaseId);
     map['return_number'] = Variable<String>(returnNumber);
+    {
+      map['subtotal_cents'] = Variable<int>(
+        $PurchaseReturnsTable.$convertersubtotalCents.toSql(subtotalCents),
+      );
+    }
+    {
+      map['discount_cents'] = Variable<int>(
+        $PurchaseReturnsTable.$converterdiscountCents.toSql(discountCents),
+      );
+    }
+    {
+      map['tax_cents'] = Variable<int>(
+        $PurchaseReturnsTable.$convertertaxCents.toSql(taxCents),
+      );
+    }
     {
       map['total_cents'] = Variable<int>(
         $PurchaseReturnsTable.$convertertotalCents.toSql(totalCents),
@@ -27411,6 +27789,9 @@ class PurchaseReturn extends DataClass implements Insertable<PurchaseReturn> {
       id: Value(id),
       purchaseId: Value(purchaseId),
       returnNumber: Value(returnNumber),
+      subtotalCents: Value(subtotalCents),
+      discountCents: Value(discountCents),
+      taxCents: Value(taxCents),
       totalCents: Value(totalCents),
       currencyId: Value(currencyId),
       status: Value(status),
@@ -27433,6 +27814,9 @@ class PurchaseReturn extends DataClass implements Insertable<PurchaseReturn> {
       id: serializer.fromJson<int>(json['id']),
       purchaseId: serializer.fromJson<int>(json['purchaseId']),
       returnNumber: serializer.fromJson<String>(json['returnNumber']),
+      subtotalCents: serializer.fromJson<Decimal>(json['subtotalCents']),
+      discountCents: serializer.fromJson<Decimal>(json['discountCents']),
+      taxCents: serializer.fromJson<Decimal>(json['taxCents']),
       totalCents: serializer.fromJson<Decimal>(json['totalCents']),
       currencyId: serializer.fromJson<int>(json['currencyId']),
       status: serializer.fromJson<String>(json['status']),
@@ -27450,6 +27834,9 @@ class PurchaseReturn extends DataClass implements Insertable<PurchaseReturn> {
       'id': serializer.toJson<int>(id),
       'purchaseId': serializer.toJson<int>(purchaseId),
       'returnNumber': serializer.toJson<String>(returnNumber),
+      'subtotalCents': serializer.toJson<Decimal>(subtotalCents),
+      'discountCents': serializer.toJson<Decimal>(discountCents),
+      'taxCents': serializer.toJson<Decimal>(taxCents),
       'totalCents': serializer.toJson<Decimal>(totalCents),
       'currencyId': serializer.toJson<int>(currencyId),
       'status': serializer.toJson<String>(status),
@@ -27465,6 +27852,9 @@ class PurchaseReturn extends DataClass implements Insertable<PurchaseReturn> {
     int? id,
     int? purchaseId,
     String? returnNumber,
+    Decimal? subtotalCents,
+    Decimal? discountCents,
+    Decimal? taxCents,
     Decimal? totalCents,
     int? currencyId,
     String? status,
@@ -27477,6 +27867,9 @@ class PurchaseReturn extends DataClass implements Insertable<PurchaseReturn> {
     id: id ?? this.id,
     purchaseId: purchaseId ?? this.purchaseId,
     returnNumber: returnNumber ?? this.returnNumber,
+    subtotalCents: subtotalCents ?? this.subtotalCents,
+    discountCents: discountCents ?? this.discountCents,
+    taxCents: taxCents ?? this.taxCents,
     totalCents: totalCents ?? this.totalCents,
     currencyId: currencyId ?? this.currencyId,
     status: status ?? this.status,
@@ -27495,6 +27888,13 @@ class PurchaseReturn extends DataClass implements Insertable<PurchaseReturn> {
       returnNumber: data.returnNumber.present
           ? data.returnNumber.value
           : this.returnNumber,
+      subtotalCents: data.subtotalCents.present
+          ? data.subtotalCents.value
+          : this.subtotalCents,
+      discountCents: data.discountCents.present
+          ? data.discountCents.value
+          : this.discountCents,
+      taxCents: data.taxCents.present ? data.taxCents.value : this.taxCents,
       totalCents: data.totalCents.present
           ? data.totalCents.value
           : this.totalCents,
@@ -27522,6 +27922,9 @@ class PurchaseReturn extends DataClass implements Insertable<PurchaseReturn> {
           ..write('id: $id, ')
           ..write('purchaseId: $purchaseId, ')
           ..write('returnNumber: $returnNumber, ')
+          ..write('subtotalCents: $subtotalCents, ')
+          ..write('discountCents: $discountCents, ')
+          ..write('taxCents: $taxCents, ')
           ..write('totalCents: $totalCents, ')
           ..write('currencyId: $currencyId, ')
           ..write('status: $status, ')
@@ -27539,6 +27942,9 @@ class PurchaseReturn extends DataClass implements Insertable<PurchaseReturn> {
     id,
     purchaseId,
     returnNumber,
+    subtotalCents,
+    discountCents,
+    taxCents,
     totalCents,
     currencyId,
     status,
@@ -27555,6 +27961,9 @@ class PurchaseReturn extends DataClass implements Insertable<PurchaseReturn> {
           other.id == this.id &&
           other.purchaseId == this.purchaseId &&
           other.returnNumber == this.returnNumber &&
+          other.subtotalCents == this.subtotalCents &&
+          other.discountCents == this.discountCents &&
+          other.taxCents == this.taxCents &&
           other.totalCents == this.totalCents &&
           other.currencyId == this.currencyId &&
           other.status == this.status &&
@@ -27569,6 +27978,9 @@ class PurchaseReturnsCompanion extends UpdateCompanion<PurchaseReturn> {
   final Value<int> id;
   final Value<int> purchaseId;
   final Value<String> returnNumber;
+  final Value<Decimal> subtotalCents;
+  final Value<Decimal> discountCents;
+  final Value<Decimal> taxCents;
   final Value<Decimal> totalCents;
   final Value<int> currencyId;
   final Value<String> status;
@@ -27581,6 +27993,9 @@ class PurchaseReturnsCompanion extends UpdateCompanion<PurchaseReturn> {
     this.id = const Value.absent(),
     this.purchaseId = const Value.absent(),
     this.returnNumber = const Value.absent(),
+    this.subtotalCents = const Value.absent(),
+    this.discountCents = const Value.absent(),
+    this.taxCents = const Value.absent(),
     this.totalCents = const Value.absent(),
     this.currencyId = const Value.absent(),
     this.status = const Value.absent(),
@@ -27594,6 +28009,9 @@ class PurchaseReturnsCompanion extends UpdateCompanion<PurchaseReturn> {
     this.id = const Value.absent(),
     required int purchaseId,
     required String returnNumber,
+    this.subtotalCents = const Value.absent(),
+    this.discountCents = const Value.absent(),
+    this.taxCents = const Value.absent(),
     required Decimal totalCents,
     required int currencyId,
     this.status = const Value.absent(),
@@ -27610,6 +28028,9 @@ class PurchaseReturnsCompanion extends UpdateCompanion<PurchaseReturn> {
     Expression<int>? id,
     Expression<int>? purchaseId,
     Expression<String>? returnNumber,
+    Expression<int>? subtotalCents,
+    Expression<int>? discountCents,
+    Expression<int>? taxCents,
     Expression<int>? totalCents,
     Expression<int>? currencyId,
     Expression<String>? status,
@@ -27623,6 +28044,9 @@ class PurchaseReturnsCompanion extends UpdateCompanion<PurchaseReturn> {
       if (id != null) 'id': id,
       if (purchaseId != null) 'purchase_id': purchaseId,
       if (returnNumber != null) 'return_number': returnNumber,
+      if (subtotalCents != null) 'subtotal_cents': subtotalCents,
+      if (discountCents != null) 'discount_cents': discountCents,
+      if (taxCents != null) 'tax_cents': taxCents,
       if (totalCents != null) 'total_cents': totalCents,
       if (currencyId != null) 'currency_id': currencyId,
       if (status != null) 'status': status,
@@ -27638,6 +28062,9 @@ class PurchaseReturnsCompanion extends UpdateCompanion<PurchaseReturn> {
     Value<int>? id,
     Value<int>? purchaseId,
     Value<String>? returnNumber,
+    Value<Decimal>? subtotalCents,
+    Value<Decimal>? discountCents,
+    Value<Decimal>? taxCents,
     Value<Decimal>? totalCents,
     Value<int>? currencyId,
     Value<String>? status,
@@ -27651,6 +28078,9 @@ class PurchaseReturnsCompanion extends UpdateCompanion<PurchaseReturn> {
       id: id ?? this.id,
       purchaseId: purchaseId ?? this.purchaseId,
       returnNumber: returnNumber ?? this.returnNumber,
+      subtotalCents: subtotalCents ?? this.subtotalCents,
+      discountCents: discountCents ?? this.discountCents,
+      taxCents: taxCents ?? this.taxCents,
       totalCents: totalCents ?? this.totalCents,
       currencyId: currencyId ?? this.currencyId,
       status: status ?? this.status,
@@ -27673,6 +28103,25 @@ class PurchaseReturnsCompanion extends UpdateCompanion<PurchaseReturn> {
     }
     if (returnNumber.present) {
       map['return_number'] = Variable<String>(returnNumber.value);
+    }
+    if (subtotalCents.present) {
+      map['subtotal_cents'] = Variable<int>(
+        $PurchaseReturnsTable.$convertersubtotalCents.toSql(
+          subtotalCents.value,
+        ),
+      );
+    }
+    if (discountCents.present) {
+      map['discount_cents'] = Variable<int>(
+        $PurchaseReturnsTable.$converterdiscountCents.toSql(
+          discountCents.value,
+        ),
+      );
+    }
+    if (taxCents.present) {
+      map['tax_cents'] = Variable<int>(
+        $PurchaseReturnsTable.$convertertaxCents.toSql(taxCents.value),
+      );
     }
     if (totalCents.present) {
       map['total_cents'] = Variable<int>(
@@ -27709,6 +28158,9 @@ class PurchaseReturnsCompanion extends UpdateCompanion<PurchaseReturn> {
           ..write('id: $id, ')
           ..write('purchaseId: $purchaseId, ')
           ..write('returnNumber: $returnNumber, ')
+          ..write('subtotalCents: $subtotalCents, ')
+          ..write('discountCents: $discountCents, ')
+          ..write('taxCents: $taxCents, ')
           ..write('totalCents: $totalCents, ')
           ..write('currencyId: $currencyId, ')
           ..write('status: $status, ')
@@ -27781,6 +28233,40 @@ class $PurchaseReturnItemsTable extends PurchaseReturnItems
     requiredDuringInsert: true,
   );
   @override
+  late final GeneratedColumnWithTypeConverter<Decimal, int> subtotalCents =
+      GeneratedColumn<int>(
+        'subtotal_cents',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(0),
+      ).withConverter<Decimal>(
+        $PurchaseReturnItemsTable.$convertersubtotalCents,
+      );
+  @override
+  late final GeneratedColumnWithTypeConverter<Decimal, int> discountCents =
+      GeneratedColumn<int>(
+        'discount_cents',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(0),
+      ).withConverter<Decimal>(
+        $PurchaseReturnItemsTable.$converterdiscountCents,
+      );
+  @override
+  late final GeneratedColumnWithTypeConverter<Decimal, int> taxCents =
+      GeneratedColumn<int>(
+        'tax_cents',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(0),
+      ).withConverter<Decimal>($PurchaseReturnItemsTable.$convertertaxCents);
+  @override
   late final GeneratedColumnWithTypeConverter<Decimal, int> refundCents =
       GeneratedColumn<int>(
         'refund_cents',
@@ -27816,6 +28302,9 @@ class $PurchaseReturnItemsTable extends PurchaseReturnItems
     returnId,
     purchaseItemId,
     quantity,
+    subtotalCents,
+    discountCents,
+    taxCents,
     refundCents,
     reason,
     createdAt,
@@ -27899,6 +28388,24 @@ class $PurchaseReturnItemsTable extends PurchaseReturnItems
         DriftSqlType.int,
         data['${effectivePrefix}quantity'],
       )!,
+      subtotalCents: $PurchaseReturnItemsTable.$convertersubtotalCents.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}subtotal_cents'],
+        )!,
+      ),
+      discountCents: $PurchaseReturnItemsTable.$converterdiscountCents.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}discount_cents'],
+        )!,
+      ),
+      taxCents: $PurchaseReturnItemsTable.$convertertaxCents.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}tax_cents'],
+        )!,
+      ),
       refundCents: $PurchaseReturnItemsTable.$converterrefundCents.fromSql(
         attachedDatabase.typeMapping.read(
           DriftSqlType.int,
@@ -27921,6 +28428,12 @@ class $PurchaseReturnItemsTable extends PurchaseReturnItems
     return $PurchaseReturnItemsTable(attachedDatabase, alias);
   }
 
+  static TypeConverter<Decimal, int> $convertersubtotalCents =
+      const MoneyConverter();
+  static TypeConverter<Decimal, int> $converterdiscountCents =
+      const MoneyConverter();
+  static TypeConverter<Decimal, int> $convertertaxCents =
+      const MoneyConverter();
   static TypeConverter<Decimal, int> $converterrefundCents =
       const MoneyConverter();
 }
@@ -27931,6 +28444,9 @@ class PurchaseReturnItem extends DataClass
   final int returnId;
   final int purchaseItemId;
   final int quantity;
+  final Decimal subtotalCents;
+  final Decimal discountCents;
+  final Decimal taxCents;
   final Decimal refundCents;
 
   /// damaged, wrong_item, quality, overstock, other
@@ -27941,6 +28457,9 @@ class PurchaseReturnItem extends DataClass
     required this.returnId,
     required this.purchaseItemId,
     required this.quantity,
+    required this.subtotalCents,
+    required this.discountCents,
+    required this.taxCents,
     required this.refundCents,
     this.reason,
     required this.createdAt,
@@ -27952,6 +28471,21 @@ class PurchaseReturnItem extends DataClass
     map['return_id'] = Variable<int>(returnId);
     map['purchase_item_id'] = Variable<int>(purchaseItemId);
     map['quantity'] = Variable<int>(quantity);
+    {
+      map['subtotal_cents'] = Variable<int>(
+        $PurchaseReturnItemsTable.$convertersubtotalCents.toSql(subtotalCents),
+      );
+    }
+    {
+      map['discount_cents'] = Variable<int>(
+        $PurchaseReturnItemsTable.$converterdiscountCents.toSql(discountCents),
+      );
+    }
+    {
+      map['tax_cents'] = Variable<int>(
+        $PurchaseReturnItemsTable.$convertertaxCents.toSql(taxCents),
+      );
+    }
     {
       map['refund_cents'] = Variable<int>(
         $PurchaseReturnItemsTable.$converterrefundCents.toSql(refundCents),
@@ -27970,6 +28504,9 @@ class PurchaseReturnItem extends DataClass
       returnId: Value(returnId),
       purchaseItemId: Value(purchaseItemId),
       quantity: Value(quantity),
+      subtotalCents: Value(subtotalCents),
+      discountCents: Value(discountCents),
+      taxCents: Value(taxCents),
       refundCents: Value(refundCents),
       reason: reason == null && nullToAbsent
           ? const Value.absent()
@@ -27988,6 +28525,9 @@ class PurchaseReturnItem extends DataClass
       returnId: serializer.fromJson<int>(json['returnId']),
       purchaseItemId: serializer.fromJson<int>(json['purchaseItemId']),
       quantity: serializer.fromJson<int>(json['quantity']),
+      subtotalCents: serializer.fromJson<Decimal>(json['subtotalCents']),
+      discountCents: serializer.fromJson<Decimal>(json['discountCents']),
+      taxCents: serializer.fromJson<Decimal>(json['taxCents']),
       refundCents: serializer.fromJson<Decimal>(json['refundCents']),
       reason: serializer.fromJson<String?>(json['reason']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
@@ -28001,6 +28541,9 @@ class PurchaseReturnItem extends DataClass
       'returnId': serializer.toJson<int>(returnId),
       'purchaseItemId': serializer.toJson<int>(purchaseItemId),
       'quantity': serializer.toJson<int>(quantity),
+      'subtotalCents': serializer.toJson<Decimal>(subtotalCents),
+      'discountCents': serializer.toJson<Decimal>(discountCents),
+      'taxCents': serializer.toJson<Decimal>(taxCents),
       'refundCents': serializer.toJson<Decimal>(refundCents),
       'reason': serializer.toJson<String?>(reason),
       'createdAt': serializer.toJson<DateTime>(createdAt),
@@ -28012,6 +28555,9 @@ class PurchaseReturnItem extends DataClass
     int? returnId,
     int? purchaseItemId,
     int? quantity,
+    Decimal? subtotalCents,
+    Decimal? discountCents,
+    Decimal? taxCents,
     Decimal? refundCents,
     Value<String?> reason = const Value.absent(),
     DateTime? createdAt,
@@ -28020,6 +28566,9 @@ class PurchaseReturnItem extends DataClass
     returnId: returnId ?? this.returnId,
     purchaseItemId: purchaseItemId ?? this.purchaseItemId,
     quantity: quantity ?? this.quantity,
+    subtotalCents: subtotalCents ?? this.subtotalCents,
+    discountCents: discountCents ?? this.discountCents,
+    taxCents: taxCents ?? this.taxCents,
     refundCents: refundCents ?? this.refundCents,
     reason: reason.present ? reason.value : this.reason,
     createdAt: createdAt ?? this.createdAt,
@@ -28032,6 +28581,13 @@ class PurchaseReturnItem extends DataClass
           ? data.purchaseItemId.value
           : this.purchaseItemId,
       quantity: data.quantity.present ? data.quantity.value : this.quantity,
+      subtotalCents: data.subtotalCents.present
+          ? data.subtotalCents.value
+          : this.subtotalCents,
+      discountCents: data.discountCents.present
+          ? data.discountCents.value
+          : this.discountCents,
+      taxCents: data.taxCents.present ? data.taxCents.value : this.taxCents,
       refundCents: data.refundCents.present
           ? data.refundCents.value
           : this.refundCents,
@@ -28047,6 +28603,9 @@ class PurchaseReturnItem extends DataClass
           ..write('returnId: $returnId, ')
           ..write('purchaseItemId: $purchaseItemId, ')
           ..write('quantity: $quantity, ')
+          ..write('subtotalCents: $subtotalCents, ')
+          ..write('discountCents: $discountCents, ')
+          ..write('taxCents: $taxCents, ')
           ..write('refundCents: $refundCents, ')
           ..write('reason: $reason, ')
           ..write('createdAt: $createdAt')
@@ -28060,6 +28619,9 @@ class PurchaseReturnItem extends DataClass
     returnId,
     purchaseItemId,
     quantity,
+    subtotalCents,
+    discountCents,
+    taxCents,
     refundCents,
     reason,
     createdAt,
@@ -28072,6 +28634,9 @@ class PurchaseReturnItem extends DataClass
           other.returnId == this.returnId &&
           other.purchaseItemId == this.purchaseItemId &&
           other.quantity == this.quantity &&
+          other.subtotalCents == this.subtotalCents &&
+          other.discountCents == this.discountCents &&
+          other.taxCents == this.taxCents &&
           other.refundCents == this.refundCents &&
           other.reason == this.reason &&
           other.createdAt == this.createdAt);
@@ -28082,6 +28647,9 @@ class PurchaseReturnItemsCompanion extends UpdateCompanion<PurchaseReturnItem> {
   final Value<int> returnId;
   final Value<int> purchaseItemId;
   final Value<int> quantity;
+  final Value<Decimal> subtotalCents;
+  final Value<Decimal> discountCents;
+  final Value<Decimal> taxCents;
   final Value<Decimal> refundCents;
   final Value<String?> reason;
   final Value<DateTime> createdAt;
@@ -28090,6 +28658,9 @@ class PurchaseReturnItemsCompanion extends UpdateCompanion<PurchaseReturnItem> {
     this.returnId = const Value.absent(),
     this.purchaseItemId = const Value.absent(),
     this.quantity = const Value.absent(),
+    this.subtotalCents = const Value.absent(),
+    this.discountCents = const Value.absent(),
+    this.taxCents = const Value.absent(),
     this.refundCents = const Value.absent(),
     this.reason = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -28099,6 +28670,9 @@ class PurchaseReturnItemsCompanion extends UpdateCompanion<PurchaseReturnItem> {
     required int returnId,
     required int purchaseItemId,
     required int quantity,
+    this.subtotalCents = const Value.absent(),
+    this.discountCents = const Value.absent(),
+    this.taxCents = const Value.absent(),
     required Decimal refundCents,
     this.reason = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -28111,6 +28685,9 @@ class PurchaseReturnItemsCompanion extends UpdateCompanion<PurchaseReturnItem> {
     Expression<int>? returnId,
     Expression<int>? purchaseItemId,
     Expression<int>? quantity,
+    Expression<int>? subtotalCents,
+    Expression<int>? discountCents,
+    Expression<int>? taxCents,
     Expression<int>? refundCents,
     Expression<String>? reason,
     Expression<DateTime>? createdAt,
@@ -28120,6 +28697,9 @@ class PurchaseReturnItemsCompanion extends UpdateCompanion<PurchaseReturnItem> {
       if (returnId != null) 'return_id': returnId,
       if (purchaseItemId != null) 'purchase_item_id': purchaseItemId,
       if (quantity != null) 'quantity': quantity,
+      if (subtotalCents != null) 'subtotal_cents': subtotalCents,
+      if (discountCents != null) 'discount_cents': discountCents,
+      if (taxCents != null) 'tax_cents': taxCents,
       if (refundCents != null) 'refund_cents': refundCents,
       if (reason != null) 'reason': reason,
       if (createdAt != null) 'created_at': createdAt,
@@ -28131,6 +28711,9 @@ class PurchaseReturnItemsCompanion extends UpdateCompanion<PurchaseReturnItem> {
     Value<int>? returnId,
     Value<int>? purchaseItemId,
     Value<int>? quantity,
+    Value<Decimal>? subtotalCents,
+    Value<Decimal>? discountCents,
+    Value<Decimal>? taxCents,
     Value<Decimal>? refundCents,
     Value<String?>? reason,
     Value<DateTime>? createdAt,
@@ -28140,6 +28723,9 @@ class PurchaseReturnItemsCompanion extends UpdateCompanion<PurchaseReturnItem> {
       returnId: returnId ?? this.returnId,
       purchaseItemId: purchaseItemId ?? this.purchaseItemId,
       quantity: quantity ?? this.quantity,
+      subtotalCents: subtotalCents ?? this.subtotalCents,
+      discountCents: discountCents ?? this.discountCents,
+      taxCents: taxCents ?? this.taxCents,
       refundCents: refundCents ?? this.refundCents,
       reason: reason ?? this.reason,
       createdAt: createdAt ?? this.createdAt,
@@ -28160,6 +28746,25 @@ class PurchaseReturnItemsCompanion extends UpdateCompanion<PurchaseReturnItem> {
     }
     if (quantity.present) {
       map['quantity'] = Variable<int>(quantity.value);
+    }
+    if (subtotalCents.present) {
+      map['subtotal_cents'] = Variable<int>(
+        $PurchaseReturnItemsTable.$convertersubtotalCents.toSql(
+          subtotalCents.value,
+        ),
+      );
+    }
+    if (discountCents.present) {
+      map['discount_cents'] = Variable<int>(
+        $PurchaseReturnItemsTable.$converterdiscountCents.toSql(
+          discountCents.value,
+        ),
+      );
+    }
+    if (taxCents.present) {
+      map['tax_cents'] = Variable<int>(
+        $PurchaseReturnItemsTable.$convertertaxCents.toSql(taxCents.value),
+      );
     }
     if (refundCents.present) {
       map['refund_cents'] = Variable<int>(
@@ -28184,6 +28789,9 @@ class PurchaseReturnItemsCompanion extends UpdateCompanion<PurchaseReturnItem> {
           ..write('returnId: $returnId, ')
           ..write('purchaseItemId: $purchaseItemId, ')
           ..write('quantity: $quantity, ')
+          ..write('subtotalCents: $subtotalCents, ')
+          ..write('discountCents: $discountCents, ')
+          ..write('taxCents: $taxCents, ')
           ..write('refundCents: $refundCents, ')
           ..write('reason: $reason, ')
           ..write('createdAt: $createdAt')
@@ -56874,6 +57482,9 @@ typedef $$SaleReturnsTableCreateCompanionBuilder =
       Value<int> id,
       required int saleId,
       required String returnNumber,
+      Value<Decimal> subtotalCents,
+      Value<Decimal> discountCents,
+      Value<Decimal> taxCents,
       required Decimal totalCents,
       required int currencyId,
       Value<String> status,
@@ -56888,6 +57499,9 @@ typedef $$SaleReturnsTableUpdateCompanionBuilder =
       Value<int> id,
       Value<int> saleId,
       Value<String> returnNumber,
+      Value<Decimal> subtotalCents,
+      Value<Decimal> discountCents,
+      Value<Decimal> taxCents,
       Value<Decimal> totalCents,
       Value<int> currencyId,
       Value<String> status,
@@ -56981,6 +57595,24 @@ class $$SaleReturnsTableFilterComposer
     column: $table.returnNumber,
     builder: (column) => ColumnFilters(column),
   );
+
+  ColumnWithTypeConverterFilters<Decimal, Decimal, int> get subtotalCents =>
+      $composableBuilder(
+        column: $table.subtotalCents,
+        builder: (column) => ColumnWithTypeConverterFilters(column),
+      );
+
+  ColumnWithTypeConverterFilters<Decimal, Decimal, int> get discountCents =>
+      $composableBuilder(
+        column: $table.discountCents,
+        builder: (column) => ColumnWithTypeConverterFilters(column),
+      );
+
+  ColumnWithTypeConverterFilters<Decimal, Decimal, int> get taxCents =>
+      $composableBuilder(
+        column: $table.taxCents,
+        builder: (column) => ColumnWithTypeConverterFilters(column),
+      );
 
   ColumnWithTypeConverterFilters<Decimal, Decimal, int> get totalCents =>
       $composableBuilder(
@@ -57109,6 +57741,21 @@ class $$SaleReturnsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get subtotalCents => $composableBuilder(
+    column: $table.subtotalCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get discountCents => $composableBuilder(
+    column: $table.discountCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get taxCents => $composableBuilder(
+    column: $table.taxCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get totalCents => $composableBuilder(
     column: $table.totalCents,
     builder: (column) => ColumnOrderings(column),
@@ -57207,6 +57854,21 @@ class $$SaleReturnsTableAnnotationComposer
     column: $table.returnNumber,
     builder: (column) => column,
   );
+
+  GeneratedColumnWithTypeConverter<Decimal, int> get subtotalCents =>
+      $composableBuilder(
+        column: $table.subtotalCents,
+        builder: (column) => column,
+      );
+
+  GeneratedColumnWithTypeConverter<Decimal, int> get discountCents =>
+      $composableBuilder(
+        column: $table.discountCents,
+        builder: (column) => column,
+      );
+
+  GeneratedColumnWithTypeConverter<Decimal, int> get taxCents =>
+      $composableBuilder(column: $table.taxCents, builder: (column) => column);
 
   GeneratedColumnWithTypeConverter<Decimal, int> get totalCents =>
       $composableBuilder(
@@ -57345,6 +58007,9 @@ class $$SaleReturnsTableTableManager
                 Value<int> id = const Value.absent(),
                 Value<int> saleId = const Value.absent(),
                 Value<String> returnNumber = const Value.absent(),
+                Value<Decimal> subtotalCents = const Value.absent(),
+                Value<Decimal> discountCents = const Value.absent(),
+                Value<Decimal> taxCents = const Value.absent(),
                 Value<Decimal> totalCents = const Value.absent(),
                 Value<int> currencyId = const Value.absent(),
                 Value<String> status = const Value.absent(),
@@ -57357,6 +58022,9 @@ class $$SaleReturnsTableTableManager
                 id: id,
                 saleId: saleId,
                 returnNumber: returnNumber,
+                subtotalCents: subtotalCents,
+                discountCents: discountCents,
+                taxCents: taxCents,
                 totalCents: totalCents,
                 currencyId: currencyId,
                 status: status,
@@ -57371,6 +58039,9 @@ class $$SaleReturnsTableTableManager
                 Value<int> id = const Value.absent(),
                 required int saleId,
                 required String returnNumber,
+                Value<Decimal> subtotalCents = const Value.absent(),
+                Value<Decimal> discountCents = const Value.absent(),
+                Value<Decimal> taxCents = const Value.absent(),
                 required Decimal totalCents,
                 required int currencyId,
                 Value<String> status = const Value.absent(),
@@ -57383,6 +58054,9 @@ class $$SaleReturnsTableTableManager
                 id: id,
                 saleId: saleId,
                 returnNumber: returnNumber,
+                subtotalCents: subtotalCents,
+                discountCents: discountCents,
+                taxCents: taxCents,
                 totalCents: totalCents,
                 currencyId: currencyId,
                 status: status,
@@ -57515,6 +58189,9 @@ typedef $$SaleReturnItemsTableCreateCompanionBuilder =
       required int returnId,
       required int saleItemId,
       required int quantity,
+      Value<Decimal> subtotalCents,
+      Value<Decimal> discountCents,
+      Value<Decimal> taxCents,
       required Decimal refundCents,
       Value<String?> reason,
       Value<DateTime> createdAt,
@@ -57525,6 +58202,9 @@ typedef $$SaleReturnItemsTableUpdateCompanionBuilder =
       Value<int> returnId,
       Value<int> saleItemId,
       Value<int> quantity,
+      Value<Decimal> subtotalCents,
+      Value<Decimal> discountCents,
+      Value<Decimal> taxCents,
       Value<Decimal> refundCents,
       Value<String?> reason,
       Value<DateTime> createdAt,
@@ -57596,6 +58276,24 @@ class $$SaleReturnItemsTableFilterComposer
     column: $table.quantity,
     builder: (column) => ColumnFilters(column),
   );
+
+  ColumnWithTypeConverterFilters<Decimal, Decimal, int> get subtotalCents =>
+      $composableBuilder(
+        column: $table.subtotalCents,
+        builder: (column) => ColumnWithTypeConverterFilters(column),
+      );
+
+  ColumnWithTypeConverterFilters<Decimal, Decimal, int> get discountCents =>
+      $composableBuilder(
+        column: $table.discountCents,
+        builder: (column) => ColumnWithTypeConverterFilters(column),
+      );
+
+  ColumnWithTypeConverterFilters<Decimal, Decimal, int> get taxCents =>
+      $composableBuilder(
+        column: $table.taxCents,
+        builder: (column) => ColumnWithTypeConverterFilters(column),
+      );
 
   ColumnWithTypeConverterFilters<Decimal, Decimal, int> get refundCents =>
       $composableBuilder(
@@ -57679,6 +58377,21 @@ class $$SaleReturnItemsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get subtotalCents => $composableBuilder(
+    column: $table.subtotalCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get discountCents => $composableBuilder(
+    column: $table.discountCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get taxCents => $composableBuilder(
+    column: $table.taxCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get refundCents => $composableBuilder(
     column: $table.refundCents,
     builder: (column) => ColumnOrderings(column),
@@ -57755,6 +58468,21 @@ class $$SaleReturnItemsTableAnnotationComposer
 
   GeneratedColumn<int> get quantity =>
       $composableBuilder(column: $table.quantity, builder: (column) => column);
+
+  GeneratedColumnWithTypeConverter<Decimal, int> get subtotalCents =>
+      $composableBuilder(
+        column: $table.subtotalCents,
+        builder: (column) => column,
+      );
+
+  GeneratedColumnWithTypeConverter<Decimal, int> get discountCents =>
+      $composableBuilder(
+        column: $table.discountCents,
+        builder: (column) => column,
+      );
+
+  GeneratedColumnWithTypeConverter<Decimal, int> get taxCents =>
+      $composableBuilder(column: $table.taxCents, builder: (column) => column);
 
   GeneratedColumnWithTypeConverter<Decimal, int> get refundCents =>
       $composableBuilder(
@@ -57849,6 +58577,9 @@ class $$SaleReturnItemsTableTableManager
                 Value<int> returnId = const Value.absent(),
                 Value<int> saleItemId = const Value.absent(),
                 Value<int> quantity = const Value.absent(),
+                Value<Decimal> subtotalCents = const Value.absent(),
+                Value<Decimal> discountCents = const Value.absent(),
+                Value<Decimal> taxCents = const Value.absent(),
                 Value<Decimal> refundCents = const Value.absent(),
                 Value<String?> reason = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -57857,6 +58588,9 @@ class $$SaleReturnItemsTableTableManager
                 returnId: returnId,
                 saleItemId: saleItemId,
                 quantity: quantity,
+                subtotalCents: subtotalCents,
+                discountCents: discountCents,
+                taxCents: taxCents,
                 refundCents: refundCents,
                 reason: reason,
                 createdAt: createdAt,
@@ -57867,6 +58601,9 @@ class $$SaleReturnItemsTableTableManager
                 required int returnId,
                 required int saleItemId,
                 required int quantity,
+                Value<Decimal> subtotalCents = const Value.absent(),
+                Value<Decimal> discountCents = const Value.absent(),
+                Value<Decimal> taxCents = const Value.absent(),
                 required Decimal refundCents,
                 Value<String?> reason = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -57875,6 +58612,9 @@ class $$SaleReturnItemsTableTableManager
                 returnId: returnId,
                 saleItemId: saleItemId,
                 quantity: quantity,
+                subtotalCents: subtotalCents,
+                discountCents: discountCents,
+                taxCents: taxCents,
                 refundCents: refundCents,
                 reason: reason,
                 createdAt: createdAt,
@@ -60179,6 +60919,9 @@ typedef $$PurchaseReturnsTableCreateCompanionBuilder =
       Value<int> id,
       required int purchaseId,
       required String returnNumber,
+      Value<Decimal> subtotalCents,
+      Value<Decimal> discountCents,
+      Value<Decimal> taxCents,
       required Decimal totalCents,
       required int currencyId,
       Value<String> status,
@@ -60193,6 +60936,9 @@ typedef $$PurchaseReturnsTableUpdateCompanionBuilder =
       Value<int> id,
       Value<int> purchaseId,
       Value<String> returnNumber,
+      Value<Decimal> subtotalCents,
+      Value<Decimal> discountCents,
+      Value<Decimal> taxCents,
       Value<Decimal> totalCents,
       Value<int> currencyId,
       Value<String> status,
@@ -60296,6 +61042,24 @@ class $$PurchaseReturnsTableFilterComposer
     column: $table.returnNumber,
     builder: (column) => ColumnFilters(column),
   );
+
+  ColumnWithTypeConverterFilters<Decimal, Decimal, int> get subtotalCents =>
+      $composableBuilder(
+        column: $table.subtotalCents,
+        builder: (column) => ColumnWithTypeConverterFilters(column),
+      );
+
+  ColumnWithTypeConverterFilters<Decimal, Decimal, int> get discountCents =>
+      $composableBuilder(
+        column: $table.discountCents,
+        builder: (column) => ColumnWithTypeConverterFilters(column),
+      );
+
+  ColumnWithTypeConverterFilters<Decimal, Decimal, int> get taxCents =>
+      $composableBuilder(
+        column: $table.taxCents,
+        builder: (column) => ColumnWithTypeConverterFilters(column),
+      );
 
   ColumnWithTypeConverterFilters<Decimal, Decimal, int> get totalCents =>
       $composableBuilder(
@@ -60424,6 +61188,21 @@ class $$PurchaseReturnsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get subtotalCents => $composableBuilder(
+    column: $table.subtotalCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get discountCents => $composableBuilder(
+    column: $table.discountCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get taxCents => $composableBuilder(
+    column: $table.taxCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get totalCents => $composableBuilder(
     column: $table.totalCents,
     builder: (column) => ColumnOrderings(column),
@@ -60522,6 +61301,21 @@ class $$PurchaseReturnsTableAnnotationComposer
     column: $table.returnNumber,
     builder: (column) => column,
   );
+
+  GeneratedColumnWithTypeConverter<Decimal, int> get subtotalCents =>
+      $composableBuilder(
+        column: $table.subtotalCents,
+        builder: (column) => column,
+      );
+
+  GeneratedColumnWithTypeConverter<Decimal, int> get discountCents =>
+      $composableBuilder(
+        column: $table.discountCents,
+        builder: (column) => column,
+      );
+
+  GeneratedColumnWithTypeConverter<Decimal, int> get taxCents =>
+      $composableBuilder(column: $table.taxCents, builder: (column) => column);
 
   GeneratedColumnWithTypeConverter<Decimal, int> get totalCents =>
       $composableBuilder(
@@ -60663,6 +61457,9 @@ class $$PurchaseReturnsTableTableManager
                 Value<int> id = const Value.absent(),
                 Value<int> purchaseId = const Value.absent(),
                 Value<String> returnNumber = const Value.absent(),
+                Value<Decimal> subtotalCents = const Value.absent(),
+                Value<Decimal> discountCents = const Value.absent(),
+                Value<Decimal> taxCents = const Value.absent(),
                 Value<Decimal> totalCents = const Value.absent(),
                 Value<int> currencyId = const Value.absent(),
                 Value<String> status = const Value.absent(),
@@ -60675,6 +61472,9 @@ class $$PurchaseReturnsTableTableManager
                 id: id,
                 purchaseId: purchaseId,
                 returnNumber: returnNumber,
+                subtotalCents: subtotalCents,
+                discountCents: discountCents,
+                taxCents: taxCents,
                 totalCents: totalCents,
                 currencyId: currencyId,
                 status: status,
@@ -60689,6 +61489,9 @@ class $$PurchaseReturnsTableTableManager
                 Value<int> id = const Value.absent(),
                 required int purchaseId,
                 required String returnNumber,
+                Value<Decimal> subtotalCents = const Value.absent(),
+                Value<Decimal> discountCents = const Value.absent(),
+                Value<Decimal> taxCents = const Value.absent(),
                 required Decimal totalCents,
                 required int currencyId,
                 Value<String> status = const Value.absent(),
@@ -60701,6 +61504,9 @@ class $$PurchaseReturnsTableTableManager
                 id: id,
                 purchaseId: purchaseId,
                 returnNumber: returnNumber,
+                subtotalCents: subtotalCents,
+                discountCents: discountCents,
+                taxCents: taxCents,
                 totalCents: totalCents,
                 currencyId: currencyId,
                 status: status,
@@ -60833,6 +61639,9 @@ typedef $$PurchaseReturnItemsTableCreateCompanionBuilder =
       required int returnId,
       required int purchaseItemId,
       required int quantity,
+      Value<Decimal> subtotalCents,
+      Value<Decimal> discountCents,
+      Value<Decimal> taxCents,
       required Decimal refundCents,
       Value<String?> reason,
       Value<DateTime> createdAt,
@@ -60843,6 +61652,9 @@ typedef $$PurchaseReturnItemsTableUpdateCompanionBuilder =
       Value<int> returnId,
       Value<int> purchaseItemId,
       Value<int> quantity,
+      Value<Decimal> subtotalCents,
+      Value<Decimal> discountCents,
+      Value<Decimal> taxCents,
       Value<Decimal> refundCents,
       Value<String?> reason,
       Value<DateTime> createdAt,
@@ -60924,6 +61736,24 @@ class $$PurchaseReturnItemsTableFilterComposer
     column: $table.quantity,
     builder: (column) => ColumnFilters(column),
   );
+
+  ColumnWithTypeConverterFilters<Decimal, Decimal, int> get subtotalCents =>
+      $composableBuilder(
+        column: $table.subtotalCents,
+        builder: (column) => ColumnWithTypeConverterFilters(column),
+      );
+
+  ColumnWithTypeConverterFilters<Decimal, Decimal, int> get discountCents =>
+      $composableBuilder(
+        column: $table.discountCents,
+        builder: (column) => ColumnWithTypeConverterFilters(column),
+      );
+
+  ColumnWithTypeConverterFilters<Decimal, Decimal, int> get taxCents =>
+      $composableBuilder(
+        column: $table.taxCents,
+        builder: (column) => ColumnWithTypeConverterFilters(column),
+      );
 
   ColumnWithTypeConverterFilters<Decimal, Decimal, int> get refundCents =>
       $composableBuilder(
@@ -61007,6 +61837,21 @@ class $$PurchaseReturnItemsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get subtotalCents => $composableBuilder(
+    column: $table.subtotalCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get discountCents => $composableBuilder(
+    column: $table.discountCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get taxCents => $composableBuilder(
+    column: $table.taxCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get refundCents => $composableBuilder(
     column: $table.refundCents,
     builder: (column) => ColumnOrderings(column),
@@ -61083,6 +61928,21 @@ class $$PurchaseReturnItemsTableAnnotationComposer
 
   GeneratedColumn<int> get quantity =>
       $composableBuilder(column: $table.quantity, builder: (column) => column);
+
+  GeneratedColumnWithTypeConverter<Decimal, int> get subtotalCents =>
+      $composableBuilder(
+        column: $table.subtotalCents,
+        builder: (column) => column,
+      );
+
+  GeneratedColumnWithTypeConverter<Decimal, int> get discountCents =>
+      $composableBuilder(
+        column: $table.discountCents,
+        builder: (column) => column,
+      );
+
+  GeneratedColumnWithTypeConverter<Decimal, int> get taxCents =>
+      $composableBuilder(column: $table.taxCents, builder: (column) => column);
 
   GeneratedColumnWithTypeConverter<Decimal, int> get refundCents =>
       $composableBuilder(
@@ -61183,6 +62043,9 @@ class $$PurchaseReturnItemsTableTableManager
                 Value<int> returnId = const Value.absent(),
                 Value<int> purchaseItemId = const Value.absent(),
                 Value<int> quantity = const Value.absent(),
+                Value<Decimal> subtotalCents = const Value.absent(),
+                Value<Decimal> discountCents = const Value.absent(),
+                Value<Decimal> taxCents = const Value.absent(),
                 Value<Decimal> refundCents = const Value.absent(),
                 Value<String?> reason = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -61191,6 +62054,9 @@ class $$PurchaseReturnItemsTableTableManager
                 returnId: returnId,
                 purchaseItemId: purchaseItemId,
                 quantity: quantity,
+                subtotalCents: subtotalCents,
+                discountCents: discountCents,
+                taxCents: taxCents,
                 refundCents: refundCents,
                 reason: reason,
                 createdAt: createdAt,
@@ -61201,6 +62067,9 @@ class $$PurchaseReturnItemsTableTableManager
                 required int returnId,
                 required int purchaseItemId,
                 required int quantity,
+                Value<Decimal> subtotalCents = const Value.absent(),
+                Value<Decimal> discountCents = const Value.absent(),
+                Value<Decimal> taxCents = const Value.absent(),
                 required Decimal refundCents,
                 Value<String?> reason = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -61209,6 +62078,9 @@ class $$PurchaseReturnItemsTableTableManager
                 returnId: returnId,
                 purchaseItemId: purchaseItemId,
                 quantity: quantity,
+                subtotalCents: subtotalCents,
+                discountCents: discountCents,
+                taxCents: taxCents,
                 refundCents: refundCents,
                 reason: reason,
                 createdAt: createdAt,

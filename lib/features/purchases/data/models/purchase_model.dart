@@ -126,11 +126,14 @@ class PurchaseItemModel extends PurchaseItemEntity {
 }
 
 class PurchaseReturnModel extends PurchaseReturnEntity {
-  const PurchaseReturnModel({
+  PurchaseReturnModel({
     required super.id,
     required super.purchaseId,
     required super.returnNumber,
     super.supplierName,
+    super.subtotalCents,
+    super.discountCents,
+    super.taxCents,
     required super.totalCents,
     required super.currencyId,
     super.status,
@@ -146,6 +149,9 @@ class PurchaseReturnModel extends PurchaseReturnEntity {
       id: r.id,
       purchaseId: r.purchaseId,
       returnNumber: r.returnNumber,
+      subtotalCents: r.subtotalCents,
+      discountCents: r.discountCents,
+      taxCents: r.taxCents,
       totalCents: r.totalCents,
       currencyId: r.currencyId,
       status: r.status,
@@ -159,11 +165,14 @@ class PurchaseReturnModel extends PurchaseReturnEntity {
 }
 
 class PurchaseReturnItemModel extends PurchaseReturnItemEntity {
-  const PurchaseReturnItemModel({
+  PurchaseReturnItemModel({
     required super.id,
     required super.returnId,
     required super.purchaseItemId,
     required super.quantity,
+    super.subtotalCents,
+    super.discountCents,
+    super.taxCents,
     required super.refundCents,
     super.reason,
     super.productName,
@@ -181,6 +190,9 @@ class PurchaseReturnItemModel extends PurchaseReturnItemEntity {
       returnId: item.returnId,
       purchaseItemId: item.purchaseItemId,
       quantity: item.quantity,
+      subtotalCents: item.subtotalCents,
+      discountCents: item.discountCents,
+      taxCents: item.taxCents,
       refundCents: item.refundCents,
       reason: item.reason,
       createdAt: item.createdAt,
@@ -194,6 +206,9 @@ class PurchaseReturnItemModel extends PurchaseReturnItemEntity {
       returnId: d.returnItem.returnId,
       purchaseItemId: d.returnItem.purchaseItemId,
       quantity: d.returnItem.quantity,
+      subtotalCents: d.returnItem.subtotalCents,
+      discountCents: d.returnItem.discountCents,
+      taxCents: d.returnItem.taxCents,
       refundCents: d.returnItem.refundCents,
       reason: d.returnItem.reason,
       productName: d.product.name,

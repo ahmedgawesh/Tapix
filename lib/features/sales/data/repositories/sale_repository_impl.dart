@@ -169,6 +169,9 @@ class SaleRepositoryImpl implements SaleRepository {
   Future<int> createSaleReturn({
     required int saleId,
     required int currencyId,
+    required Decimal subtotalCents,
+    required Decimal discountCents,
+    required Decimal taxCents,
     required Decimal totalCents,
     required List<SaleReturnItemInput> items,
     String? reason,
@@ -181,6 +184,9 @@ class SaleRepositoryImpl implements SaleRepository {
     final returnCompanion = db.SaleReturnsCompanion(
       saleId: Value(saleId),
       returnNumber: Value(returnNumber),
+      subtotalCents: Value(subtotalCents),
+      discountCents: Value(discountCents),
+      taxCents: Value(taxCents),
       totalCents: Value(totalCents),
       currencyId: Value(currencyId),
       reason: reason != null ? Value(reason) : const Value.absent(),
@@ -192,6 +198,9 @@ class SaleRepositoryImpl implements SaleRepository {
     final itemCompanions = items.map((i) => db.SaleReturnItemsCompanion(
           saleItemId: Value(i.saleItemId),
           quantity: Value(i.quantity),
+          subtotalCents: Value(i.subtotalCents),
+          discountCents: Value(i.discountCents),
+          taxCents: Value(i.taxCents),
           refundCents: Value(i.refundCents),
           reason: i.reason != null ? Value(i.reason!) : const Value.absent(),
         )).toList();

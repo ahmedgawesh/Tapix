@@ -56,6 +56,9 @@ class SaleReturns extends Table {
   IntColumn get id => integer().autoIncrement()();
   IntColumn get saleId => integer().references(Sales, #id, onDelete: KeyAction.restrict)();
   TextColumn get returnNumber => text().unique()();
+  IntColumn get subtotalCents => integer().map(const MoneyConverter()).withDefault(const Constant(0))();
+  IntColumn get discountCents => integer().map(const MoneyConverter()).withDefault(const Constant(0))();
+  IntColumn get taxCents => integer().map(const MoneyConverter()).withDefault(const Constant(0))();
   IntColumn get totalCents => integer().map(const MoneyConverter())();
   IntColumn get currencyId => integer().references(Currencies, #id, onDelete: KeyAction.restrict)();
   /// draft, posted, voided
@@ -75,6 +78,9 @@ class SaleReturnItems extends Table {
   IntColumn get returnId => integer().references(SaleReturns, #id, onDelete: KeyAction.cascade)();
   IntColumn get saleItemId => integer().references(SaleItems, #id, onDelete: KeyAction.restrict)();
   IntColumn get quantity => integer()();
+  IntColumn get subtotalCents => integer().map(const MoneyConverter()).withDefault(const Constant(0))();
+  IntColumn get discountCents => integer().map(const MoneyConverter()).withDefault(const Constant(0))();
+  IntColumn get taxCents => integer().map(const MoneyConverter()).withDefault(const Constant(0))();
   IntColumn get refundCents => integer().map(const MoneyConverter())();
   /// wrong_size, defective, wrong_item, changed_mind, other
   TextColumn get reason => text().nullable()();
@@ -137,6 +143,9 @@ class PurchaseReturns extends Table {
   IntColumn get id => integer().autoIncrement()();
   IntColumn get purchaseId => integer().references(Purchases, #id, onDelete: KeyAction.restrict)();
   TextColumn get returnNumber => text().unique()();
+  IntColumn get subtotalCents => integer().map(const MoneyConverter()).withDefault(const Constant(0))();
+  IntColumn get discountCents => integer().map(const MoneyConverter()).withDefault(const Constant(0))();
+  IntColumn get taxCents => integer().map(const MoneyConverter()).withDefault(const Constant(0))();
   IntColumn get totalCents => integer().map(const MoneyConverter())();
   IntColumn get currencyId => integer().references(Currencies, #id, onDelete: KeyAction.restrict)();
   /// draft, posted, voided
@@ -156,6 +165,9 @@ class PurchaseReturnItems extends Table {
   IntColumn get returnId => integer().references(PurchaseReturns, #id, onDelete: KeyAction.cascade)();
   IntColumn get purchaseItemId => integer().references(PurchaseItems, #id, onDelete: KeyAction.restrict)();
   IntColumn get quantity => integer()();
+  IntColumn get subtotalCents => integer().map(const MoneyConverter()).withDefault(const Constant(0))();
+  IntColumn get discountCents => integer().map(const MoneyConverter()).withDefault(const Constant(0))();
+  IntColumn get taxCents => integer().map(const MoneyConverter()).withDefault(const Constant(0))();
   IntColumn get refundCents => integer().map(const MoneyConverter())();
   /// damaged, wrong_item, quality, overstock, other
   TextColumn get reason => text().nullable()();

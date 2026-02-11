@@ -10,12 +10,18 @@ import '../../domain/repositories/purchase_repository.dart';
 class ReturnLineItem extends Equatable {
   final PurchaseItemEntity originalItem;
   final int returnQuantity;
+  final Decimal subtotalCents;
+  final Decimal discountCents;
+  final Decimal taxCents;
   final Decimal refundCents;
   final String? reason;
 
   const ReturnLineItem({
     required this.originalItem,
     required this.returnQuantity,
+    required this.subtotalCents,
+    required this.discountCents,
+    required this.taxCents,
     required this.refundCents,
     this.reason,
   });
@@ -29,19 +35,59 @@ class ReturnLineItem extends Equatable {
 
   ReturnLineItem copyWith({
     int? returnQuantity,
+    Decimal? subtotalCents,
+    Decimal? discountCents,
+    Decimal? taxCents,
     Decimal? refundCents,
     String? reason,
   }) {
     return ReturnLineItem(
       originalItem: originalItem,
       returnQuantity: returnQuantity ?? this.returnQuantity,
+      subtotalCents: subtotalCents ?? this.subtotalCents,
+      discountCents: discountCents ?? this.discountCents,
+      taxCents: taxCents ?? this.taxCents,
       refundCents: refundCents ?? this.refundCents,
       reason: reason ?? this.reason,
     );
   }
 
   @override
-  List<Object?> get props => [originalItem, returnQuantity, refundCents, reason];
+  List<Object?> get props => [
+        originalItem, returnQuantity,
+        subtotalCents, discountCents, taxCents, refundCents, reason,
+      ];
+}
+
+/// ERP Golden Rule: Proportional reversal of original transaction.
+/// ReturnRatio = returnQty / originalQty
+/// Each component is reversed proportionally using integer math.
+ReturnLineItem _computeProportionalReturn(
+    PurchaseItemEntity original, int returnQty) {
+  final origQty = original.quantity;
+  if (origQty <= 0) {
+    return ReturnLineItem(
+      originalItem: original,
+      returnQuantity: returnQty,
+      subtotalCents: Decimal.zero,
+      discountCents: Decimal.zero,
+      taxCents: Decimal.zero,
+      refundCents: Decimal.zero,
+    );
+  }
+  final subtotalInt = (original.subtotalCents.toBigInt().toInt() * returnQty) ~/ origQty;
+  final discountInt = (original.discountCents.toBigInt().toInt() * returnQty) ~/ origQty;
+  final taxInt = (original.taxCents.toBigInt().toInt() * returnQty) ~/ origQty;
+  // refund = subtotal - discount + tax  (net value + tax)
+  final refundInt = subtotalInt - discountInt + taxInt;
+  return ReturnLineItem(
+    originalItem: original,
+    returnQuantity: returnQty,
+    subtotalCents: Decimal.fromInt(subtotalInt),
+    discountCents: Decimal.fromInt(discountInt),
+    taxCents: Decimal.fromInt(taxInt),
+    refundCents: Decimal.fromInt(refundInt),
+  );
 }
 
 class PurchaseReturnFormState extends Equatable {
@@ -90,6 +136,21 @@ class PurchaseReturnFormState extends Equatable {
   Decimal get totalRefundCents => returnItems.fold(
         Decimal.zero,
         (sum, item) => sum + item.refundCents,
+      );
+
+  Decimal get totalSubtotalCents => returnItems.fold(
+        Decimal.zero,
+        (sum, item) => sum + item.subtotalCents,
+      );
+
+  Decimal get totalDiscountCents => returnItems.fold(
+        Decimal.zero,
+        (sum, item) => sum + item.discountCents,
+      );
+
+  Decimal get totalTaxCents => returnItems.fold(
+        Decimal.zero,
+        (sum, item) => sum + item.taxCents,
       );
 
   int get totalReturnQuantity =>
@@ -281,14 +342,7 @@ class PurchaseReturnFormBloc
       // Add item with max returnable quantity
       final maxQty = state.maxReturnableQty(event.item.id, event.item.quantity);
       if (maxQty <= 0) return; // Fully returned already
-      final origQty = event.item.quantity;
-      final totalInt = event.item.totalCents.toBigInt().toInt();
-      final refundInt = origQty > 0 ? (totalInt * maxQty) ~/ origQty : 0;
-      final newItem = ReturnLineItem(
-        originalItem: event.item,
-        returnQuantity: maxQty,
-        refundCents: Decimal.fromInt(refundInt),
-      );
+      final newItem = _computeProportionalReturn(event.item, maxQty);
       emit(state.copyWith(returnItems: [...state.returnItems, newItem], hasUnsavedChanges: true));
     }
   }
@@ -301,15 +355,8 @@ class PurchaseReturnFormBloc
       if (item.originalItem.id == event.purchaseItemId) {
         final maxQty = state.maxReturnableQty(item.originalItem.id, item.originalItem.quantity);
         final qty = event.quantity.clamp(1, maxQty);
-        // Proportional refund: (totalCents * returnQty) / originalQty
-        // Use integer math to avoid Decimal division returning Object
-        final origQty = item.originalItem.quantity;
-        final totalInt = item.originalItem.totalCents.toBigInt().toInt();
-        final refundInt = origQty > 0 ? (totalInt * qty) ~/ origQty : 0;
-        return item.copyWith(
-          returnQuantity: qty,
-          refundCents: Decimal.fromInt(refundInt),
-        );
+        final computed = _computeProportionalReturn(item.originalItem, qty);
+        return computed.copyWith(reason: item.reason);
       }
       return item;
     }).toList();
@@ -370,6 +417,9 @@ class PurchaseReturnFormBloc
           .map((item) => PurchaseReturnItemInput(
                 purchaseItemId: item.originalItem.id,
                 quantity: item.returnQuantity,
+                subtotalCents: item.subtotalCents,
+                discountCents: item.discountCents,
+                taxCents: item.taxCents,
                 refundCents: item.refundCents,
                 reason: item.reason,
               ))
@@ -378,6 +428,9 @@ class PurchaseReturnFormBloc
       await _repository.createPurchaseReturn(
         purchaseId: state.purchaseId!,
         currencyId: state.currencyId,
+        subtotalCents: state.totalSubtotalCents,
+        discountCents: state.totalDiscountCents,
+        taxCents: state.totalTaxCents,
         totalCents: state.totalRefundCents,
         items: items,
         dispositionType: state.dispositionType,

@@ -904,22 +904,31 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
   Future<void> updatePurchaseReturnTotals(int returnId) async {
     final totalsRow = await customSelect(
       'SELECT '
-      '  COALESCE(SUM((pi.subtotal_cents * pri.quantity) / pi.quantity), 0) AS subtotal, '
-      '  COALESCE(SUM((pi.tax_cents * pri.quantity) / pi.quantity), 0) AS tax '
+      '  COALESCE(SUM(pri.subtotal_cents), 0) AS subtotal, '
+      '  COALESCE(SUM(pri.discount_cents), 0) AS discount, '
+      '  COALESCE(SUM(pri.tax_cents), 0) AS tax, '
+      '  COALESCE(SUM(pri.refund_cents), 0) AS total '
       'FROM purchase_return_items pri '
-      'JOIN purchase_items pi ON pi.id = pri.purchase_item_id '
       'WHERE pri.return_id = ?',
       variables: [Variable.withInt(returnId)],
     ).getSingle();
 
     final subtotalCents = totalsRow.read<int>('subtotal');
+    final discountCents = totalsRow.read<int>('discount');
     final taxCents = totalsRow.read<int>('tax');
+    final totalCents = totalsRow.read<int>('total');
 
     await customUpdate(
       'UPDATE purchase_returns '
-      'SET subtotal_cents = ?, tax_cents = ? '
+      'SET subtotal_cents = ?, discount_cents = ?, tax_cents = ?, total_cents = ? '
       'WHERE id = ?',
-      variables: [Variable.withInt(subtotalCents), Variable.withInt(taxCents), Variable.withInt(returnId)],
+      variables: [
+        Variable.withInt(subtotalCents),
+        Variable.withInt(discountCents),
+        Variable.withInt(taxCents),
+        Variable.withInt(totalCents),
+        Variable.withInt(returnId),
+      ],
       updates: {purchaseReturns},
       updateKind: UpdateKind.update,
     );

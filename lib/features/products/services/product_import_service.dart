@@ -24,26 +24,13 @@ class ProductImportService implements ImportProducts {
     final startTime = DateTime.now();
     final errors = <ImportError>[];
     final rowToProductId = <int, int>{};
-    final bulkProducts = <BulkProductData>[];
 
-    final rowToColorName = <int, String>{};
-    final rowToSizeName = <int, String>{};
-    final rowToCategoryName = <int, String>{};
-
+    // --- Phase 1: Parse all rows ---
+    final parsedRows = <_ParsedRow>[];
     for (var rowIndex = 0; rowIndex < fileData.rows.length; rowIndex++) {
       final row = fileData.rows[rowIndex];
-      
       try {
-        final productData = _parseRowToProductData(
-          row,
-          rowIndex,
-          columnMapping,
-          fileData.headers,
-          rowToColorName: rowToColorName,
-          rowToSizeName: rowToSizeName,
-          rowToCategoryName: rowToCategoryName,
-        );
-        bulkProducts.add(productData);
+        parsedRows.add(_parseRow(row, rowIndex, columnMapping, fileData.headers));
       } catch (e) {
         errors.add(ImportError(
           rowIndex: rowIndex,
@@ -54,169 +41,232 @@ class ProductImportService implements ImportProducts {
       }
     }
 
-    Map<int, int> insertedProducts = {};
-    
-    if (bulkProducts.isNotEmpty) {
+    if (parsedRows.isEmpty) {
+      final duration = DateTime.now().difference(startTime);
+      return ImportResult(
+        totalRows: fileData.rows.length,
+        successfulRows: 0,
+        failedRows: fileData.rows.length,
+        errors: errors,
+        rowToProductId: rowToProductId,
+        duration: duration,
+      );
+    }
+
+    // --- Phase 2: Group rows by product name ---
+    // Rows with the same name become one product with multiple variants.
+    final groupedByName = <String, List<_ParsedRow>>{};
+    for (final parsed in parsedRows) {
+      final key = parsed.name.toLowerCase().trim();
+      groupedByName.putIfAbsent(key, () => []).add(parsed);
+    }
+
+    // --- Phase 3: Resolve categories, colors, sizes (create-if-missing) ---
+    final categories = await _categoryRepository.getAllCategories();
+    final categoryIdByLowerName = {for (final c in categories) c.name.toLowerCase(): c.id};
+
+    final colors = await _variantRepository.getAllColors();
+    final sizes = await _variantRepository.getAllSizes();
+    final colorIdByLowerName = {for (final c in colors) c.name.toLowerCase(): c.id};
+    final sizeIdByLowerName = {for (final s in sizes) s.name.toLowerCase(): s.id};
+
+    int successCount = 0;
+
+    // --- Phase 4: Create one product per group, then variants ---
+    for (final entry in groupedByName.entries) {
+      final rows = entry.value;
+      final firstRow = rows.first;
+
       try {
-        insertedProducts = await _productRepository.bulkCreateProducts(bulkProducts);
-        rowToProductId.addAll(insertedProducts);
+        // Determine if this product has variants:
+        // 1. If the file explicitly says has_variants=true, respect it
+        // 2. If any row has color or size, it's a variant product
+        // 3. If multiple rows exist for the same product name, it's a variant product
+        // 4. Otherwise, it's a non-variant product
+        final hasVariants = firstRow.hasVariants ||
+            rows.any((r) => r.color.isNotEmpty || r.size.isNotEmpty) ||
+            rows.length > 1;
 
-        if (insertedProducts.isNotEmpty) {
-          final categories = await _categoryRepository.getAllCategories();
-          final categoryIdByLowerName = {for (final c in categories) c.name.toLowerCase(): c.id};
+        // Resolve category from the first row that has one
+        int? categoryId;
+        for (final r in rows) {
+          if (r.category.isNotEmpty) {
+            final key = r.category.toLowerCase();
+            categoryId = categoryIdByLowerName[key];
+            if (categoryId == null) {
+              final createdId = await _categoryRepository.createCategory(
+                CategoryModel(
+                  id: 0,
+                  name: r.category,
+                  description: null,
+                  parentId: null,
+                  isActive: true,
+                  createdAt: DateTime.now(),
+                  updatedAt: DateTime.now(),
+                ),
+              );
+              categoryIdByLowerName[key] = createdId;
+              categoryId = createdId;
+            }
+            break;
+          }
+        }
 
-          final colors = await _variantRepository.getAllColors();
-          final sizes = await _variantRepository.getAllSizes();
-          final colorIdByLowerName = {for (final c in colors) c.name.toLowerCase(): c.id};
-          final sizeIdByLowerName = {for (final s in sizes) s.name.toLowerCase(): s.id};
+        // Use description from the first row that has one
+        String? description;
+        for (final r in rows) {
+          if (r.description.isNotEmpty) {
+            description = r.description;
+            break;
+          }
+        }
 
-          for (final entry in insertedProducts.entries) {
-            final rowIndex = entry.key;
-            final productId = entry.value;
+        if (!hasVariants) {
+          // ===== NON-VARIANT PRODUCT =====
+          // Single product with product-level SKU/barcode/wholesale price
+          // and a default variant for stock/cost/price
+          final r = firstRow;
 
-            final colorName = (rowToColorName[rowIndex] ?? '').trim();
-            final sizeName = (rowToSizeName[rowIndex] ?? '').trim();
-            final categoryName = (rowToCategoryName[rowIndex] ?? '').trim();
+          final productId = await _productRepository.createProduct(
+            name: r.name,
+            description: description,
+            costCents: r.costCents,
+            priceCents: r.priceCents,
+            wholesalePriceCents: r.wholesalePriceCents,
+            stockQuantity: r.stockQuantity,
+            minQuantity: r.minQuantity,
+            categoryId: categoryId,
+            hasVariants: false,
+            isTaxable: r.isTaxable,
+            isActive: r.isActive,
+            sku: r.sku.isEmpty ? null : r.sku,
+            barcode: r.barcode.isEmpty ? null : r.barcode,
+            trackInventory: true,
+          );
 
+          // Create default variant with all pricing data including wholesale
+          await _variantRepository.ensureDefaultVariantForProduct(
+            productId: productId,
+            costCents: r.costCents,
+            priceCents: r.priceCents,
+            stockQuantity: r.stockQuantity,
+          );
+
+          final defaultVariant = await _variantRepository.getDefaultVariantByProduct(productId);
+          if (defaultVariant != null) {
+            final updated = defaultVariant.copyWith(
+              sku: r.sku.isEmpty ? null : r.sku,
+              barcode: r.barcode.isEmpty ? null : r.barcode,
+              costCents: r.costCents,
+              priceCents: r.priceCents,
+              wholesalePriceCents: r.wholesalePriceCents,
+              stockQuantity: r.stockQuantity,
+            );
+            await _variantRepository.updateVariant(updated);
+          }
+
+          rowToProductId[r.rowIndex] = productId;
+          successCount++;
+        } else {
+          // ===== VARIANT PRODUCT =====
+          // Product-level: no SKU/barcode (those belong to variants)
+          // Each row becomes a variant with its own color/size/SKU/barcode/pricing
+          final productId = await _productRepository.createProduct(
+            name: firstRow.name,
+            description: description,
+            costCents: firstRow.costCents,
+            priceCents: firstRow.priceCents,
+            wholesalePriceCents: firstRow.wholesalePriceCents,
+            stockQuantity: firstRow.stockQuantity,
+            minQuantity: firstRow.minQuantity,
+            categoryId: categoryId,
+            hasVariants: true,
+            isTaxable: firstRow.isTaxable,
+            isActive: firstRow.isActive,
+            trackInventory: true,
+          );
+
+          for (final r in rows) {
             int? colorId;
             int? sizeId;
-            int? categoryId;
 
-            if (categoryName.isNotEmpty) {
-              final key = categoryName.toLowerCase();
-              categoryId = categoryIdByLowerName[key];
-              if (categoryId == null) {
-                final createdId = await _categoryRepository.createCategory(
-                  CategoryModel(
-                    id: 0,
-                    name: categoryName,
-                    description: null,
-                    parentId: null,
-                    isActive: true,
-                    createdAt: DateTime.now(),
-                    updatedAt: DateTime.now(),
-                  ),
-                );
-                categoryIdByLowerName[key] = createdId;
-                categoryId = createdId;
-              }
-            }
-
-            if (colorName.isNotEmpty) {
-              final key = colorName.toLowerCase();
+            if (r.color.isNotEmpty) {
+              final key = r.color.toLowerCase();
               colorId = colorIdByLowerName[key];
               if (colorId == null) {
-                final createdId = await _variantRepository.createColor(colorName, null);
+                final createdId = await _variantRepository.createColor(r.color, null);
                 colorIdByLowerName[key] = createdId;
                 colorId = createdId;
               }
             }
 
-            if (sizeName.isNotEmpty) {
-              final key = sizeName.toLowerCase();
+            if (r.size.isNotEmpty) {
+              final key = r.size.toLowerCase();
               sizeId = sizeIdByLowerName[key];
               if (sizeId == null) {
-                final createdId = await _variantRepository.createSize(sizeName, 0, null);
+                final createdId = await _variantRepository.createSize(r.size, 0, null);
                 sizeIdByLowerName[key] = createdId;
                 sizeId = createdId;
               }
             }
 
-            if (colorId != null || sizeId != null) {
-              final product = bulkProducts.firstWhere((p) => p.rowIndex == rowIndex);
-              await _variantRepository.createVariant(
-                productId: productId,
-                colorId: colorId,
-                sizeId: sizeId,
-                costCents: product.costCents,
-                priceCents: product.priceCents,
-                stockQuantity: product.stockQuantity,
-              );
-            } else {
-              final product = bulkProducts.firstWhere((p) => p.rowIndex == rowIndex);
-              await _variantRepository.ensureDefaultVariantForProduct(
-                productId: productId,
-                costCents: product.costCents,
-                priceCents: product.priceCents,
-                stockQuantity: product.stockQuantity,
-              );
+            await _variantRepository.createVariant(
+              productId: productId,
+              sku: r.sku.isEmpty ? null : r.sku,
+              barcode: r.barcode.isEmpty ? null : r.barcode,
+              colorId: colorId,
+              sizeId: sizeId,
+              costCents: r.costCents,
+              priceCents: r.priceCents,
+              wholesalePriceCents: r.wholesalePriceCents,
+              stockQuantity: r.stockQuantity,
+            );
 
-              final defaultVariant = await _variantRepository.getDefaultVariantByProduct(productId);
-              if (defaultVariant != null) {
-                final updated = defaultVariant.copyWith(
-                  sku: (product.sku?.trim().isNotEmpty ?? false) ? product.sku : null,
-                  barcode: (product.barcode?.trim().isNotEmpty ?? false) ? product.barcode : null,
-                  costCents: product.costCents,
-                  priceCents: product.priceCents,
-                  stockQuantity: product.stockQuantity,
-                  colorId: null,
-                  sizeId: null,
-                );
-                await _variantRepository.updateVariant(updated);
-              }
-            }
-
-            if (categoryId != null) {
-              final product = await _productRepository.watchProduct(productId).first;
-              if (product != null) {
-                await _productRepository.updateProduct(product.copyWith(categoryId: categoryId));
-              }
-            }
+            rowToProductId[r.rowIndex] = productId;
+            successCount++;
           }
         }
       } catch (e) {
-        errors.add(ImportError(
-          rowIndex: -1,
-          field: 'import_products.field_bulk_import'.tr(),
-          message: 'import_products.error_bulk_import'.tr(args: [e.toString()]),
-          severity: ImportErrorSeverity.error,
-        ));
+        for (final r in rows) {
+          errors.add(ImportError(
+            rowIndex: r.rowIndex,
+            field: 'import_products.field_bulk_import'.tr(),
+            message: 'import_products.error_bulk_import'.tr(args: [e.toString()]),
+            severity: ImportErrorSeverity.error,
+          ));
+        }
       }
     }
 
     final duration = DateTime.now().difference(startTime);
-    
+
     return ImportResult(
       totalRows: fileData.rows.length,
-      successfulRows: insertedProducts.length,
-      failedRows: fileData.rows.length - insertedProducts.length,
+      successfulRows: successCount,
+      failedRows: fileData.rows.length - successCount,
       errors: errors,
       rowToProductId: rowToProductId,
       duration: duration,
     );
   }
 
-  BulkProductData _parseRowToProductData(
+  _ParsedRow _parseRow(
     List<String> row,
     int rowIndex,
     ColumnMapping columnMapping,
     List<String> headers,
-    {
-    required Map<int, String> rowToColorName,
-    required Map<int, String> rowToSizeName,
-    required Map<int, String> rowToCategoryName,
-  }
   ) {
     final name = _getCellValue(row, columnMapping, 'name');
     if (name.isEmpty) {
       throw Exception('import_products.validation_name_required'.tr());
     }
 
+    final description = _getCellValue(row, columnMapping, 'description');
     final color = _getCellValue(row, columnMapping, 'color');
     final size = _getCellValue(row, columnMapping, 'size');
-    if (color.isNotEmpty) {
-      rowToColorName[rowIndex] = color;
-    }
-    if (size.isNotEmpty) {
-      rowToSizeName[rowIndex] = size;
-    }
     final sku = _getCellValue(row, columnMapping, 'sku');
     final barcode = _getCellValue(row, columnMapping, 'barcode');
-
     final category = _getCellValue(row, columnMapping, 'category');
-    if (category.isNotEmpty) {
-      rowToCategoryName[rowIndex] = category;
-    }
 
     final costIndex = columnMapping.getColumnIndex('cost');
     final costHeader = _getHeader(headers, costIndex);
@@ -250,19 +300,26 @@ class ProductImportService implements ImportProducts {
     final isActiveStr = _getCellValue(row, columnMapping, 'is_active');
     final isActive = isActiveStr.isEmpty || isActiveStr.toLowerCase() == 'true' || isActiveStr == '1';
 
-    return BulkProductData(
+    final hasVariantsStr = _getCellValue(row, columnMapping, 'has_variants');
+    final hasVariants = hasVariantsStr.toLowerCase() == 'true' || hasVariantsStr == '1';
+
+    return _ParsedRow(
       rowIndex: rowIndex,
       name: name,
-      sku: sku.isEmpty ? null : sku,
-      barcode: barcode.isEmpty ? null : barcode,
+      description: description,
+      category: category,
+      sku: sku,
+      barcode: barcode,
+      color: color,
+      size: size,
       costCents: costCents,
       priceCents: priceCents,
       wholesalePriceCents: wholesalePriceCents,
       stockQuantity: stockQuantity,
       minQuantity: minQuantity,
-      categoryId: null,
       isTaxable: isTaxable,
       isActive: isActive,
+      hasVariants: hasVariants,
     );
   }
 
@@ -292,4 +349,42 @@ class ProductImportService implements ImportProducts {
     final decimal = Decimal.parse(cleanedValue);
     return decimal * Decimal.fromInt(100);
   }
+}
+
+class _ParsedRow {
+  final int rowIndex;
+  final String name;
+  final String description;
+  final String category;
+  final String sku;
+  final String barcode;
+  final String color;
+  final String size;
+  final Decimal costCents;
+  final Decimal priceCents;
+  final Decimal? wholesalePriceCents;
+  final int stockQuantity;
+  final int minQuantity;
+  final bool isTaxable;
+  final bool isActive;
+  final bool hasVariants;
+
+  const _ParsedRow({
+    required this.rowIndex,
+    required this.name,
+    required this.description,
+    required this.category,
+    required this.sku,
+    required this.barcode,
+    required this.color,
+    required this.size,
+    required this.costCents,
+    required this.priceCents,
+    this.wholesalePriceCents,
+    required this.stockQuantity,
+    required this.minQuantity,
+    required this.isTaxable,
+    required this.isActive,
+    this.hasVariants = false,
+  });
 }

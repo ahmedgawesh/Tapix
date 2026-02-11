@@ -81,6 +81,13 @@ import '../../features/reports/presentation/screens/customer_analysis_report_scr
 import '../../features/reports/presentation/screens/supplier_balance_report_screen.dart';
 import '../../features/reports/presentation/screens/supplier_debit_balance_report_screen.dart';
 import '../../features/reports/presentation/screens/supplier_credit_balance_report_screen.dart';
+import '../../features/reports/presentation/screens/supplier_analysis_report_screen.dart';
+import '../../features/reports/presentation/screens/supplier_aging_report_screen.dart';
+import '../../features/reports/presentation/screens/supplier_statement_report_screen.dart';
+import '../../features/reports/presentation/screens/supplier_stocktake_report_screen.dart';
+import '../../features/reports/presentation/screens/supplier_balance_drilldown_screen.dart';
+import '../../features/reports/presentation/screens/salespeople_commission_report_screen.dart';
+import '../../features/reports/presentation/screens/expense_report_screen.dart';
 import '../di/injection_container.dart';
 import 'route_permissions.dart';
 
@@ -586,6 +593,34 @@ class AppRouter {
           GoRoute(
             path: 'supplier-credit-balance',
             builder: (context, state) => const SupplierCreditBalanceReportScreen(),
+          ),
+          GoRoute(
+            path: 'supplier-analysis',
+            builder: (context, state) => const SupplierAnalysisReportScreen(),
+          ),
+          GoRoute(
+            path: 'supplier-aging',
+            builder: (context, state) => const SupplierAgingReportScreen(),
+          ),
+          GoRoute(
+            path: 'supplier-statement',
+            builder: (context, state) => const SupplierStatementReportScreen(),
+          ),
+          GoRoute(
+            path: 'supplier-stocktake',
+            builder: (context, state) => const SupplierStocktakeReportScreen(),
+          ),
+          GoRoute(
+            path: 'supplier-balance-drilldown',
+            builder: (context, state) => const SupplierBalanceDrilldownScreen(),
+          ),
+          GoRoute(
+            path: 'salespeople-commission',
+            builder: (context, state) => const SalespeopleCommissionReportScreen(),
+          ),
+          GoRoute(
+            path: 'expense-report',
+            builder: (context, state) => const ExpenseReportScreen(),
           ),
         ],
       ),

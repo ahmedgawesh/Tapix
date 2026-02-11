@@ -123,12 +123,15 @@ class SaleItemModel extends SaleItemEntity {
 }
 
 class SaleReturnModel extends SaleReturnEntity {
-  const SaleReturnModel({
+  SaleReturnModel({
     required super.id,
     required super.saleId,
     super.saleInvoiceNumber,
     super.customerName,
     required super.returnNumber,
+    super.subtotalCents,
+    super.discountCents,
+    super.taxCents,
     required super.totalCents,
     required super.currencyId,
     super.status,
@@ -144,6 +147,9 @@ class SaleReturnModel extends SaleReturnEntity {
       id: ret.id,
       saleId: ret.saleId,
       returnNumber: ret.returnNumber,
+      subtotalCents: ret.subtotalCents,
+      discountCents: ret.discountCents,
+      taxCents: ret.taxCents,
       totalCents: ret.totalCents,
       currencyId: ret.currencyId,
       status: ret.status,
@@ -157,13 +163,22 @@ class SaleReturnModel extends SaleReturnEntity {
 }
 
 class SaleReturnItemModel extends SaleReturnItemEntity {
-  const SaleReturnItemModel({
+  SaleReturnItemModel({
     required super.id,
     required super.returnId,
     required super.saleItemId,
     required super.quantity,
+    super.subtotalCents,
+    super.discountCents,
+    super.taxCents,
     required super.refundCents,
     super.reason,
+    super.productName,
+    super.variantSku,
+    super.variantBarcode,
+    super.colorName,
+    super.colorHex,
+    super.sizeName,
     required super.createdAt,
   });
 
@@ -173,9 +188,34 @@ class SaleReturnItemModel extends SaleReturnItemEntity {
       returnId: item.returnId,
       saleItemId: item.saleItemId,
       quantity: item.quantity,
+      subtotalCents: item.subtotalCents,
+      discountCents: item.discountCents,
+      taxCents: item.taxCents,
       refundCents: item.refundCents,
       reason: item.reason,
       createdAt: item.createdAt,
+    );
+  }
+
+  factory SaleReturnItemModel.fromDriftWithDetails(
+      SaleReturnItemWithDetails d) {
+    return SaleReturnItemModel(
+      id: d.returnItem.id,
+      returnId: d.returnItem.returnId,
+      saleItemId: d.returnItem.saleItemId,
+      quantity: d.returnItem.quantity,
+      subtotalCents: d.returnItem.subtotalCents,
+      discountCents: d.returnItem.discountCents,
+      taxCents: d.returnItem.taxCents,
+      refundCents: d.returnItem.refundCents,
+      reason: d.returnItem.reason,
+      productName: d.product.name,
+      variantSku: d.variant?.sku,
+      variantBarcode: d.variant?.barcode,
+      colorName: d.colorName,
+      colorHex: d.colorHex,
+      sizeName: d.sizeName,
+      createdAt: d.returnItem.createdAt,
     );
   }
 }
