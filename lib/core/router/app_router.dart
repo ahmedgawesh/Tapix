@@ -84,6 +84,7 @@ import '../../features/reports/presentation/screens/supplier_credit_balance_repo
 import '../../features/reports/presentation/screens/supplier_analysis_report_screen.dart';
 import '../../features/reports/presentation/screens/supplier_aging_report_screen.dart';
 import '../../features/reports/presentation/screens/supplier_statement_report_screen.dart';
+import '../../features/reports/presentation/screens/supplier_ledger_report_screen.dart';
 import '../../features/reports/presentation/screens/supplier_stocktake_report_screen.dart';
 import '../../features/reports/presentation/screens/supplier_balance_drilldown_screen.dart';
 import '../../features/reports/presentation/screens/salespeople_commission_report_screen.dart';
@@ -605,6 +606,10 @@ class AppRouter {
           GoRoute(
             path: 'supplier-statement',
             builder: (context, state) => const SupplierStatementReportScreen(),
+          ),
+          GoRoute(
+            path: 'supplier-ledger',
+            builder: (context, state) => const SupplierLedgerReportScreen(),
           ),
           GoRoute(
             path: 'supplier-stocktake',

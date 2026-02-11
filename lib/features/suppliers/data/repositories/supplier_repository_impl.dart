@@ -119,6 +119,7 @@ class SupplierRepositoryImpl implements SupplierRepository {
     String? description,
     int? referenceId,
     String? referenceType,
+    String? discountType,
   }) {
     final companion = SupplierTransactionsCompanion(
       supplierId: Value(supplierId),
@@ -128,10 +129,16 @@ class SupplierRepositoryImpl implements SupplierRepository {
       description: Value(description),
       referenceId: Value(referenceId),
       referenceType: Value(referenceType),
+      discountType: Value(discountType),
       transactionDate: Value(DateTime.now()),
       createdAt: Value(DateTime.now()),
     );
     return _datasource.createTransaction(companion);
+  }
+
+  @override
+  Future<SupplierTransaction?> getTransaction(int transactionId) {
+    return _datasource.getTransaction(transactionId);
   }
 
   @override

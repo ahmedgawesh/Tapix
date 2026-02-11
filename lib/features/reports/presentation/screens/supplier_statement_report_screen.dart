@@ -650,6 +650,16 @@ class _StatementContent extends StatelessWidget {
           // Transaction rows
           ...data.transactions.map((txn) {
             final isDebit = txn.amountCents > 0;
+            // Build description with transaction number and discount type
+            final descParts = <String>[];
+            if (txn.transactionNumber != null) descParts.add(txn.transactionNumber!);
+            if (txn.type == 'discount' && txn.discountType != null) {
+              descParts.add('suppliers.discount_type_${txn.discountType}'.tr());
+            }
+            if (txn.description != null && txn.description!.isNotEmpty) {
+              descParts.add(txn.description!);
+            }
+            final descText = descParts.isNotEmpty ? descParts.join(' · ') : '-';
             return DataRow(cells: [
               DataCell(Text(
                 DateFormat.yMd().format(txn.date),
@@ -663,7 +673,7 @@ class _StatementContent extends StatelessWidget {
                 ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 200),
                   child: Text(
-                    txn.description ?? '-',
+                    descText,
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: colorScheme.onSurfaceVariant,
                     ),

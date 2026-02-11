@@ -55,7 +55,11 @@ abstract class SupplierRepository {
     String? description,
     int? referenceId,
     String? referenceType,
+    String? discountType,
   });
+
+  /// Get a single supplier transaction by ID
+  Future<SupplierTransaction?> getTransaction(int transactionId);
 
   /// Watch supplier transactions
   Stream<List<SupplierTransaction>> watchSupplierTransactions(int supplierId);

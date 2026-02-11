@@ -16,6 +16,7 @@ abstract class SupplierLocalDatasource {
   Stream<List<Supplier>> watchTopSuppliersByBalance({int limit = 5});
   Future<void> updateSupplierBalance(int supplierId, int newBalanceCents);
   Future<int> createTransaction(SupplierTransactionsCompanion transaction);
+  Future<SupplierTransaction?> getTransaction(int transactionId);
   Stream<List<SupplierTransaction>> watchSupplierTransactions(int supplierId);
   Future<List<SupplierTransaction>> getSupplierTransactions(
     int supplierId, {
@@ -93,6 +94,11 @@ class SupplierLocalDatasourceImpl implements SupplierLocalDatasource {
   @override
   Future<int> createTransaction(SupplierTransactionsCompanion transaction) {
     return _supplierDao.createTransaction(transaction);
+  }
+
+  @override
+  Future<SupplierTransaction?> getTransaction(int transactionId) {
+    return _supplierDao.getTransaction(transactionId);
   }
 
   @override

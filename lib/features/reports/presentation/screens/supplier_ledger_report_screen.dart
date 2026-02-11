@@ -1,0 +1,764 @@
+import 'package:easy_localization/easy_localization.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:lucide_icons/lucide_icons.dart';
+import '../../../../core/bloc/realtime_bloc.dart';
+import '../../../../core/di/injection_container.dart';
+import '../../../../core/services/audit_log_service.dart';
+import '../../../../core/services/currency_service.dart';
+import '../../services/supplier_ledger_pdf_service.dart';
+import '../bloc/supplier_ledger_report_bloc.dart';
+import '../widgets/date_range_selector.dart';
+
+class SupplierLedgerReportScreen extends StatelessWidget {
+  const SupplierLedgerReportScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocProvider(
+      create: (_) => sl<SupplierLedgerReportBloc>(),
+      child: const _SupplierLedgerReportView(),
+    );
+  }
+}
+
+class _SupplierLedgerReportView extends StatelessWidget {
+  const _SupplierLedgerReportView();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('reports.supplier_ledger_report'.tr()),
+        actions: [
+          BlocBuilder<SupplierLedgerReportBloc,
+              RealtimeState<SupplierLedgerData>>(
+            builder: (context, state) {
+              if (state is! RealtimeSuccess<SupplierLedgerData>) {
+                return const SizedBox.shrink();
+              }
+              if (state.data.supplierId == null) {
+                return const SizedBox.shrink();
+              }
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: const Icon(LucideIcons.printer),
+                    tooltip: 'common.print'.tr(),
+                    onPressed: () => _printReport(context, state.data),
+                  ),
+                  IconButton(
+                    icon: const Icon(LucideIcons.share2),
+                    tooltip: 'common.share'.tr(),
+                    onPressed: () => _shareReport(context, state.data),
+                  ),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+      body: BlocBuilder<SupplierLedgerReportBloc,
+          RealtimeState<SupplierLedgerData>>(
+        builder: (context, state) {
+          if (state is RealtimeLoading<SupplierLedgerData>) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (state is RealtimeError<SupplierLedgerData>) {
+            return Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.error_outline,
+                      size: 48, color: colorScheme.error),
+                  const SizedBox(height: 16),
+                  Text(state.error.toString(),
+                      style: theme.textTheme.bodyLarge),
+                ],
+              ),
+            );
+          }
+
+          if (state is RealtimeSuccess<SupplierLedgerData>) {
+            return Column(
+              children: [
+                // Supplier selector
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  child: _SupplierSelector(
+                    suppliers: state.data.suppliers,
+                    selectedId: state.data.supplierId,
+                    onChanged: (id) => context
+                        .read<SupplierLedgerReportBloc>()
+                        .add(SupplierLedgerSupplierChanged(id)),
+                  ),
+                ),
+                const SizedBox(height: 8),
+
+                // Date range selector
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: DateRangeSelector(
+                    dateRange: state.data.dateRange,
+                    onChanged: (range) => context
+                        .read<SupplierLedgerReportBloc>()
+                        .add(SupplierLedgerDateRangeChanged(range)),
+                  ),
+                ),
+                const SizedBox(height: 8),
+
+                // Content
+                Expanded(
+                  child: state.data.supplierId == null
+                      ? _buildSelectSupplierPrompt(context)
+                      : _LedgerContent(data: state.data),
+                ),
+              ],
+            );
+          }
+
+          return const SizedBox.shrink();
+        },
+      ),
+    );
+  }
+
+  Widget _buildSelectSupplierPrompt(BuildContext context) {
+    final theme = Theme.of(context);
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(LucideIcons.search,
+              size: 48, color: theme.colorScheme.primary),
+          const SizedBox(height: 16),
+          Text('reports.select_supplier_prompt'.tr(),
+              style: theme.textTheme.bodyLarge),
+          const SizedBox(height: 8),
+          Text('reports.select_supplier_prompt_desc'.tr(),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              )),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _printReport(
+      BuildContext context, SupplierLedgerData data) async {
+    await SupplierLedgerPdfService.printLedger(
+      context: context,
+      data: data,
+    );
+    sl<AuditLogService>().log(
+      entityType: 'report',
+      entityId: 0,
+      action: 'print_supplier_ledger_report',
+    );
+  }
+
+  Future<void> _shareReport(
+      BuildContext context, SupplierLedgerData data) async {
+    await SupplierLedgerPdfService.shareLedger(
+      context: context,
+      data: data,
+    );
+    sl<AuditLogService>().log(
+      entityType: 'report',
+      entityId: 0,
+      action: 'share_supplier_ledger_report',
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// SUPPLIER SELECTOR
+// ═══════════════════════════════════════════════════════
+
+class _SupplierSelector extends StatelessWidget {
+  final List<SupplierLedgerOption> suppliers;
+  final int? selectedId;
+  final ValueChanged<int?> onChanged;
+
+  const _SupplierSelector({
+    required this.suppliers,
+    required this.selectedId,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final cs = sl<CurrencyService>();
+
+    return DropdownButtonFormField<int>(
+      // ignore: deprecated_member_use
+      value: selectedId,
+      decoration: InputDecoration(
+        labelText: 'reports.select_supplier'.tr(),
+        prefixIcon: Icon(LucideIcons.truck, color: colorScheme.primary),
+        border: const OutlineInputBorder(),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      ),
+      isExpanded: true,
+      items: suppliers.map((s) {
+        return DropdownMenuItem<int>(
+          value: s.id,
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  s.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                cs.formatCents(s.balanceCents),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: s.balanceCents > 0
+                      ? colorScheme.error
+                      : colorScheme.primary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+      onChanged: (value) => onChanged(value),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// LEDGER CONTENT
+// ═══════════════════════════════════════════════════════
+
+class _LedgerContent extends StatelessWidget {
+  final SupplierLedgerData data;
+
+  const _LedgerContent({required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final cs = sl<CurrencyService>();
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Supplier Info Card ──
+          _SupplierInfoCard(data: data),
+          const SizedBox(height: 16),
+
+          // ── Summary Cards ──
+          _SummaryCardsRow(data: data, cs: cs),
+          const SizedBox(height: 16),
+
+          // ── Ledger Table ──
+          Card(
+            clipBehavior: Clip.antiAlias,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: _buildLedgerTable(context, theme, colorScheme, cs),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLedgerTable(
+    BuildContext context,
+    ThemeData theme,
+    ColorScheme colorScheme,
+    CurrencyService cs,
+  ) {
+    final headerStyle = theme.textTheme.labelSmall?.copyWith(
+      fontWeight: FontWeight.bold,
+      color: colorScheme.onPrimaryContainer,
+    );
+    final subHeaderStyle = theme.textTheme.labelSmall?.copyWith(
+      fontWeight: FontWeight.w600,
+      color: colorScheme.onPrimaryContainer,
+      fontSize: 10,
+    );
+    final cellStyle = theme.textTheme.bodySmall;
+    final boldCellStyle = theme.textTheme.bodySmall?.copyWith(
+      fontWeight: FontWeight.bold,
+    );
+
+    return DataTable(
+      headingRowHeight: 56,
+      dataRowMinHeight: 36,
+      dataRowMaxHeight: 44,
+      columnSpacing: 12,
+      horizontalMargin: 12,
+      headingRowColor: WidgetStateProperty.all(
+        colorScheme.primaryContainer.withValues(alpha: 0.5),
+      ),
+      columns: [
+        // Date
+        DataColumn(
+          label: Text('reports.ledger_date'.tr(), style: headerStyle),
+        ),
+        // Purchase Invoices group
+        DataColumn(
+          label: Text('reports.ledger_purchase_number'.tr(),
+              style: subHeaderStyle),
+        ),
+        DataColumn(
+          label: Text('reports.ledger_purchase_qty'.tr(),
+              style: subHeaderStyle),
+          numeric: true,
+        ),
+        DataColumn(
+          label: Text('reports.ledger_purchase_total'.tr(),
+              style: subHeaderStyle),
+          numeric: true,
+        ),
+        // Return Invoices group
+        DataColumn(
+          label: Text('reports.ledger_return_number'.tr(),
+              style: subHeaderStyle),
+        ),
+        DataColumn(
+          label: Text('reports.ledger_return_qty'.tr(),
+              style: subHeaderStyle),
+          numeric: true,
+        ),
+        DataColumn(
+          label: Text('reports.ledger_return_total'.tr(),
+              style: subHeaderStyle),
+          numeric: true,
+        ),
+        // Payments group
+        DataColumn(
+          label: Text('reports.ledger_payment_amount'.tr(),
+              style: subHeaderStyle),
+          numeric: true,
+        ),
+        DataColumn(
+          label: Text('reports.ledger_payment_number'.tr(),
+              style: subHeaderStyle),
+        ),
+        // Discounts group
+        DataColumn(
+          label: Text('reports.ledger_discount_amount'.tr(),
+              style: subHeaderStyle),
+          numeric: true,
+        ),
+        DataColumn(
+          label: Text('reports.ledger_discount_number'.tr(),
+              style: subHeaderStyle),
+        ),
+        // Balance
+        DataColumn(
+          label: Text('reports.ledger_balance'.tr(), style: headerStyle),
+          numeric: true,
+        ),
+      ],
+      rows: [
+        // ── Opening Balance Row ──
+        DataRow(
+          color: WidgetStateProperty.all(
+              colorScheme.surfaceContainerHighest),
+          cells: [
+            DataCell(Text(
+              DateFormat.yMd().format(data.dateRange.startDate),
+              style: boldCellStyle,
+            )),
+            DataCell(Text('reports.opening_balance'.tr(),
+                style: boldCellStyle)),
+            const DataCell(Text('-')),
+            const DataCell(Text('-')),
+            const DataCell(Text('-')),
+            const DataCell(Text('-')),
+            const DataCell(Text('-')),
+            const DataCell(Text('-')),
+            const DataCell(Text('-')),
+            const DataCell(Text('-')),
+            const DataCell(Text('-')),
+            DataCell(Text(
+              cs.formatCents(data.openingBalanceCents),
+              style: boldCellStyle?.copyWith(
+                color: data.openingBalanceCents > 0
+                    ? colorScheme.error
+                    : colorScheme.primary,
+              ),
+            )),
+          ],
+        ),
+
+        // ── Transaction Rows ──
+        ...data.rows.map((row) {
+          return DataRow(cells: [
+            // Date
+            DataCell(Text(
+              DateFormat.yMd().format(row.date),
+              style: cellStyle,
+            )),
+            // Purchase columns
+            DataCell(Text(
+              row.purchaseNumber ?? '-',
+              style: cellStyle?.copyWith(
+                color: row.purchaseNumber != null
+                    ? colorScheme.primary
+                    : null,
+              ),
+            )),
+            DataCell(Text(
+              row.purchaseItemCount > 0
+                  ? row.purchaseItemCount.toString()
+                  : '-',
+              style: cellStyle,
+            )),
+            DataCell(Text(
+              row.purchaseTotalCents > 0
+                  ? cs.formatCents(row.purchaseTotalCents)
+                  : '-',
+              style: cellStyle?.copyWith(
+                color: row.purchaseTotalCents > 0
+                    ? colorScheme.error
+                    : null,
+              ),
+            )),
+            // Return columns
+            DataCell(Text(
+              row.returnNumber ?? '-',
+              style: cellStyle?.copyWith(
+                color: row.returnNumber != null
+                    ? Colors.green.shade700
+                    : null,
+              ),
+            )),
+            DataCell(Text(
+              row.returnItemCount > 0
+                  ? row.returnItemCount.toString()
+                  : '-',
+              style: cellStyle,
+            )),
+            DataCell(Text(
+              row.returnTotalCents > 0
+                  ? cs.formatCents(row.returnTotalCents)
+                  : '-',
+              style: cellStyle?.copyWith(
+                color: row.returnTotalCents > 0
+                    ? Colors.green.shade700
+                    : null,
+              ),
+            )),
+            // Payment columns
+            DataCell(Text(
+              row.paymentAmountCents > 0
+                  ? cs.formatCents(row.paymentAmountCents)
+                  : '-',
+              style: cellStyle?.copyWith(
+                color: row.paymentAmountCents > 0
+                    ? Colors.blue.shade700
+                    : null,
+              ),
+            )),
+            DataCell(Text(
+              row.paymentNumber ?? '-',
+              style: cellStyle?.copyWith(
+                color: row.paymentNumber != null
+                    ? Colors.blue.shade700
+                    : null,
+              ),
+            )),
+            // Discount columns
+            DataCell(Text(
+              row.discountAmountCents > 0
+                  ? cs.formatCents(row.discountAmountCents)
+                  : '-',
+              style: cellStyle?.copyWith(
+                color: row.discountAmountCents > 0
+                    ? Colors.purple.shade700
+                    : null,
+              ),
+            )),
+            DataCell(Text(
+              row.discountNumber ?? '-',
+              style: cellStyle?.copyWith(
+                color: row.discountNumber != null
+                    ? Colors.purple.shade700
+                    : null,
+              ),
+            )),
+            // Balance
+            DataCell(Text(
+              cs.formatCents(row.runningBalanceCents),
+              style: cellStyle?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: row.runningBalanceCents > 0
+                    ? colorScheme.error
+                    : colorScheme.primary,
+              ),
+            )),
+          ]);
+        }),
+
+        // ── Subtotals Row ──
+        DataRow(
+          color: WidgetStateProperty.all(
+              colorScheme.secondaryContainer.withValues(alpha: 0.4)),
+          cells: [
+            DataCell(Text('reports.ledger_subtotals'.tr(),
+                style: boldCellStyle)),
+            const DataCell(Text('-')),
+            DataCell(Text(
+              data.totalPurchaseItems > 0
+                  ? data.totalPurchaseItems.toString()
+                  : '-',
+              style: boldCellStyle,
+            )),
+            DataCell(Text(
+              cs.formatCents(data.totalPurchasesCents),
+              style: boldCellStyle?.copyWith(color: colorScheme.error),
+            )),
+            const DataCell(Text('-')),
+            DataCell(Text(
+              data.totalReturnItems > 0
+                  ? data.totalReturnItems.toString()
+                  : '-',
+              style: boldCellStyle,
+            )),
+            DataCell(Text(
+              cs.formatCents(data.totalReturnsCents),
+              style: boldCellStyle?.copyWith(
+                  color: Colors.green.shade700),
+            )),
+            DataCell(Text(
+              cs.formatCents(data.totalPaymentsCents),
+              style: boldCellStyle?.copyWith(
+                  color: Colors.blue.shade700),
+            )),
+            const DataCell(Text('-')),
+            DataCell(Text(
+              cs.formatCents(data.totalDiscountsCents),
+              style: boldCellStyle?.copyWith(
+                  color: Colors.purple.shade700),
+            )),
+            const DataCell(Text('-')),
+            const DataCell(Text('-')),
+          ],
+        ),
+
+        // ── Closing Balance Row ──
+        DataRow(
+          color: WidgetStateProperty.all(
+              colorScheme.surfaceContainerHighest),
+          cells: [
+            DataCell(Text(
+              DateFormat.yMd().format(data.dateRange.endDate),
+              style: boldCellStyle,
+            )),
+            DataCell(Text('reports.closing_balance'.tr(),
+                style: boldCellStyle)),
+            const DataCell(Text('-')),
+            const DataCell(Text('-')),
+            const DataCell(Text('-')),
+            const DataCell(Text('-')),
+            const DataCell(Text('-')),
+            const DataCell(Text('-')),
+            const DataCell(Text('-')),
+            const DataCell(Text('-')),
+            const DataCell(Text('-')),
+            DataCell(Text(
+              cs.formatCents(data.closingBalanceCents),
+              style: boldCellStyle?.copyWith(
+                color: data.closingBalanceCents > 0
+                    ? colorScheme.error
+                    : colorScheme.primary,
+              ),
+            )),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// SUPPLIER INFO CARD
+// ═══════════════════════════════════════════════════════
+
+class _SupplierInfoCard extends StatelessWidget {
+  final SupplierLedgerData data;
+
+  const _SupplierInfoCard({required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 24,
+              backgroundColor: colorScheme.primaryContainer,
+              child: Icon(LucideIcons.truck,
+                  color: colorScheme.onPrimaryContainer),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    data.supplierName ?? '',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  if (data.supplierPhone != null &&
+                      data.supplierPhone!.isNotEmpty)
+                    Text(
+                      data.supplierPhone!,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  if (data.supplierAddress != null &&
+                      data.supplierAddress!.isNotEmpty)
+                    Text(
+                      data.supplierAddress!,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// SUMMARY CARDS ROW
+// ═══════════════════════════════════════════════════════
+
+class _SummaryCardsRow extends StatelessWidget {
+  final SupplierLedgerData data;
+  final CurrencyService cs;
+
+  const _SummaryCardsRow({required this.data, required this.cs});
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          _SummaryCard(
+            label: 'reports.ledger_total_purchases'.tr(),
+            value: cs.formatCents(data.totalPurchasesCents),
+            icon: LucideIcons.shoppingCart,
+            color: Colors.red.shade600,
+          ),
+          const SizedBox(width: 8),
+          _SummaryCard(
+            label: 'reports.ledger_total_returns'.tr(),
+            value: cs.formatCents(data.totalReturnsCents),
+            icon: LucideIcons.arrowLeftRight,
+            color: Colors.green.shade600,
+          ),
+          const SizedBox(width: 8),
+          _SummaryCard(
+            label: 'reports.ledger_total_payments'.tr(),
+            value: cs.formatCents(data.totalPaymentsCents),
+            icon: LucideIcons.banknote,
+            color: Colors.blue.shade600,
+          ),
+          const SizedBox(width: 8),
+          _SummaryCard(
+            label: 'reports.ledger_total_discounts'.tr(),
+            value: cs.formatCents(data.totalDiscountsCents),
+            icon: LucideIcons.badgePercent,
+            color: Colors.purple.shade600,
+          ),
+          const SizedBox(width: 8),
+          _SummaryCard(
+            label: 'reports.closing_balance'.tr(),
+            value: cs.formatCents(data.closingBalanceCents),
+            icon: LucideIcons.wallet,
+            color: data.closingBalanceCents > 0
+                ? Colors.red.shade600
+                : Colors.green.shade600,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SummaryCard extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color color;
+
+  const _SummaryCard({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, size: 16, color: color),
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              value,
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

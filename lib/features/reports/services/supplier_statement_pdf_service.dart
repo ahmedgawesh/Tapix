@@ -248,10 +248,19 @@ class SupplierStatementPdfService {
     // Transaction rows
     for (final txn in data.transactions) {
       final isDebit = txn.amountCents > 0;
+      final descParts = <String>[];
+      if (txn.transactionNumber != null) descParts.add(txn.transactionNumber!);
+      if (txn.type == 'discount' && txn.discountType != null) {
+        descParts.add(_tDiscountType(txn.discountType!, lang));
+      }
+      if (txn.description != null && txn.description!.isNotEmpty) {
+        descParts.add(txn.description!);
+      }
+      final descText = descParts.isNotEmpty ? descParts.join(' · ') : '-';
       rows.add([
         DateFormat.yMd().format(txn.date),
         _tTxnType(txn.type, lang),
-        txn.description ?? '-',
+        descText,
         isDebit ? cs.formatCents(txn.amountCents) : '-',
         !isDebit ? cs.formatCents(txn.amountCents.abs()) : '-',
         cs.formatCents(txn.runningBalanceCents),
@@ -433,6 +442,37 @@ class SupplierStatementPdfService {
       'ar': 'رصيد افتتاحي',
       'fr': 'Solde d\'Ouverture',
     },
+    // Discount types
+    'dt_seasonal': {
+      'en': 'Seasonal',
+      'ar': 'موسمي',
+      'fr': 'Saisonnière',
+    },
+    'dt_volume': {
+      'en': 'Volume',
+      'ar': 'كمية',
+      'fr': 'Volume',
+    },
+    'dt_loyalty': {
+      'en': 'Loyalty',
+      'ar': 'ولاء',
+      'fr': 'Fidélité',
+    },
+    'dt_promotional': {
+      'en': 'Promotional',
+      'ar': 'ترويجي',
+      'fr': 'Promotionnelle',
+    },
+    'dt_early_payment': {
+      'en': 'Early Payment',
+      'ar': 'دفع مبكر',
+      'fr': 'Paiement anticipé',
+    },
+    'dt_other': {
+      'en': 'Other',
+      'ar': 'أخرى',
+      'fr': 'Autre',
+    },
   };
 
   static String _t(String key, String lang) {
@@ -441,6 +481,11 @@ class SupplierStatementPdfService {
 
   static String _tTxnType(String type, String lang) {
     final key = 'txn_$type';
+    return _translations[key]?[lang] ?? _translations[key]?['en'] ?? type;
+  }
+
+  static String _tDiscountType(String type, String lang) {
+    final key = 'dt_$type';
     return _translations[key]?[lang] ?? _translations[key]?['en'] ?? type;
   }
 

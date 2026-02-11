@@ -20,11 +20,17 @@ class SaleItemWithDetails {
   final SaleItem item;
   final Product product;
   final ProductVariant? variant;
+  final String? colorName;
+  final String? colorHex;
+  final String? sizeName;
 
   SaleItemWithDetails({
     required this.item,
     required this.product,
     this.variant,
+    this.colorName,
+    this.colorHex,
+    this.sizeName,
   });
 }
 
@@ -563,6 +569,8 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
     final query = select(saleItems).join([
       innerJoin(products, products.id.equalsExp(saleItems.productId)),
       leftOuterJoin(productVariants, productVariants.id.equalsExp(saleItems.variantId)),
+      leftOuterJoin(productColors, productColors.id.equalsExp(productVariants.colorId)),
+      leftOuterJoin(sizes, sizes.id.equalsExp(productVariants.sizeId)),
     ])
       ..where(saleItems.saleId.equals(saleId));
 
@@ -572,6 +580,9 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
         item: row.readTable(saleItems),
         product: row.readTable(products),
         variant: row.readTableOrNull(productVariants),
+        colorName: row.readTableOrNull(productColors)?.name,
+        colorHex: row.readTableOrNull(productColors)?.hexCode,
+        sizeName: row.readTableOrNull(sizes)?.name,
       );
     }).toList();
   }
@@ -581,6 +592,8 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
     final query = select(saleItems).join([
       innerJoin(products, products.id.equalsExp(saleItems.productId)),
       leftOuterJoin(productVariants, productVariants.id.equalsExp(saleItems.variantId)),
+      leftOuterJoin(productColors, productColors.id.equalsExp(productVariants.colorId)),
+      leftOuterJoin(sizes, sizes.id.equalsExp(productVariants.sizeId)),
     ])
       ..where(saleItems.saleId.equals(saleId));
 
@@ -589,6 +602,9 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
             item: row.readTable(saleItems),
             product: row.readTable(products),
             variant: row.readTableOrNull(productVariants),
+            colorName: row.readTableOrNull(productColors)?.name,
+            colorHex: row.readTableOrNull(productColors)?.hexCode,
+            sizeName: row.readTableOrNull(sizes)?.name,
           );
         }).toList());
   }

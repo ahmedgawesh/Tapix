@@ -124,6 +124,7 @@ import '../../features/reports/presentation/bloc/supplier_credit_balance_report_
 import '../../features/reports/presentation/bloc/supplier_analysis_report_bloc.dart';
 import '../../features/reports/presentation/bloc/supplier_aging_report_bloc.dart';
 import '../../features/reports/presentation/bloc/supplier_statement_report_bloc.dart';
+import '../../features/reports/presentation/bloc/supplier_ledger_report_bloc.dart';
 import '../../features/reports/presentation/bloc/supplier_stocktake_report_bloc.dart';
 import '../../features/reports/presentation/bloc/supplier_balance_drilldown_bloc.dart';
 import '../../features/reports/presentation/bloc/salespeople_commission_report_bloc.dart';
@@ -375,6 +376,7 @@ Future<void> init() async {
   sl.registerFactory(() => SupplierAnalysisReportBloc(sl<AppDatabase>()));
   sl.registerFactory(() => SupplierAgingReportBloc(sl<AppDatabase>()));
   sl.registerFactory(() => SupplierStatementReportBloc(sl<AppDatabase>()));
+  sl.registerFactory(() => SupplierLedgerReportBloc(sl<AppDatabase>()));
   sl.registerFactory(() => SupplierStocktakeReportBloc(sl<AppDatabase>()));
   sl.registerFactory(() => SupplierBalanceDrilldownBloc(sl<AppDatabase>()));
   sl.registerFactory(() => SalespeopleCommissionReportBloc(sl<AppDatabase>()));

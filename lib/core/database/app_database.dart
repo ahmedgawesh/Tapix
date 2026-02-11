@@ -631,7 +631,7 @@ CREATE TABLE IF NOT EXISTS sale_payments (
   }
 
   @override
-  int get schemaVersion => 10021;
+  int get schemaVersion => 10022;
 
   @override
   MigrationStrategy get migration {
@@ -850,6 +850,12 @@ CREATE TABLE IF NOT EXISTS sale_payments (
           await _safeAddColumn('sale_returns', 'subtotal_cents', 'INTEGER NOT NULL DEFAULT 0');
           await _safeAddColumn('sale_returns', 'discount_cents', 'INTEGER NOT NULL DEFAULT 0');
           await _safeAddColumn('sale_returns', 'tax_cents', 'INTEGER NOT NULL DEFAULT 0');
+        }
+
+        // Migration 10021 -> 10022: Supplier transaction number + discount type
+        if (from < 10022) {
+          await _safeAddColumn('supplier_transactions', 'transaction_number', 'TEXT');
+          await _safeAddColumn('supplier_transactions', 'discount_type', 'TEXT');
         }
 
         await _createIndexes();

@@ -243,6 +243,8 @@ class PurchasePdfService {
                 discountCents: purchase.discountCents.toBigInt().toInt(),
                 taxCents: purchase.taxCents.toBigInt().toInt(),
                 totalCents: purchase.totalCents.toBigInt().toInt(),
+                totalItems: items.length,
+                totalPieces: items.fold<int>(0, (sum, item) => sum + item.quantity),
                 cs: cs,
                 fonts: fonts,
               ),
@@ -332,6 +334,8 @@ class PurchasePdfService {
                 discountCents: state.totalDiscountCents.toBigInt().toInt(),
                 taxCents: state.taxCents.toBigInt().toInt(),
                 totalCents: state.totalCents.toBigInt().toInt(),
+                totalItems: state.items.length,
+                totalPieces: state.items.fold<int>(0, (sum, item) => sum + item.quantity),
                 cs: cs,
                 fonts: fonts,
               ),
@@ -455,7 +459,7 @@ class PurchasePdfService {
                 isRtl: isRtl,
               ),
               pw.SizedBox(height: 16),
-              // Return total
+              // Return summary (items + pieces + total)
               pw.Container(
                 padding: const pw.EdgeInsets.all(12),
                 decoration: pw.BoxDecoration(
@@ -463,15 +467,22 @@ class PurchasePdfService {
                   border: pw.Border.all(color: PdfColors.red200),
                   borderRadius: pw.BorderRadius.circular(6),
                 ),
-                child: pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                child: pw.Column(
                   children: [
-                    _bidiText('purchases.return_total'.tr(), fonts.bold, fontSize: 14),
-                    pw.Text(
-                      cs.format(returnEntity.totalCents.toBigInt().toInt()),
-                      style: pw.TextStyle(
-                        font: fonts.bold, fontSize: 14, color: PdfColors.red,
-                      ),
+                    _pdfMoneyRow('purchases.total_items_count'.tr(), '${returnItems.length}', fonts.regular),
+                    _pdfMoneyRow('purchases.total_pieces_count'.tr(), '${returnItems.fold<int>(0, (sum, item) => sum + item.quantity)}', fonts.regular),
+                    pw.Divider(thickness: 2),
+                    pw.Row(
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                      children: [
+                        _bidiText('purchases.return_total'.tr(), fonts.bold, fontSize: 14),
+                        pw.Text(
+                          cs.format(returnEntity.totalCents.toBigInt().toInt()),
+                          style: pw.TextStyle(
+                            font: fonts.bold, fontSize: 14, color: PdfColors.red,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -683,6 +694,8 @@ class PurchasePdfService {
     required int discountCents,
     required int taxCents,
     required int totalCents,
+    required int totalItems,
+    required int totalPieces,
     required CurrencyService cs,
     required _PdfFonts fonts,
   }) {
@@ -695,6 +708,9 @@ class PurchasePdfService {
       ),
       child: pw.Column(
         children: [
+          _pdfMoneyRow('purchases.total_items_count'.tr(), '$totalItems', fonts.regular),
+          _pdfMoneyRow('purchases.total_pieces_count'.tr(), '$totalPieces', fonts.regular),
+          pw.SizedBox(height: 4),
           _pdfMoneyRow('purchases.subtotal'.tr(), cs.format(subtotalCents), fonts.regular),
           if (discountCents > 0)
             _pdfMoneyRow('purchases.discount'.tr(), '- ${cs.format(discountCents)}',

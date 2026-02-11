@@ -28,6 +28,8 @@ class SupplierStatementTransaction {
   final int id;
   final DateTime date;
   final String type;
+  final String? transactionNumber;
+  final String? discountType;
   final String? description;
   final int amountCents;
   final int runningBalanceCents;
@@ -38,6 +40,8 @@ class SupplierStatementTransaction {
     required this.id,
     required this.date,
     required this.type,
+    this.transactionNumber,
+    this.discountType,
     this.description,
     required this.amountCents,
     required this.runningBalanceCents,
@@ -269,7 +273,8 @@ class SupplierStatementReportBloc extends RealtimeBloc<SupplierStatementData,
     // Load transactions within date range
     final txnRows = await _db.customSelect(
       '''
-      SELECT id, transaction_type, amount_cents, description,
+      SELECT id, transaction_type, transaction_number, discount_type,
+             amount_cents, description,
              reference_id, reference_type, transaction_date
       FROM supplier_transactions
       WHERE supplier_id = ? AND transaction_date >= ? AND transaction_date <= ?
@@ -302,6 +307,8 @@ class SupplierStatementReportBloc extends RealtimeBloc<SupplierStatementData,
         id: row.read<int>('id'),
         date: DateTime.parse(row.read<String>('transaction_date')),
         type: row.read<String>('transaction_type'),
+        transactionNumber: row.readNullable<String>('transaction_number'),
+        discountType: row.readNullable<String>('discount_type'),
         description: row.readNullable<String>('description'),
         amountCents: amountCents,
         runningBalanceCents: runningBalance,

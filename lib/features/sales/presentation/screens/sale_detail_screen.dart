@@ -10,6 +10,7 @@ import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../domain/entities/sale_entity.dart';
 import '../../domain/repositories/sale_repository.dart';
+import '../services/sale_pdf_service.dart';
 
 class SaleDetailScreen extends StatefulWidget {
   final int saleId;
@@ -137,6 +138,23 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
           onSelected: (v) => _handleAction(v, context),
           itemBuilder: (_) => [
             PopupMenuItem(
+              value: 'print',
+              child: ListTile(
+                leading: const Icon(LucideIcons.printer),
+                title: Text('sales.print_invoice'.tr()),
+                dense: true, contentPadding: EdgeInsets.zero,
+              ),
+            ),
+            PopupMenuItem(
+              value: 'share',
+              child: ListTile(
+                leading: const Icon(LucideIcons.share2),
+                title: Text('sales.share_invoice'.tr()),
+                dense: true, contentPadding: EdgeInsets.zero,
+              ),
+            ),
+            const PopupMenuDivider(),
+            PopupMenuItem(
               value: 'void',
               child: ListTile(
                 leading: Icon(LucideIcons.ban, color: colorScheme.error),
@@ -156,6 +174,37 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
   Future<void> _handleAction(String action, BuildContext context) async {
     final repo = sl<SaleRepository>();
     switch (action) {
+      case 'print':
+        if (_sale != null) {
+          try {
+            await SalePdfService.printSaleInvoice(
+              context: context,
+              sale: _sale!,
+              items: _items,
+            );
+          } catch (e) {
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('sales.print_error'.tr()),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            }
+          }
+        }
+        break;
+      case 'share':
+        if (_sale != null) {
+          try {
+            await SalePdfService.shareSaleInvoice(
+              context: context,
+              sale: _sale!,
+              items: _items,
+            );
+          } catch (_) {}
+        }
+        break;
       case 'void':
         final confirmed = await showDialog<bool>(
           context: context,
@@ -616,20 +665,59 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                             ),
-                            if (item.variantSku != null)
-                              Container(
-                                margin: const EdgeInsets.only(top: 2),
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                                decoration: BoxDecoration(
-                                  color: colorScheme.tertiaryContainer.withValues(alpha: 0.4),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(
-                                  item.variantSku!,
-                                  style: theme.textTheme.labelSmall?.copyWith(
-                                    color: colorScheme.onTertiaryContainer,
-                                    fontSize: 10,
-                                  ),
+                            if (item.colorName != null || item.sizeName != null || item.variantSku != null)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 2),
+                                child: Wrap(
+                                  spacing: 4,
+                                  runSpacing: 2,
+                                  children: [
+                                    if (item.colorName != null)
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                        decoration: BoxDecoration(
+                                          color: colorScheme.tertiaryContainer.withValues(alpha: 0.4),
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: Text(
+                                          item.colorName!,
+                                          style: theme.textTheme.labelSmall?.copyWith(
+                                            color: colorScheme.onTertiaryContainer,
+                                            fontSize: 10,
+                                          ),
+                                        ),
+                                      ),
+                                    if (item.sizeName != null)
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                        decoration: BoxDecoration(
+                                          color: colorScheme.secondaryContainer.withValues(alpha: 0.4),
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: Text(
+                                          item.sizeName!,
+                                          style: theme.textTheme.labelSmall?.copyWith(
+                                            color: colorScheme.onSecondaryContainer,
+                                            fontSize: 10,
+                                          ),
+                                        ),
+                                      ),
+                                    if (item.variantSku != null && item.colorName == null && item.sizeName == null)
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                        decoration: BoxDecoration(
+                                          color: colorScheme.tertiaryContainer.withValues(alpha: 0.4),
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: Text(
+                                          item.variantSku!,
+                                          style: theme.textTheme.labelSmall?.copyWith(
+                                            color: colorScheme.onTertiaryContainer,
+                                            fontSize: 10,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
                                 ),
                               ),
                             Text(
@@ -684,6 +772,8 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
   Widget _buildTotalsCard(BuildContext context, SaleEntity sale, CurrencyService cs) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final totalItems = _items.length;
+    final totalPieces = _items.fold<int>(0, (sum, item) => sum + item.quantity);
 
     return Card(
       elevation: 0,
@@ -697,6 +787,12 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
             child: Column(
               children: [
+                _totalRow(theme, 'sales.total_items_count'.tr(),
+                    '$totalItems'),
+                const SizedBox(height: 8),
+                _totalRow(theme, 'sales.total_pieces_count'.tr(),
+                    '$totalPieces'),
+                const SizedBox(height: 8),
                 _totalRow(theme, 'sales.subtotal'.tr(),
                     cs.format(sale.subtotalCents.toBigInt().toInt())),
                 if (sale.discountCents > Decimal.zero) ...[

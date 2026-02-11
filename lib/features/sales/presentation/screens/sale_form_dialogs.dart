@@ -1150,24 +1150,44 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                   // Credit/Cheque info message
                   if (state.paymentMethod == SalePaymentMethod.credit ||
                       state.paymentMethod == SalePaymentMethod.cheque) ...[
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: cs.tertiaryContainer.withValues(alpha: 0.3),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: cs.tertiary.withValues(alpha: 0.3)),
-                      ),
-                      child: Row(children: [
-                        Icon(LucideIcons.info, size: 16, color: cs.tertiary),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'sales.credit_balance_info'.tr(),
-                            style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
-                          ),
+                    if (state.customerId == null)
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: cs.errorContainer.withValues(alpha: 0.3),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: cs.error.withValues(alpha: 0.3)),
                         ),
-                      ]),
-                    ),
+                        child: Row(children: [
+                          Icon(LucideIcons.alertTriangle, size: 16, color: cs.error),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'sales.customer_required_for_credit'.tr(),
+                              style: theme.textTheme.bodySmall?.copyWith(color: cs.error),
+                            ),
+                          ),
+                        ]),
+                      )
+                    else
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: cs.tertiaryContainer.withValues(alpha: 0.3),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: cs.tertiary.withValues(alpha: 0.3)),
+                        ),
+                        child: Row(children: [
+                          Icon(LucideIcons.info, size: 16, color: cs.tertiary),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'sales.credit_balance_info'.tr(),
+                              style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                            ),
+                          ),
+                        ]),
+                      ),
                     const SizedBox(height: 16),
                   ],
 
@@ -1334,7 +1354,11 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                           state.paidAmountCents < state.totalCents;
                       final chequeNoDueDate = state.paymentMethod == SalePaymentMethod.cheque &&
                           state.dueDate == null;
-                      final canConfirm = !state.isSubmitting && !cashInsufficient && !chequeNoDueDate;
+                      final customerRequiredButMissing =
+                          (state.paymentMethod == SalePaymentMethod.credit ||
+                           state.paymentMethod == SalePaymentMethod.cheque) &&
+                          state.customerId == null;
+                      final canConfirm = !state.isSubmitting && !cashInsufficient && !chequeNoDueDate && !customerRequiredButMissing;
                       return FilledButton.icon(
                         onPressed: canConfirm ? widget.onConfirm : null,
                         icon: state.isSubmitting

@@ -63,6 +63,59 @@ class SalePdfService {
     );
   }
 
+  /// Generate and print a sale invoice PDF from entity data (for reprinting)
+  static Future<void> printSaleInvoice({
+    required BuildContext context,
+    required SaleEntity sale,
+    required List<SaleItemEntity> items,
+  }) async {
+    final cs = sl<CurrencyService>();
+    final locale = context.locale;
+    final isRtl = locale.languageCode == 'ar';
+    final company = await sl<CompanyProfileService>().getProfile();
+
+    final pdf = await _buildSaleInvoiceFromEntity(
+      sale: sale,
+      items: items,
+      cs: cs,
+      locale: locale,
+      isRtl: isRtl,
+      company: company,
+    );
+
+    await Printing.layoutPdf(
+      onLayout: (PdfPageFormat format) async => pdf.save(),
+      name: 'Sale_${sale.invoiceNumber}',
+    );
+  }
+
+  /// Generate and share a sale invoice PDF from entity data (for sharing)
+  static Future<void> shareSaleInvoice({
+    required BuildContext context,
+    required SaleEntity sale,
+    required List<SaleItemEntity> items,
+  }) async {
+    final cs = sl<CurrencyService>();
+    final locale = context.locale;
+    final isRtl = locale.languageCode == 'ar';
+    final company = await sl<CompanyProfileService>().getProfile();
+
+    final pdf = await _buildSaleInvoiceFromEntity(
+      sale: sale,
+      items: items,
+      cs: cs,
+      locale: locale,
+      isRtl: isRtl,
+      company: company,
+    );
+
+    final bytes = await pdf.save();
+    await Printing.sharePdf(
+      bytes: bytes,
+      filename: 'Sale_${sale.invoiceNumber}.pdf',
+    );
+  }
+
   /// Generate and print a sale return PDF
   static Future<void> printSaleReturn({
     required BuildContext context,
@@ -209,7 +262,7 @@ class SalePdfService {
                 isRtl: isRtl,
               ),
               pw.SizedBox(height: 16),
-              // Return total
+              // Return summary (items + pieces + total)
               pw.Container(
                 padding: const pw.EdgeInsets.all(12),
                 decoration: pw.BoxDecoration(
@@ -217,15 +270,22 @@ class SalePdfService {
                   border: pw.Border.all(color: PdfColors.red200),
                   borderRadius: pw.BorderRadius.circular(6),
                 ),
-                child: pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                child: pw.Column(
                   children: [
-                    _bidiText('sales.total_refund'.tr(), fonts.bold, fontSize: 14),
-                    pw.Text(
-                      cs.format(returnEntity.totalCents.toBigInt().toInt()),
-                      style: pw.TextStyle(
-                        font: fonts.bold, fontSize: 14, color: PdfColors.red,
-                      ),
+                    _pdfMoneyRow('sales.total_items_count'.tr(), '${returnItems.length}', fonts.regular),
+                    _pdfMoneyRow('sales.total_pieces_count'.tr(), '${returnItems.fold<int>(0, (sum, item) => sum + item.quantity)}', fonts.regular),
+                    pw.Divider(thickness: 2),
+                    pw.Row(
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                      children: [
+                        _bidiText('sales.total_refund'.tr(), fonts.bold, fontSize: 14),
+                        pw.Text(
+                          cs.format(returnEntity.totalCents.toBigInt().toInt()),
+                          style: pw.TextStyle(
+                            font: fonts.bold, fontSize: 14, color: PdfColors.red,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -275,7 +335,7 @@ class SalePdfService {
           return pw.TableRow(
             children: [
               _tableCell('${idx + 1}', fonts.regular),
-              _tableCell('Item #${item.saleItemId}', fonts.regular),
+              _tableCell(item.displayName.isNotEmpty ? item.displayName : 'Item #${item.saleItemId}', fonts.regular),
               _tableCell('${item.quantity}', fonts.regular),
               _tableCell(cs.format(item.refundCents.toBigInt().toInt()), fonts.regular),
             ],
@@ -343,6 +403,8 @@ class SalePdfService {
                 items: state.items.map((item) => _PdfLineItem(
                   name: item.product.name,
                   variantSku: item.variant?.sku,
+                  colorName: item.colorName,
+                  sizeName: item.sizeName,
                   quantity: item.quantity,
                   unitPriceCents: item.unitPriceCents.toBigInt().toInt(),
                   totalCents: item.totalCents.toBigInt().toInt(),
@@ -358,6 +420,8 @@ class SalePdfService {
                 taxCents: state.taxCents.toBigInt().toInt(),
                 totalCents: state.totalCents.toBigInt().toInt(),
                 paidCents: state.paidAmountCents.toBigInt().toInt(),
+                totalItems: state.items.length,
+                totalPieces: state.items.fold<int>(0, (sum, item) => sum + item.quantity),
                 cs: cs,
                 fonts: fonts,
               ),
@@ -375,6 +439,119 @@ class SalePdfService {
                       _bidiText('sales.notes'.tr(), fonts.bold, fontSize: 10),
                       pw.SizedBox(height: 4),
                       _bidiText(state.notes!, fonts.regular, fontSize: 9),
+                    ],
+                  ),
+                ),
+              ],
+              if (customerBalanceWidget != null) ...[
+                pw.SizedBox(height: 12),
+                customerBalanceWidget,
+              ],
+              pw.Spacer(),
+              _buildFooter(fonts: fonts, locale: locale),
+            ],
+          );
+        },
+      ),
+    );
+
+    return pdf;
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // SALE INVOICE PDF FROM ENTITY DATA (for reprinting)
+  // ═══════════════════════════════════════════════════════
+  static Future<pw.Document> _buildSaleInvoiceFromEntity({
+    required SaleEntity sale,
+    required List<SaleItemEntity> items,
+    required CurrencyService cs,
+    required Locale locale,
+    required bool isRtl,
+    required CompanyProfile company,
+  }) async {
+    final fonts = await _loadFonts();
+    final pdf = pw.Document();
+
+    pw.Widget? customerBalanceWidget;
+    try {
+      if (sale.customerId != null) {
+        final customerRepo = sl<CustomerRepository>();
+        final customers = await customerRepo.searchCustomers('');
+        final customer = customers.where((c) => c.id == sale.customerId).firstOrNull;
+        if (customer != null) {
+          customerBalanceWidget = _buildCustomerBalance(
+            customerName: customer.name,
+            balanceCents: customer.balanceCents.toBigInt().toInt(),
+            cs: cs,
+            fonts: fonts,
+          );
+        }
+      }
+    } catch (_) {}
+
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        textDirection: isRtl ? pw.TextDirection.rtl : pw.TextDirection.ltr,
+        build: (pw.Context ctx) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+            children: [
+              _buildHeader(
+                company: company,
+                title: 'sales.title'.tr(),
+                fonts: fonts,
+                isRtl: isRtl,
+              ),
+              pw.SizedBox(height: 16),
+              _buildInvoiceInfo(
+                invoiceNumber: sale.invoiceNumber,
+                date: sale.saleDate,
+                customerName: sale.customerName ?? 'sales.walk_in'.tr(),
+                locale: locale,
+                fonts: fonts,
+              ),
+              pw.SizedBox(height: 16),
+              _buildItemsTable(
+                items: items.map((item) => _PdfLineItem(
+                  name: item.productName ?? '',
+                  variantSku: item.variantSku,
+                  colorName: item.colorName,
+                  sizeName: item.sizeName,
+                  quantity: item.quantity,
+                  unitPriceCents: item.unitPriceCents.toBigInt().toInt(),
+                  totalCents: item.totalCents.toBigInt().toInt(),
+                )).toList(),
+                cs: cs,
+                fonts: fonts,
+                isRtl: isRtl,
+              ),
+              pw.SizedBox(height: 16),
+              _buildTotals(
+                subtotalCents: sale.subtotalCents.toBigInt().toInt(),
+                discountCents: sale.discountCents.toBigInt().toInt(),
+                taxCents: sale.taxCents.toBigInt().toInt(),
+                totalCents: sale.totalCents.toBigInt().toInt(),
+                paidCents: sale.paidAmountCents.toBigInt().toInt(),
+                totalItems: items.length,
+                totalPieces: items.fold<int>(0, (sum, item) => sum + item.quantity),
+                cs: cs,
+                fonts: fonts,
+              ),
+              if (sale.notes != null && sale.notes!.isNotEmpty) ...[
+                pw.SizedBox(height: 12),
+                pw.Container(
+                  padding: const pw.EdgeInsets.all(8),
+                  decoration: pw.BoxDecoration(
+                    border: pw.Border.all(color: PdfColors.grey300),
+                    borderRadius: pw.BorderRadius.circular(4),
+                  ),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      _bidiText('sales.notes'.tr(), fonts.bold, fontSize: 10),
+                      pw.SizedBox(height: 4),
+                      _bidiText(sale.notes!, fonts.regular, fontSize: 9),
                     ],
                   ),
                 ),
@@ -497,9 +674,7 @@ class SalePdfService {
         ...items.asMap().entries.map((entry) {
           final idx = entry.key;
           final item = entry.value;
-          final displayName = item.variantSku != null
-              ? '${item.name} (${item.variantSku})'
-              : item.name;
+          final displayName = item.displayName;
           return pw.TableRow(
             children: [
               _tableCell('${idx + 1}', fonts.regular),
@@ -520,6 +695,8 @@ class SalePdfService {
     required int taxCents,
     required int totalCents,
     required int paidCents,
+    required int totalItems,
+    required int totalPieces,
     required CurrencyService cs,
     required _PdfFonts fonts,
   }) {
@@ -533,6 +710,9 @@ class SalePdfService {
       ),
       child: pw.Column(
         children: [
+          _pdfMoneyRow('sales.total_items_count'.tr(), '$totalItems', fonts.regular),
+          _pdfMoneyRow('sales.total_pieces_count'.tr(), '$totalPieces', fonts.regular),
+          pw.SizedBox(height: 4),
           _pdfMoneyRow('sales.subtotal'.tr(), cs.format(subtotalCents), fonts.regular),
           if (discountCents > 0)
             _pdfMoneyRow('sales.discount'.tr(), '- ${cs.format(discountCents)}',
@@ -684,6 +864,8 @@ class _PdfFonts {
 class _PdfLineItem {
   final String name;
   final String? variantSku;
+  final String? colorName;
+  final String? sizeName;
   final int quantity;
   final int unitPriceCents;
   final int totalCents;
@@ -691,8 +873,23 @@ class _PdfLineItem {
   const _PdfLineItem({
     required this.name,
     this.variantSku,
+    this.colorName,
+    this.sizeName,
     required this.quantity,
     required this.unitPriceCents,
     required this.totalCents,
   });
+
+  String get displayName {
+    final parts = <String>[];
+    if (colorName != null) parts.add(colorName!);
+    if (sizeName != null) parts.add(sizeName!);
+    if (parts.isEmpty && variantSku != null) {
+      parts.add(variantSku!);
+    }
+    if (parts.isNotEmpty) {
+      return '$name (${parts.join(' / ')})';
+    }
+    return name;
+  }
 }

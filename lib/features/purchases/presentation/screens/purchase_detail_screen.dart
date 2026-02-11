@@ -781,11 +781,14 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
                                           color: Colors.orange.shade700,
                                         ),
                                         const SizedBox(width: 3),
-                                        Text(
-                                          '${'purchases.expiry_date'.tr()}: ${item.expiryDate!.toLocal().toString().split(' ').first}',
-                                          style: theme.textTheme.bodySmall?.copyWith(
-                                            color: colorScheme.onSurfaceVariant,
-                                            fontSize: 10,
+                                        Flexible(
+                                          child: Text(
+                                            '${'purchases.expiry_date'.tr()}: ${item.expiryDate!.toLocal().toString().split(' ').first}',
+                                            style: theme.textTheme.bodySmall?.copyWith(
+                                              color: colorScheme.onSurfaceVariant,
+                                              fontSize: 10,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
                                           ),
                                         ),
                                       ],
@@ -844,6 +847,8 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
   Widget _buildTotalsCard(BuildContext context, PurchaseEntity purchase, CurrencyService cs) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final totalItems = _items.length;
+    final totalPieces = _items.fold<int>(0, (sum, item) => sum + item.quantity);
 
     return Card(
       elevation: 0,
@@ -858,6 +863,12 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
             child: Column(
               children: [
+                _summaryRow(theme, 'purchases.total_items_count'.tr(),
+                    '$totalItems', icon: LucideIcons.layers),
+                const SizedBox(height: 8),
+                _summaryRow(theme, 'purchases.total_pieces_count'.tr(),
+                    '$totalPieces', icon: LucideIcons.package),
+                const SizedBox(height: 8),
                 _summaryRow(theme, 'purchases.subtotal'.tr(),
                     cs.format(purchase.subtotalCents.toBigInt().toInt())),
                 if (purchase.discountCents > Decimal.zero) ...[

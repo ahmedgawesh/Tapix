@@ -10,6 +10,7 @@ import '../../../../core/services/currency_service.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../domain/repositories/supplier_repository.dart';
 import '../bloc/supplier_profile_bloc.dart';
+import '../services/supplier_transaction_pdf_service.dart';
 
 /// Supplier profile screen with balance, actions, and transactions
 class SupplierProfileScreen extends StatefulWidget {
@@ -215,7 +216,7 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
                     const SizedBox(height: 16),
                     _ContactInformationSection(supplier: supplier),
                     const SizedBox(height: 16),
-                    _RecentTransactionsSection(supplierId: widget.supplierId),
+                    _RecentTransactionsSection(supplierId: widget.supplierId, supplierName: supplier.name),
                   ],
                 ),
               ),
@@ -345,7 +346,7 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
               navigator.pop();
 
               final amountCents = (amount * 100).round();
-              await sl<SupplierRepository>().recordTransaction(
+              final txId = await sl<SupplierRepository>().recordTransaction(
                 supplierId: supplier.id,
                 transactionType: 'payment',
                 amountCents: -amountCents,
@@ -361,9 +362,55 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
                 scaffoldMessenger.showSnackBar(
                   SnackBar(content: Text('suppliers.payment_success'.tr())),
                 );
+                _showReceiptDialog(context, txId, supplier.name);
               }
             },
             child: Text('suppliers.confirm_payment'.tr()),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showReceiptDialog(BuildContext context, int transactionId, String supplierName) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        icon: const Icon(LucideIcons.checkCircle, color: Colors.green, size: 48),
+        content: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            FilledButton.icon(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                SupplierTransactionPdfService.printReceiptById(
+                  context: context,
+                  transactionId: transactionId,
+                  supplierName: supplierName,
+                );
+              },
+              icon: const Icon(LucideIcons.printer),
+              label: Text('suppliers.print_receipt'.tr()),
+            ),
+            const SizedBox(width: 12),
+            OutlinedButton.icon(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                SupplierTransactionPdfService.shareReceiptById(
+                  context: context,
+                  transactionId: transactionId,
+                  supplierName: supplierName,
+                );
+              },
+              icon: const Icon(LucideIcons.share2),
+              label: Text('suppliers.share_receipt'.tr()),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text('common.close'.tr()),
           ),
         ],
       ),
@@ -384,8 +431,18 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
     var updating = false;
     var selectedMode = 'fixed';
     var periodMode = 'month';
+    var selectedDiscountType = 'seasonal';
     DateTime startDate = firstOfMonth;
     DateTime endDate = now;
+
+    final discountTypes = [
+      'seasonal',
+      'volume',
+      'loyalty',
+      'promotional',
+      'early_payment',
+      'other',
+    ];
 
     var baseFuture = _getNetPostedPurchasesSubtotalCents(
       supplierId: supplier.id,
@@ -469,176 +526,199 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
                     ),
                   ],
                 ),
-                content: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    SegmentedButton<String>(
-                      segments: [
-                        ButtonSegment(
-                          value: 'month',
-                          label: Text('suppliers.period_this_month'.tr()),
-                          icon: const Icon(LucideIcons.calendarDays),
+                content: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Discount type dropdown
+                      DropdownButtonFormField<String>(
+                        initialValue: selectedDiscountType,
+                        decoration: InputDecoration(
+                          labelText: 'suppliers.discount_type'.tr(),
+                          prefixIcon: const Icon(LucideIcons.tag),
                         ),
-                        ButtonSegment(
-                          value: 'last30',
-                          label: Text('suppliers.period_last_30_days'.tr()),
-                          icon: const Icon(LucideIcons.calendarClock),
-                        ),
-                        ButtonSegment(
-                          value: 'custom',
-                          label: Text('suppliers.period_custom'.tr()),
-                          icon: const Icon(LucideIcons.calendarRange),
+                        items: discountTypes.map((type) {
+                          return DropdownMenuItem(
+                            value: type,
+                            child: Text('suppliers.discount_type_$type'.tr()),
+                          );
+                        }).toList(),
+                        onChanged: (v) {
+                          if (v != null) {
+                            setState(() => selectedDiscountType = v);
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      SegmentedButton<String>(
+                        segments: [
+                          ButtonSegment(
+                            value: 'month',
+                            label: Text('suppliers.period_this_month'.tr()),
+                            icon: const Icon(LucideIcons.calendarDays),
+                          ),
+                          ButtonSegment(
+                            value: 'last30',
+                            label: Text('suppliers.period_last_30_days'.tr()),
+                            icon: const Icon(LucideIcons.calendarClock),
+                          ),
+                          ButtonSegment(
+                            value: 'custom',
+                            label: Text('suppliers.period_custom'.tr()),
+                            icon: const Icon(LucideIcons.calendarRange),
+                          ),
+                        ],
+                        selected: {periodMode},
+                        onSelectionChanged: (v) async {
+                          setState(() {
+                            periodMode = v.first;
+                            final n = DateTime.now();
+                            if (periodMode == 'month') {
+                              startDate = DateTime(n.year, n.month, 1);
+                              endDate = n;
+                            } else if (periodMode == 'last30') {
+                              startDate = n.subtract(const Duration(days: 30));
+                              endDate = n;
+                            }
+                            reloadBase();
+                            updateFromAmount(baseCents);
+                          });
+                        },
+                      ),
+                      if (periodMode == 'custom') ...[
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () async {
+                                  final picked = await showDatePicker(
+                                    context: dialogContext,
+                                    initialDate: startDate,
+                                    firstDate: DateTime(2000),
+                                    lastDate: DateTime(2100),
+                                  );
+                                  if (picked == null) return;
+                                  setState(() {
+                                    startDate = DateTime(picked.year, picked.month, picked.day);
+                                    if (startDate.isAfter(endDate)) {
+                                      endDate = startDate;
+                                    }
+                                    reloadBase();
+                                  });
+                                },
+                                icon: const Icon(LucideIcons.calendar),
+                                label: Text('suppliers.start_date'.tr()),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () async {
+                                  final picked = await showDatePicker(
+                                    context: dialogContext,
+                                    initialDate: endDate,
+                                    firstDate: DateTime(2000),
+                                    lastDate: DateTime(2100),
+                                  );
+                                  if (picked == null) return;
+                                  setState(() {
+                                    endDate = DateTime(picked.year, picked.month, picked.day, 23, 59, 59);
+                                    if (endDate.isBefore(startDate)) {
+                                      startDate = DateTime(picked.year, picked.month, picked.day);
+                                    }
+                                    reloadBase();
+                                  });
+                                },
+                                icon: const Icon(LucideIcons.calendar),
+                                label: Text('suppliers.end_date'.tr()),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
-                      selected: {periodMode},
-                      onSelectionChanged: (v) async {
-                        setState(() {
-                          periodMode = v.first;
-                          final n = DateTime.now();
-                          if (periodMode == 'month') {
-                            startDate = DateTime(n.year, n.month, 1);
-                            endDate = n;
-                          } else if (periodMode == 'last30') {
-                            startDate = n.subtract(const Duration(days: 30));
-                            endDate = n;
-                          }
-                          reloadBase();
-                          updateFromAmount(baseCents);
-                        });
-                      },
-                    ),
-                    if (periodMode == 'custom') ...[
                       const SizedBox(height: 12),
+                      SegmentedButton<String>(
+                        segments: [
+                          ButtonSegment(
+                            value: 'fixed',
+                            label: Text('suppliers.discount_fixed'.tr()),
+                            icon: const Icon(LucideIcons.badgeDollarSign),
+                          ),
+                          ButtonSegment(
+                            value: 'percent',
+                            label: Text('suppliers.discount_percent'.tr()),
+                            icon: const Icon(LucideIcons.percent),
+                          ),
+                        ],
+                        selected: {selectedMode},
+                        onSelectionChanged: (v) {
+                          setState(() {
+                            selectedMode = v.first;
+                            if (selectedMode == 'percent') {
+                              updateFromAmount(baseCents);
+                            } else {
+                              updateFromPercent(baseCents);
+                            }
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 16),
                       Row(
                         children: [
                           Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: () async {
-                                final picked = await showDatePicker(
-                                  context: dialogContext,
-                                  initialDate: startDate,
-                                  firstDate: DateTime(2000),
-                                  lastDate: DateTime(2100),
-                                );
-                                if (picked == null) return;
-                                setState(() {
-                                  startDate = DateTime(picked.year, picked.month, picked.day);
-                                  if (startDate.isAfter(endDate)) {
-                                    endDate = startDate;
-                                  }
-                                  reloadBase();
-                                });
+                            child: TextField(
+                              controller: amountController,
+                              decoration: InputDecoration(
+                                labelText: 'suppliers.discount_amount'.tr(),
+                                prefixIcon: const Icon(LucideIcons.badgeDollarSign),
+                              ),
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              autofocus: selectedMode == 'fixed',
+                              enabled: true,
+                              onChanged: (_) {
+                                if (selectedMode == 'percent') return;
+                                updateFromAmount(baseCents);
                               },
-                              icon: const Icon(LucideIcons.calendar),
-                              label: Text('suppliers.start_date'.tr()),
+                              onTap: () {
+                                if (amountController.text == '0.00' || amountController.text.isEmpty) {
+                                  amountController.clear();
+                                }
+                              },
                             ),
                           ),
                           const SizedBox(width: 12),
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: () async {
-                                final picked = await showDatePicker(
-                                  context: dialogContext,
-                                  initialDate: endDate,
-                                  firstDate: DateTime(2000),
-                                  lastDate: DateTime(2100),
-                                );
-                                if (picked == null) return;
-                                setState(() {
-                                  endDate = DateTime(picked.year, picked.month, picked.day, 23, 59, 59);
-                                  if (endDate.isBefore(startDate)) {
-                                    startDate = DateTime(picked.year, picked.month, picked.day);
-                                  }
-                                  reloadBase();
-                                });
+                          SizedBox(
+                            width: 120,
+                            child: TextField(
+                              controller: percentController,
+                              decoration: InputDecoration(
+                                labelText: 'suppliers.discount_percent'.tr(),
+                                prefixIcon: const Icon(LucideIcons.percent),
+                                suffixText: '%',
+                              ),
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              autofocus: selectedMode == 'percent',
+                              enabled: baseCents != 0,
+                              onChanged: (_) {
+                                if (selectedMode == 'fixed') return;
+                                updateFromPercent(baseCents);
                               },
-                              icon: const Icon(LucideIcons.calendar),
-                              label: Text('suppliers.end_date'.tr()),
                             ),
                           ),
                         ],
                       ),
-                    ],
-                    SegmentedButton<String>(
-                      segments: [
-                        ButtonSegment(
-                          value: 'fixed',
-                          label: Text('suppliers.discount_fixed'.tr()),
-                          icon: const Icon(LucideIcons.badgeDollarSign),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: descriptionController,
+                        decoration: InputDecoration(
+                          labelText: 'suppliers.description'.tr(),
+                          hintText: 'suppliers.seasonal_discount_hint'.tr(),
+                          prefixIcon: const Icon(LucideIcons.fileText),
                         ),
-                        ButtonSegment(
-                          value: 'percent',
-                          label: Text('suppliers.discount_percent'.tr()),
-                          icon: const Icon(LucideIcons.percent),
-                        ),
-                      ],
-                      selected: {selectedMode},
-                      onSelectionChanged: (v) {
-                        setState(() {
-                          selectedMode = v.first;
-                          if (selectedMode == 'percent') {
-                            updateFromAmount(baseCents);
-                          } else {
-                            updateFromPercent(baseCents);
-                          }
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: amountController,
-                            decoration: InputDecoration(
-                              labelText: 'suppliers.discount_amount'.tr(),
-                              prefixIcon: const Icon(LucideIcons.badgeDollarSign),
-                            ),
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                            autofocus: selectedMode == 'fixed',
-                            enabled: true,
-                            onChanged: (_) {
-                              if (selectedMode == 'percent') return;
-                              updateFromAmount(baseCents);
-                            },
-                            onTap: () {
-                              if (amountController.text == '0.00' || amountController.text.isEmpty) {
-                                amountController.clear();
-                              }
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        SizedBox(
-                          width: 120,
-                          child: TextField(
-                            controller: percentController,
-                            decoration: InputDecoration(
-                              labelText: 'suppliers.discount_percent'.tr(),
-                              prefixIcon: const Icon(LucideIcons.percent),
-                              suffixText: '%',
-                            ),
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                            autofocus: selectedMode == 'percent',
-                            enabled: baseCents != 0,
-                            onChanged: (_) {
-                              if (selectedMode == 'fixed') return;
-                              updateFromPercent(baseCents);
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: descriptionController,
-                      decoration: InputDecoration(
-                        labelText: 'suppliers.description'.tr(),
-                        hintText: 'suppliers.seasonal_discount_hint'.tr(),
-                        prefixIcon: const Icon(LucideIcons.fileText),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
                 actions: [
                   TextButton(
@@ -669,14 +749,15 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
 
                       final amountCents = (amount * 100).round();
 
-                      await sl<SupplierRepository>().recordTransaction(
+                      final txId = await sl<SupplierRepository>().recordTransaction(
                         supplierId: supplier.id,
                         transactionType: 'discount',
                         amountCents: -amountCents,
                         currencyId: supplier.currencyId,
                         description: descriptionController.text.isEmpty
-                            ? 'suppliers.seasonal_discount'.tr()
+                            ? 'suppliers.discount_type_$selectedDiscountType'.tr()
                             : descriptionController.text,
+                        discountType: selectedDiscountType,
                       );
 
                       profileBloc.refresh();
@@ -685,6 +766,7 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
                         scaffoldMessenger.showSnackBar(
                           SnackBar(content: Text('suppliers.seasonal_discount_recorded'.tr())),
                         );
+                        _showReceiptDialog(context, txId, supplier.name);
                       }
                     },
                     child: Text('suppliers.record_discount'.tr()),
@@ -1256,8 +1338,9 @@ class _ContactRow extends StatelessWidget {
 
 class _RecentTransactionsSection extends StatelessWidget {
   final int supplierId;
+  final String supplierName;
 
-  const _RecentTransactionsSection({required this.supplierId});
+  const _RecentTransactionsSection({required this.supplierId, required this.supplierName});
 
   @override
   Widget build(BuildContext context) {
@@ -1324,6 +1407,7 @@ class _RecentTransactionsSection extends StatelessWidget {
                   ...transactions.take(5).map((tx) => _TransactionTile(
                     transaction: tx,
                     currencyService: currencyService,
+                    supplierName: supplierName,
                   )),
               ],
             ),
@@ -1337,10 +1421,12 @@ class _RecentTransactionsSection extends StatelessWidget {
 class _TransactionTile extends StatelessWidget {
   final SupplierTransaction transaction;
   final CurrencyService currencyService;
+  final String? supplierName;
 
   const _TransactionTile({
     required this.transaction,
     required this.currencyService,
+    this.supplierName,
   });
 
   @override
@@ -1351,82 +1437,169 @@ class _TransactionTile extends StatelessWidget {
 
     IconData icon;
     Color color;
+    String typeLabel;
     switch (transaction.transactionType) {
       case 'payment':
         icon = LucideIcons.banknote;
         color = Colors.blue;
+        typeLabel = 'suppliers.transaction_payment'.tr();
         break;
       case 'discount':
         icon = LucideIcons.badgePercent;
         color = Colors.purple;
+        typeLabel = 'suppliers.transaction_discount'.tr();
         break;
       case 'purchase':
         icon = LucideIcons.shoppingCart;
         color = Colors.orange;
+        typeLabel = 'suppliers.transaction_purchase'.tr();
         break;
       case 'return':
         icon = LucideIcons.arrowLeftRight;
         color = Colors.green;
+        typeLabel = 'suppliers.transaction_return'.tr();
         break;
       default:
         icon = LucideIcons.fileText;
         color = theme.colorScheme.outline;
+        typeLabel = transaction.transactionType.toUpperCase();
     }
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 18,
-            backgroundColor: color.withValues(alpha: 0.1),
-            child: Icon(icon, size: 18, color: color),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    final canPrint = transaction.transactionType == 'payment' ||
+        transaction.transactionType == 'discount';
+
+    return InkWell(
+      onTap: canPrint && supplierName != null
+          ? () => _showTxReceiptOptions(context)
+          : null,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 18,
+              backgroundColor: color.withValues(alpha: 0.1),
+              child: Icon(icon, size: 18, color: color),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        typeLabel,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: color,
+                        ),
+                      ),
+                      if (transaction.transactionType == 'discount' &&
+                          transaction.discountType != null) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: Colors.purple.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            'suppliers.discount_type_${transaction.discountType}'.tr(),
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: Colors.purple,
+                              fontSize: 9,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  if (transaction.transactionNumber != null)
+                    Text(
+                      transaction.transactionNumber!,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w500,
+                        fontSize: 10,
+                      ),
+                    ),
+                  if (transaction.description != null)
+                    Text(
+                      transaction.description!,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  transaction.transactionType.toUpperCase(),
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: color,
+                  currencyService.format(amountCents.abs()),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: isNegative ? Colors.green : Colors.red,
                   ),
                 ),
-                if (transaction.description != null)
-                  Text(
-                    transaction.description!,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                Text(
+                  _formatDate(transaction.transactionDate),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.outline,
+                    fontSize: 10,
                   ),
+                ),
               ],
             ),
-          ),
-          const SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                currencyService.format(amountCents.abs()),
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: isNegative ? Colors.green : Colors.red,
-                ),
-              ),
-              Text(
-                _formatDate(transaction.transactionDate),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.outline,
-                  fontSize: 10,
-                ),
-              ),
+            if (canPrint) ...[
+              const SizedBox(width: 4),
+              Icon(LucideIcons.chevronRight, size: 14, color: theme.colorScheme.outline),
             ],
-          ),
-        ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showTxReceiptOptions(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(LucideIcons.printer),
+              title: Text('suppliers.print_receipt'.tr()),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                SupplierTransactionPdfService.printReceipt(
+                  context: context,
+                  transaction: transaction,
+                  supplierName: supplierName!,
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(LucideIcons.share2),
+              title: Text('suppliers.share_receipt'.tr()),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                SupplierTransactionPdfService.shareReceipt(
+                  context: context,
+                  transaction: transaction,
+                  supplierName: supplierName!,
+                );
+              },
+            ),
+          ],
+        ),
       ),
     );
   }

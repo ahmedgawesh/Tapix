@@ -67,6 +67,9 @@ class SaleItemEntity extends Equatable {
   final String? productName;
   final int? variantId;
   final String? variantSku;
+  final String? colorName;
+  final String? colorHex;
+  final String? sizeName;
   final int quantity;
   final Decimal unitPriceCents;
   final Decimal subtotalCents;
@@ -82,6 +85,9 @@ class SaleItemEntity extends Equatable {
     this.productName,
     this.variantId,
     this.variantSku,
+    this.colorName,
+    this.colorHex,
+    this.sizeName,
     required this.quantity,
     required this.unitPriceCents,
     required this.subtotalCents,
@@ -91,9 +97,23 @@ class SaleItemEntity extends Equatable {
     required this.createdAt,
   });
 
+  String get displayName {
+    final parts = <String>[];
+    if (colorName != null) parts.add(colorName!);
+    if (sizeName != null) parts.add(sizeName!);
+    if (parts.isEmpty && variantSku != null) {
+      parts.add(variantSku!);
+    }
+    if (parts.isNotEmpty) {
+      return '${productName ?? ''} (${parts.join(' / ')})';
+    }
+    return productName ?? '';
+  }
+
   @override
   List<Object?> get props => [
         id, saleId, productId, productName, variantId, variantSku,
+        colorName, colorHex, sizeName,
         quantity, unitPriceCents, subtotalCents, discountCents,
         taxCents, totalCents, createdAt,
       ];
@@ -189,6 +209,19 @@ class SaleReturnItemEntity extends Equatable {
   }) : subtotalCents = subtotalCents ?? Decimal.zero,
        discountCents = discountCents ?? Decimal.zero,
        taxCents = taxCents ?? Decimal.zero;
+
+  String get displayName {
+    final parts = <String>[];
+    if (colorName != null) parts.add(colorName!);
+    if (sizeName != null) parts.add(sizeName!);
+    if (parts.isEmpty && variantSku != null) {
+      parts.add(variantSku!);
+    }
+    if (parts.isNotEmpty) {
+      return '${productName ?? ''} (${parts.join(' / ')})';
+    }
+    return productName ?? '';
+  }
 
   @override
   List<Object?> get props => [

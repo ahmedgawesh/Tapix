@@ -56,7 +56,10 @@ class Suppliers extends Table {
 class SupplierTransactions extends Table {
   IntColumn get id => integer().autoIncrement()();
   IntColumn get supplierId => integer().references(Suppliers, #id, onDelete: KeyAction.restrict)();
+  TextColumn get transactionNumber => text().nullable()();
   TextColumn get transactionType => text()();
+  /// For discount transactions: seasonal, volume, loyalty, promotional, early_payment, other
+  TextColumn get discountType => text().nullable()();
   IntColumn get amountCents => integer().map(const MoneyConverter())();
   IntColumn get currencyId => integer().references(Currencies, #id, onDelete: KeyAction.restrict)();
   TextColumn get description => text().nullable()();

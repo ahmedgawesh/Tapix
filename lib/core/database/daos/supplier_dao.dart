@@ -47,9 +47,54 @@ class SupplierDao extends DatabaseAccessor<AppDatabase> with _$SupplierDaoMixin 
     return (delete(suppliers)..where((s) => s.id.equals(id))).go();
   }
 
+  /// Generate the next sequential transaction number for a given prefix.
+  /// e.g. PAY-0001, DSC-0001, PUR-0001, RET-0001
+  Future<String> _nextTransactionNumber(String prefix) async {
+    final result = await customSelect(
+'SELECT COUNT(*) AS cnt FROM supplier_transactions WHERE transaction_number LIKE ?',
+      variables: [Variable<String>('$prefix-%')],
+    ).getSingle();
+    final count = result.read<int>('cnt');
+    return '$prefix-${(count + 1).toString().padLeft(4, '0')}';
+  }
+
   Future<int> createTransaction(SupplierTransactionsCompanion tx) {
     return transaction(() async {
-      final txId = await into(supplierTransactions).insert(tx);
+      // Auto-generate transaction number if not provided
+      var companion = tx;
+      if (!tx.transactionNumber.present || tx.transactionNumber.value == null) {
+        final type = tx.transactionType.value;
+        String prefix;
+        switch (type) {
+          case 'payment':
+            prefix = 'PAY';
+            break;
+          case 'discount':
+            prefix = 'DSC';
+            break;
+          case 'purchase':
+            prefix = 'PUR';
+            break;
+          case 'return':
+            prefix = 'RET';
+            break;
+          case 'payment_reversal':
+            prefix = 'PRV';
+            break;
+          case 'credit_note':
+            prefix = 'CRN';
+            break;
+          case 'adjustment':
+            prefix = 'ADJ';
+            break;
+          default:
+            prefix = 'TXN';
+        }
+        final txNumber = await _nextTransactionNumber(prefix);
+        companion = companion.copyWith(transactionNumber: Value(txNumber));
+      }
+
+      final txId = await into(supplierTransactions).insert(companion);
 
       final supplierId = tx.supplierId.value;
       final deltaCents = tx.amountCents.value.toBigInt().toInt();
@@ -82,6 +127,11 @@ class SupplierDao extends DatabaseAccessor<AppDatabase> with _$SupplierDaoMixin 
 
       return txId;
     });
+  }
+
+  Future<SupplierTransaction?> getTransaction(int transactionId) {
+    return (select(supplierTransactions)..where((t) => t.id.equals(transactionId)))
+        .getSingleOrNull();
   }
 
   Stream<List<SupplierTransaction>> watchSupplierTransactions(int supplierId) {

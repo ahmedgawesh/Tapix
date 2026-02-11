@@ -706,6 +706,8 @@ class _SaleReturnDetailScreenState extends State<SaleReturnDetailScreen> {
     final discount = ret.discountCents.toBigInt().toInt();
     final tax = ret.taxCents.toBigInt().toInt();
     final total = ret.totalCents.toBigInt().toInt();
+    final totalItems = _returnItems.length;
+    final totalPieces = _returnItems.fold<int>(0, (sum, item) => sum + item.quantity);
 
     return Card(
       elevation: 0,
@@ -721,7 +723,10 @@ class _SaleReturnDetailScreenState extends State<SaleReturnDetailScreen> {
         ),
         child: Column(
           children: [
+            _totalRow(theme, 'sales.total_items_count'.tr(), '$totalItems'),
+            _totalRow(theme, 'sales.total_pieces_count'.tr(), '$totalPieces'),
             if (subtotal != 0 || discount != 0 || tax != 0) ...[
+              Divider(height: 16, color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
               _totalRow(theme, 'sales.subtotal'.tr(), cs.format(subtotal)),
               if (discount != 0)
                 _totalRow(theme, 'sales.discount'.tr(), '- ${cs.format(discount)}',

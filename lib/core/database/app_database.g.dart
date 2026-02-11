@@ -12729,6 +12729,18 @@ class $SupplierTransactionsTable extends SupplierTransactions
       'REFERENCES suppliers (id) ON DELETE RESTRICT',
     ),
   );
+  static const VerificationMeta _transactionNumberMeta = const VerificationMeta(
+    'transactionNumber',
+  );
+  @override
+  late final GeneratedColumn<String> transactionNumber =
+      GeneratedColumn<String>(
+        'transaction_number',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _transactionTypeMeta = const VerificationMeta(
     'transactionType',
   );
@@ -12739,6 +12751,17 @@ class $SupplierTransactionsTable extends SupplierTransactions
     false,
     type: DriftSqlType.string,
     requiredDuringInsert: true,
+  );
+  static const VerificationMeta _discountTypeMeta = const VerificationMeta(
+    'discountType',
+  );
+  @override
+  late final GeneratedColumn<String> discountType = GeneratedColumn<String>(
+    'discount_type',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
   );
   @override
   late final GeneratedColumnWithTypeConverter<Decimal, int> amountCents =
@@ -12827,7 +12850,9 @@ class $SupplierTransactionsTable extends SupplierTransactions
   List<GeneratedColumn> get $columns => [
     id,
     supplierId,
+    transactionNumber,
     transactionType,
+    discountType,
     amountCents,
     currencyId,
     description,
@@ -12859,6 +12884,15 @@ class $SupplierTransactionsTable extends SupplierTransactions
     } else if (isInserting) {
       context.missing(_supplierIdMeta);
     }
+    if (data.containsKey('transaction_number')) {
+      context.handle(
+        _transactionNumberMeta,
+        transactionNumber.isAcceptableOrUnknown(
+          data['transaction_number']!,
+          _transactionNumberMeta,
+        ),
+      );
+    }
     if (data.containsKey('transaction_type')) {
       context.handle(
         _transactionTypeMeta,
@@ -12869,6 +12903,15 @@ class $SupplierTransactionsTable extends SupplierTransactions
       );
     } else if (isInserting) {
       context.missing(_transactionTypeMeta);
+    }
+    if (data.containsKey('discount_type')) {
+      context.handle(
+        _discountTypeMeta,
+        discountType.isAcceptableOrUnknown(
+          data['discount_type']!,
+          _discountTypeMeta,
+        ),
+      );
     }
     if (data.containsKey('currency_id')) {
       context.handle(
@@ -12937,10 +12980,18 @@ class $SupplierTransactionsTable extends SupplierTransactions
         DriftSqlType.int,
         data['${effectivePrefix}supplier_id'],
       )!,
+      transactionNumber: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}transaction_number'],
+      ),
       transactionType: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}transaction_type'],
       )!,
+      discountType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}discount_type'],
+      ),
       amountCents: $SupplierTransactionsTable.$converteramountCents.fromSql(
         attachedDatabase.typeMapping.read(
           DriftSqlType.int,
@@ -12987,7 +13038,11 @@ class SupplierTransaction extends DataClass
     implements Insertable<SupplierTransaction> {
   final int id;
   final int supplierId;
+  final String? transactionNumber;
   final String transactionType;
+
+  /// For discount transactions: seasonal, volume, loyalty, promotional, early_payment, other
+  final String? discountType;
   final Decimal amountCents;
   final int currencyId;
   final String? description;
@@ -12998,7 +13053,9 @@ class SupplierTransaction extends DataClass
   const SupplierTransaction({
     required this.id,
     required this.supplierId,
+    this.transactionNumber,
     required this.transactionType,
+    this.discountType,
     required this.amountCents,
     required this.currencyId,
     this.description,
@@ -13012,7 +13069,13 @@ class SupplierTransaction extends DataClass
     final map = <String, Expression>{};
     map['id'] = Variable<int>(id);
     map['supplier_id'] = Variable<int>(supplierId);
+    if (!nullToAbsent || transactionNumber != null) {
+      map['transaction_number'] = Variable<String>(transactionNumber);
+    }
     map['transaction_type'] = Variable<String>(transactionType);
+    if (!nullToAbsent || discountType != null) {
+      map['discount_type'] = Variable<String>(discountType);
+    }
     {
       map['amount_cents'] = Variable<int>(
         $SupplierTransactionsTable.$converteramountCents.toSql(amountCents),
@@ -13037,7 +13100,13 @@ class SupplierTransaction extends DataClass
     return SupplierTransactionsCompanion(
       id: Value(id),
       supplierId: Value(supplierId),
+      transactionNumber: transactionNumber == null && nullToAbsent
+          ? const Value.absent()
+          : Value(transactionNumber),
       transactionType: Value(transactionType),
+      discountType: discountType == null && nullToAbsent
+          ? const Value.absent()
+          : Value(discountType),
       amountCents: Value(amountCents),
       currencyId: Value(currencyId),
       description: description == null && nullToAbsent
@@ -13062,7 +13131,11 @@ class SupplierTransaction extends DataClass
     return SupplierTransaction(
       id: serializer.fromJson<int>(json['id']),
       supplierId: serializer.fromJson<int>(json['supplierId']),
+      transactionNumber: serializer.fromJson<String?>(
+        json['transactionNumber'],
+      ),
       transactionType: serializer.fromJson<String>(json['transactionType']),
+      discountType: serializer.fromJson<String?>(json['discountType']),
       amountCents: serializer.fromJson<Decimal>(json['amountCents']),
       currencyId: serializer.fromJson<int>(json['currencyId']),
       description: serializer.fromJson<String?>(json['description']),
@@ -13078,7 +13151,9 @@ class SupplierTransaction extends DataClass
     return <String, dynamic>{
       'id': serializer.toJson<int>(id),
       'supplierId': serializer.toJson<int>(supplierId),
+      'transactionNumber': serializer.toJson<String?>(transactionNumber),
       'transactionType': serializer.toJson<String>(transactionType),
+      'discountType': serializer.toJson<String?>(discountType),
       'amountCents': serializer.toJson<Decimal>(amountCents),
       'currencyId': serializer.toJson<int>(currencyId),
       'description': serializer.toJson<String?>(description),
@@ -13092,7 +13167,9 @@ class SupplierTransaction extends DataClass
   SupplierTransaction copyWith({
     int? id,
     int? supplierId,
+    Value<String?> transactionNumber = const Value.absent(),
     String? transactionType,
+    Value<String?> discountType = const Value.absent(),
     Decimal? amountCents,
     int? currencyId,
     Value<String?> description = const Value.absent(),
@@ -13103,7 +13180,11 @@ class SupplierTransaction extends DataClass
   }) => SupplierTransaction(
     id: id ?? this.id,
     supplierId: supplierId ?? this.supplierId,
+    transactionNumber: transactionNumber.present
+        ? transactionNumber.value
+        : this.transactionNumber,
     transactionType: transactionType ?? this.transactionType,
+    discountType: discountType.present ? discountType.value : this.discountType,
     amountCents: amountCents ?? this.amountCents,
     currencyId: currencyId ?? this.currencyId,
     description: description.present ? description.value : this.description,
@@ -13120,9 +13201,15 @@ class SupplierTransaction extends DataClass
       supplierId: data.supplierId.present
           ? data.supplierId.value
           : this.supplierId,
+      transactionNumber: data.transactionNumber.present
+          ? data.transactionNumber.value
+          : this.transactionNumber,
       transactionType: data.transactionType.present
           ? data.transactionType.value
           : this.transactionType,
+      discountType: data.discountType.present
+          ? data.discountType.value
+          : this.discountType,
       amountCents: data.amountCents.present
           ? data.amountCents.value
           : this.amountCents,
@@ -13150,7 +13237,9 @@ class SupplierTransaction extends DataClass
     return (StringBuffer('SupplierTransaction(')
           ..write('id: $id, ')
           ..write('supplierId: $supplierId, ')
+          ..write('transactionNumber: $transactionNumber, ')
           ..write('transactionType: $transactionType, ')
+          ..write('discountType: $discountType, ')
           ..write('amountCents: $amountCents, ')
           ..write('currencyId: $currencyId, ')
           ..write('description: $description, ')
@@ -13166,7 +13255,9 @@ class SupplierTransaction extends DataClass
   int get hashCode => Object.hash(
     id,
     supplierId,
+    transactionNumber,
     transactionType,
+    discountType,
     amountCents,
     currencyId,
     description,
@@ -13181,7 +13272,9 @@ class SupplierTransaction extends DataClass
       (other is SupplierTransaction &&
           other.id == this.id &&
           other.supplierId == this.supplierId &&
+          other.transactionNumber == this.transactionNumber &&
           other.transactionType == this.transactionType &&
+          other.discountType == this.discountType &&
           other.amountCents == this.amountCents &&
           other.currencyId == this.currencyId &&
           other.description == this.description &&
@@ -13195,7 +13288,9 @@ class SupplierTransactionsCompanion
     extends UpdateCompanion<SupplierTransaction> {
   final Value<int> id;
   final Value<int> supplierId;
+  final Value<String?> transactionNumber;
   final Value<String> transactionType;
+  final Value<String?> discountType;
   final Value<Decimal> amountCents;
   final Value<int> currencyId;
   final Value<String?> description;
@@ -13206,7 +13301,9 @@ class SupplierTransactionsCompanion
   const SupplierTransactionsCompanion({
     this.id = const Value.absent(),
     this.supplierId = const Value.absent(),
+    this.transactionNumber = const Value.absent(),
     this.transactionType = const Value.absent(),
+    this.discountType = const Value.absent(),
     this.amountCents = const Value.absent(),
     this.currencyId = const Value.absent(),
     this.description = const Value.absent(),
@@ -13218,7 +13315,9 @@ class SupplierTransactionsCompanion
   SupplierTransactionsCompanion.insert({
     this.id = const Value.absent(),
     required int supplierId,
+    this.transactionNumber = const Value.absent(),
     required String transactionType,
+    this.discountType = const Value.absent(),
     required Decimal amountCents,
     required int currencyId,
     this.description = const Value.absent(),
@@ -13233,7 +13332,9 @@ class SupplierTransactionsCompanion
   static Insertable<SupplierTransaction> custom({
     Expression<int>? id,
     Expression<int>? supplierId,
+    Expression<String>? transactionNumber,
     Expression<String>? transactionType,
+    Expression<String>? discountType,
     Expression<int>? amountCents,
     Expression<int>? currencyId,
     Expression<String>? description,
@@ -13245,7 +13346,9 @@ class SupplierTransactionsCompanion
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (supplierId != null) 'supplier_id': supplierId,
+      if (transactionNumber != null) 'transaction_number': transactionNumber,
       if (transactionType != null) 'transaction_type': transactionType,
+      if (discountType != null) 'discount_type': discountType,
       if (amountCents != null) 'amount_cents': amountCents,
       if (currencyId != null) 'currency_id': currencyId,
       if (description != null) 'description': description,
@@ -13259,7 +13362,9 @@ class SupplierTransactionsCompanion
   SupplierTransactionsCompanion copyWith({
     Value<int>? id,
     Value<int>? supplierId,
+    Value<String?>? transactionNumber,
     Value<String>? transactionType,
+    Value<String?>? discountType,
     Value<Decimal>? amountCents,
     Value<int>? currencyId,
     Value<String?>? description,
@@ -13271,7 +13376,9 @@ class SupplierTransactionsCompanion
     return SupplierTransactionsCompanion(
       id: id ?? this.id,
       supplierId: supplierId ?? this.supplierId,
+      transactionNumber: transactionNumber ?? this.transactionNumber,
       transactionType: transactionType ?? this.transactionType,
+      discountType: discountType ?? this.discountType,
       amountCents: amountCents ?? this.amountCents,
       currencyId: currencyId ?? this.currencyId,
       description: description ?? this.description,
@@ -13291,8 +13398,14 @@ class SupplierTransactionsCompanion
     if (supplierId.present) {
       map['supplier_id'] = Variable<int>(supplierId.value);
     }
+    if (transactionNumber.present) {
+      map['transaction_number'] = Variable<String>(transactionNumber.value);
+    }
     if (transactionType.present) {
       map['transaction_type'] = Variable<String>(transactionType.value);
+    }
+    if (discountType.present) {
+      map['discount_type'] = Variable<String>(discountType.value);
     }
     if (amountCents.present) {
       map['amount_cents'] = Variable<int>(
@@ -13327,7 +13440,9 @@ class SupplierTransactionsCompanion
     return (StringBuffer('SupplierTransactionsCompanion(')
           ..write('id: $id, ')
           ..write('supplierId: $supplierId, ')
+          ..write('transactionNumber: $transactionNumber, ')
           ..write('transactionType: $transactionType, ')
+          ..write('discountType: $discountType, ')
           ..write('amountCents: $amountCents, ')
           ..write('currencyId: $currencyId, ')
           ..write('description: $description, ')
@@ -48113,7 +48228,9 @@ typedef $$SupplierTransactionsTableCreateCompanionBuilder =
     SupplierTransactionsCompanion Function({
       Value<int> id,
       required int supplierId,
+      Value<String?> transactionNumber,
       required String transactionType,
+      Value<String?> discountType,
       required Decimal amountCents,
       required int currencyId,
       Value<String?> description,
@@ -48126,7 +48243,9 @@ typedef $$SupplierTransactionsTableUpdateCompanionBuilder =
     SupplierTransactionsCompanion Function({
       Value<int> id,
       Value<int> supplierId,
+      Value<String?> transactionNumber,
       Value<String> transactionType,
+      Value<String?> discountType,
       Value<Decimal> amountCents,
       Value<int> currencyId,
       Value<String?> description,
@@ -48208,8 +48327,18 @@ class $$SupplierTransactionsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get transactionNumber => $composableBuilder(
+    column: $table.transactionNumber,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<String> get transactionType => $composableBuilder(
     column: $table.transactionType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get discountType => $composableBuilder(
+    column: $table.discountType,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -48305,8 +48434,18 @@ class $$SupplierTransactionsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get transactionNumber => $composableBuilder(
+    column: $table.transactionNumber,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get transactionType => $composableBuilder(
     column: $table.transactionType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get discountType => $composableBuilder(
+    column: $table.discountType,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -48399,8 +48538,18 @@ class $$SupplierTransactionsTableAnnotationComposer
   GeneratedColumn<int> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
 
+  GeneratedColumn<String> get transactionNumber => $composableBuilder(
+    column: $table.transactionNumber,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get transactionType => $composableBuilder(
     column: $table.transactionType,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get discountType => $composableBuilder(
+    column: $table.discountType,
     builder: (column) => column,
   );
 
@@ -48518,7 +48667,9 @@ class $$SupplierTransactionsTableTableManager
               ({
                 Value<int> id = const Value.absent(),
                 Value<int> supplierId = const Value.absent(),
+                Value<String?> transactionNumber = const Value.absent(),
                 Value<String> transactionType = const Value.absent(),
+                Value<String?> discountType = const Value.absent(),
                 Value<Decimal> amountCents = const Value.absent(),
                 Value<int> currencyId = const Value.absent(),
                 Value<String?> description = const Value.absent(),
@@ -48529,7 +48680,9 @@ class $$SupplierTransactionsTableTableManager
               }) => SupplierTransactionsCompanion(
                 id: id,
                 supplierId: supplierId,
+                transactionNumber: transactionNumber,
                 transactionType: transactionType,
+                discountType: discountType,
                 amountCents: amountCents,
                 currencyId: currencyId,
                 description: description,
@@ -48542,7 +48695,9 @@ class $$SupplierTransactionsTableTableManager
               ({
                 Value<int> id = const Value.absent(),
                 required int supplierId,
+                Value<String?> transactionNumber = const Value.absent(),
                 required String transactionType,
+                Value<String?> discountType = const Value.absent(),
                 required Decimal amountCents,
                 required int currencyId,
                 Value<String?> description = const Value.absent(),
@@ -48553,7 +48708,9 @@ class $$SupplierTransactionsTableTableManager
               }) => SupplierTransactionsCompanion.insert(
                 id: id,
                 supplierId: supplierId,
+                transactionNumber: transactionNumber,
                 transactionType: transactionType,
+                discountType: discountType,
                 amountCents: amountCents,
                 currencyId: currencyId,
                 description: description,
