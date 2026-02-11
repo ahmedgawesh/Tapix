@@ -81,7 +81,8 @@ class _ProductFormViewState extends State<_ProductFormView> {
   final _barcodeController = TextEditingController();
   final _stockController = TextEditingController();
   final _minStockController = TextEditingController();
-  final _taxRateController = TextEditingController();
+  final _purchaseTaxRateController = TextEditingController();
+  final _salesTaxRateController = TextEditingController();
   
   final _stockFocusNode = FocusNode();
   final _minStockFocusNode = FocusNode();
@@ -129,7 +130,8 @@ class _ProductFormViewState extends State<_ProductFormView> {
     _barcodeController.dispose();
     _stockController.dispose();
     _minStockController.dispose();
-    _taxRateController.dispose();
+    _purchaseTaxRateController.dispose();
+    _salesTaxRateController.dispose();
     _stockFocusNode.dispose();
     _minStockFocusNode.dispose();
     super.dispose();
@@ -154,8 +156,11 @@ class _ProductFormViewState extends State<_ProductFormView> {
     if (!_minStockFocusNode.hasFocus) {
       _minStockController.text = state.minQuantity.toString();
     }
-    if (_taxRateController.text.isEmpty && state.taxRateBps > 0) {
-      _taxRateController.text = (state.taxRateBps / 100).toString();
+    if (_purchaseTaxRateController.text.isEmpty && state.purchaseTaxRateBps > 0) {
+      _purchaseTaxRateController.text = (state.purchaseTaxRateBps / 100).toString();
+    }
+    if (_salesTaxRateController.text.isEmpty && state.salesTaxRateBps > 0) {
+      _salesTaxRateController.text = (state.salesTaxRateBps / 100).toString();
     }
   }
 
@@ -260,7 +265,8 @@ class _ProductFormViewState extends State<_ProductFormView> {
                       imagePath: state.imagePath,
                       hasVariants: state.hasVariants,
                       isTaxable: state.isTaxable,
-                      taxRateBps: state.taxRateBps,
+                      purchaseTaxRateBps: state.purchaseTaxRateBps,
+                      salesTaxRateBps: state.salesTaxRateBps,
                       isActive: state.isActive,
                       trackInventory: state.trackInventory,
                     );
@@ -942,10 +948,10 @@ class _ProductFormViewState extends State<_ProductFormView> {
         if (state.isTaxable) ...[
           const SizedBox(height: 16),
           TextFormField(
-            controller: _taxRateController,
+            controller: _purchaseTaxRateController,
             decoration: InputDecoration(
-              labelText: 'product_form_taxRate'.tr(),
-              errorText: state.fieldErrors['taxRateBps'],
+              labelText: 'product_form_purchaseTaxRate'.tr(),
+              errorText: state.fieldErrors['purchaseTaxRateBps'],
               border: const OutlineInputBorder(),
               suffixText: '%',
             ),
@@ -953,7 +959,25 @@ class _ProductFormViewState extends State<_ProductFormView> {
             onChanged: (value) {
               final rate = double.tryParse(value) ?? 0;
               bloc.add(ProductFormFieldChanged(
-                field: 'taxRateBps',
+                field: 'purchaseTaxRateBps',
+                value: (rate * 100).toInt(),
+              ));
+            },
+          ),
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: _salesTaxRateController,
+            decoration: InputDecoration(
+              labelText: 'product_form_salesTaxRate'.tr(),
+              errorText: state.fieldErrors['salesTaxRateBps'],
+              border: const OutlineInputBorder(),
+              suffixText: '%',
+            ),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            onChanged: (value) {
+              final rate = double.tryParse(value) ?? 0;
+              bloc.add(ProductFormFieldChanged(
+                field: 'salesTaxRateBps',
                 value: (rate * 100).toInt(),
               ));
             },

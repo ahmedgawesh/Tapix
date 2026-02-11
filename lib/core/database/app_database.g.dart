@@ -4265,12 +4265,23 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
     ),
     defaultValue: const Constant(false),
   );
-  static const VerificationMeta _taxRateBpsMeta = const VerificationMeta(
-    'taxRateBps',
+  static const VerificationMeta _purchaseTaxRateBpsMeta =
+      const VerificationMeta('purchaseTaxRateBps');
+  @override
+  late final GeneratedColumn<int> purchaseTaxRateBps = GeneratedColumn<int>(
+    'purchase_tax_rate_bps',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _salesTaxRateBpsMeta = const VerificationMeta(
+    'salesTaxRateBps',
   );
   @override
-  late final GeneratedColumn<int> taxRateBps = GeneratedColumn<int>(
-    'tax_rate_bps',
+  late final GeneratedColumn<int> salesTaxRateBps = GeneratedColumn<int>(
+    'sales_tax_rate_bps',
     aliasedName,
     false,
     type: DriftSqlType.int,
@@ -4350,7 +4361,8 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
     minQuantity,
     hasVariants,
     isTaxable,
-    taxRateBps,
+    purchaseTaxRateBps,
+    salesTaxRateBps,
     imagePath,
     isActive,
     createdAt,
@@ -4472,12 +4484,21 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
         isTaxable.isAcceptableOrUnknown(data['is_taxable']!, _isTaxableMeta),
       );
     }
-    if (data.containsKey('tax_rate_bps')) {
+    if (data.containsKey('purchase_tax_rate_bps')) {
       context.handle(
-        _taxRateBpsMeta,
-        taxRateBps.isAcceptableOrUnknown(
-          data['tax_rate_bps']!,
-          _taxRateBpsMeta,
+        _purchaseTaxRateBpsMeta,
+        purchaseTaxRateBps.isAcceptableOrUnknown(
+          data['purchase_tax_rate_bps']!,
+          _purchaseTaxRateBpsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('sales_tax_rate_bps')) {
+      context.handle(
+        _salesTaxRateBpsMeta,
+        salesTaxRateBps.isAcceptableOrUnknown(
+          data['sales_tax_rate_bps']!,
+          _salesTaxRateBpsMeta,
         ),
       );
     }
@@ -4613,9 +4634,13 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
         DriftSqlType.bool,
         data['${effectivePrefix}is_taxable'],
       )!,
-      taxRateBps: attachedDatabase.typeMapping.read(
+      purchaseTaxRateBps: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
-        data['${effectivePrefix}tax_rate_bps'],
+        data['${effectivePrefix}purchase_tax_rate_bps'],
+      )!,
+      salesTaxRateBps: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sales_tax_rate_bps'],
       )!,
       imagePath: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
@@ -4685,7 +4710,8 @@ class Product extends DataClass implements Insertable<Product> {
   final int minQuantity;
   final bool hasVariants;
   final bool isTaxable;
-  final int taxRateBps;
+  final int purchaseTaxRateBps;
+  final int salesTaxRateBps;
   final String? imagePath;
   final bool isActive;
   final DateTime createdAt;
@@ -4712,7 +4738,8 @@ class Product extends DataClass implements Insertable<Product> {
     required this.minQuantity,
     required this.hasVariants,
     required this.isTaxable,
-    required this.taxRateBps,
+    required this.purchaseTaxRateBps,
+    required this.salesTaxRateBps,
     this.imagePath,
     required this.isActive,
     required this.createdAt,
@@ -4786,7 +4813,8 @@ class Product extends DataClass implements Insertable<Product> {
     map['min_quantity'] = Variable<int>(minQuantity);
     map['has_variants'] = Variable<bool>(hasVariants);
     map['is_taxable'] = Variable<bool>(isTaxable);
-    map['tax_rate_bps'] = Variable<int>(taxRateBps);
+    map['purchase_tax_rate_bps'] = Variable<int>(purchaseTaxRateBps);
+    map['sales_tax_rate_bps'] = Variable<int>(salesTaxRateBps);
     if (!nullToAbsent || imagePath != null) {
       map['image_path'] = Variable<String>(imagePath);
     }
@@ -4842,7 +4870,8 @@ class Product extends DataClass implements Insertable<Product> {
       minQuantity: Value(minQuantity),
       hasVariants: Value(hasVariants),
       isTaxable: Value(isTaxable),
-      taxRateBps: Value(taxRateBps),
+      purchaseTaxRateBps: Value(purchaseTaxRateBps),
+      salesTaxRateBps: Value(salesTaxRateBps),
       imagePath: imagePath == null && nullToAbsent
           ? const Value.absent()
           : Value(imagePath),
@@ -4887,7 +4916,8 @@ class Product extends DataClass implements Insertable<Product> {
       minQuantity: serializer.fromJson<int>(json['minQuantity']),
       hasVariants: serializer.fromJson<bool>(json['hasVariants']),
       isTaxable: serializer.fromJson<bool>(json['isTaxable']),
-      taxRateBps: serializer.fromJson<int>(json['taxRateBps']),
+      purchaseTaxRateBps: serializer.fromJson<int>(json['purchaseTaxRateBps']),
+      salesTaxRateBps: serializer.fromJson<int>(json['salesTaxRateBps']),
       imagePath: serializer.fromJson<String?>(json['imagePath']),
       isActive: serializer.fromJson<bool>(json['isActive']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
@@ -4921,7 +4951,8 @@ class Product extends DataClass implements Insertable<Product> {
       'minQuantity': serializer.toJson<int>(minQuantity),
       'hasVariants': serializer.toJson<bool>(hasVariants),
       'isTaxable': serializer.toJson<bool>(isTaxable),
-      'taxRateBps': serializer.toJson<int>(taxRateBps),
+      'purchaseTaxRateBps': serializer.toJson<int>(purchaseTaxRateBps),
+      'salesTaxRateBps': serializer.toJson<int>(salesTaxRateBps),
       'imagePath': serializer.toJson<String?>(imagePath),
       'isActive': serializer.toJson<bool>(isActive),
       'createdAt': serializer.toJson<DateTime>(createdAt),
@@ -4951,7 +4982,8 @@ class Product extends DataClass implements Insertable<Product> {
     int? minQuantity,
     bool? hasVariants,
     bool? isTaxable,
-    int? taxRateBps,
+    int? purchaseTaxRateBps,
+    int? salesTaxRateBps,
     Value<String?> imagePath = const Value.absent(),
     bool? isActive,
     DateTime? createdAt,
@@ -4986,7 +5018,8 @@ class Product extends DataClass implements Insertable<Product> {
     minQuantity: minQuantity ?? this.minQuantity,
     hasVariants: hasVariants ?? this.hasVariants,
     isTaxable: isTaxable ?? this.isTaxable,
-    taxRateBps: taxRateBps ?? this.taxRateBps,
+    purchaseTaxRateBps: purchaseTaxRateBps ?? this.purchaseTaxRateBps,
+    salesTaxRateBps: salesTaxRateBps ?? this.salesTaxRateBps,
     imagePath: imagePath.present ? imagePath.value : this.imagePath,
     isActive: isActive ?? this.isActive,
     createdAt: createdAt ?? this.createdAt,
@@ -5041,9 +5074,12 @@ class Product extends DataClass implements Insertable<Product> {
           ? data.hasVariants.value
           : this.hasVariants,
       isTaxable: data.isTaxable.present ? data.isTaxable.value : this.isTaxable,
-      taxRateBps: data.taxRateBps.present
-          ? data.taxRateBps.value
-          : this.taxRateBps,
+      purchaseTaxRateBps: data.purchaseTaxRateBps.present
+          ? data.purchaseTaxRateBps.value
+          : this.purchaseTaxRateBps,
+      salesTaxRateBps: data.salesTaxRateBps.present
+          ? data.salesTaxRateBps.value
+          : this.salesTaxRateBps,
       imagePath: data.imagePath.present ? data.imagePath.value : this.imagePath,
       isActive: data.isActive.present ? data.isActive.value : this.isActive,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
@@ -5075,7 +5111,8 @@ class Product extends DataClass implements Insertable<Product> {
           ..write('minQuantity: $minQuantity, ')
           ..write('hasVariants: $hasVariants, ')
           ..write('isTaxable: $isTaxable, ')
-          ..write('taxRateBps: $taxRateBps, ')
+          ..write('purchaseTaxRateBps: $purchaseTaxRateBps, ')
+          ..write('salesTaxRateBps: $salesTaxRateBps, ')
           ..write('imagePath: $imagePath, ')
           ..write('isActive: $isActive, ')
           ..write('createdAt: $createdAt, ')
@@ -5107,7 +5144,8 @@ class Product extends DataClass implements Insertable<Product> {
     minQuantity,
     hasVariants,
     isTaxable,
-    taxRateBps,
+    purchaseTaxRateBps,
+    salesTaxRateBps,
     imagePath,
     isActive,
     createdAt,
@@ -5139,7 +5177,8 @@ class Product extends DataClass implements Insertable<Product> {
           other.minQuantity == this.minQuantity &&
           other.hasVariants == this.hasVariants &&
           other.isTaxable == this.isTaxable &&
-          other.taxRateBps == this.taxRateBps &&
+          other.purchaseTaxRateBps == this.purchaseTaxRateBps &&
+          other.salesTaxRateBps == this.salesTaxRateBps &&
           other.imagePath == this.imagePath &&
           other.isActive == this.isActive &&
           other.createdAt == this.createdAt &&
@@ -5168,7 +5207,8 @@ class ProductsCompanion extends UpdateCompanion<Product> {
   final Value<int> minQuantity;
   final Value<bool> hasVariants;
   final Value<bool> isTaxable;
-  final Value<int> taxRateBps;
+  final Value<int> purchaseTaxRateBps;
+  final Value<int> salesTaxRateBps;
   final Value<String?> imagePath;
   final Value<bool> isActive;
   final Value<DateTime> createdAt;
@@ -5195,7 +5235,8 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     this.minQuantity = const Value.absent(),
     this.hasVariants = const Value.absent(),
     this.isTaxable = const Value.absent(),
-    this.taxRateBps = const Value.absent(),
+    this.purchaseTaxRateBps = const Value.absent(),
+    this.salesTaxRateBps = const Value.absent(),
     this.imagePath = const Value.absent(),
     this.isActive = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -5223,7 +5264,8 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     this.minQuantity = const Value.absent(),
     this.hasVariants = const Value.absent(),
     this.isTaxable = const Value.absent(),
-    this.taxRateBps = const Value.absent(),
+    this.purchaseTaxRateBps = const Value.absent(),
+    this.salesTaxRateBps = const Value.absent(),
     this.imagePath = const Value.absent(),
     this.isActive = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -5253,7 +5295,8 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     Expression<int>? minQuantity,
     Expression<bool>? hasVariants,
     Expression<bool>? isTaxable,
-    Expression<int>? taxRateBps,
+    Expression<int>? purchaseTaxRateBps,
+    Expression<int>? salesTaxRateBps,
     Expression<String>? imagePath,
     Expression<bool>? isActive,
     Expression<DateTime>? createdAt,
@@ -5284,7 +5327,9 @@ class ProductsCompanion extends UpdateCompanion<Product> {
       if (minQuantity != null) 'min_quantity': minQuantity,
       if (hasVariants != null) 'has_variants': hasVariants,
       if (isTaxable != null) 'is_taxable': isTaxable,
-      if (taxRateBps != null) 'tax_rate_bps': taxRateBps,
+      if (purchaseTaxRateBps != null)
+        'purchase_tax_rate_bps': purchaseTaxRateBps,
+      if (salesTaxRateBps != null) 'sales_tax_rate_bps': salesTaxRateBps,
       if (imagePath != null) 'image_path': imagePath,
       if (isActive != null) 'is_active': isActive,
       if (createdAt != null) 'created_at': createdAt,
@@ -5314,7 +5359,8 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     Value<int>? minQuantity,
     Value<bool>? hasVariants,
     Value<bool>? isTaxable,
-    Value<int>? taxRateBps,
+    Value<int>? purchaseTaxRateBps,
+    Value<int>? salesTaxRateBps,
     Value<String?>? imagePath,
     Value<bool>? isActive,
     Value<DateTime>? createdAt,
@@ -5343,7 +5389,8 @@ class ProductsCompanion extends UpdateCompanion<Product> {
       minQuantity: minQuantity ?? this.minQuantity,
       hasVariants: hasVariants ?? this.hasVariants,
       isTaxable: isTaxable ?? this.isTaxable,
-      taxRateBps: taxRateBps ?? this.taxRateBps,
+      purchaseTaxRateBps: purchaseTaxRateBps ?? this.purchaseTaxRateBps,
+      salesTaxRateBps: salesTaxRateBps ?? this.salesTaxRateBps,
       imagePath: imagePath ?? this.imagePath,
       isActive: isActive ?? this.isActive,
       createdAt: createdAt ?? this.createdAt,
@@ -5437,8 +5484,11 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     if (isTaxable.present) {
       map['is_taxable'] = Variable<bool>(isTaxable.value);
     }
-    if (taxRateBps.present) {
-      map['tax_rate_bps'] = Variable<int>(taxRateBps.value);
+    if (purchaseTaxRateBps.present) {
+      map['purchase_tax_rate_bps'] = Variable<int>(purchaseTaxRateBps.value);
+    }
+    if (salesTaxRateBps.present) {
+      map['sales_tax_rate_bps'] = Variable<int>(salesTaxRateBps.value);
     }
     if (imagePath.present) {
       map['image_path'] = Variable<String>(imagePath.value);
@@ -5479,7 +5529,8 @@ class ProductsCompanion extends UpdateCompanion<Product> {
           ..write('minQuantity: $minQuantity, ')
           ..write('hasVariants: $hasVariants, ')
           ..write('isTaxable: $isTaxable, ')
-          ..write('taxRateBps: $taxRateBps, ')
+          ..write('purchaseTaxRateBps: $purchaseTaxRateBps, ')
+          ..write('salesTaxRateBps: $salesTaxRateBps, ')
           ..write('imagePath: $imagePath, ')
           ..write('isActive: $isActive, ')
           ..write('createdAt: $createdAt, ')
@@ -42502,7 +42553,8 @@ typedef $$ProductsTableCreateCompanionBuilder =
       Value<int> minQuantity,
       Value<bool> hasVariants,
       Value<bool> isTaxable,
-      Value<int> taxRateBps,
+      Value<int> purchaseTaxRateBps,
+      Value<int> salesTaxRateBps,
       Value<String?> imagePath,
       Value<bool> isActive,
       Value<DateTime> createdAt,
@@ -42531,7 +42583,8 @@ typedef $$ProductsTableUpdateCompanionBuilder =
       Value<int> minQuantity,
       Value<bool> hasVariants,
       Value<bool> isTaxable,
-      Value<int> taxRateBps,
+      Value<int> purchaseTaxRateBps,
+      Value<int> salesTaxRateBps,
       Value<String?> imagePath,
       Value<bool> isActive,
       Value<DateTime> createdAt,
@@ -42806,8 +42859,13 @@ class $$ProductsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<int> get taxRateBps => $composableBuilder(
-    column: $table.taxRateBps,
+  ColumnFilters<int> get purchaseTaxRateBps => $composableBuilder(
+    column: $table.purchaseTaxRateBps,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get salesTaxRateBps => $composableBuilder(
+    column: $table.salesTaxRateBps,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -43125,8 +43183,13 @@ class $$ProductsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<int> get taxRateBps => $composableBuilder(
-    column: $table.taxRateBps,
+  ColumnOrderings<int> get purchaseTaxRateBps => $composableBuilder(
+    column: $table.purchaseTaxRateBps,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get salesTaxRateBps => $composableBuilder(
+    column: $table.salesTaxRateBps,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -43308,8 +43371,13 @@ class $$ProductsTableAnnotationComposer
   GeneratedColumn<bool> get isTaxable =>
       $composableBuilder(column: $table.isTaxable, builder: (column) => column);
 
-  GeneratedColumn<int> get taxRateBps => $composableBuilder(
-    column: $table.taxRateBps,
+  GeneratedColumn<int> get purchaseTaxRateBps => $composableBuilder(
+    column: $table.purchaseTaxRateBps,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get salesTaxRateBps => $composableBuilder(
+    column: $table.salesTaxRateBps,
     builder: (column) => column,
   );
 
@@ -43580,7 +43648,8 @@ class $$ProductsTableTableManager
                 Value<int> minQuantity = const Value.absent(),
                 Value<bool> hasVariants = const Value.absent(),
                 Value<bool> isTaxable = const Value.absent(),
-                Value<int> taxRateBps = const Value.absent(),
+                Value<int> purchaseTaxRateBps = const Value.absent(),
+                Value<int> salesTaxRateBps = const Value.absent(),
                 Value<String?> imagePath = const Value.absent(),
                 Value<bool> isActive = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -43607,7 +43676,8 @@ class $$ProductsTableTableManager
                 minQuantity: minQuantity,
                 hasVariants: hasVariants,
                 isTaxable: isTaxable,
-                taxRateBps: taxRateBps,
+                purchaseTaxRateBps: purchaseTaxRateBps,
+                salesTaxRateBps: salesTaxRateBps,
                 imagePath: imagePath,
                 isActive: isActive,
                 createdAt: createdAt,
@@ -43637,7 +43707,8 @@ class $$ProductsTableTableManager
                 Value<int> minQuantity = const Value.absent(),
                 Value<bool> hasVariants = const Value.absent(),
                 Value<bool> isTaxable = const Value.absent(),
-                Value<int> taxRateBps = const Value.absent(),
+                Value<int> purchaseTaxRateBps = const Value.absent(),
+                Value<int> salesTaxRateBps = const Value.absent(),
                 Value<String?> imagePath = const Value.absent(),
                 Value<bool> isActive = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -43664,7 +43735,8 @@ class $$ProductsTableTableManager
                 minQuantity: minQuantity,
                 hasVariants: hasVariants,
                 isTaxable: isTaxable,
-                taxRateBps: taxRateBps,
+                purchaseTaxRateBps: purchaseTaxRateBps,
+                salesTaxRateBps: salesTaxRateBps,
                 imagePath: imagePath,
                 isActive: isActive,
                 createdAt: createdAt,

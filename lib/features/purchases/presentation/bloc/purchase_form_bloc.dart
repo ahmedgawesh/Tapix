@@ -591,7 +591,8 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
           minQuantity: 0,
           hasVariants: i.variantId != null,
           isTaxable: false,
-          taxRateBps: 0,
+          purchaseTaxRateBps: 0,
+          salesTaxRateBps: 0,
           isActive: true,
           trackInventory: true,
         );
@@ -783,6 +784,16 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
         ?? resolvedVariant?.wholesalePriceCents?.toBigInt().toInt()
         ?? event.product.wholesalePriceCents?.toBigInt().toInt();
 
+    // Auto-calculate tax from product's purchase tax rate if product is taxable
+    Decimal itemTaxCents = Decimal.zero;
+    if (event.product.isTaxable && event.product.purchaseTaxRateBps > 0) {
+      final subtotal = event.unitCostCents * Decimal.fromInt(event.quantity);
+      final discount = event.discountCents ?? Decimal.zero;
+      final taxable = subtotal - discount;
+      final raw = taxable * Decimal.fromInt(event.product.purchaseTaxRateBps) ~/ Decimal.fromInt(10000);
+      itemTaxCents = Decimal.fromBigInt(raw);
+    }
+
     final newItem = PurchaseLineItem(
       tempId: _generateTempId(),
       product: event.product,
@@ -790,6 +801,7 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
       quantity: event.quantity,
       unitCostCents: event.unitCostCents,
       discountCents: event.discountCents,
+      taxCents: itemTaxCents,
       expiryDate: event.expiryDate,
       colorName: _resolveColorName(resolvedVariant?.colorId),
       colorHex: _resolveColorHex(resolvedVariant?.colorId),

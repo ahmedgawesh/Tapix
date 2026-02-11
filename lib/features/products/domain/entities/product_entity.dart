@@ -23,7 +23,8 @@ class Product extends Equatable {
   final String? imagePath;
   final bool hasVariants;
   final bool isTaxable;
-  final int taxRateBps;
+  final int purchaseTaxRateBps;
+  final int salesTaxRateBps;
   final bool isActive;
   final bool trackInventory;
 
@@ -49,7 +50,8 @@ class Product extends Equatable {
     this.imagePath,
     required this.hasVariants,
     required this.isTaxable,
-    required this.taxRateBps,
+    required this.purchaseTaxRateBps,
+    required this.salesTaxRateBps,
     required this.isActive,
     required this.trackInventory,
   });
@@ -76,7 +78,8 @@ class Product extends Equatable {
     String? imagePath,
     bool? hasVariants,
     bool? isTaxable,
-    int? taxRateBps,
+    int? purchaseTaxRateBps,
+    int? salesTaxRateBps,
     bool? isActive,
     bool? trackInventory,
   }) {
@@ -102,7 +105,8 @@ class Product extends Equatable {
       imagePath: imagePath ?? this.imagePath,
       hasVariants: hasVariants ?? this.hasVariants,
       isTaxable: isTaxable ?? this.isTaxable,
-      taxRateBps: taxRateBps ?? this.taxRateBps,
+      purchaseTaxRateBps: purchaseTaxRateBps ?? this.purchaseTaxRateBps,
+      salesTaxRateBps: salesTaxRateBps ?? this.salesTaxRateBps,
       isActive: isActive ?? this.isActive,
       trackInventory: trackInventory ?? this.trackInventory,
     );
@@ -131,7 +135,8 @@ class Product extends Equatable {
         imagePath,
         hasVariants,
         isTaxable,
-        taxRateBps,
+        purchaseTaxRateBps,
+        salesTaxRateBps,
         isActive,
         trackInventory,
       ];

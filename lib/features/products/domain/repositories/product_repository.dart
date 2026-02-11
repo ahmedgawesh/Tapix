@@ -55,7 +55,8 @@ abstract class ProductRepository {
     String? imagePath,
     bool hasVariants = false,
     bool isTaxable = false,
-    int taxRateBps = 0,
+    int purchaseTaxRateBps = 0,
+    int salesTaxRateBps = 0,
     bool isActive = true,
     bool trackInventory = true,
   });
@@ -108,7 +109,8 @@ class BulkProductData {
   final int? supplierId;
   final bool hasVariants;
   final bool isTaxable;
-  final int taxRateBps;
+  final int purchaseTaxRateBps;
+  final int salesTaxRateBps;
   final bool isActive;
   final bool trackInventory;
 
@@ -128,7 +130,8 @@ class BulkProductData {
     this.supplierId,
     this.hasVariants = false,
     this.isTaxable = false,
-    this.taxRateBps = 0,
+    this.purchaseTaxRateBps = 0,
+    this.salesTaxRateBps = 0,
     this.isActive = true,
     this.trackInventory = true,
   });

@@ -90,7 +90,8 @@ class BulkProductRowData extends Equatable {
   final int? sizeId;
   final bool hasVariants;
   final bool isTaxable;
-  final int taxRateBps;
+  final int purchaseTaxRateBps;
+  final int salesTaxRateBps;
 
   const BulkProductRowData({
     required this.rowIndex,
@@ -109,7 +110,8 @@ class BulkProductRowData extends Equatable {
     this.sizeId,
     this.hasVariants = false,
     this.isTaxable = false,
-    this.taxRateBps = 0,
+    this.purchaseTaxRateBps = 0,
+    this.salesTaxRateBps = 0,
   });
 
   factory BulkProductRowData.empty(int rowIndex) {
@@ -140,7 +142,8 @@ class BulkProductRowData extends Equatable {
     int? sizeId,
     bool? hasVariants,
     bool? isTaxable,
-    int? taxRateBps,
+    int? purchaseTaxRateBps,
+    int? salesTaxRateBps,
   }) {
     return BulkProductRowData(
       rowIndex: rowIndex ?? this.rowIndex,
@@ -159,7 +162,8 @@ class BulkProductRowData extends Equatable {
       sizeId: sizeId ?? this.sizeId,
       hasVariants: hasVariants ?? this.hasVariants,
       isTaxable: isTaxable ?? this.isTaxable,
-      taxRateBps: taxRateBps ?? this.taxRateBps,
+      purchaseTaxRateBps: purchaseTaxRateBps ?? this.purchaseTaxRateBps,
+      salesTaxRateBps: salesTaxRateBps ?? this.salesTaxRateBps,
     );
   }
 
@@ -181,6 +185,7 @@ class BulkProductRowData extends Equatable {
         sizeId,
         hasVariants,
         isTaxable,
-        taxRateBps,
+        purchaseTaxRateBps,
+        salesTaxRateBps,
       ];
 }

@@ -56,7 +56,8 @@ class Products extends Table {
   IntColumn get minQuantity => integer().withDefault(const Constant(0))(); // reorderLevel in requirements
   BoolColumn get hasVariants => boolean().withDefault(const Constant(false))();
   BoolColumn get isTaxable => boolean().withDefault(const Constant(false))();
-  IntColumn get taxRateBps => integer().withDefault(const Constant(0))();
+  IntColumn get purchaseTaxRateBps => integer().withDefault(const Constant(0))();
+  IntColumn get salesTaxRateBps => integer().withDefault(const Constant(0))();
   TextColumn get imagePath => text().nullable()();
   BoolColumn get isActive => boolean().withDefault(const Constant(true))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();

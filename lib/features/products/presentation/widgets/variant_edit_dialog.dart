@@ -1181,7 +1181,8 @@ class _VariantEditDialogState extends State<VariantEditDialog> {
       imagePath: null,
       hasVariants: false,
       isTaxable: false,
-      taxRateBps: 0,
+      purchaseTaxRateBps: 0,
+      salesTaxRateBps: 0,
       isActive: v.isActive,
       trackInventory: false,
     );

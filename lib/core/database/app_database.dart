@@ -433,7 +433,8 @@ FROM product_variants__old
     // Drift stores booleans as INTEGER 0/1.
     await _safeAddColumn('products', 'has_variants', 'INTEGER NOT NULL DEFAULT 0');
     await _safeAddColumn('products', 'is_taxable', 'INTEGER NOT NULL DEFAULT 0');
-    await _safeAddColumn('products', 'tax_rate_bps', 'INTEGER NOT NULL DEFAULT 0');
+    await _safeAddColumn('products', 'purchase_tax_rate_bps', 'INTEGER NOT NULL DEFAULT 0');
+    await _safeAddColumn('products', 'sales_tax_rate_bps', 'INTEGER NOT NULL DEFAULT 0');
     await _safeAddColumn('products', 'track_inventory', 'INTEGER NOT NULL DEFAULT 1');
     await _safeAddColumn('products', 'stock_quantity', 'INTEGER NOT NULL DEFAULT 0');
     await _safeAddColumn('products', 'image_path', 'TEXT');
@@ -648,7 +649,7 @@ CREATE TABLE IF NOT EXISTS sale_payments (
   }
 
   @override
-  int get schemaVersion => 10025;
+  int get schemaVersion => 10026;
 
   @override
   MigrationStrategy get migration {
@@ -896,6 +897,21 @@ CREATE TABLE IF NOT EXISTS sale_payments (
           await _safeAddColumn('products', 'previous_cost_cents', 'INTEGER');
           await _safeAddColumn('products', 'previous_price_cents', 'INTEGER');
           await _safeAddColumn('products', 'previous_wholesale_price_cents', 'INTEGER');
+        }
+
+        // Migration 10025 -> 10026: Split taxRateBps into purchaseTaxRateBps + salesTaxRateBps
+        if (from < 10026) {
+          await _safeAddColumn('products', 'purchase_tax_rate_bps', 'INTEGER NOT NULL DEFAULT 0');
+          await _safeAddColumn('products', 'sales_tax_rate_bps', 'INTEGER NOT NULL DEFAULT 0');
+          // Migrate old tax_rate_bps data to both new columns
+          final hasTaxRateBps = await customSelect(
+            "SELECT COUNT(*) as cnt FROM pragma_table_info('products') WHERE name = 'tax_rate_bps'",
+          ).getSingle();
+          if (hasTaxRateBps.read<int>('cnt') > 0) {
+            await customStatement(
+              'UPDATE products SET purchase_tax_rate_bps = tax_rate_bps, sales_tax_rate_bps = tax_rate_bps WHERE tax_rate_bps > 0',
+            );
+          }
         }
 
         await _createIndexes();

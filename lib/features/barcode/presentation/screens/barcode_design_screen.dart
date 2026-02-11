@@ -99,7 +99,8 @@ class _BarcodeDesignScreenContent extends StatelessWidget {
           imagePath: null,
           hasVariants: false,
           isTaxable: false,
-          taxRateBps: 0,
+          purchaseTaxRateBps: 0,
+          salesTaxRateBps: 0,
           isActive: true,
           trackInventory: false,
         );

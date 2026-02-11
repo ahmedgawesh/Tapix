@@ -104,7 +104,8 @@ class BulkProductBloc extends Bloc<BulkProductEvent, BulkProductState> {
       sizeId: event.sizeId,
       hasVariants: event.hasVariants,
       isTaxable: event.isTaxable,
-      taxRateBps: event.taxRateBps,
+      purchaseTaxRateBps: event.purchaseTaxRateBps,
+      salesTaxRateBps: event.salesTaxRateBps,
     );
 
     final updatedErrors = Map<int, List<String>>.from(currentState.validationErrors);
@@ -252,7 +253,8 @@ class BulkProductBloc extends Bloc<BulkProductEvent, BulkProductState> {
         categoryId: row.categoryId,
         hasVariants: row.hasVariants,
         isTaxable: row.isTaxable,
-        taxRateBps: row.taxRateBps,
+        purchaseTaxRateBps: row.purchaseTaxRateBps,
+        salesTaxRateBps: row.salesTaxRateBps,
       )).toList();
 
       final results = await _repository.bulkCreateProducts(bulkData);

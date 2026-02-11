@@ -165,7 +165,8 @@ class ExportServiceImpl implements ExportService {
           product.trackInventory,
           false,
           product.isTaxable,
-          product.taxRateBps,
+          product.purchaseTaxRateBps,
+          product.salesTaxRateBps,
           product.isActive,
         ]);
       } else {
@@ -195,7 +196,8 @@ class ExportServiceImpl implements ExportService {
             product.trackInventory,
             true,
             product.isTaxable,
-            product.taxRateBps,
+            product.purchaseTaxRateBps,
+            product.salesTaxRateBps,
             product.isActive,
           ]);
         }
@@ -332,7 +334,8 @@ class ExportServiceImpl implements ExportService {
           TextCellValue(product.trackInventory.toString()),
           TextCellValue('false'),
           TextCellValue(product.isTaxable.toString()),
-          IntCellValue(product.taxRateBps),
+          IntCellValue(product.purchaseTaxRateBps),
+          IntCellValue(product.salesTaxRateBps),
           TextCellValue(product.isActive.toString()),
         ]);
       } else {
@@ -364,7 +367,8 @@ class ExportServiceImpl implements ExportService {
             TextCellValue(product.trackInventory.toString()),
             TextCellValue('true'),
             TextCellValue(product.isTaxable.toString()),
-            IntCellValue(product.taxRateBps),
+            IntCellValue(product.purchaseTaxRateBps),
+            IntCellValue(product.salesTaxRateBps),
             TextCellValue(product.isActive.toString()),
           ]);
         }

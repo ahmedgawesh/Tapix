@@ -37,7 +37,8 @@ class BulkProductRowUpdated extends BulkProductEvent {
   final int? sizeId;
   final bool? hasVariants;
   final bool? isTaxable;
-  final int? taxRateBps;
+  final int? purchaseTaxRateBps;
+  final int? salesTaxRateBps;
 
   const BulkProductRowUpdated({
     required this.rowIndex,
@@ -56,7 +57,8 @@ class BulkProductRowUpdated extends BulkProductEvent {
     this.sizeId,
     this.hasVariants,
     this.isTaxable,
-    this.taxRateBps,
+    this.purchaseTaxRateBps,
+    this.salesTaxRateBps,
   });
 
   @override
@@ -77,7 +79,8 @@ class BulkProductRowUpdated extends BulkProductEvent {
         sizeId,
         hasVariants,
         isTaxable,
-        taxRateBps,
+        purchaseTaxRateBps,
+        salesTaxRateBps,
       ];
 }
 

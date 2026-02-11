@@ -25,7 +25,8 @@ class ProductModel extends Product {
     super.imagePath,
     required super.hasVariants,
     required super.isTaxable,
-    required super.taxRateBps,
+    required super.purchaseTaxRateBps,
+    required super.salesTaxRateBps,
     required super.isActive,
     required super.trackInventory,
   });
@@ -53,7 +54,8 @@ class ProductModel extends Product {
       imagePath: product.imagePath,
       hasVariants: product.hasVariants,
       isTaxable: product.isTaxable,
-      taxRateBps: product.taxRateBps,
+      purchaseTaxRateBps: product.purchaseTaxRateBps,
+      salesTaxRateBps: product.salesTaxRateBps,
       isActive: product.isActive,
       trackInventory: product.trackInventory,
     );
@@ -82,7 +84,8 @@ class ProductModel extends Product {
       imagePath: entity.imagePath,
       hasVariants: entity.hasVariants,
       isTaxable: entity.isTaxable,
-      taxRateBps: entity.taxRateBps,
+      purchaseTaxRateBps: entity.purchaseTaxRateBps,
+      salesTaxRateBps: entity.salesTaxRateBps,
       isActive: entity.isActive,
       trackInventory: entity.trackInventory,
     );
@@ -108,7 +111,8 @@ class ProductModel extends Product {
       imagePath: Value(imagePath),
       hasVariants: Value(hasVariants),
       isTaxable: Value(isTaxable),
-      taxRateBps: Value(taxRateBps),
+      purchaseTaxRateBps: Value(purchaseTaxRateBps),
+      salesTaxRateBps: Value(salesTaxRateBps),
       isActive: Value(isActive),
       trackInventory: Value(trackInventory),
     );

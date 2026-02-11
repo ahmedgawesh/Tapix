@@ -69,7 +69,8 @@ class ProductFormState extends Equatable {
   final String? imagePath;
   final bool hasVariants;
   final bool isTaxable;
-  final int taxRateBps;
+  final int purchaseTaxRateBps;
+  final int salesTaxRateBps;
   final bool isActive;
   final bool trackInventory;
 
@@ -103,7 +104,8 @@ class ProductFormState extends Equatable {
     this.imagePath,
     this.hasVariants = false,
     this.isTaxable = false,
-    this.taxRateBps = 0,
+    this.purchaseTaxRateBps = 0,
+    this.salesTaxRateBps = 0,
     this.isActive = true,
     this.trackInventory = true,
     this.selectedColorId,
@@ -148,7 +150,8 @@ class ProductFormState extends Equatable {
     String? imagePath,
     bool? hasVariants,
     bool? isTaxable,
-    int? taxRateBps,
+    int? purchaseTaxRateBps,
+    int? salesTaxRateBps,
     bool? isActive,
     bool? trackInventory,
     int? selectedColorId,
@@ -179,7 +182,8 @@ class ProductFormState extends Equatable {
       imagePath: imagePath ?? this.imagePath,
       hasVariants: hasVariants ?? this.hasVariants,
       isTaxable: isTaxable ?? this.isTaxable,
-      taxRateBps: taxRateBps ?? this.taxRateBps,
+      purchaseTaxRateBps: purchaseTaxRateBps ?? this.purchaseTaxRateBps,
+      salesTaxRateBps: salesTaxRateBps ?? this.salesTaxRateBps,
       isActive: isActive ?? this.isActive,
       trackInventory: trackInventory ?? this.trackInventory,
       selectedColorId: selectedColorId ?? this.selectedColorId,
@@ -213,7 +217,8 @@ class ProductFormState extends Equatable {
         imagePath,
         hasVariants,
         isTaxable,
-        taxRateBps,
+        purchaseTaxRateBps,
+        salesTaxRateBps,
         isActive,
         trackInventory,
         selectedColorId,
@@ -290,7 +295,8 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
           imagePath: product.imagePath,
           hasVariants: product.hasVariants,
           isTaxable: product.isTaxable,
-          taxRateBps: product.taxRateBps,
+          purchaseTaxRateBps: product.purchaseTaxRateBps,
+          salesTaxRateBps: product.salesTaxRateBps,
           isActive: product.isActive,
           trackInventory: product.trackInventory,
           selectedColorId: product.hasVariants ? null : selectedColorId,
@@ -371,8 +377,11 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
       case 'isTaxable':
         emit(state.copyWith(isTaxable: event.value as bool, fieldErrors: newErrors));
         break;
-      case 'taxRateBps':
-        emit(state.copyWith(taxRateBps: event.value as int, fieldErrors: newErrors));
+      case 'purchaseTaxRateBps':
+        emit(state.copyWith(purchaseTaxRateBps: event.value as int, fieldErrors: newErrors));
+        break;
+      case 'salesTaxRateBps':
+        emit(state.copyWith(salesTaxRateBps: event.value as int, fieldErrors: newErrors));
         break;
       case 'isActive':
         emit(state.copyWith(isActive: event.value as bool, fieldErrors: newErrors));
@@ -424,8 +433,8 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
       errors['minQuantity'] = 'Minimum quantity cannot be negative';
     }
 
-    if (state.isTaxable && state.taxRateBps <= 0) {
-      errors['taxRateBps'] = 'Tax rate is required when product is taxable';
+    if (state.isTaxable && state.purchaseTaxRateBps <= 0 && state.salesTaxRateBps <= 0) {
+      errors['purchaseTaxRateBps'] = 'At least one tax rate is required when product is taxable';
     }
 
     return errors;
@@ -545,7 +554,8 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
           imagePath: state.imagePath,
           hasVariants: state.hasVariants,
           isTaxable: state.isTaxable,
-          taxRateBps: state.taxRateBps,
+          purchaseTaxRateBps: state.purchaseTaxRateBps,
+          salesTaxRateBps: state.salesTaxRateBps,
           isActive: state.isActive,
           trackInventory: state.trackInventory,
         );
@@ -593,7 +603,8 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
           imagePath: state.imagePath,
           hasVariants: state.hasVariants,
           isTaxable: state.isTaxable,
-          taxRateBps: state.taxRateBps,
+          purchaseTaxRateBps: state.purchaseTaxRateBps,
+          salesTaxRateBps: state.salesTaxRateBps,
           isActive: state.isActive,
           trackInventory: state.trackInventory,
         );

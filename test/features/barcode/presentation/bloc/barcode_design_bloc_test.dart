@@ -44,7 +44,8 @@ void main() {
     minQuantity: 2,
     hasVariants: false,
     isTaxable: false,
-    taxRateBps: 0,
+    purchaseTaxRateBps: 0,
+    salesTaxRateBps: 0,
     isActive: true,
     trackInventory: true,
   );

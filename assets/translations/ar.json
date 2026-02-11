@@ -446,6 +446,8 @@
   "product_form_tax": "إعدادات الضريبة",
   "product_form_isTaxable": "خاضع للضريبة",
   "product_form_taxRate": "نسبة الضريبة",
+  "product_form_purchaseTaxRate": "نسبة ضريبة المشتريات",
+  "product_form_salesTaxRate": "نسبة ضريبة المبيعات",
   "product_form_options": "خيارات",
   "product_form_hasVariants": "له متغيرات",
   "product_form_hasVariants_hint": "فعّل إذا كان للمنتج متغيرات متعددة (ألوان، مقاسات)",

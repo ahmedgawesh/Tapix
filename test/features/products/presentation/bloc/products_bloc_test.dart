@@ -241,7 +241,8 @@ void main() {
                 imagePath: any(named: 'imagePath'),
                 hasVariants: any(named: 'hasVariants'),
                 isTaxable: any(named: 'isTaxable'),
-                taxRateBps: any(named: 'taxRateBps'),
+                purchaseTaxRateBps: any(named: 'purchaseTaxRateBps'),
+                salesTaxRateBps: any(named: 'salesTaxRateBps'),
                 isActive: any(named: 'isActive'),
                 trackInventory: any(named: 'trackInventory'),
               )).thenAnswer((_) async => 1);
@@ -273,7 +274,8 @@ void main() {
                 imagePath: any(named: 'imagePath'),
                 hasVariants: any(named: 'hasVariants'),
                 isTaxable: any(named: 'isTaxable'),
-                taxRateBps: any(named: 'taxRateBps'),
+                purchaseTaxRateBps: any(named: 'purchaseTaxRateBps'),
+                salesTaxRateBps: any(named: 'salesTaxRateBps'),
                 isActive: any(named: 'isActive'),
                 trackInventory: any(named: 'trackInventory'),
               )).called(1);

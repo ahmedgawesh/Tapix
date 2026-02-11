@@ -26,7 +26,8 @@ class ProductCreateRequested extends ProductsEvent {
   final int minQuantity;
   final bool hasVariants;
   final bool isTaxable;
-  final int taxRateBps;
+  final int purchaseTaxRateBps;
+  final int salesTaxRateBps;
   final String? imagePath;
 
   const ProductCreateRequested({
@@ -43,7 +44,8 @@ class ProductCreateRequested extends ProductsEvent {
     this.minQuantity = 0,
     this.hasVariants = false,
     this.isTaxable = false,
-    this.taxRateBps = 0,
+    this.purchaseTaxRateBps = 0,
+    this.salesTaxRateBps = 0,
     this.imagePath,
   });
 }
@@ -162,7 +164,8 @@ class ProductsBloc extends RealtimeBloc<List<Product>, ProductsEvent> {
         minQuantity: event.minQuantity,
         hasVariants: event.hasVariants,
         isTaxable: event.isTaxable,
-        taxRateBps: event.taxRateBps,
+        purchaseTaxRateBps: event.purchaseTaxRateBps,
+        salesTaxRateBps: event.salesTaxRateBps,
         imagePath: event.imagePath,
       );
     } catch (e, st) {

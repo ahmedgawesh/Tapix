@@ -316,7 +316,8 @@ class _BulkProductFormView extends StatelessWidget {
                       sizeId: updates['sizeId'] as int?,
                       hasVariants: updates['hasVariants'] as bool?,
                       isTaxable: updates['isTaxable'] as bool?,
-                      taxRateBps: updates['taxRateBps'] as int?,
+                      purchaseTaxRateBps: updates['purchaseTaxRateBps'] as int?,
+                      salesTaxRateBps: updates['salesTaxRateBps'] as int?,
                     ),
                   );
             },

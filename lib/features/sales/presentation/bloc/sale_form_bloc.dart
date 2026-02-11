@@ -547,7 +547,8 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
           minQuantity: 0,
           hasVariants: i.variantId != null,
           isTaxable: false,
-          taxRateBps: 0,
+          purchaseTaxRateBps: 0,
+          salesTaxRateBps: 0,
           isActive: true,
           trackInventory: true,
         );
@@ -673,6 +674,16 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
       } catch (_) {}
     }
 
+    // Auto-calculate tax from product's sales tax rate if product is taxable
+    Decimal itemTaxCents = Decimal.zero;
+    if (event.product.isTaxable && event.product.salesTaxRateBps > 0) {
+      final subtotal = event.unitPriceCents * Decimal.fromInt(event.quantity);
+      final discount = event.discountCents ?? Decimal.zero;
+      final taxable = subtotal - discount;
+      final raw = taxable * Decimal.fromInt(event.product.salesTaxRateBps) ~/ Decimal.fromInt(10000);
+      itemTaxCents = Decimal.fromBigInt(raw);
+    }
+
     final newItem = SaleLineItem(
       tempId: _generateTempId(),
       product: event.product,
@@ -680,6 +691,7 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
       quantity: event.quantity,
       unitPriceCents: event.unitPriceCents,
       discountCents: event.discountCents,
+      taxCents: itemTaxCents,
       colorName: _resolveColorName(resolvedVariant?.colorId),
       colorHex: _resolveColorHex(resolvedVariant?.colorId),
       sizeName: _resolveSizeName(resolvedVariant?.sizeId),

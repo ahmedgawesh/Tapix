@@ -365,6 +365,8 @@
   "product_form_tax": "Tax Settings",
   "product_form_isTaxable": "Taxable",
   "product_form_taxRate": "Tax Rate",
+  "product_form_purchaseTaxRate": "Purchase Tax Rate",
+  "product_form_salesTaxRate": "Sales Tax Rate",
   "product_form_options": "Options",
   "product_form_hasVariants": "Has Variants",
   "product_form_hasVariants_hint": "Enable if product has multiple variants (colors, sizes)",

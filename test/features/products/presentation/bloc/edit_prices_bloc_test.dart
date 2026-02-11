@@ -27,7 +27,8 @@ void main() {
     trackInventory: true,
     hasVariants: false,
     isTaxable: false,
-    taxRateBps: 0,
+    purchaseTaxRateBps: 0,
+    salesTaxRateBps: 0,
   );
 
   setUp(() {

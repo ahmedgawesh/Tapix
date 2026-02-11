@@ -446,6 +446,8 @@
   "product_form_tax": "Paramètres Fiscaux",
   "product_form_isTaxable": "Taxable",
   "product_form_taxRate": "Taux de Taxe",
+  "product_form_purchaseTaxRate": "Taux de Taxe Achat",
+  "product_form_salesTaxRate": "Taux de Taxe Vente",
   "product_form_options": "Options",
   "product_form_hasVariants": "A des Variantes",
   "product_form_hasVariants_hint": "Activer si le produit a plusieurs variantes (couleurs, tailles)",
