@@ -1115,54 +1115,58 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
                 color: colorScheme.outlineVariant.withValues(alpha: 0.3)),
             itemBuilder: (context, index) {
               final ret = _returns[index];
-              return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 36, height: 36,
-                      decoration: BoxDecoration(
-                        color: colorScheme.errorContainer.withValues(alpha: 0.25),
-                        borderRadius: BorderRadius.circular(10),
+              return InkWell(
+                onTap: () => context.push('/purchases/returns/${ret.id}'),
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 36, height: 36,
+                        decoration: BoxDecoration(
+                          color: colorScheme.errorContainer.withValues(alpha: 0.25),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        alignment: Alignment.center,
+                        child: Icon(LucideIcons.undo2, size: 16, color: colorScheme.error),
                       ),
-                      alignment: Alignment.center,
-                      child: Icon(LucideIcons.undo2, size: 16, color: colorScheme.error),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(ret.returnNumber,
-                              style: theme.textTheme.titleSmall?.copyWith(
-                                  fontWeight: FontWeight.w600)),
-                          Row(
-                            children: [
-                              Icon(LucideIcons.calendar, size: 11,
-                                  color: colorScheme.onSurfaceVariant),
-                              const SizedBox(width: 4),
-                              Text(DateFormat.yMMMd().format(ret.returnDate),
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                      color: colorScheme.onSurfaceVariant, fontSize: 11)),
-                            ],
-                          ),
-                          if (ret.reason != null && ret.reason!.isNotEmpty)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 2),
-                              child: Text(ret.reason!,
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                      color: colorScheme.onSurfaceVariant, fontStyle: FontStyle.italic),
-                                  maxLines: 1, overflow: TextOverflow.ellipsis),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(ret.returnNumber,
+                                style: theme.textTheme.titleSmall?.copyWith(
+                                    fontWeight: FontWeight.w600)),
+                            Row(
+                              children: [
+                                Icon(LucideIcons.calendar, size: 11,
+                                    color: colorScheme.onSurfaceVariant),
+                                const SizedBox(width: 4),
+                                Text(DateFormat.yMMMd().format(ret.returnDate),
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                        color: colorScheme.onSurfaceVariant, fontSize: 11)),
+                              ],
                             ),
-                        ],
+                            if (ret.reason != null && ret.reason!.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 2),
+                                child: Text(ret.reason!,
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                        color: colorScheme.onSurfaceVariant, fontStyle: FontStyle.italic),
+                                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                              ),
+                          ],
+                        ),
                       ),
-                    ),
-                    Text(
-                      cs.format(ret.totalCents.toBigInt().toInt()),
-                      style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.bold, color: colorScheme.error),
-                    ),
-                  ],
+                      Text(
+                        cs.format(ret.totalCents.toBigInt().toInt()),
+                        style: theme.textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.bold, color: colorScheme.error),
+                      ),
+                    ],
+                  ),
                 ),
               );
             },

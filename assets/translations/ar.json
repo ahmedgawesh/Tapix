@@ -756,6 +756,7 @@
     "status_pending": "قيد الانتظار",
     "status_posted": "مُرحّل",
     "status_voided": "ملغى",
+    "has_returns": "يوجد مرتجعات",
     "supplier": "المورد",
     "select_supplier": "اختر المورد",
     "date": "تاريخ الشراء",

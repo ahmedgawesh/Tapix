@@ -392,12 +392,22 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
   }
 
   /// Void sale - reverse stock and customer accounting if completed.
-  /// Mirrors voidPurchase pattern for full accounting reversal.
+  /// Also cascade-voids all associated returns to keep stock/accounting consistent.
   Future<void> voidSale(int saleId) {
     return transaction(() async {
       final sale = await getSaleById(saleId);
       if (sale == null) throw Exception('Sale not found');
       if (sale.status == 'voided') throw Exception('Sale already voided');
+
+      // Cascade-void all associated returns first (reverses their stock/accounting)
+      final associatedReturns = await (select(saleReturns)
+            ..where((r) => r.saleId.equals(saleId)))
+          .get();
+      for (final ret in associatedReturns) {
+        if (ret.status != 'voided') {
+          await voidSaleReturn(ret.id);
+        }
+      }
 
       if (sale.status == 'completed') {
         // 1. Reverse stock
@@ -650,20 +660,39 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
       if (returnData == null) throw Exception('Return not found');
       if (returnData.status == 'posted') throw Exception('Return already posted');
 
+      // Validate return quantities don't exceed available (sold - already returned)
+      final returnItemsQuery = select(saleReturnItems).join([
+        innerJoin(saleItems, saleItems.id.equalsExp(saleReturnItems.saleItemId)),
+      ])
+        ..where(saleReturnItems.returnId.equals(returnId));
+
+      final returnItemRows = await returnItemsQuery.get();
+      for (final row in returnItemRows) {
+        final returnItem = row.readTable(saleReturnItems);
+        final saleItem = row.readTable(saleItems);
+
+        final alreadyReturned = await getReturnedQuantity(saleItem.id);
+        // Subtract this return's own quantity since it's not yet posted
+        final previouslyReturned = alreadyReturned - returnItem.quantity;
+        final maxReturnable = saleItem.quantity - previouslyReturned;
+
+        if (returnItem.quantity > maxReturnable) {
+          throw Exception(
+            'Cannot return ${returnItem.quantity} units of item #${saleItem.id}. '
+            'Only $maxReturnable available (sold: ${saleItem.quantity}, '
+            'already returned: $previouslyReturned).',
+          );
+        }
+      }
+
       // 1. Restore stock for applicable dispositions
       final shouldRestoreStock = returnData.dispositionType == 'restock' ||
           returnData.dispositionType == 'refund' ||
           returnData.dispositionType == 'exchange';
 
       if (shouldRestoreStock) {
-        final query = select(saleReturnItems).join([
-          innerJoin(saleItems, saleItems.id.equalsExp(saleReturnItems.saleItemId)),
-        ])
-          ..where(saleReturnItems.returnId.equals(returnId));
-
-        final items = await query.get();
         final returnAffectedProductIds = <int>{};
-        for (final row in items) {
+        for (final row in returnItemRows) {
           final returnItem = row.readTable(saleReturnItems);
           final saleItem = row.readTable(saleItems);
           final variantId = saleItem.variantId;
@@ -816,8 +845,8 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
               // Also deduct from the default variant
               await customUpdate(
                 'UPDATE product_variants SET stock_quantity = stock_quantity - ?, updated_at = ? '
-                'WHERE product_id = ? AND color_id IS NULL AND size_id IS NULL AND stock_quantity >= ?',
-                variables: [Variable.withInt(returnItem.quantity), Variable.withString(now), Variable.withInt(productId), Variable.withInt(returnItem.quantity)],
+                'WHERE product_id = ? AND color_id IS NULL AND size_id IS NULL',
+                variables: [Variable.withInt(returnItem.quantity), Variable.withString(now), Variable.withInt(productId)],
                 updates: {productVariants},
                 updateKind: UpdateKind.update,
               );
@@ -1015,11 +1044,14 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
     });
   }
 
-  /// Get total returned quantity for a specific sale item
+  /// Get total returned quantity for a specific sale item (excluding voided returns)
   Future<int> getReturnedQuantity(int saleItemId) async {
     final result = await customSelect(
-      'SELECT COALESCE(SUM(quantity), 0) as total FROM sale_return_items WHERE sale_item_id = ?',
-      variables: [Variable.withInt(saleItemId)],
+      'SELECT COALESCE(SUM(sri.quantity), 0) as total '
+      'FROM sale_return_items sri '
+      'JOIN sale_returns sr ON sr.id = sri.return_id '
+      'WHERE sri.sale_item_id = ? AND sr.status != ?',
+      variables: [Variable.withInt(saleItemId), const Variable('voided')],
     ).getSingle();
     return result.read<int>('total');
   }

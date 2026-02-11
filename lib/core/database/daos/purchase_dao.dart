@@ -260,7 +260,6 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
         affectedProductIds.add(productId);
         final newCostCents = item.unitCostCents.toBigInt().toInt();
         final now = DateTime.now().toIso8601String();
-
         if (variantId != null) {
           // Increase variant stock
           await customUpdate(
@@ -597,7 +596,7 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
   }
 
   /// Void purchase - reverse stock changes if posted
-  /// Validates that reversing stock won't result in negative quantities.
+  /// Also cascade-voids all associated returns to keep stock/accounting consistent.
   Future<void> voidPurchase(int purchaseId, {int? userId}) {
     return transaction(() async {
       final purchase = await getPurchaseById(purchaseId);
@@ -606,6 +605,16 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
       }
       if (purchase.status == 'voided') {
         throw Exception('Purchase already voided');
+      }
+
+      // Cascade-void all associated returns first (reverses their stock/accounting)
+      final associatedReturns = await (select(purchaseReturns)
+            ..where((r) => r.purchaseId.equals(purchaseId)))
+          .get();
+      for (final ret in associatedReturns) {
+        if (ret.status != 'voided') {
+          await voidPurchaseReturn(ret.id);
+        }
       }
 
       // If posted, reverse stock changes with negative-stock guard
@@ -666,8 +675,8 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
             // Also reverse the default variant
             await customUpdate(
               'UPDATE product_variants SET stock_quantity = stock_quantity - ?, updated_at = ? '
-              'WHERE product_id = ? AND color_id IS NULL AND size_id IS NULL AND stock_quantity >= ?',
-              variables: [Variable.withInt(item.quantity), Variable.withString(now), Variable.withInt(productId), Variable.withInt(item.quantity)],
+              'WHERE product_id = ? AND color_id IS NULL AND size_id IS NULL',
+              variables: [Variable.withInt(item.quantity), Variable.withString(now), Variable.withInt(productId)],
               updates: {productVariants},
               updateKind: UpdateKind.update,
             );
@@ -1025,7 +1034,6 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
       final shouldDeductStock = returnData.dispositionType == 'restock' ||
           returnData.dispositionType == 'refund' ||
           returnData.dispositionType == 'replace';
-
       if (shouldDeductStock) {
         final returnAffectedProductIds = <int>{};
         for (final row in returnItemRows) {
@@ -1035,7 +1043,6 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
           final productId = purchaseItem.productId;
           returnAffectedProductIds.add(productId);
           final now = DateTime.now().toIso8601String();
-
           if (variantId != null) {
             // Guard against negative stock
             final variantRow = await customSelect(
@@ -1082,8 +1089,8 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
             // Also deduct from the default variant
             await customUpdate(
               'UPDATE product_variants SET stock_quantity = stock_quantity - ?, updated_at = ? '
-              'WHERE product_id = ? AND color_id IS NULL AND size_id IS NULL AND stock_quantity >= ?',
-              variables: [Variable.withInt(returnItem.quantity), Variable.withString(now), Variable.withInt(productId), Variable.withInt(returnItem.quantity)],
+              'WHERE product_id = ? AND color_id IS NULL AND size_id IS NULL',
+              variables: [Variable.withInt(returnItem.quantity), Variable.withString(now), Variable.withInt(productId)],
               updates: {productVariants},
               updateKind: UpdateKind.update,
             );
@@ -1472,5 +1479,13 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
       variables: [Variable.withInt(purchaseItemId), const Variable('voided')],
     ).get();
     return rows.isEmpty ? 0 : rows.first.read<int>('total');
+  }
+
+  /// Watch set of purchase IDs that have at least one non-voided return
+  Stream<Set<int>> watchPurchaseIdsWithReturns() {
+    return (select(purchaseReturns)
+          ..where((r) => r.status.equals('posted')))
+        .watch()
+        .map((list) => list.map((r) => r.purchaseId).toSet());
   }
 }

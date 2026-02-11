@@ -13,12 +13,14 @@ class PurchasesHubData {
   final PurchaseDashboardStats stats;
   final String? searchQuery;
   final String? statusFilter;
+  final Set<int> purchaseIdsWithReturns;
 
   const PurchasesHubData({
     required this.purchases,
     required this.stats,
     this.searchQuery,
     this.statusFilter,
+    this.purchaseIdsWithReturns = const {},
   });
 
   List<PurchaseEntity> get filteredPurchases {
@@ -77,12 +79,17 @@ class PurchasesBloc extends RealtimeBloc<PurchasesHubData, PurchasesEvent> {
   // Keep latest values from both streams
   List<PurchaseEntity>? _latestPurchases;
   PurchaseDashboardStats? _latestStats;
+  Set<int>? _returnPurchaseIds;
   StreamSubscription<PurchaseDashboardStats>? _statsSub;
+  StreamSubscription<Set<int>>? _returnIdsSub;
 
   PurchasesBloc(this._repository) : super(const RealtimeLoading()) {
-    // Subscribe to stats stream separately
     _statsSub = _repository.watchDashboardStats().listen((stats) {
       _latestStats = stats;
+      _emitCombined();
+    });
+    _returnIdsSub = _repository.watchPurchaseIdsWithReturns().listen((ids) {
+      _returnPurchaseIds = ids;
       _emitCombined();
     });
   }
@@ -109,6 +116,7 @@ class PurchasesBloc extends RealtimeBloc<PurchasesHubData, PurchasesEvent> {
         ),
         searchQuery: _searchQuery,
         statusFilter: _statusFilter,
+        purchaseIdsWithReturns: _returnPurchaseIds ?? const {},
       );
     });
   }
@@ -121,6 +129,7 @@ class PurchasesBloc extends RealtimeBloc<PurchasesHubData, PurchasesEvent> {
         stats: _latestStats!,
         searchQuery: _searchQuery,
         statusFilter: _statusFilter,
+        purchaseIdsWithReturns: _returnPurchaseIds ?? const {},
       )));
     }
   }
@@ -137,6 +146,7 @@ class PurchasesBloc extends RealtimeBloc<PurchasesHubData, PurchasesEvent> {
         stats: data.stats,
         searchQuery: _searchQuery,
         statusFilter: _statusFilter,
+        purchaseIdsWithReturns: data.purchaseIdsWithReturns,
       )));
     }
   }
@@ -153,6 +163,7 @@ class PurchasesBloc extends RealtimeBloc<PurchasesHubData, PurchasesEvent> {
         stats: data.stats,
         searchQuery: _searchQuery,
         statusFilter: _statusFilter,
+        purchaseIdsWithReturns: data.purchaseIdsWithReturns,
       )));
     }
   }
@@ -193,6 +204,7 @@ class PurchasesBloc extends RealtimeBloc<PurchasesHubData, PurchasesEvent> {
   @override
   Future<void> close() {
     _statsSub?.cancel();
+    _returnIdsSub?.cancel();
     return super.close();
   }
 }

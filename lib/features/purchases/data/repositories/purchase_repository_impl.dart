@@ -433,4 +433,8 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
   Future<int> getReturnedQuantity(int purchaseItemId) {
     return _datasource.getReturnedQuantity(purchaseItemId);
   }
+
+  @override
+  Stream<Set<int>> watchPurchaseIdsWithReturns() =>
+      _datasource.watchPurchaseIdsWithReturns();
 }

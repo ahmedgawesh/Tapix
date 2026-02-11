@@ -350,6 +350,7 @@ class _PurchaseHubViewState extends State<_PurchaseHubView> {
                   return _PurchaseTile(
                     purchase: purchase,
                     currencyService: currencyService,
+                    hasReturn: data.purchaseIdsWithReturns.contains(purchase.id),
                     onTap: () =>
                         context.push('/purchases/${purchase.id}'),
                   );
@@ -570,11 +571,13 @@ class _FilterChip extends StatelessWidget {
 class _PurchaseTile extends StatelessWidget {
   final PurchaseEntity purchase;
   final CurrencyService currencyService;
+  final bool hasReturn;
   final VoidCallback onTap;
 
   const _PurchaseTile({
     required this.purchase,
     required this.currencyService,
+    this.hasReturn = false,
     required this.onTap,
   });
 
@@ -777,6 +780,37 @@ class _PurchaseTile extends StatelessWidget {
                               if (purchase.isPosted && purchase.isFullyPaid) ...[
                                 const SizedBox(width: 8),
                                 const Icon(LucideIcons.checkCircle, size: 13, color: Colors.green),
+                              ],
+                              if (hasReturn) ...[
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: cs.error.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(
+                                      color: cs.error.withValues(alpha: 0.3),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(LucideIcons.undo2,
+                                          size: 10, color: cs.error),
+                                      const SizedBox(width: 3),
+                                      Text(
+                                        'purchases.has_returns'.tr(),
+                                        style: theme.textTheme.labelSmall
+                                            ?.copyWith(
+                                          color: cs.error,
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 9,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               ],
                               const Spacer(),
                               Text(

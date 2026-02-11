@@ -401,6 +401,7 @@ class PurchaseReturnFormBloc
     PurchaseReturnFormSubmitted event,
     Emitter<PurchaseReturnFormState> emit,
   ) async {
+    if (state.isSuccess) return; // Prevent double-submission
     if (state.purchaseId == null) {
       emit(state.copyWith(error: 'No purchase selected'));
       return;

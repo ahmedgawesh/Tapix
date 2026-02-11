@@ -756,6 +756,7 @@
     "status_pending": "Pending",
     "status_posted": "Posted",
     "status_voided": "Voided",
+    "has_returns": "Has Returns",
     "supplier": "Supplier",
     "select_supplier": "Select a supplier",
     "date": "Purchase Date",

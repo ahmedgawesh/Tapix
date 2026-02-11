@@ -756,6 +756,7 @@
     "status_pending": "En attente",
     "status_posted": "Validé",
     "status_voided": "Annulé",
+    "has_returns": "A des Retours",
     "supplier": "Fournisseur",
     "select_supplier": "Sélectionner un fournisseur",
     "date": "Date d'achat",

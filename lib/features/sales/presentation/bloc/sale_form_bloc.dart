@@ -735,16 +735,45 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
     emit(state.copyWith(isSubmitting: true, error: null));
 
     try {
-      final items = state.items.map((item) => SaleItemInput(
-            productId: item.product.id,
-            variantId: item.variant?.id,
-            quantity: item.quantity,
-            unitPriceCents: item.unitPriceCents,
-            subtotalCents: item.subtotalCents,
-            discountCents: item.discountCents,
-            taxCents: item.taxCents,
-            totalCents: item.totalCents,
-          )).toList();
+      // Distribute invoice-level discount and tax proportionally to each line
+      // so that each item in the DB carries its correct share (needed for returns).
+      final invoiceDiscount = state.discountMode == SaleDiscountMode.invoice
+          ? state.invoiceDiscountCents.toBigInt().toInt()
+          : 0;
+      final invoiceTax = state.taxRatePercent > Decimal.zero
+          ? state.taxCents.toBigInt().toInt()
+          : 0;
+      final totalSubtotal = state.subtotalCents.toBigInt().toInt();
+
+      final lineItems = state.items;
+      final distributedDiscounts = _distributeProportionally(
+        invoiceDiscount, lineItems.map((i) => i.subtotalCents.toBigInt().toInt()).toList(), totalSubtotal,
+      );
+      final distributedTaxes = _distributeProportionally(
+        invoiceTax, lineItems.map((i) => i.subtotalCents.toBigInt().toInt()).toList(), totalSubtotal,
+      );
+
+      final items = <SaleItemInput>[];
+      for (int idx = 0; idx < lineItems.length; idx++) {
+        final item = lineItems[idx];
+        final effectiveDiscount = invoiceDiscount > 0
+            ? Decimal.fromInt(distributedDiscounts[idx])
+            : item.discountCents;
+        final effectiveTax = invoiceTax > 0
+            ? Decimal.fromInt(distributedTaxes[idx])
+            : item.taxCents;
+        final effectiveTotal = item.subtotalCents - effectiveDiscount + effectiveTax;
+        items.add(SaleItemInput(
+          productId: item.product.id,
+          variantId: item.variant?.id,
+          quantity: item.quantity,
+          unitPriceCents: item.unitPriceCents,
+          subtotalCents: item.subtotalCents,
+          discountCents: effectiveDiscount,
+          taxCents: effectiveTax,
+          totalCents: effectiveTotal,
+        ));
+      }
 
       final paymentMethodStr = state.paymentMethod.name;
 
@@ -851,5 +880,31 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
     Emitter<SaleFormState> emit,
   ) {
     emit(state.copyWith(dueDate: event.date));
+  }
+
+  /// Distribute [total] proportionally across items based on [weights].
+  /// Uses largest-remainder method so the distributed values sum exactly to [total].
+  List<int> _distributeProportionally(int total, List<int> weights, int weightSum) {
+    if (weights.isEmpty || weightSum <= 0 || total == 0) {
+      return List.filled(weights.length, 0);
+    }
+    final result = List<int>.filled(weights.length, 0);
+    int allocated = 0;
+    final remainders = <int, double>{};
+    for (int i = 0; i < weights.length; i++) {
+      final exact = (total * weights[i]) / weightSum;
+      result[i] = exact.floor();
+      remainders[i] = exact - result[i];
+      allocated += result[i];
+    }
+    // Distribute the remainder (total - allocated) to items with largest fractional parts
+    var remaining = total - allocated;
+    final sorted = remainders.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+    for (final entry in sorted) {
+      if (remaining <= 0) break;
+      result[entry.key]++;
+      remaining--;
+    }
+    return result;
   }
 }

@@ -43,6 +43,9 @@ abstract class PurchaseLocalDatasource {
 
   // Returned quantity tracking
   Future<int> getReturnedQuantity(int purchaseItemId);
+
+  // Watch purchase IDs that have returns
+  Stream<Set<int>> watchPurchaseIdsWithReturns();
 }
 
 class PurchaseLocalDatasourceImpl implements PurchaseLocalDatasource {
@@ -257,4 +260,8 @@ class PurchaseLocalDatasourceImpl implements PurchaseLocalDatasource {
   Future<int> getReturnedQuantity(int purchaseItemId) {
     return _dao.getReturnedQuantity(purchaseItemId);
   }
+
+  @override
+  Stream<Set<int>> watchPurchaseIdsWithReturns() =>
+      _dao.watchPurchaseIdsWithReturns();
 }

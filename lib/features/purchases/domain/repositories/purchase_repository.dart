@@ -146,6 +146,9 @@ abstract class PurchaseRepository {
 
   /// Get total already returned quantity for a purchase item
   Future<int> getReturnedQuantity(int purchaseItemId);
+
+  /// Watch set of purchase IDs that have at least one non-voided return
+  Stream<Set<int>> watchPurchaseIdsWithReturns();
 }
 
 /// Input for creating/updating a purchase item

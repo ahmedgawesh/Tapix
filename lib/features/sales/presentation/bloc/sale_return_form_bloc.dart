@@ -294,9 +294,15 @@ class SaleReturnFormBloc
         if (qty > 0) alreadyReturned[item.id] = qty;
       }
 
+      // Filter out items that are fully returned
+      final availableItems = items.where((item) {
+        final returned = alreadyReturned[item.id] ?? 0;
+        return returned < item.quantity;
+      }).toList();
+
       emit(state.copyWith(
         sale: sale,
-        availableItems: items,
+        availableItems: availableItems,
         currencyId: sale?.currencyId ?? 1,
         isLoading: false,
         alreadyReturnedQty: alreadyReturned,
@@ -381,6 +387,7 @@ class SaleReturnFormBloc
     SaleReturnFormSubmitted event,
     Emitter<SaleReturnFormState> emit,
   ) async {
+    if (state.isSuccess) return; // Prevent double-submission
     if (state.saleId == null) {
       emit(state.copyWith(error: 'No sale selected'));
       return;

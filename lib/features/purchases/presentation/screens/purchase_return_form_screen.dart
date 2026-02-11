@@ -70,6 +70,8 @@ class _ReturnFormView extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
 
     return BlocConsumer<PurchaseReturnFormBloc, PurchaseReturnFormState>(
+      listenWhen: (prev, curr) =>
+          prev.isSuccess != curr.isSuccess || prev.error != curr.error,
       listener: (context, state) {
         if (state.isSuccess) {
           _showReturnSavedDialog(context);
@@ -86,7 +88,7 @@ class _ReturnFormView extends StatelessWidget {
       },
       builder: (context, state) {
         return PopScope(
-          canPop: !state.hasUnsavedChanges,
+          canPop: state.isSuccess || !state.hasUnsavedChanges,
           onPopInvokedWithResult: (didPop, _) async {
             if (didPop) return;
             _navigateBack(context);
@@ -1138,7 +1140,7 @@ class _ReturnFormView extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             FilledButton.icon(
-              onPressed: state.isSubmitting || state.returnItems.isEmpty
+              onPressed: state.isSubmitting || state.isSuccess || state.returnItems.isEmpty
                   ? null
                   : () => context
                       .read<PurchaseReturnFormBloc>()
