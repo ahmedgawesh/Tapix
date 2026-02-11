@@ -3801,7 +3801,14 @@ class _AddItemSheetState extends State<_AddItemSheet> {
                           ),
                         ),
                       const Spacer(),
-                      if (!product.hasVariants)
+                      if (!product.hasVariants) ...[
+                        Icon(LucideIcons.warehouse, size: 12, color: cs.onSurfaceVariant),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${product.stockQuantity}',
+                          style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                        ),
+                        const SizedBox(width: 12),
                         Text(
                           currencyService.format(product.costCents.toBigInt().toInt()),
                           style: TextStyle(
@@ -3810,6 +3817,7 @@ class _AddItemSheetState extends State<_AddItemSheet> {
                             fontWeight: FontWeight.w500,
                           ),
                         ),
+                      ],
                     ],
                   ),
                   trailing: product.hasVariants

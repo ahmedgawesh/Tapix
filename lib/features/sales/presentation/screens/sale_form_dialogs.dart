@@ -453,9 +453,15 @@ class _AddItemSheetState extends State<_AddItemSheet> {
                         decoration: BoxDecoration(color: shade, shape: BoxShape.circle,
                           border: Border.all(color: cs.outline))),
                     const Spacer(),
-                    if (!product.hasVariants)
+                    if (!product.hasVariants) ...[
+                      Icon(LucideIcons.warehouse, size: 12, color: cs.onSurfaceVariant),
+                      const SizedBox(width: 4),
+                      Text('${product.stockQuantity}',
+                        style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+                      const SizedBox(width: 12),
                       Text(currencyService.format(product.priceCents.toBigInt().toInt()),
                         style: TextStyle(fontSize: 12, color: cs.primary, fontWeight: FontWeight.w500)),
+                    ],
                   ]),
                   trailing: product.hasVariants
                     ? Icon(LucideIcons.chevronRight, size: 20, color: cs.primary)
@@ -469,11 +475,17 @@ class _AddItemSheetState extends State<_AddItemSheet> {
                         final variantRepo = sl<ProductVariantRepository>();
                         final defaultVariant = await variantRepo.getDefaultVariantByProduct(product.id);
                         if (defaultVariant != null && defaultVariant.stockQuantity <= 0 && context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('sales.out_of_stock_warning'.tr()),
-                              behavior: SnackBarBehavior.floating,
-                              backgroundColor: Theme.of(context).colorScheme.error,
+                          await showDialog<void>(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              icon: Icon(LucideIcons.alertTriangle, color: Theme.of(ctx).colorScheme.error, size: 32),
+                              title: Text('sales.out_of_stock_warning'.tr()),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.of(ctx).pop(),
+                                  child: Text('common.ok'.tr()),
+                                ),
+                              ],
                             ),
                           );
                           return;
@@ -587,13 +599,19 @@ class _AddItemSheetState extends State<_AddItemSheet> {
                     ]),
                     trailing: Icon(LucideIcons.plusCircle, size: 20,
                       color: variant.stockQuantity > 0 ? cs.primary : cs.onSurfaceVariant.withValues(alpha: 0.3)),
-                    onTap: () {
+                    onTap: () async {
                       if (variant.stockQuantity <= 0) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('sales.out_of_stock_warning'.tr()),
-                            behavior: SnackBarBehavior.floating,
-                            backgroundColor: Theme.of(context).colorScheme.error,
+                        await showDialog<void>(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            icon: Icon(LucideIcons.alertTriangle, color: Theme.of(ctx).colorScheme.error, size: 32),
+                            title: Text('sales.out_of_stock_warning'.tr()),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.of(ctx).pop(),
+                                child: Text('common.ok'.tr()),
+                              ),
+                            ],
                           ),
                         );
                         return;
