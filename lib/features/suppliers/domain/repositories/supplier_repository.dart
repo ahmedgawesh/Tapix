@@ -56,6 +56,7 @@ abstract class SupplierRepository {
     int? referenceId,
     String? referenceType,
     String? discountType,
+    DateTime? transactionDate,
   });
 
   /// Get a single supplier transaction by ID

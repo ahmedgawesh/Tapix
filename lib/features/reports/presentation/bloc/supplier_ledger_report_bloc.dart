@@ -291,39 +291,65 @@ class SupplierLedgerReportBloc
 
       runningBalance += amountCents;
 
-      // Determine item count for purchase/return from the reference
-      int itemCount = 0;
-      if (refId != null && (type == 'purchase' || type == 'return')) {
-        itemCount = await _getItemCount(refId, refType);
+      // Determine if this is a purchase return (recorded as credit_note/refund with reference_type='purchase_return')
+      final isReturnTx = (type == 'credit_note' || type == 'refund' || type == 'return') &&
+          refType == 'purchase_return';
+
+      // Determine total pieces for purchase/return from the reference
+      int totalPiecesCount = 0;
+      if (refId != null && (type == 'purchase' || isReturnTx)) {
+        totalPiecesCount = await _getTotalPieces(refId, refType);
+      }
+
+      // For return transactions, fetch the return number from purchase_returns table
+      String? resolvedReturnNumber;
+      if (isReturnTx && refId != null) {
+        resolvedReturnNumber = await _getReturnNumber(refId);
       }
 
       // Build a ledger row based on type
-      switch (type) {
-        case 'purchase':
-          totalPurchases += amountCents.abs();
-          totalPurchaseItems += itemCount;
-          ledgerRows.add(LedgerRow(
-            date: date,
-            purchaseId: refId,
-            purchaseNumber: txNumber ?? (refId != null ? 'PUR-$refId' : null),
-            purchaseItemCount: itemCount,
-            purchaseTotalCents: amountCents.abs(),
-            runningBalanceCents: runningBalance,
-          ));
-          break;
-        case 'return':
-          totalReturns += amountCents.abs();
-          totalReturnItems += itemCount;
-          ledgerRows.add(LedgerRow(
-            date: date,
-            returnId: refId,
-            returnNumber: txNumber ?? (refId != null ? 'RET-$refId' : null),
-            returnItemCount: itemCount,
-            returnTotalCents: amountCents.abs(),
-            runningBalanceCents: runningBalance,
-          ));
-          break;
-        case 'payment':
+      if (isReturnTx) {
+        // Purchase return — show in return columns
+        totalReturns += amountCents.abs();
+        totalReturnItems += totalPiecesCount;
+        ledgerRows.add(LedgerRow(
+          date: date,
+          returnId: refId,
+          returnNumber: resolvedReturnNumber ?? txNumber ?? (refId != null ? 'RET-$refId' : null),
+          returnItemCount: totalPiecesCount,
+          returnTotalCents: amountCents.abs(),
+          runningBalanceCents: runningBalance,
+        ));
+      } else if (type == 'purchase') {
+        totalPurchases += amountCents.abs();
+        totalPurchaseItems += totalPiecesCount;
+        ledgerRows.add(LedgerRow(
+          date: date,
+          purchaseId: refId,
+          purchaseNumber: txNumber ?? (refId != null ? 'PUR-$refId' : null),
+          purchaseItemCount: totalPiecesCount,
+          purchaseTotalCents: amountCents.abs(),
+          runningBalanceCents: runningBalance,
+        ));
+      } else if (type == 'payment') {
+        totalPayments += amountCents.abs();
+        ledgerRows.add(LedgerRow(
+          date: date,
+          paymentNumber: txNumber,
+          paymentAmountCents: amountCents.abs(),
+          runningBalanceCents: runningBalance,
+        ));
+      } else if (type == 'discount') {
+        totalDiscounts += amountCents.abs();
+        ledgerRows.add(LedgerRow(
+          date: date,
+          discountNumber: txNumber,
+          discountAmountCents: amountCents.abs(),
+          runningBalanceCents: runningBalance,
+        ));
+      } else {
+        // adjustment, etc. — show as payment-like
+        if (amountCents < 0) {
           totalPayments += amountCents.abs();
           ledgerRows.add(LedgerRow(
             date: date,
@@ -331,35 +357,15 @@ class SupplierLedgerReportBloc
             paymentAmountCents: amountCents.abs(),
             runningBalanceCents: runningBalance,
           ));
-          break;
-        case 'discount':
-          totalDiscounts += amountCents.abs();
+        } else {
+          totalPurchases += amountCents.abs();
           ledgerRows.add(LedgerRow(
             date: date,
-            discountNumber: txNumber,
-            discountAmountCents: amountCents.abs(),
+            purchaseNumber: txNumber,
+            purchaseTotalCents: amountCents.abs(),
             runningBalanceCents: runningBalance,
           ));
-          break;
-        default:
-          // credit_note, adjustment, etc. — show as payment-like
-          if (amountCents < 0) {
-            totalPayments += amountCents.abs();
-            ledgerRows.add(LedgerRow(
-              date: date,
-              paymentNumber: txNumber,
-              paymentAmountCents: amountCents.abs(),
-              runningBalanceCents: runningBalance,
-            ));
-          } else {
-            totalPurchases += amountCents.abs();
-            ledgerRows.add(LedgerRow(
-              date: date,
-              purchaseNumber: txNumber,
-              purchaseTotalCents: amountCents.abs(),
-              runningBalanceCents: runningBalance,
-            ));
-          }
+        }
       }
     }
 
@@ -382,27 +388,41 @@ class SupplierLedgerReportBloc
     );
   }
 
-  /// Get item count for a purchase or return reference
-  Future<int> _getItemCount(int refId, String? refType) async {
+  /// Get total pieces (sum of quantities) for a purchase or return reference
+  Future<int> _getTotalPieces(int refId, String? refType) async {
     try {
       if (refType == 'purchase' || refType == null) {
         final result = await _db.customSelect(
-          'SELECT COUNT(*) AS cnt FROM purchase_items WHERE purchase_id = ?',
+          'SELECT COALESCE(SUM(quantity), 0) AS total_qty FROM purchase_items WHERE purchase_id = ?',
           variables: [Variable.withInt(refId)],
           readsFrom: {_db.purchaseItems},
         ).getSingle();
-        return result.read<int>('cnt');
+        return result.read<int>('total_qty');
       } else if (refType == 'purchase_return') {
         final result = await _db.customSelect(
-          'SELECT COUNT(*) AS cnt FROM purchase_return_items WHERE purchase_return_id = ?',
+          'SELECT COALESCE(SUM(quantity), 0) AS total_qty FROM purchase_return_items WHERE return_id = ?',
           variables: [Variable.withInt(refId)],
           readsFrom: {_db.purchaseReturnItems},
         ).getSingle();
-        return result.read<int>('cnt');
+        return result.read<int>('total_qty');
       }
     } catch (_) {
       // Table might not exist or other error
     }
     return 0;
+  }
+
+  /// Get the return number from the purchase_returns table
+  Future<String?> _getReturnNumber(int returnId) async {
+    try {
+      final result = await _db.customSelect(
+        'SELECT return_number FROM purchase_returns WHERE id = ?',
+        variables: [Variable.withInt(returnId)],
+        readsFrom: {_db.purchaseReturns},
+      ).getSingleOrNull();
+      return result?.readNullable<String>('return_number');
+    } catch (_) {
+      return null;
+    }
   }
 }

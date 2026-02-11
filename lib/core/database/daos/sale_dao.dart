@@ -701,12 +701,10 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
         }
       }
 
-      // 1. Restore stock for applicable dispositions
-      final shouldRestoreStock = returnData.dispositionType == 'restock' ||
-          returnData.dispositionType == 'refund' ||
-          returnData.dispositionType == 'exchange';
-
-      if (shouldRestoreStock) {
+      // 1. Always restore stock for sale returns regardless of disposition.
+      // The goods are returning to inventory whether restocked, refunded, written off,
+      // or exchanged. Disposition only affects financial treatment.
+      {
         final returnAffectedProductIds = <int>{};
         for (final row in returnItemRows) {
           final returnItem = row.readTable(saleReturnItems);
@@ -822,12 +820,8 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
       if (returnData.status == 'voided') throw Exception('Return already voided');
 
       if (returnData.status == 'posted') {
-        // 1. Reverse stock changes
-        final shouldReverseStock = returnData.dispositionType == 'restock' ||
-            returnData.dispositionType == 'refund' ||
-            returnData.dispositionType == 'exchange';
-
-        if (shouldReverseStock) {
+        // 1. Always reverse stock changes (mirrors postSaleReturn).
+        {
           final query = select(saleReturnItems).join([
             innerJoin(saleItems, saleItems.id.equalsExp(saleReturnItems.saleItemId)),
           ])

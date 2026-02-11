@@ -120,7 +120,9 @@ class SupplierRepositoryImpl implements SupplierRepository {
     int? referenceId,
     String? referenceType,
     String? discountType,
+    DateTime? transactionDate,
   }) {
+    final now = DateTime.now();
     final companion = SupplierTransactionsCompanion(
       supplierId: Value(supplierId),
       transactionType: Value(transactionType),
@@ -130,8 +132,8 @@ class SupplierRepositoryImpl implements SupplierRepository {
       referenceId: Value(referenceId),
       referenceType: Value(referenceType),
       discountType: Value(discountType),
-      transactionDate: Value(DateTime.now()),
-      createdAt: Value(DateTime.now()),
+      transactionDate: Value(transactionDate ?? now),
+      createdAt: Value(now),
     );
     return _datasource.createTransaction(companion);
   }

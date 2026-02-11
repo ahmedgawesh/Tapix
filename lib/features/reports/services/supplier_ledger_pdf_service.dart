@@ -145,7 +145,7 @@ class SupplierLedgerPdfService {
       cs.formatCents(data.closingBalanceCents),
     ]);
 
-    // ── Column headers ──
+    // ── Column headers (sub-headers under each group) ──
     final headers = [
       _t('date', lang),
       _t('purchase_number', lang),
@@ -158,18 +158,6 @@ class SupplierLedgerPdfService {
       _t('payment_number', lang),
       _t('discount_amount', lang),
       _t('discount_number', lang),
-      _t('balance', lang),
-    ];
-
-    // ── Group headers ──
-    final groupHeaders = [
-      _t('date', lang),
-      _t('purchase_invoices', lang),
-      '', '',
-      _t('return_invoices', lang),
-      '', '',
-      _t('payments_discounts', lang),
-      '', '', '',
       _t('balance', lang),
     ];
 
@@ -192,6 +180,22 @@ class SupplierLedgerPdfService {
       11: const pw.FlexColumnWidth(1.3), // Balance
     };
 
+    // Group category labels for each column (shown above sub-headers)
+    final groupLabels = [
+      _t('date', lang),
+      _t('purchase_invoices', lang),
+      _t('purchase_invoices', lang),
+      _t('purchase_invoices', lang),
+      _t('return_invoices', lang),
+      _t('return_invoices', lang),
+      _t('return_invoices', lang),
+      _t('payments_group', lang),
+      _t('payments_group', lang),
+      _t('discounts_group', lang),
+      _t('discounts_group', lang),
+      _t('balance', lang),
+    ];
+
     pdf.addPage(
       pw.MultiPage(
         pageFormat: pageFormat,
@@ -204,22 +208,23 @@ class SupplierLedgerPdfService {
           // Summary row
           _buildSummaryRow(data, cs, fonts, lang),
           pw.SizedBox(height: 12),
-          // Group header row
+          // Main table
           pw.Table(
             border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.5),
             columnWidths: colWidths,
             children: [
+              // Group category labels row
               pw.TableRow(
                 decoration: const pw.BoxDecoration(color: PdfColors.blue50),
-                children: groupHeaders.map((h) {
+                children: groupLabels.map((g) {
                   return pw.Container(
-                    padding: const pw.EdgeInsets.all(4),
+                    padding: const pw.EdgeInsets.symmetric(horizontal: 2, vertical: 3),
                     alignment: pw.Alignment.center,
                     child: pw.Text(
-                      h,
+                      g,
                       style: pw.TextStyle(
                         font: fonts.bold,
-                        fontSize: 7,
+                        fontSize: 6,
                         color: PdfColors.blue900,
                       ),
                       textDirection: dir,
@@ -228,14 +233,7 @@ class SupplierLedgerPdfService {
                   );
                 }).toList(),
               ),
-            ],
-          ),
-          // Main table
-          pw.Table(
-            border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.5),
-            columnWidths: colWidths,
-            children: [
-              // Sub-headers
+              // Sub-headers row
               pw.TableRow(
                 decoration:
                     const pw.BoxDecoration(color: PdfColors.grey200),
@@ -524,6 +522,16 @@ class SupplierLedgerPdfService {
       'en': 'Payments - Discounts',
       'ar': 'الدفعات - الخصم',
       'fr': 'Paiements - Remises',
+    },
+    'payments_group': {
+      'en': 'Payments',
+      'ar': 'الدفعات',
+      'fr': 'Paiements',
+    },
+    'discounts_group': {
+      'en': 'Discounts',
+      'ar': 'الخصومات',
+      'fr': 'Remises',
     },
     'purchase_number': {
       'en': 'Invoice #',

@@ -44,50 +44,6 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
     }
   }
 
-  Future<int> _getNetPostedPurchasesSubtotalCents({
-    required int supplierId,
-    required DateTime start,
-    required DateTime end,
-  }) async {
-    final db = sl<AppDatabase>();
-
-    final purchasesRow = await db.customSelect(
-      'SELECT COALESCE(SUM(p.subtotal_cents), 0) AS total '
-      'FROM purchases p '
-      'WHERE p.supplier_id = ? '
-      'AND p.status = ? '
-      'AND p.purchase_date >= ? '
-      'AND p.purchase_date <= ?',
-      variables: [
-        Variable.withInt(supplierId),
-        const Variable<String>('posted'),
-        Variable.withDateTime(start),
-        Variable.withDateTime(end),
-      ],
-    ).getSingle();
-
-    final returnsRow = await db.customSelect(
-      'SELECT COALESCE(SUM(pr.subtotal_cents), 0) AS total '
-      'FROM purchase_returns pr '
-      'JOIN purchases p ON p.id = pr.purchase_id '
-      'WHERE p.supplier_id = ? '
-      'AND pr.status = ? '
-      'AND pr.return_date >= ? '
-      'AND pr.return_date <= ?',
-      variables: [
-        Variable.withInt(supplierId),
-        const Variable<String>('posted'),
-        Variable.withDateTime(start),
-        Variable.withDateTime(end),
-      ],
-    ).getSingle();
-
-    final purchasesSubtotal = purchasesRow.read<int>('total');
-    final returnsSubtotal = returnsRow.read<int>('total');
-    final net = purchasesSubtotal - returnsSubtotal;
-    return net < 0 ? 0 : net;
-  }
-
   @override
   Widget build(BuildContext context) {
     final currencyService = sl<CurrencyService>();
@@ -293,81 +249,149 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
     final profileBloc = context.read<SupplierProfileBloc>();
     final amountController = TextEditingController();
     final descriptionController = TextEditingController();
+    var selectedDate = DateTime.now();
 
     showDialog<void>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text('suppliers.make_payment'.tr()),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: amountController,
-              decoration: InputDecoration(
-                labelText: 'suppliers.payment_amount'.tr(),
-                prefixIcon: const Icon(LucideIcons.banknote),
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (stfContext, setState) {
+          final theme = Theme.of(stfContext);
+          final colorScheme = theme.colorScheme;
+
+          return Dialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(LucideIcons.banknote, size: 40, color: colorScheme.primary),
+                    const SizedBox(height: 12),
+                    Text(
+                      'suppliers.make_payment'.tr(),
+                      style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 24),
+                    TextField(
+                      controller: amountController,
+                      decoration: InputDecoration(
+                        labelText: 'suppliers.payment_amount'.tr(),
+                        prefixIcon: const Icon(LucideIcons.badgeDollarSign),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        filled: true,
+                      ),
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      autofocus: true,
+                      onTap: () {
+                        if (amountController.text == '0.00' || amountController.text.isEmpty) {
+                          amountController.clear();
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    InkWell(
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: dialogContext,
+                          initialDate: selectedDate,
+                          firstDate: DateTime(2000),
+                          lastDate: DateTime(2100),
+                        );
+                        if (picked != null) {
+                          setState(() => selectedDate = picked);
+                        }
+                      },
+                      borderRadius: BorderRadius.circular(12),
+                      child: InputDecorator(
+                        decoration: InputDecoration(
+                          labelText: 'suppliers.payment_date'.tr(),
+                          prefixIcon: const Icon(LucideIcons.calendarDays),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          filled: true,
+                        ),
+                        child: Text(
+                          '${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',
+                          style: theme.textTheme.bodyLarge,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: descriptionController,
+                      decoration: InputDecoration(
+                        labelText: 'suppliers.description'.tr(),
+                        hintText: 'suppliers.payment_description_hint'.tr(),
+                        prefixIcon: const Icon(LucideIcons.fileText),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        filled: true,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.of(dialogContext).pop(),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                            child: Text('common.cancel'.tr()),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: FilledButton(
+                            onPressed: () async {
+                              final scaffoldMessenger = ScaffoldMessenger.of(dialogContext);
+                              final navigator = Navigator.of(dialogContext);
+                              final amount = double.tryParse(amountController.text);
+                              if (amount == null || amount <= 0) {
+                                scaffoldMessenger.showSnackBar(
+                                  SnackBar(content: Text('suppliers.amount_invalid'.tr())),
+                                );
+                                return;
+                              }
+
+                              navigator.pop();
+
+                              final amountCents = (amount * 100).round();
+                              final txId = await sl<SupplierRepository>().recordTransaction(
+                                supplierId: supplier.id,
+                                transactionType: 'payment',
+                                amountCents: -amountCents,
+                                currencyId: supplier.currencyId,
+                                description: descriptionController.text.isEmpty
+                                    ? null
+                                    : descriptionController.text,
+                                transactionDate: selectedDate,
+                              );
+
+                              profileBloc.refresh();
+
+                              if (mounted) {
+                                scaffoldMessenger.showSnackBar(
+                                  SnackBar(content: Text('suppliers.payment_success'.tr())),
+                                );
+                                _showReceiptDialog(this.context, txId, supplier.name);
+                              }
+                            },
+                            style: FilledButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                            child: Text('suppliers.confirm_payment'.tr()),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              autofocus: true,
-              onTap: () {
-                if (amountController.text == '0.00' || amountController.text.isEmpty) {
-                  amountController.clear();
-                }
-              },
             ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: descriptionController,
-              decoration: InputDecoration(
-                labelText: 'suppliers.description'.tr(),
-                hintText: 'suppliers.payment_description_hint'.tr(),
-                prefixIcon: const Icon(LucideIcons.fileText),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: Text('common.cancel'.tr()),
-          ),
-          FilledButton(
-            onPressed: () async {
-              final scaffoldMessenger = ScaffoldMessenger.of(dialogContext);
-              final navigator = Navigator.of(dialogContext);
-              final amount = double.tryParse(amountController.text);
-              if (amount == null || amount <= 0) {
-                scaffoldMessenger.showSnackBar(
-                  SnackBar(content: Text('suppliers.amount_invalid'.tr())),
-                );
-                return;
-              }
-
-              navigator.pop();
-
-              final amountCents = (amount * 100).round();
-              final txId = await sl<SupplierRepository>().recordTransaction(
-                supplierId: supplier.id,
-                transactionType: 'payment',
-                amountCents: -amountCents,
-                currencyId: supplier.currencyId,
-                description: descriptionController.text.isEmpty
-                    ? null
-                    : descriptionController.text,
-              );
-
-              profileBloc.refresh();
-
-              if (mounted) {
-                scaffoldMessenger.showSnackBar(
-                  SnackBar(content: Text('suppliers.payment_success'.tr())),
-                );
-                _showReceiptDialog(context, txId, supplier.name);
-              }
-            },
-            child: Text('suppliers.confirm_payment'.tr()),
-          ),
-        ],
+          );
+        },
       ),
     );
   }
@@ -375,65 +399,78 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
   void _showReceiptDialog(BuildContext context, int transactionId, String supplierName) {
     showDialog<void>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        icon: const Icon(LucideIcons.checkCircle, color: Colors.green, size: 48),
-        content: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            FilledButton.icon(
-              onPressed: () {
-                Navigator.pop(dialogContext);
-                SupplierTransactionPdfService.printReceiptById(
-                  context: context,
-                  transactionId: transactionId,
-                  supplierName: supplierName,
-                );
-              },
-              icon: const Icon(LucideIcons.printer),
-              label: Text('suppliers.print_receipt'.tr()),
-            ),
-            const SizedBox(width: 12),
-            OutlinedButton.icon(
-              onPressed: () {
-                Navigator.pop(dialogContext);
-                SupplierTransactionPdfService.shareReceiptById(
-                  context: context,
-                  transactionId: transactionId,
-                  supplierName: supplierName,
-                );
-              },
-              icon: const Icon(LucideIcons.share2),
-              label: Text('suppliers.share_receipt'.tr()),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: Text('common.close'.tr()),
+      builder: (dialogContext) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(LucideIcons.checkCircle, color: Colors.green, size: 48),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: () {
+                        Navigator.pop(dialogContext);
+                        SupplierTransactionPdfService.printReceiptById(
+                          context: context,
+                          transactionId: transactionId,
+                          supplierName: supplierName,
+                        );
+                      },
+                      icon: const Icon(LucideIcons.printer),
+                      label: Flexible(
+                        child: Text(
+                          'suppliers.print_receipt'.tr(),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(dialogContext);
+                        SupplierTransactionPdfService.shareReceiptById(
+                          context: context,
+                          transactionId: transactionId,
+                          supplierName: supplierName,
+                        );
+                      },
+                      icon: const Icon(LucideIcons.share2),
+                      label: Flexible(
+                        child: Text(
+                          'suppliers.share_receipt'.tr(),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: Text('common.close'.tr()),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
 
   void _showSeasonalDiscountDialog(BuildContext context, Supplier supplier) {
     final profileBloc = context.read<SupplierProfileBloc>();
-    final currencyService = sl<CurrencyService>();
-
-    final now = DateTime.now();
-    final firstOfMonth = DateTime(now.year, now.month, 1);
 
     final amountController = TextEditingController();
-    final percentController = TextEditingController();
     final descriptionController = TextEditingController();
 
-    var updating = false;
-    var selectedMode = 'fixed';
-    var periodMode = 'month';
     var selectedDiscountType = 'seasonal';
-    DateTime startDate = firstOfMonth;
-    DateTime endDate = now;
+    var selectedDate = DateTime.now();
 
     final discountTypes = [
       'seasonal',
@@ -444,336 +481,169 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
       'other',
     ];
 
-    var baseFuture = _getNetPostedPurchasesSubtotalCents(
-      supplierId: supplier.id,
-      start: startDate,
-      end: endDate,
-    );
-
-    void reloadBase() {
-      baseFuture = _getNetPostedPurchasesSubtotalCents(
-        supplierId: supplier.id,
-        start: startDate,
-        end: endDate,
-      );
-    }
-
-    void updateFromPercent(int baseCents) {
-      if (updating) return;
-      updating = true;
-
-      final pct = double.tryParse(percentController.text);
-      if (pct == null || pct < 0) {
-        updating = false;
-        return;
-      }
-
-      final base = baseCents.abs();
-      if (base == 0) {
-        amountController.text = '0.00';
-        updating = false;
-        return;
-      }
-
-      final amountCents = ((base * pct) / 100).round();
-      amountController.text = (amountCents / 100).toStringAsFixed(2);
-      updating = false;
-    }
-
-    void updateFromAmount(int baseCents) {
-      if (updating) return;
-      updating = true;
-
-      final amount = double.tryParse(amountController.text);
-      if (amount == null || amount < 0) {
-        updating = false;
-        return;
-      }
-
-      final base = baseCents.abs();
-      if (base == 0) {
-        percentController.text = '0';
-        updating = false;
-        return;
-      }
-
-      final amountCents = (amount * 100).round();
-      final pct = (amountCents / base) * 100;
-      percentController.text = pct.toStringAsFixed(pct >= 10 ? 1 : 2);
-      updating = false;
-    }
-
     showDialog<void>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setState) {
-          return FutureBuilder<int>(
-            future: baseFuture,
-            builder: (context, snapshot) {
-              final baseCents = snapshot.data ?? 0;
+        builder: (stfContext, setState) {
+          final theme = Theme.of(stfContext);
+          final colorScheme = theme.colorScheme;
 
-              return AlertDialog(
-                title: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          return Dialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text('suppliers.seasonal_discount_title'.tr()),
-                    const SizedBox(height: 6),
+                    Icon(LucideIcons.badgePercent, size: 40, color: colorScheme.primary),
+                    const SizedBox(height: 12),
                     Text(
-                      'suppliers.discount_base_hint'.tr(args: [currencyService.format(baseCents)]),
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      'suppliers.seasonal_discount_title'.tr(),
+                      style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 24),
+                    DropdownButtonFormField<String>(
+                      initialValue: selectedDiscountType,
+                      decoration: InputDecoration(
+                        labelText: 'suppliers.discount_type'.tr(),
+                        prefixIcon: const Icon(LucideIcons.tag),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        filled: true,
+                      ),
+                      items: discountTypes.map((type) {
+                        return DropdownMenuItem(
+                          value: type,
+                          child: Text('suppliers.discount_type_$type'.tr()),
+                        );
+                      }).toList(),
+                      onChanged: (v) {
+                        if (v != null) {
+                          setState(() => selectedDiscountType = v);
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: amountController,
+                      decoration: InputDecoration(
+                        labelText: 'suppliers.discount_amount'.tr(),
+                        prefixIcon: const Icon(LucideIcons.badgeDollarSign),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        filled: true,
+                      ),
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      autofocus: true,
+                      onTap: () {
+                        if (amountController.text == '0.00' || amountController.text.isEmpty) {
+                          amountController.clear();
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    InkWell(
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: dialogContext,
+                          initialDate: selectedDate,
+                          firstDate: DateTime(2000),
+                          lastDate: DateTime(2100),
+                        );
+                        if (picked != null) {
+                          setState(() => selectedDate = picked);
+                        }
+                      },
+                      borderRadius: BorderRadius.circular(12),
+                      child: InputDecorator(
+                        decoration: InputDecoration(
+                          labelText: 'suppliers.discount_date'.tr(),
+                          prefixIcon: const Icon(LucideIcons.calendarDays),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          filled: true,
+                        ),
+                        child: Text(
+                          '${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',
+                          style: theme.textTheme.bodyLarge,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: descriptionController,
+                      decoration: InputDecoration(
+                        labelText: 'suppliers.description'.tr(),
+                        hintText: 'suppliers.seasonal_discount_hint'.tr(),
+                        prefixIcon: const Icon(LucideIcons.fileText),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        filled: true,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.of(dialogContext).pop(),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                            child: Text('common.cancel'.tr()),
                           ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: FilledButton(
+                            onPressed: () async {
+                              final scaffoldMessenger = ScaffoldMessenger.of(dialogContext);
+                              final navigator = Navigator.of(dialogContext);
+
+                              final amount = double.tryParse(amountController.text);
+                              if (amount == null || amount <= 0) {
+                                scaffoldMessenger.showSnackBar(
+                                  SnackBar(content: Text('suppliers.amount_invalid'.tr())),
+                                );
+                                return;
+                              }
+
+                              navigator.pop();
+
+                              final amountCents = (amount * 100).round();
+
+                              final txId = await sl<SupplierRepository>().recordTransaction(
+                                supplierId: supplier.id,
+                                transactionType: 'discount',
+                                amountCents: -amountCents,
+                                currencyId: supplier.currencyId,
+                                description: descriptionController.text.isEmpty
+                                    ? 'suppliers.discount_type_$selectedDiscountType'.tr()
+                                    : descriptionController.text,
+                                discountType: selectedDiscountType,
+                                transactionDate: selectedDate,
+                              );
+
+                              profileBloc.refresh();
+
+                              if (mounted) {
+                                scaffoldMessenger.showSnackBar(
+                                  SnackBar(content: Text('suppliers.seasonal_discount_recorded'.tr())),
+                                );
+                                _showReceiptDialog(this.context, txId, supplier.name);
+                              }
+                            },
+                            style: FilledButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                            child: Text('suppliers.record_discount'.tr()),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-                content: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Discount type dropdown
-                      DropdownButtonFormField<String>(
-                        initialValue: selectedDiscountType,
-                        decoration: InputDecoration(
-                          labelText: 'suppliers.discount_type'.tr(),
-                          prefixIcon: const Icon(LucideIcons.tag),
-                        ),
-                        items: discountTypes.map((type) {
-                          return DropdownMenuItem(
-                            value: type,
-                            child: Text('suppliers.discount_type_$type'.tr()),
-                          );
-                        }).toList(),
-                        onChanged: (v) {
-                          if (v != null) {
-                            setState(() => selectedDiscountType = v);
-                          }
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      SegmentedButton<String>(
-                        segments: [
-                          ButtonSegment(
-                            value: 'month',
-                            label: Text('suppliers.period_this_month'.tr()),
-                            icon: const Icon(LucideIcons.calendarDays),
-                          ),
-                          ButtonSegment(
-                            value: 'last30',
-                            label: Text('suppliers.period_last_30_days'.tr()),
-                            icon: const Icon(LucideIcons.calendarClock),
-                          ),
-                          ButtonSegment(
-                            value: 'custom',
-                            label: Text('suppliers.period_custom'.tr()),
-                            icon: const Icon(LucideIcons.calendarRange),
-                          ),
-                        ],
-                        selected: {periodMode},
-                        onSelectionChanged: (v) async {
-                          setState(() {
-                            periodMode = v.first;
-                            final n = DateTime.now();
-                            if (periodMode == 'month') {
-                              startDate = DateTime(n.year, n.month, 1);
-                              endDate = n;
-                            } else if (periodMode == 'last30') {
-                              startDate = n.subtract(const Duration(days: 30));
-                              endDate = n;
-                            }
-                            reloadBase();
-                            updateFromAmount(baseCents);
-                          });
-                        },
-                      ),
-                      if (periodMode == 'custom') ...[
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: () async {
-                                  final picked = await showDatePicker(
-                                    context: dialogContext,
-                                    initialDate: startDate,
-                                    firstDate: DateTime(2000),
-                                    lastDate: DateTime(2100),
-                                  );
-                                  if (picked == null) return;
-                                  setState(() {
-                                    startDate = DateTime(picked.year, picked.month, picked.day);
-                                    if (startDate.isAfter(endDate)) {
-                                      endDate = startDate;
-                                    }
-                                    reloadBase();
-                                  });
-                                },
-                                icon: const Icon(LucideIcons.calendar),
-                                label: Text('suppliers.start_date'.tr()),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: () async {
-                                  final picked = await showDatePicker(
-                                    context: dialogContext,
-                                    initialDate: endDate,
-                                    firstDate: DateTime(2000),
-                                    lastDate: DateTime(2100),
-                                  );
-                                  if (picked == null) return;
-                                  setState(() {
-                                    endDate = DateTime(picked.year, picked.month, picked.day, 23, 59, 59);
-                                    if (endDate.isBefore(startDate)) {
-                                      startDate = DateTime(picked.year, picked.month, picked.day);
-                                    }
-                                    reloadBase();
-                                  });
-                                },
-                                icon: const Icon(LucideIcons.calendar),
-                                label: Text('suppliers.end_date'.tr()),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                      const SizedBox(height: 12),
-                      SegmentedButton<String>(
-                        segments: [
-                          ButtonSegment(
-                            value: 'fixed',
-                            label: Text('suppliers.discount_fixed'.tr()),
-                            icon: const Icon(LucideIcons.badgeDollarSign),
-                          ),
-                          ButtonSegment(
-                            value: 'percent',
-                            label: Text('suppliers.discount_percent'.tr()),
-                            icon: const Icon(LucideIcons.percent),
-                          ),
-                        ],
-                        selected: {selectedMode},
-                        onSelectionChanged: (v) {
-                          setState(() {
-                            selectedMode = v.first;
-                            if (selectedMode == 'percent') {
-                              updateFromAmount(baseCents);
-                            } else {
-                              updateFromPercent(baseCents);
-                            }
-                          });
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: amountController,
-                              decoration: InputDecoration(
-                                labelText: 'suppliers.discount_amount'.tr(),
-                                prefixIcon: const Icon(LucideIcons.badgeDollarSign),
-                              ),
-                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                              autofocus: selectedMode == 'fixed',
-                              enabled: true,
-                              onChanged: (_) {
-                                if (selectedMode == 'percent') return;
-                                updateFromAmount(baseCents);
-                              },
-                              onTap: () {
-                                if (amountController.text == '0.00' || amountController.text.isEmpty) {
-                                  amountController.clear();
-                                }
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          SizedBox(
-                            width: 120,
-                            child: TextField(
-                              controller: percentController,
-                              decoration: InputDecoration(
-                                labelText: 'suppliers.discount_percent'.tr(),
-                                prefixIcon: const Icon(LucideIcons.percent),
-                                suffixText: '%',
-                              ),
-                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                              autofocus: selectedMode == 'percent',
-                              enabled: baseCents != 0,
-                              onChanged: (_) {
-                                if (selectedMode == 'fixed') return;
-                                updateFromPercent(baseCents);
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      TextField(
-                        controller: descriptionController,
-                        decoration: InputDecoration(
-                          labelText: 'suppliers.description'.tr(),
-                          hintText: 'suppliers.seasonal_discount_hint'.tr(),
-                          prefixIcon: const Icon(LucideIcons.fileText),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(dialogContext),
-                    child: Text('common.cancel'.tr()),
-                  ),
-                  FilledButton(
-                    onPressed: () async {
-                      final scaffoldMessenger = ScaffoldMessenger.of(dialogContext);
-                      final navigator = Navigator.of(dialogContext);
-
-                      final amount = double.tryParse(amountController.text);
-                      if (amount == null || amount <= 0) {
-                        scaffoldMessenger.showSnackBar(
-                          SnackBar(content: Text('suppliers.amount_invalid'.tr())),
-                        );
-                        return;
-                      }
-
-                      if (baseCents <= 0) {
-                        scaffoldMessenger.showSnackBar(
-                          SnackBar(content: Text('suppliers.discount_base_zero'.tr())),
-                        );
-                        return;
-                      }
-
-                      navigator.pop();
-
-                      final amountCents = (amount * 100).round();
-
-                      final txId = await sl<SupplierRepository>().recordTransaction(
-                        supplierId: supplier.id,
-                        transactionType: 'discount',
-                        amountCents: -amountCents,
-                        currencyId: supplier.currencyId,
-                        description: descriptionController.text.isEmpty
-                            ? 'suppliers.discount_type_$selectedDiscountType'.tr()
-                            : descriptionController.text,
-                        discountType: selectedDiscountType,
-                      );
-
-                      profileBloc.refresh();
-
-                      if (mounted) {
-                        scaffoldMessenger.showSnackBar(
-                          SnackBar(content: Text('suppliers.seasonal_discount_recorded'.tr())),
-                        );
-                        _showReceiptDialog(context, txId, supplier.name);
-                      }
-                    },
-                    child: Text('suppliers.record_discount'.tr()),
-                  ),
-                ],
-              );
-            },
+              ),
+            ),
           );
         },
       ),
@@ -1458,6 +1328,26 @@ class _TransactionTile extends StatelessWidget {
         icon = LucideIcons.arrowLeftRight;
         color = Colors.green;
         typeLabel = 'suppliers.transaction_return'.tr();
+        break;
+      case 'credit_note':
+        icon = LucideIcons.fileText;
+        color = Colors.green;
+        typeLabel = 'suppliers.transaction_credit_note'.tr();
+        break;
+      case 'refund':
+        icon = LucideIcons.arrowLeftRight;
+        color = Colors.green;
+        typeLabel = 'suppliers.transaction_refund'.tr();
+        break;
+      case 'credit_note_reversal':
+        icon = LucideIcons.fileX;
+        color = Colors.red;
+        typeLabel = 'suppliers.transaction_credit_note_reversal'.tr();
+        break;
+      case 'refund_reversal':
+        icon = LucideIcons.fileX;
+        color = Colors.red;
+        typeLabel = 'suppliers.transaction_refund_reversal'.tr();
         break;
       default:
         icon = LucideIcons.fileText;

@@ -72,12 +72,25 @@ class SupplierTransactionPdfService {
     required int transactionId,
     required String supplierName,
   }) async {
+    final cs = sl<CurrencyService>();
+    final locale = context.locale;
+    final isRtl = locale.languageCode == 'ar';
+    final company = await sl<CompanyProfileService>().getProfile();
     final tx = await sl<SupplierRepository>().getTransaction(transactionId);
     if (tx == null) return;
-    await printReceipt(
-      context: context,
+
+    final pdf = await _buildReceipt(
       transaction: tx,
       supplierName: supplierName,
+      cs: cs,
+      locale: locale,
+      isRtl: isRtl,
+      company: company,
+    );
+
+    await Printing.layoutPdf(
+      onLayout: (PdfPageFormat format) async => pdf.save(),
+      name: tx.transactionNumber ?? 'TXN-${tx.id}',
     );
   }
 
@@ -87,12 +100,26 @@ class SupplierTransactionPdfService {
     required int transactionId,
     required String supplierName,
   }) async {
+    final cs = sl<CurrencyService>();
+    final locale = context.locale;
+    final isRtl = locale.languageCode == 'ar';
+    final company = await sl<CompanyProfileService>().getProfile();
     final tx = await sl<SupplierRepository>().getTransaction(transactionId);
     if (tx == null) return;
-    await shareReceipt(
-      context: context,
+
+    final pdf = await _buildReceipt(
       transaction: tx,
       supplierName: supplierName,
+      cs: cs,
+      locale: locale,
+      isRtl: isRtl,
+      company: company,
+    );
+
+    final bytes = await pdf.save();
+    await Printing.sharePdf(
+      bytes: bytes,
+      filename: '${tx.transactionNumber ?? 'TXN-${tx.id}'}.pdf',
     );
   }
 

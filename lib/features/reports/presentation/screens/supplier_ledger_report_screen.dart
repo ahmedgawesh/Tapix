@@ -290,6 +290,11 @@ class _LedgerContent extends StatelessWidget {
       fontWeight: FontWeight.bold,
       color: colorScheme.onPrimaryContainer,
     );
+    final groupLabelStyle = theme.textTheme.labelSmall?.copyWith(
+      fontWeight: FontWeight.bold,
+      color: colorScheme.primary,
+      fontSize: 9,
+    );
     final subHeaderStyle = theme.textTheme.labelSmall?.copyWith(
       fontWeight: FontWeight.w600,
       color: colorScheme.onPrimaryContainer,
@@ -299,6 +304,18 @@ class _LedgerContent extends StatelessWidget {
     final boldCellStyle = theme.textTheme.bodySmall?.copyWith(
       fontWeight: FontWeight.bold,
     );
+
+    // Helper to build a two-line column label: category on top, sub-header below
+    Widget colLabel(String category, String subHeader) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(category, style: groupLabelStyle, textAlign: TextAlign.center),
+          const SizedBox(height: 2),
+          Text(subHeader, style: subHeaderStyle, textAlign: TextAlign.center),
+        ],
+      );
+    }
 
     return DataTable(
       headingRowHeight: 56,
@@ -316,53 +333,73 @@ class _LedgerContent extends StatelessWidget {
         ),
         // Purchase Invoices group
         DataColumn(
-          label: Text('reports.ledger_purchase_number'.tr(),
-              style: subHeaderStyle),
+          label: colLabel(
+            'reports.ledger_purchase_invoices'.tr(),
+            'reports.ledger_purchase_number'.tr(),
+          ),
         ),
         DataColumn(
-          label: Text('reports.ledger_purchase_qty'.tr(),
-              style: subHeaderStyle),
+          label: colLabel(
+            'reports.ledger_purchase_invoices'.tr(),
+            'reports.ledger_purchase_qty'.tr(),
+          ),
           numeric: true,
         ),
         DataColumn(
-          label: Text('reports.ledger_purchase_total'.tr(),
-              style: subHeaderStyle),
+          label: colLabel(
+            'reports.ledger_purchase_invoices'.tr(),
+            'reports.ledger_purchase_total'.tr(),
+          ),
           numeric: true,
         ),
         // Return Invoices group
         DataColumn(
-          label: Text('reports.ledger_return_number'.tr(),
-              style: subHeaderStyle),
+          label: colLabel(
+            'reports.ledger_return_invoices'.tr(),
+            'reports.ledger_return_number'.tr(),
+          ),
         ),
         DataColumn(
-          label: Text('reports.ledger_return_qty'.tr(),
-              style: subHeaderStyle),
+          label: colLabel(
+            'reports.ledger_return_invoices'.tr(),
+            'reports.ledger_return_qty'.tr(),
+          ),
           numeric: true,
         ),
         DataColumn(
-          label: Text('reports.ledger_return_total'.tr(),
-              style: subHeaderStyle),
+          label: colLabel(
+            'reports.ledger_return_invoices'.tr(),
+            'reports.ledger_return_total'.tr(),
+          ),
           numeric: true,
         ),
         // Payments group
         DataColumn(
-          label: Text('reports.ledger_payment_amount'.tr(),
-              style: subHeaderStyle),
+          label: colLabel(
+            'reports.ledger_payments_group'.tr(),
+            'reports.ledger_payment_amount'.tr(),
+          ),
           numeric: true,
         ),
         DataColumn(
-          label: Text('reports.ledger_payment_number'.tr(),
-              style: subHeaderStyle),
+          label: colLabel(
+            'reports.ledger_payments_group'.tr(),
+            'reports.ledger_payment_number'.tr(),
+          ),
         ),
         // Discounts group
         DataColumn(
-          label: Text('reports.ledger_discount_amount'.tr(),
-              style: subHeaderStyle),
+          label: colLabel(
+            'reports.ledger_discounts_group'.tr(),
+            'reports.ledger_discount_amount'.tr(),
+          ),
           numeric: true,
         ),
         DataColumn(
-          label: Text('reports.ledger_discount_number'.tr(),
-              style: subHeaderStyle),
+          label: colLabel(
+            'reports.ledger_discounts_group'.tr(),
+            'reports.ledger_discount_number'.tr(),
+          ),
         ),
         // Balance
         DataColumn(
