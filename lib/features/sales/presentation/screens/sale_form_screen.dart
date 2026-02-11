@@ -54,12 +54,10 @@ class _SaleFormView extends StatefulWidget {
 
 class _SaleFormViewState extends State<_SaleFormView> {
   final _notesCtrl = TextEditingController();
-  final _taxCtrl = TextEditingController(text: '0');
 
   @override
   void dispose() {
     _notesCtrl.dispose();
-    _taxCtrl.dispose();
     super.dispose();
   }
 
@@ -794,7 +792,7 @@ class _SaleFormViewState extends State<_SaleFormView> {
     showModalBottomSheet<void>(context: ctx, isScrollControlled: true, useSafeArea: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (sc) => BlocProvider.value(value: bloc,
-        child: _CheckoutSheet(currencyService: curr, notesCtrl: _notesCtrl, taxCtrl: _taxCtrl,
+        child: _CheckoutSheet(currencyService: curr, notesCtrl: _notesCtrl,
           onConfirm: () { bloc.add(const SaleFormSubmitted()); Navigator.pop(sc); })));
   }
 }

@@ -2066,6 +2066,28 @@ class _EditItemSheetState extends State<_EditItemSheet> {
                         ],
                       ),
                     ),
+                    // ── Purchase Tax Rate (read-only info) ──
+                    if (item.product.isTaxable && item.product.purchaseTaxRateBps > 0) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: cs.tertiaryContainer.withValues(alpha: 0.3),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: cs.tertiary.withValues(alpha: 0.3)),
+                        ),
+                        child: Row(children: [
+                          Icon(LucideIcons.percent, size: 16, color: cs.tertiary),
+                          const SizedBox(width: 8),
+                          Text('purchases.product_tax_rate'.tr(),
+                            style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                          const Spacer(),
+                          Text('${(item.product.purchaseTaxRateBps / 100).toStringAsFixed(2)}%',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.bold, color: cs.tertiary)),
+                        ]),
+                      ),
+                    ],
                     const SizedBox(height: 16),
                     // ── Quantity + New Cost ──
                     Row(
@@ -2210,6 +2232,51 @@ class _EditItemSheetState extends State<_EditItemSheet> {
                 ),
               ),
               const SizedBox(height: 16),
+              // ── Totals Preview (before & after tax) ──
+              Builder(builder: (context) {
+                final qty = int.tryParse(_qtyCtrl.text) ?? 1;
+                final costVal = double.tryParse(_costCtrl.text) ?? 0;
+                final costCents = (costVal * 100).round();
+                final subtotalCents = costCents * (qty < 1 ? 1 : qty);
+                final discVal = double.tryParse(_discountFixedCtrl.text) ?? 0;
+                final discCents = (discVal * 100).round();
+                final netCents = subtotalCents - discCents;
+                final product = widget.item.product;
+                final taxBps = product.isTaxable ? product.purchaseTaxRateBps : 0;
+                final taxCents = taxBps > 0 && netCents > 0
+                    ? ((netCents * taxBps) / 10000).round()
+                    : 0;
+                final totalAfterTax = netCents + taxCents;
+                return Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: cs.primaryContainer.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(children: [
+                    Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                      Text('purchases.subtotal'.tr(), style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
+                      Text(widget.currencyService.format(netCents > 0 ? netCents : 0),
+                        style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500)),
+                    ]),
+                    if (taxCents > 0) ...[
+                      const SizedBox(height: 4),
+                      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                        Text('purchases.tax'.tr(), style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                        Text('+${widget.currencyService.format(taxCents)}',
+                          style: theme.textTheme.bodySmall?.copyWith(color: cs.tertiary)),
+                      ]),
+                    ],
+                    const Divider(height: 12),
+                    Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                      Text('purchases.total'.tr(), style: theme.textTheme.titleSmall),
+                      Text(widget.currencyService.format(totalAfterTax > 0 ? totalAfterTax : 0),
+                        style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: cs.primary)),
+                    ]),
+                  ]),
+                );
+              }),
+              const SizedBox(height: 16),
               // ── Actions ──
               Row(
                 children: [
@@ -2329,7 +2396,6 @@ class _CheckoutSheet extends StatefulWidget {
 }
 
 class _CheckoutSheetState extends State<_CheckoutSheet> {
-  late final TextEditingController _taxCtrl;
   late final TextEditingController _paidCtrl;
   late final TextEditingController _notesCtrl;
   late final TextEditingController _discountPercentCtrl;
@@ -2341,10 +2407,6 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
   void initState() {
     super.initState();
     final state = context.read<PurchaseFormBloc>().state;
-    _taxCtrl = TextEditingController(
-        text: state.taxRatePercent > Decimal.zero
-            ? state.taxRatePercent.toString()
-            : '');
     _paidCtrl = TextEditingController(
         text: state.paidAmountCents > Decimal.zero
             ? (state.paidAmountCents.toBigInt().toInt() / 100).toStringAsFixed(2)
@@ -2372,13 +2434,11 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
 
     // Initial hydration for edit flow: once bloc loads async data.
     if (!_hasHydratedFromBloc) {
-      final taxText = state.taxRatePercent > Decimal.zero ? state.taxRatePercent.toString() : '';
       final paidText = state.paidAmountCents > Decimal.zero
           ? (state.paidAmountCents.toBigInt().toInt() / 100).toStringAsFixed(2)
           : '';
       final notesText = state.notes ?? '';
 
-      if (_taxCtrl.text != taxText) _taxCtrl.text = taxText;
       if (_paidCtrl.text != paidText) _paidCtrl.text = paidText;
       if (_notesCtrl.text != notesText) _notesCtrl.text = notesText;
 
@@ -2447,7 +2507,6 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
 
   @override
   void dispose() {
-    _taxCtrl.dispose();
     _paidCtrl.dispose();
     _notesCtrl.dispose();
     _discountPercentCtrl.dispose();
@@ -2694,30 +2753,35 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                           ),
                         );
                       }),
-                      // ── Tax Rate ──
-                      _buildCheckoutSection(
-                        theme: theme,
-                        cs: cs,
-                        icon: LucideIcons.percent,
-                        title: 'purchases.tax_rate'.tr(),
-                        child: TextField(
-                          controller: _taxCtrl,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
-                          decoration: const InputDecoration(
-                            border: OutlineInputBorder(),
-                            suffixText: '%',
-                            hintText: '0',
-                            isDense: true,
+                      // ── Tax (read-only, sum of line item taxes) ──
+                      if (state.taxCents > Decimal.zero)
+                        _buildCheckoutSection(
+                          theme: theme,
+                          cs: cs,
+                          icon: LucideIcons.percent,
+                          title: 'purchases.tax'.tr(),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                            decoration: BoxDecoration(
+                              color: cs.surfaceContainerHighest.withValues(alpha: 0.3),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: cs.outlineVariant),
+                            ),
+                            child: Row(children: [
+                              Icon(LucideIcons.receipt, size: 16, color: cs.onSurfaceVariant),
+                              const SizedBox(width: 8),
+                              Text(
+                                widget.currencyService.format(state.taxCents.toBigInt().toInt()),
+                                style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
+                              ),
+                              const Spacer(),
+                              Text(
+                                'purchases.tax_from_products'.tr(),
+                                style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                              ),
+                            ]),
                           ),
-                          onChanged: (v) {
-                            final pct = double.tryParse(v) ?? 0;
-                            context.read<PurchaseFormBloc>().add(
-                                  PurchaseTaxRateChanged(Decimal.parse(pct.toStringAsFixed(2))),
-                                );
-                          },
                         ),
-                      ),
                       const SizedBox(height: 16),
                       // ── Invoice Discount (% and fixed) ──
                       if (state.discountMode == DiscountMode.invoice)

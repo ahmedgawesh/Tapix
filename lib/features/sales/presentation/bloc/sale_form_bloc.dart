@@ -89,14 +89,7 @@ class SaleFormState extends Equatable {
         (sum, item) => sum + item.taxCents,
       );
 
-  Decimal get taxCents {
-    if (taxRatePercent > Decimal.zero) {
-      final taxable = subtotalCents - totalDiscountCents;
-      final raw = taxable * taxRatePercent / Decimal.fromInt(100);
-      return Decimal.fromBigInt(raw.round());
-    }
-    return itemTaxCents;
-  }
+  Decimal get taxCents => itemTaxCents;
 
   Decimal get totalCents {
     final net = subtotalCents - totalDiscountCents + taxCents;
@@ -179,7 +172,6 @@ class SaleLineItem extends Equatable {
   final int quantity;
   final Decimal unitPriceCents;
   final Decimal discountCents;
-  final Decimal taxCents;
   final String? colorName;
   final String? colorHex;
   final String? sizeName;
@@ -194,18 +186,27 @@ class SaleLineItem extends Equatable {
     required this.quantity,
     required this.unitPriceCents,
     Decimal? discountCents,
-    Decimal? taxCents,
     this.colorName,
     this.colorHex,
     this.sizeName,
     this.employeeId,
     this.employeeName,
     this.itemNote,
-  })  : discountCents = discountCents ?? Decimal.zero,
-        taxCents = taxCents ?? Decimal.zero;
+  })  : discountCents = discountCents ?? Decimal.zero;
 
   Decimal get subtotalCents => unitPriceCents * Decimal.fromInt(quantity);
   Decimal get netCents => subtotalCents - discountCents;
+
+  /// Tax is always computed from the product's sales tax rate.
+  /// Uses proper rounding (round half-up) instead of truncation.
+  Decimal get taxCents {
+    if (!product.isTaxable || product.salesTaxRateBps <= 0) return Decimal.zero;
+    final taxable = netCents;
+    if (taxable <= Decimal.zero) return Decimal.zero;
+    final raw = taxable * Decimal.fromInt(product.salesTaxRateBps) / Decimal.fromInt(10000);
+    return Decimal.fromBigInt(raw.round());
+  }
+
   Decimal get totalCents => netCents + taxCents;
 
   String get displayName {
@@ -228,7 +229,6 @@ class SaleLineItem extends Equatable {
     int? quantity,
     Decimal? unitPriceCents,
     Decimal? discountCents,
-    Decimal? taxCents,
     String? colorName,
     String? colorHex,
     String? sizeName,
@@ -244,7 +244,6 @@ class SaleLineItem extends Equatable {
       quantity: quantity ?? this.quantity,
       unitPriceCents: unitPriceCents ?? this.unitPriceCents,
       discountCents: discountCents ?? this.discountCents,
-      taxCents: taxCents ?? this.taxCents,
       colorName: colorName ?? this.colorName,
       colorHex: colorHex ?? this.colorHex,
       sizeName: sizeName ?? this.sizeName,
@@ -257,7 +256,7 @@ class SaleLineItem extends Equatable {
   @override
   List<Object?> get props => [
         tempId, product, variant, quantity,
-        unitPriceCents, discountCents, taxCents,
+        unitPriceCents, discountCents,
         colorName, colorHex, sizeName,
         employeeId, employeeName, itemNote,
       ];
@@ -579,7 +578,6 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
           quantity: i.quantity,
           unitPriceCents: i.unitPriceCents,
           discountCents: i.discountCents,
-          taxCents: i.taxCents,
           colorName: _resolveColorName(variant?.colorId),
           colorHex: _resolveColorHex(variant?.colorId),
           sizeName: _resolveSizeName(variant?.sizeId),
@@ -674,16 +672,6 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
       } catch (_) {}
     }
 
-    // Auto-calculate tax from product's sales tax rate if product is taxable
-    Decimal itemTaxCents = Decimal.zero;
-    if (event.product.isTaxable && event.product.salesTaxRateBps > 0) {
-      final subtotal = event.unitPriceCents * Decimal.fromInt(event.quantity);
-      final discount = event.discountCents ?? Decimal.zero;
-      final taxable = subtotal - discount;
-      final raw = taxable * Decimal.fromInt(event.product.salesTaxRateBps) ~/ Decimal.fromInt(10000);
-      itemTaxCents = Decimal.fromBigInt(raw);
-    }
-
     final newItem = SaleLineItem(
       tempId: _generateTempId(),
       product: event.product,
@@ -691,7 +679,6 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
       quantity: event.quantity,
       unitPriceCents: event.unitPriceCents,
       discountCents: event.discountCents,
-      taxCents: itemTaxCents,
       colorName: _resolveColorName(resolvedVariant?.colorId),
       colorHex: _resolveColorHex(resolvedVariant?.colorId),
       sizeName: _resolveSizeName(resolvedVariant?.sizeId),

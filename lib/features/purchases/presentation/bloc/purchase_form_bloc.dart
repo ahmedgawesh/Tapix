@@ -96,14 +96,7 @@ class PurchaseFormState extends Equatable {
         (sum, item) => sum + item.taxCents,
       );
 
-  Decimal get taxCents {
-    if (taxRatePercent > Decimal.zero) {
-      final taxable = subtotalCents - totalDiscountCents;
-      final raw = taxable * taxRatePercent / Decimal.fromInt(100);
-      return Decimal.fromBigInt(raw.round());
-    }
-    return itemTaxCents;
-  }
+  Decimal get taxCents => itemTaxCents;
 
   Decimal get remainingCents {
     final r = totalCents - paidAmountCents;
@@ -189,7 +182,6 @@ class PurchaseLineItem extends Equatable {
   final int quantity;
   final Decimal unitCostCents;
   final Decimal discountCents;
-  final Decimal taxCents;
   final DateTime? expiryDate;
   final String? colorName;
   final String? colorHex;
@@ -207,7 +199,6 @@ class PurchaseLineItem extends Equatable {
     required this.quantity,
     required this.unitCostCents,
     Decimal? discountCents,
-    Decimal? taxCents,
     this.expiryDate,
     this.colorName,
     this.colorHex,
@@ -217,11 +208,21 @@ class PurchaseLineItem extends Equatable {
     this.originalWholesalePriceCents,
     this.newSellPriceCents,
     this.newWholesalePriceCents,
-  })  : discountCents = discountCents ?? Decimal.zero,
-        taxCents = taxCents ?? Decimal.zero;
+  })  : discountCents = discountCents ?? Decimal.zero;
 
   Decimal get subtotalCents => unitCostCents * Decimal.fromInt(quantity);
   Decimal get netCents => subtotalCents - discountCents;
+
+  /// Tax is always computed from the product's purchase tax rate.
+  /// Uses proper rounding (round half-up) instead of truncation.
+  Decimal get taxCents {
+    if (!product.isTaxable || product.purchaseTaxRateBps <= 0) return Decimal.zero;
+    final taxable = netCents;
+    if (taxable <= Decimal.zero) return Decimal.zero;
+    final raw = taxable * Decimal.fromInt(product.purchaseTaxRateBps) / Decimal.fromInt(10000);
+    return Decimal.fromBigInt(raw.round());
+  }
+
   Decimal get totalCents => netCents + taxCents;
 
   String get displayName {
@@ -244,7 +245,6 @@ class PurchaseLineItem extends Equatable {
     int? quantity,
     Decimal? unitCostCents,
     Decimal? discountCents,
-    Decimal? taxCents,
     DateTime? expiryDate,
     bool clearExpiry = false,
     String? colorName,
@@ -265,7 +265,6 @@ class PurchaseLineItem extends Equatable {
       quantity: quantity ?? this.quantity,
       unitCostCents: unitCostCents ?? this.unitCostCents,
       discountCents: discountCents ?? this.discountCents,
-      taxCents: taxCents ?? this.taxCents,
       expiryDate: clearExpiry ? null : (expiryDate ?? this.expiryDate),
       colorName: colorName ?? this.colorName,
       colorHex: colorHex ?? this.colorHex,
@@ -281,7 +280,7 @@ class PurchaseLineItem extends Equatable {
   @override
   List<Object?> get props => [
         tempId, product, variant, quantity,
-        unitCostCents, discountCents, taxCents, expiryDate,
+        unitCostCents, discountCents, expiryDate,
         colorName, colorHex, sizeName,
         originalCostCents, originalPriceCents, originalWholesalePriceCents,
         newSellPriceCents, newWholesalePriceCents,
@@ -635,7 +634,6 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
           quantity: i.quantity,
           unitCostCents: i.unitCostCents,
           discountCents: i.discountCents,
-          taxCents: i.taxCents,
           expiryDate: i.expiryDate,
           colorName: _resolveColorName(variant?.colorId),
           colorHex: _resolveColorHex(variant?.colorId),
@@ -784,16 +782,6 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
         ?? resolvedVariant?.wholesalePriceCents?.toBigInt().toInt()
         ?? event.product.wholesalePriceCents?.toBigInt().toInt();
 
-    // Auto-calculate tax from product's purchase tax rate if product is taxable
-    Decimal itemTaxCents = Decimal.zero;
-    if (event.product.isTaxable && event.product.purchaseTaxRateBps > 0) {
-      final subtotal = event.unitCostCents * Decimal.fromInt(event.quantity);
-      final discount = event.discountCents ?? Decimal.zero;
-      final taxable = subtotal - discount;
-      final raw = taxable * Decimal.fromInt(event.product.purchaseTaxRateBps) ~/ Decimal.fromInt(10000);
-      itemTaxCents = Decimal.fromBigInt(raw);
-    }
-
     final newItem = PurchaseLineItem(
       tempId: _generateTempId(),
       product: event.product,
@@ -801,7 +789,6 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
       quantity: event.quantity,
       unitCostCents: event.unitCostCents,
       discountCents: event.discountCents,
-      taxCents: itemTaxCents,
       expiryDate: event.expiryDate,
       colorName: _resolveColorName(resolvedVariant?.colorId),
       colorHex: _resolveColorHex(resolvedVariant?.colorId),

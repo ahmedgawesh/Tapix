@@ -747,6 +747,28 @@ class _EditItemSheetState extends State<_EditItemSheet> {
                 fontWeight: FontWeight.bold, color: cs.onSurfaceVariant)),
             ]),
           ),
+          // ── Sales Tax Rate (read-only info) ──
+          if (widget.item.product.isTaxable && widget.item.product.salesTaxRateBps > 0) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: cs.tertiaryContainer.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: cs.tertiary.withValues(alpha: 0.3)),
+              ),
+              child: Row(children: [
+                Icon(LucideIcons.percent, size: 16, color: cs.tertiary),
+                const SizedBox(width: 8),
+                Text('sales.product_tax_rate'.tr(),
+                  style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                const Spacer(),
+                Text('${(widget.item.product.salesTaxRateBps / 100).toStringAsFixed(2)}%',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.bold, color: cs.tertiary)),
+              ]),
+            ),
+          ],
           const SizedBox(height: 16),
 
           // Price with tier buttons
@@ -867,18 +889,47 @@ class _EditItemSheetState extends State<_EditItemSheet> {
           // Per-item salesperson
           if (widget.showSalesperson) ...[_buildItemSalesperson(theme, cs), const SizedBox(height: 16)],
 
-          // Preview total
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: cs.primaryContainer.withValues(alpha: 0.3),
-              borderRadius: BorderRadius.circular(12)),
-            child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-              Text('sales.total'.tr(), style: theme.textTheme.titleSmall),
-              Text(_previewTotal(curr),
-                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: cs.primary)),
-            ]),
-          ),
+          // Preview totals (before & after tax)
+          Builder(builder: (context) {
+            final price = double.tryParse(_priceCtrl.text) ?? 0;
+            final priceCents = (price * 100).round();
+            final subtotalCents = priceCents * _quantity;
+            final discountCents = _computeDiscountCents();
+            final netCents = subtotalCents - discountCents;
+            final product = widget.item.product;
+            final taxBps = product.isTaxable ? product.salesTaxRateBps : 0;
+            final taxCents = taxBps > 0 && netCents > 0
+                ? ((netCents * taxBps) / 10000).round()
+                : 0;
+            final totalAfterTax = netCents + taxCents;
+            return Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: cs.primaryContainer.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(12)),
+              child: Column(children: [
+                Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                  Text('sales.subtotal'.tr(), style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
+                  Text(curr.format(netCents > 0 ? netCents : 0),
+                    style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500)),
+                ]),
+                if (taxCents > 0) ...[
+                  const SizedBox(height: 4),
+                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                    Text('sales.tax'.tr(), style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                    Text('+${curr.format(taxCents)}',
+                      style: theme.textTheme.bodySmall?.copyWith(color: cs.tertiary)),
+                  ]),
+                ],
+                const Divider(height: 12),
+                Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                  Text('sales.total'.tr(), style: theme.textTheme.titleSmall),
+                  Text(curr.format(totalAfterTax > 0 ? totalAfterTax : 0),
+                    style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: cs.primary)),
+                ]),
+              ]),
+            );
+          }),
           const SizedBox(height: 20),
 
           // Save button
@@ -970,12 +1021,6 @@ class _EditItemSheetState extends State<_EditItemSheet> {
     return (val * 100).round();
   }
 
-  String _previewTotal(CurrencyService curr) {
-    final price = double.tryParse(_priceCtrl.text) ?? 0;
-    final discountCents = _computeDiscountCents();
-    final cents = ((price * 100).round() * _quantity) - discountCents;
-    return curr.format(cents > 0 ? cents : 0);
-  }
 
   void _onSave() {
     final price = double.tryParse(_priceCtrl.text) ?? 0;
@@ -999,12 +1044,11 @@ class _EditItemSheetState extends State<_EditItemSheet> {
 class _CheckoutSheet extends StatefulWidget {
   final CurrencyService currencyService;
   final TextEditingController notesCtrl;
-  final TextEditingController taxCtrl;
   final VoidCallback onConfirm;
 
   const _CheckoutSheet({
     required this.currencyService, required this.notesCtrl,
-    required this.taxCtrl, required this.onConfirm,
+    required this.onConfirm,
   });
 
   @override
@@ -1209,22 +1253,33 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                     const SizedBox(height: 16),
                   ],
 
-                  // Tax Rate
-                  _section(theme, cs, LucideIcons.percent, 'sales.tax_rate'.tr(),
-                    child: TextField(
-                      controller: widget.taxCtrl,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
-                      decoration: const InputDecoration(
-                        border: OutlineInputBorder(), suffixText: '%', hintText: '0', isDense: true),
-                      onChanged: (v) {
-                        final pct = double.tryParse(v) ?? 0;
-                        context.read<SaleFormBloc>().add(
-                          SaleTaxRateChanged(Decimal.parse(pct.toStringAsFixed(2))));
-                      },
+                  // Tax (read-only, sum of line item taxes)
+                  if (state.taxCents > Decimal.zero) ...[
+                    _section(theme, cs, LucideIcons.percent, 'sales.tax'.tr(),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: cs.surfaceContainerHighest.withValues(alpha: 0.3),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: cs.outlineVariant),
+                        ),
+                        child: Row(children: [
+                          Icon(LucideIcons.receipt, size: 16, color: cs.onSurfaceVariant),
+                          const SizedBox(width: 8),
+                          Text(
+                            widget.currencyService.format(state.taxCents.toBigInt().toInt()),
+                            style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
+                          ),
+                          const Spacer(),
+                          Text(
+                            'sales.tax_from_products'.tr(),
+                            style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                          ),
+                        ]),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
+                    const SizedBox(height: 16),
+                  ],
 
                   // Invoice Discount (if invoice mode)
                   if (state.discountMode == SaleDiscountMode.invoice) ...[
