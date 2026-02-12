@@ -232,9 +232,9 @@ class CustomerAnalysisReportBloc
   }
 
   Future<List<CustomerAnalysisItem>> _loadCustomerAnalysis() async {
-    final startUnix = _dateRange.startDate.millisecondsSinceEpoch ~/ 1000;
-    final endUnix = _dateRange.endDate.millisecondsSinceEpoch ~/ 1000;
-    final nowUnix = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final startIso = _dateRange.startDate.toIso8601String();
+    final endIso = _dateRange.endDate.toIso8601String();
+    final now = DateTime.now();
 
     final rows = await _db.customSelect(
       '''
@@ -258,8 +258,8 @@ class CustomerAnalysisReportBloc
       ORDER BY total_spent_cents DESC
       ''',
       variables: [
-        Variable<int>(startUnix),
-        Variable<int>(endUnix),
+        Variable.withString(startIso),
+        Variable.withString(endIso),
       ],
       readsFrom: {
         _db.sales,
@@ -275,21 +275,21 @@ class CustomerAnalysisReportBloc
     for (final row in rows) {
       final totalSpent = row.read<int>('total_spent_cents');
       final purchaseCount = row.read<int>('purchase_count');
-      final lastDateVal = row.readNullable<int>('last_sale_date');
-      final firstDateVal = row.readNullable<int>('first_sale_date');
+      final lastDateStr = row.readNullable<String>('last_sale_date');
+      final firstDateStr = row.readNullable<String>('first_sale_date');
 
       if (totalSpent > maxSpent) maxSpent = totalSpent;
       if (purchaseCount > maxPurchases) maxPurchases = purchaseCount;
 
-      final lastDate = lastDateVal != null
-          ? DateTime.fromMillisecondsSinceEpoch(lastDateVal * 1000)
+      final lastDate = lastDateStr != null
+          ? DateTime.parse(lastDateStr)
           : null;
-      final firstDate = firstDateVal != null
-          ? DateTime.fromMillisecondsSinceEpoch(firstDateVal * 1000)
+      final firstDate = firstDateStr != null
+          ? DateTime.parse(firstDateStr)
           : null;
 
-      final daysSinceLast = lastDateVal != null
-          ? ((nowUnix - lastDateVal) / 86400).round()
+      final daysSinceLast = lastDate != null
+          ? now.difference(lastDate).inDays
           : 9999;
 
       double avgDays = 0;

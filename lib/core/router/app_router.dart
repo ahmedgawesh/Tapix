@@ -70,6 +70,9 @@ import '../../features/reports/presentation/screens/balance_sheet_screen.dart';
 import '../../features/reports/presentation/screens/general_ledger_screen.dart';
 import '../../features/reports/presentation/screens/accounting_health_screen.dart';
 import '../../features/reports/presentation/screens/inventory_reports_screen.dart';
+import '../../features/reports/presentation/screens/product_movement_detail_screen.dart';
+import '../../features/reports/presentation/screens/product_variant_movement_screen.dart';
+import '../../features/reports/presentation/screens/category_movement_screen.dart';
 import '../../features/reports/presentation/screens/customer_reports_screen.dart';
 import '../../features/reports/presentation/screens/customer_sales_returns_reports_screen.dart';
 import '../../features/reports/presentation/screens/top_customers_screen.dart';
@@ -89,6 +92,8 @@ import '../../features/reports/presentation/screens/supplier_stocktake_report_sc
 import '../../features/reports/presentation/screens/supplier_balance_drilldown_screen.dart';
 import '../../features/reports/presentation/screens/salespeople_commission_report_screen.dart';
 import '../../features/reports/presentation/screens/expense_report_screen.dart';
+import '../../features/reports/presentation/screens/sales_tax_report_screen.dart';
+import '../../features/reports/presentation/screens/purchase_tax_report_screen.dart';
 import '../di/injection_container.dart';
 import 'route_permissions.dart';
 
@@ -552,6 +557,18 @@ class AppRouter {
             builder: (context, state) => const InventoryReportsScreen(),
           ),
           GoRoute(
+            path: 'product-movement-detail',
+            builder: (context, state) => const ProductMovementDetailScreen(),
+          ),
+          GoRoute(
+            path: 'product-variant-movement',
+            builder: (context, state) => const ProductVariantMovementScreen(),
+          ),
+          GoRoute(
+            path: 'category-movement',
+            builder: (context, state) => const CategoryMovementScreen(),
+          ),
+          GoRoute(
             path: 'customers',
             builder: (context, state) => const CustomerReportsScreen(),
           ),
@@ -626,6 +643,14 @@ class AppRouter {
           GoRoute(
             path: 'expense-report',
             builder: (context, state) => const ExpenseReportScreen(),
+          ),
+          GoRoute(
+            path: 'sales-tax',
+            builder: (context, state) => const SalesTaxReportScreen(),
+          ),
+          GoRoute(
+            path: 'purchase-tax',
+            builder: (context, state) => const PurchaseTaxReportScreen(),
           ),
         ],
       ),

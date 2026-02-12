@@ -471,6 +471,12 @@ class PurchasePdfService {
                   children: [
                     _pdfMoneyRow('purchases.total_items_count'.tr(), '${returnItems.length}', fonts.regular),
                     _pdfMoneyRow('purchases.total_pieces_count'.tr(), '${returnItems.fold<int>(0, (sum, item) => sum + item.quantity)}', fonts.regular),
+                    pw.SizedBox(height: 4),
+                    _pdfMoneyRow('purchases.subtotal'.tr(), cs.format(returnEntity.subtotalCents.toBigInt().toInt()), fonts.regular),
+                    if (returnEntity.discountCents.toBigInt().toInt() > 0)
+                      _pdfMoneyRow('purchases.discount'.tr(), '- ${cs.format(returnEntity.discountCents.toBigInt().toInt())}', fonts.regular, valueColor: PdfColors.orange),
+                    if (returnEntity.taxCents.toBigInt().toInt() > 0)
+                      _pdfMoneyRow('purchases.tax'.tr(), '+ ${cs.format(returnEntity.taxCents.toBigInt().toInt())}', fonts.regular),
                     pw.Divider(thickness: 2),
                     pw.Row(
                       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -632,10 +638,12 @@ class PurchasePdfService {
     return pw.Table(
       border: pw.TableBorder.all(color: PdfColors.grey300),
       columnWidths: {
-        0: const pw.FlexColumnWidth(1),
-        1: const pw.FlexColumnWidth(4),
-        2: const pw.FlexColumnWidth(1),
-        3: const pw.FlexColumnWidth(1.5),
+        0: const pw.FlexColumnWidth(0.6),
+        1: const pw.FlexColumnWidth(3),
+        2: const pw.FlexColumnWidth(0.8),
+        3: const pw.FlexColumnWidth(1.2),
+        4: const pw.FlexColumnWidth(1.2),
+        5: const pw.FlexColumnWidth(1.2),
       },
       children: [
         pw.TableRow(
@@ -644,6 +652,8 @@ class PurchasePdfService {
             _tableCell('#', fonts.bold, isHeader: true),
             _tableCell('purchases.product'.tr(), fonts.bold, isHeader: true),
             _tableCell('purchases.qty'.tr(), fonts.bold, isHeader: true),
+            _tableCell('purchases.discount'.tr(), fonts.bold, isHeader: true),
+            _tableCell('purchases.tax'.tr(), fonts.bold, isHeader: true),
             _tableCell('purchases.refund'.tr(), fonts.bold, isHeader: true),
           ],
         ),
@@ -651,7 +661,6 @@ class PurchasePdfService {
           final idx = entry.key;
           final item = entry.value;
           final productName = item.productName ?? 'Item #${item.purchaseItemId}';
-          // Build variant details (color · size · SKU)
           final variantParts = <String>[];
           if (item.colorName != null && item.colorName!.isNotEmpty) {
             variantParts.add(item.colorName!);
@@ -681,6 +690,16 @@ class PurchasePdfService {
                 ),
               ),
               _tableCell('${item.quantity}', fonts.regular),
+              _tableCell(
+                item.discountCents.toBigInt().toInt() > 0
+                    ? cs.format(item.discountCents.toBigInt().toInt())
+                    : '-',
+                fonts.regular),
+              _tableCell(
+                item.taxCents.toBigInt().toInt() > 0
+                    ? cs.format(item.taxCents.toBigInt().toInt())
+                    : '-',
+                fonts.regular),
               _tableCell(cs.format(item.refundCents.toBigInt().toInt()), fonts.regular),
             ],
           );

@@ -104,12 +104,17 @@ import '../../features/expenses/presentation/bloc/expense_categories_bloc.dart';
 import '../../features/accounting/domain/repositories/journal_repository.dart';
 import '../../features/accounting/data/datasources/journal_local_datasource.dart';
 import '../../features/accounting/data/repositories/journal_repository_impl.dart';
+import '../../features/accounting/data/repositories/accounting_repository.dart';
+import '../services/journal_entry_service.dart';
 import '../../features/accounting/presentation/bloc/accounts_bloc.dart';
 import '../../features/accounting/presentation/bloc/journal_entries_bloc.dart';
 import '../../features/accounting/presentation/bloc/journal_entry_form_bloc.dart';
 import '../../features/accounting/presentation/bloc/accounting_health_bloc.dart';
 import '../../features/reports/presentation/bloc/reports_bloc.dart';
 import '../../features/reports/presentation/bloc/inventory_reports_bloc.dart';
+import '../../features/reports/presentation/bloc/product_movement_detail_bloc.dart';
+import '../../features/reports/presentation/bloc/product_variant_movement_bloc.dart';
+import '../../features/reports/presentation/bloc/category_movement_bloc.dart';
 import '../../features/reports/presentation/bloc/customer_reports_bloc.dart';
 import '../../features/reports/presentation/bloc/customer_sales_returns_reports_bloc.dart';
 import '../../features/reports/presentation/bloc/top_customers_bloc.dart';
@@ -129,6 +134,8 @@ import '../../features/reports/presentation/bloc/supplier_stocktake_report_bloc.
 import '../../features/reports/presentation/bloc/supplier_balance_drilldown_bloc.dart';
 import '../../features/reports/presentation/bloc/salespeople_commission_report_bloc.dart';
 import '../../features/reports/presentation/bloc/expense_report_bloc.dart';
+import '../../features/reports/presentation/bloc/sales_tax_report_bloc.dart';
+import '../../features/reports/presentation/bloc/purchase_tax_report_bloc.dart';
 
 final sl = GetIt.instance;
 
@@ -204,12 +211,20 @@ Future<void> init() async {
     () => SizeRepositoryImpl(sl()),
   );
 
+  // Accounting Repository & Journal Entry Service (needed by Sales/Purchases)
+  sl.registerLazySingleton<AccountingRepository>(
+    () => AccountingRepository(sl<AppDatabase>()),
+  );
+  sl.registerLazySingleton<JournalEntryService>(
+    () => JournalEntryService(sl<AccountingRepository>()),
+  );
+
   // Purchases
   sl.registerLazySingleton<PurchaseLocalDatasource>(
     () => PurchaseLocalDatasourceImpl(sl<PurchaseDao>()),
   );
   sl.registerLazySingleton<PurchaseRepository>(
-    () => PurchaseRepositoryImpl(sl<PurchaseLocalDatasource>(), sl<AuditLogService>(), sl<SessionService>()),
+    () => PurchaseRepositoryImpl(sl<PurchaseLocalDatasource>(), sl<AuditLogService>(), sl<SessionService>(), sl<JournalEntryService>()),
   );
 
   // Sales
@@ -217,7 +232,7 @@ Future<void> init() async {
     () => SaleLocalDatasourceImpl(sl<SaleDao>()),
   );
   sl.registerLazySingleton<SaleRepository>(
-    () => SaleRepositoryImpl(sl<SaleLocalDatasource>(), sl<SaleDao>()),
+    () => SaleRepositoryImpl(sl<SaleLocalDatasource>(), sl<SaleDao>(), sl<JournalEntryService>()),
   );
 
   // Customers
@@ -360,8 +375,11 @@ Future<void> init() async {
   sl.registerFactory(() => JournalEntriesBloc(sl<JournalRepository>()));
   sl.registerFactory(() => JournalEntryFormBloc(sl<JournalRepository>()));
   sl.registerFactory(() => AccountingHealthBloc(sl<JournalRepository>()));
-  sl.registerFactory(() => ReportsBloc(sl<JournalRepository>()));
+  sl.registerFactory(() => ReportsBloc(sl<JournalRepository>(), sl<AppDatabase>()));
   sl.registerFactory(() => InventoryReportsBloc(sl<AppDatabase>()));
+  sl.registerFactory(() => ProductMovementDetailBloc(sl<AppDatabase>()));
+  sl.registerFactory(() => ProductVariantMovementBloc(sl<AppDatabase>()));
+  sl.registerFactory(() => CategoryMovementBloc(sl<AppDatabase>()));
   sl.registerFactory(() => CustomerReportsBloc(sl<AppDatabase>()));
   sl.registerFactory(() => CustomerSalesReturnsBloc(sl<AppDatabase>()));
   sl.registerFactory(() => TopCustomersBloc(sl<AppDatabase>()));
@@ -381,6 +399,8 @@ Future<void> init() async {
   sl.registerFactory(() => SupplierBalanceDrilldownBloc(sl<AppDatabase>()));
   sl.registerFactory(() => SalespeopleCommissionReportBloc(sl<AppDatabase>()));
   sl.registerFactory(() => ExpenseReportBloc(sl<AppDatabase>()));
+  sl.registerFactory(() => SalesTaxReportBloc(sl<AppDatabase>()));
+  sl.registerFactory(() => PurchaseTaxReportBloc(sl<AppDatabase>()));
 
   // Barcode Services
   sl.registerLazySingleton(() => BarcodeValidationService());

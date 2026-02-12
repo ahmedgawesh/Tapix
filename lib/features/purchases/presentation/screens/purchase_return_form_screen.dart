@@ -1,3 +1,4 @@
+import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -1020,6 +1021,25 @@ class _ReturnFormView extends StatelessWidget {
                     '+${state.totalReturnQuantity} ${'purchases.items_count'.tr()}',
                     Colors.green),
                 const SizedBox(height: 10),
+                _impactRow(theme, LucideIcons.receipt,
+                    'purchases.subtotal'.tr(),
+                    cs.format(state.totalSubtotalCents.toBigInt().toInt()),
+                    colorScheme.onSurfaceVariant),
+                if (state.totalDiscountCents > Decimal.zero) ...[
+                  const SizedBox(height: 10),
+                  _impactRow(theme, LucideIcons.tag,
+                      'purchases.discount'.tr(),
+                      '- ${cs.format(state.totalDiscountCents.toBigInt().toInt())}',
+                      Colors.orange),
+                ],
+                if (state.totalTaxCents > Decimal.zero) ...[
+                  const SizedBox(height: 10),
+                  _impactRow(theme, LucideIcons.percent,
+                      'purchases.tax'.tr(),
+                      '+ ${cs.format(state.totalTaxCents.toBigInt().toInt())}',
+                      colorScheme.tertiary),
+                ],
+                const SizedBox(height: 10),
                 _impactRow(theme, LucideIcons.coins,
                     'purchases.supplier_credit'.tr(),
                     cs.format(state.totalRefundCents.toBigInt().toInt()),
@@ -1165,7 +1185,7 @@ class _ReturnFormView extends StatelessWidget {
 // ═══════════════════════════════════════════════════════
 // RETURN ITEM TILE
 // ═══════════════════════════════════════════════════════
-class _ReturnItemTile extends StatelessWidget {
+class _ReturnItemTile extends StatefulWidget {
   final PurchaseItemEntity item;
   final ReturnLineItem? returnItem;
   final bool isSelected;
@@ -1187,12 +1207,76 @@ class _ReturnItemTile extends StatelessWidget {
   });
 
   @override
+  State<_ReturnItemTile> createState() => _ReturnItemTileState();
+}
+
+class _ReturnItemTileState extends State<_ReturnItemTile> {
+  late TextEditingController _qtyCtrl;
+  bool _isEditing = false;
+  final FocusNode _qtyFocus = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    _qtyCtrl = TextEditingController(
+        text: '${widget.returnItem?.returnQuantity ?? 1}');
+    _qtyFocus.addListener(() {
+      if (_qtyFocus.hasFocus) {
+        _isEditing = true;
+        _qtyCtrl.selection = TextSelection(
+            baseOffset: 0, extentOffset: _qtyCtrl.text.length);
+      } else {
+        _isEditing = false;
+        _applyQty(_qtyCtrl.text);
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant _ReturnItemTile oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_isEditing) {
+      final newQty = widget.returnItem?.returnQuantity ?? 1;
+      if (_qtyCtrl.text != '$newQty') {
+        _qtyCtrl.text = '$newQty';
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _qtyFocus.dispose();
+    _qtyCtrl.dispose();
+    super.dispose();
+  }
+
+  void _applyQty(String value) {
+    final parsed = int.tryParse(value);
+    if (parsed == null || parsed < 1) {
+      widget.onQuantityChanged(1);
+    } else if (parsed > widget.maxReturnableQty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('purchases.max_return_qty_exceeded'.tr(
+              args: ['${widget.maxReturnableQty}'])),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: Theme.of(context).colorScheme.error,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      widget.onQuantityChanged(widget.maxReturnableQty);
+    } else {
+      widget.onQuantityChanged(parsed);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final displayName = item.variantSku != null
-        ? '${item.productName ?? 'Product'} (${item.variantSku})'
-        : item.productName ?? 'Product #${item.productId}';
+    final displayName = widget.item.variantSku != null
+        ? '${widget.item.productName ?? 'Product'} (${widget.item.variantSku})'
+        : widget.item.productName ?? 'Product #${widget.item.productId}';
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
@@ -1201,8 +1285,8 @@ class _ReturnItemTile extends StatelessWidget {
           Row(
             children: [
               Checkbox(
-                value: isSelected,
-                onChanged: (_) => onToggle(),
+                value: widget.isSelected,
+                onChanged: (_) => widget.onToggle(),
                 activeColor: cs.error,
               ),
               Expanded(
@@ -1214,15 +1298,15 @@ class _ReturnItemTile extends StatelessWidget {
                             fontWeight: FontWeight.w600)),
                     const SizedBox(height: 2),
                     Text(
-                      '${currencyService.format(item.unitCostCents.toBigInt().toInt())} × ${item.quantity}  •  ${currencyService.format(item.totalCents.toBigInt().toInt())}',
+                      '${widget.currencyService.format(widget.item.unitCostCents.toBigInt().toInt())} × ${widget.item.quantity}  •  ${widget.currencyService.format(widget.item.totalCents.toBigInt().toInt())}',
                       style: theme.textTheme.bodySmall?.copyWith(
                           color: cs.onSurfaceVariant),
                     ),
-                    if (alreadyReturnedQty > 0)
+                    if (widget.alreadyReturnedQty > 0)
                       Padding(
                         padding: const EdgeInsets.only(top: 2),
                         child: Text(
-                          '${'purchases.already_returned'.tr()}: $alreadyReturnedQty / ${item.quantity}',
+                          '${'purchases.already_returned'.tr()}: ${widget.alreadyReturnedQty} / ${widget.item.quantity}',
                           style: theme.textTheme.bodySmall?.copyWith(
                               color: Colors.orange, fontSize: 11),
                         ),
@@ -1232,7 +1316,7 @@ class _ReturnItemTile extends StatelessWidget {
               ),
             ],
           ),
-          if (isSelected && returnItem != null) ...[
+          if (widget.isSelected && widget.returnItem != null) ...[
             const SizedBox(height: 8),
             Padding(
               padding: const EdgeInsets.only(left: 48),
@@ -1252,35 +1336,49 @@ class _ReturnItemTile extends StatelessWidget {
                       children: [
                         InkWell(
                           borderRadius: BorderRadius.circular(8),
-                          onTap: returnItem!.returnQuantity > 1
-                              ? () => onQuantityChanged(
-                                  returnItem!.returnQuantity - 1)
+                          onTap: widget.returnItem!.returnQuantity > 1
+                              ? () => widget.onQuantityChanged(
+                                  widget.returnItem!.returnQuantity - 1)
                               : null,
                           child: Padding(
                             padding: const EdgeInsets.all(6),
                             child: Icon(LucideIcons.minus, size: 14,
-                                color: returnItem!.returnQuantity > 1
+                                color: widget.returnItem!.returnQuantity > 1
                                     ? cs.onSurface
                                     : cs.onSurface.withValues(alpha: 0.3)),
                           ),
                         ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          child: Text('${returnItem!.returnQuantity}',
-                              style: theme.textTheme.labelLarge?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                  color: cs.error)),
+                        SizedBox(
+                          width: 48,
+                          child: TextField(
+                            controller: _qtyCtrl,
+                            focusNode: _qtyFocus,
+                            keyboardType: TextInputType.number,
+                            textAlign: TextAlign.center,
+                            style: theme.textTheme.labelLarge?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: cs.error),
+                            decoration: const InputDecoration(
+                              border: InputBorder.none,
+                              isDense: true,
+                              contentPadding: EdgeInsets.symmetric(vertical: 4),
+                            ),
+                            onSubmitted: (v) {
+                              _applyQty(v);
+                              _qtyFocus.unfocus();
+                            },
+                          ),
                         ),
                         InkWell(
                           borderRadius: BorderRadius.circular(8),
-                          onTap: returnItem!.returnQuantity < maxReturnableQty
-                              ? () => onQuantityChanged(
-                                  returnItem!.returnQuantity + 1)
+                          onTap: widget.returnItem!.returnQuantity < widget.maxReturnableQty
+                              ? () => widget.onQuantityChanged(
+                                  widget.returnItem!.returnQuantity + 1)
                               : null,
                           child: Padding(
                             padding: const EdgeInsets.all(6),
                             child: Icon(LucideIcons.plus, size: 14,
-                                color: returnItem!.returnQuantity < maxReturnableQty
+                                color: widget.returnItem!.returnQuantity < widget.maxReturnableQty
                                     ? cs.onSurface
                                     : cs.onSurface.withValues(alpha: 0.3)),
                           ),
@@ -1290,14 +1388,14 @@ class _ReturnItemTile extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    '/ $maxReturnableQty',
+                    '/ ${widget.maxReturnableQty}',
                     style: theme.textTheme.bodySmall?.copyWith(
                         color: cs.onSurfaceVariant),
                   ),
                   const Spacer(),
                   Text(
-                    currencyService.format(
-                        returnItem!.refundCents.toBigInt().toInt()),
+                    widget.currencyService.format(
+                        widget.returnItem!.refundCents.toBigInt().toInt()),
                     style: theme.textTheme.titleSmall?.copyWith(
                         fontWeight: FontWeight.bold, color: cs.error),
                   ),

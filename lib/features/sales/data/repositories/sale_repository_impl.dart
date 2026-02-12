@@ -3,6 +3,7 @@ import 'package:drift/drift.dart';
 
 import '../../../../core/database/app_database.dart' as db;
 import '../../../../core/database/daos/sale_dao.dart' hide SaleDashboardStats;
+import '../../../../core/services/journal_entry_service.dart';
 import '../../domain/entities/sale_entity.dart';
 import '../../domain/repositories/sale_repository.dart';
 import '../datasources/sale_local_datasource.dart';
@@ -10,8 +11,9 @@ import '../datasources/sale_local_datasource.dart';
 class SaleRepositoryImpl implements SaleRepository {
   final SaleLocalDatasource _datasource;
   final SaleDao _dao;
+  final JournalEntryService _journalService;
 
-  SaleRepositoryImpl(this._datasource, this._dao);
+  SaleRepositoryImpl(this._datasource, this._dao, this._journalService);
 
   @override
   Future<String> generateInvoiceNumber() => _datasource.generateInvoiceNumber();
@@ -84,6 +86,14 @@ class SaleRepositoryImpl implements SaleRepository {
 
     // Auto-post: deduct stock immediately for completed sales
     await _dao.postSale(saleId);
+
+    // Create journal entries (best-effort, won't break sale flow)
+    await _journalService.recordSaleJournalEntry(
+      saleId: saleId,
+      totalCents: totalCents.toBigInt().toInt(),
+      paidAmountCents: paidAmountCents.toBigInt().toInt(),
+      currencyId: currencyId,
+    );
 
     return saleId;
   }
@@ -209,6 +219,13 @@ class SaleRepositoryImpl implements SaleRepository {
 
     // Auto-post return: restore stock immediately
     await _dao.postSaleReturn(returnId);
+
+    // Create journal entries (best-effort)
+    await _journalService.recordSaleReturnJournalEntry(
+      returnId: returnId,
+      totalCents: totalCents.toBigInt().toInt(),
+      currencyId: currencyId,
+    );
 
     return returnId;
   }

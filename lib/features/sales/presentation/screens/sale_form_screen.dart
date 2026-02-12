@@ -621,7 +621,7 @@ class _SaleFormViewState extends State<_SaleFormView> {
           Text('sales.total'.tr(), style: t.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
           Text(curr.format(s.totalCents.toBigInt().toInt()),
             style: t.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold, color: cs.primary)),
-          Text('${s.totalQuantity} ${'sales.items'.tr().toLowerCase()}',
+          Text('${s.items.length} ${'sales.items'.tr().toLowerCase()}  •  ${s.totalQuantity} ${'sales.pieces'.tr().toLowerCase()}',
             style: t.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
         ])),
         const SizedBox(width: 12),

@@ -2,6 +2,7 @@ import 'package:decimal/decimal.dart';
 import 'package:drift/drift.dart';
 import '../../../../core/database/app_database.dart' as db;
 import '../../../../core/services/audit_log_service.dart';
+import '../../../../core/services/journal_entry_service.dart';
 import '../../../auth/data/services/session_service.dart';
 import '../../domain/entities/purchase_entity.dart';
 import '../../domain/repositories/purchase_repository.dart';
@@ -11,8 +12,9 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
   final PurchaseLocalDatasource _datasource;
   final AuditLogService _auditService;
   final SessionService _sessionService;
+  final JournalEntryService _journalService;
 
-  PurchaseRepositoryImpl(this._datasource, this._auditService, this._sessionService);
+  PurchaseRepositoryImpl(this._datasource, this._auditService, this._sessionService, this._journalService);
 
   /// Get the current user ID from the session for audit logging.
   Future<int?> _currentUserId() => _sessionService.getCurrentUserId();
@@ -125,6 +127,14 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
         'itemCount': items.length,
       },
       userId: await _currentUserId(),
+    );
+
+    // Create journal entries (best-effort)
+    await _journalService.recordPurchaseJournalEntry(
+      purchaseId: purchaseId,
+      totalCents: totalCents.toBigInt().toInt(),
+      paidAmountCents: paidAmountCents.toBigInt().toInt(),
+      currencyId: currencyId,
     );
 
     return purchaseId;
@@ -346,6 +356,13 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
         'itemCount': items.length,
       },
       userId: await _currentUserId(),
+    );
+
+    // Create journal entries (best-effort)
+    await _journalService.recordPurchaseReturnJournalEntry(
+      returnId: returnId,
+      totalCents: totalCents.toBigInt().toInt(),
+      currencyId: currencyId,
     );
 
     return returnId;

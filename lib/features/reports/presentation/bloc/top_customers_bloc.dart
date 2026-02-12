@@ -240,9 +240,8 @@ class TopCustomersBloc
   }
 
   Future<List<TopCustomerItem>> _loadTopCustomers() async {
-    final startUnix =
-        _dateRange.startDate.millisecondsSinceEpoch ~/ 1000;
-    final endUnix = _dateRange.endDate.millisecondsSinceEpoch ~/ 1000;
+    final startIso = _dateRange.startDate.toIso8601String();
+    final endIso = _dateRange.endDate.toIso8601String();
 
     final rows = await _db.customSelect(
       '''
@@ -270,8 +269,8 @@ class TopCustomersBloc
       ORDER BY total_revenue_cents DESC
       ''',
       variables: [
-        Variable<int>(startUnix),
-        Variable<int>(endUnix),
+        Variable.withString(startIso),
+        Variable.withString(endIso),
       ],
       readsFrom: {
         _db.sales,
@@ -284,7 +283,7 @@ class TopCustomersBloc
       final totalRevenue = row.read<int>('total_revenue_cents');
       final txCount = row.read<int>('transaction_count');
       final avgOrder = txCount > 0 ? totalRevenue ~/ txCount : 0;
-      final lastDateVal = row.readNullable<int>('last_purchase_date');
+      final lastDateVal = row.readNullable<String>('last_purchase_date');
 
       return TopCustomerItem(
         customerId: row.read<int>('customer_id'),
@@ -295,7 +294,7 @@ class TopCustomersBloc
         totalQuantity: row.read<int>('total_quantity'),
         averageOrderCents: avgOrder,
         lastPurchaseDate: lastDateVal != null
-            ? DateTime.fromMillisecondsSinceEpoch(lastDateVal * 1000)
+            ? DateTime.parse(lastDateVal)
             : null,
       );
     }).toList();

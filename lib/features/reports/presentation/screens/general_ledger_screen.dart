@@ -1,27 +1,53 @@
-import 'dart:async';
-
+import 'package:drift/drift.dart' hide Column;
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart' hide Currency;
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/audit_log_service.dart';
 import '../../../../core/services/currency_service.dart';
-import '../../../accounting/presentation/bloc/accounts_bloc.dart';
-import '../../../accounting/domain/repositories/journal_repository.dart';
 import '../widgets/date_range_selector.dart';
 import '../widgets/report_date_range.dart';
+
+// ── Lightweight model for a single ledger row ──
+class _LedgerEntry {
+  final DateTime date;
+  final String description;
+  final int debitCents;
+  final int creditCents;
+
+  const _LedgerEntry({
+    required this.date,
+    required this.description,
+    required this.debitCents,
+    required this.creditCents,
+  });
+}
+
+// ── Account definitions matching the synthetic chart used by ReportsBloc ──
+class _VirtualAccount {
+  final String code;
+  final String name;
+  final String type;
+
+  const _VirtualAccount(this.code, this.name, this.type);
+}
+
+const _virtualAccounts = [
+  _VirtualAccount('1000', 'Cash', 'asset'),
+  _VirtualAccount('1100', 'Accounts Receivable', 'asset'),
+  _VirtualAccount('1200', 'Inventory', 'asset'),
+  _VirtualAccount('2000', 'Accounts Payable', 'liability'),
+  _VirtualAccount('4000', 'Sales Revenue', 'revenue'),
+  _VirtualAccount('5000', 'Cost of Goods Sold', 'expense'),
+  _VirtualAccount('5100', 'Operating Expenses', 'expense'),
+];
 
 class GeneralLedgerScreen extends StatelessWidget {
   const GeneralLedgerScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (_) => sl<AccountsBloc>(),
-      child: const _GeneralLedgerView(),
-    );
+    return const _GeneralLedgerView();
   }
 }
 
@@ -33,17 +59,10 @@ class _GeneralLedgerView extends StatefulWidget {
 }
 
 class _GeneralLedgerViewState extends State<_GeneralLedgerView> {
-  Account? _selectedAccount;
-  List<JournalEntryLine>? _lines;
-  bool _loadingLines = false;
-  StreamSubscription<List<JournalEntryLine>>? _linesSubscription;
+  _VirtualAccount? _selectedAccount;
+  List<_LedgerEntry>? _entries;
+  bool _loading = false;
   ReportDateRange _dateRange = ReportDateRange.thisMonth();
-
-  @override
-  void dispose() {
-    _linesSubscription?.cancel();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -65,52 +84,41 @@ class _GeneralLedgerViewState extends State<_GeneralLedgerView> {
               onChanged: (range) {
                 setState(() => _dateRange = range);
                 if (_selectedAccount != null) {
-                  _subscribeToLedgerLines(_selectedAccount!.id);
+                  _loadLedgerEntries(_selectedAccount!);
                 }
               },
             ),
           ),
           Padding(
             padding: const EdgeInsets.all(16),
-            child: BlocBuilder<AccountsBloc, RealtimeState<AccountsData>>(
-              builder: (context, state) {
-                List<Account> accounts = [];
-                if (state is RealtimeSuccess<AccountsData>) {
-                  accounts = state.data.accounts;
-                }
-
-                return InputDecorator(
-                  decoration: InputDecoration(
-                    labelText: 'reports.select_account'.tr(),
-                    border: const OutlineInputBorder(),
-                    prefixIcon: const Icon(Icons.account_balance_wallet),
-                  ),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<Account>(
-                      value: _selectedAccount,
-                      isExpanded: true,
-                      hint: Text('reports.select_account'.tr()),
-                      items: accounts.map((account) {
-                        return DropdownMenuItem(
-                          value: account,
-                          child: Text(
-                            '${account.accountCode} - ${account.accountName}',
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        );
-                      }).toList(),
-                      onChanged: (account) {
-                        setState(() {
-                          _selectedAccount = account;
-                        });
-                        if (account != null) {
-                          _subscribeToLedgerLines(account.id);
-                        }
-                      },
-                    ),
-                  ),
-                );
-              },
+            child: InputDecorator(
+              decoration: InputDecoration(
+                labelText: 'reports.select_account'.tr(),
+                border: const OutlineInputBorder(),
+                prefixIcon: const Icon(Icons.account_balance_wallet),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<_VirtualAccount>(
+                  value: _selectedAccount,
+                  isExpanded: true,
+                  hint: Text('reports.select_account'.tr()),
+                  items: _virtualAccounts.map((account) {
+                    return DropdownMenuItem(
+                      value: account,
+                      child: Text(
+                        '${account.code} - ${account.name}',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    );
+                  }).toList(),
+                  onChanged: (account) {
+                    setState(() => _selectedAccount = account);
+                    if (account != null) {
+                      _loadLedgerEntries(account);
+                    }
+                  },
+                ),
+              ),
             ),
           ),
           Expanded(
@@ -121,38 +129,338 @@ class _GeneralLedgerViewState extends State<_GeneralLedgerView> {
     );
   }
 
-  void _subscribeToLedgerLines(int accountId) {
-    _linesSubscription?.cancel();
+  Future<void> _loadLedgerEntries(_VirtualAccount account) async {
     setState(() {
-      _loadingLines = true;
-      _lines = null;
+      _loading = true;
+      _entries = null;
     });
 
-    final repo = sl<JournalRepository>();
-    _linesSubscription = repo.watchPostedLinesByAccountAndDateRange(
-      accountId, _dateRange.startDate, _dateRange.endDate,
-    ).listen(
-      (loadedLines) {
-        if (mounted) {
-          setState(() {
-            _lines = loadedLines;
-            _loadingLines = false;
-          });
-        }
-      },
-      onError: (Object e) {
-        if (mounted) {
-          setState(() {
-            _lines = [];
-            _loadingLines = false;
-          });
-        }
-      },
-    );
+    try {
+      final db = sl<AppDatabase>();
+      final startIso = _dateRange.startDate.toIso8601String();
+      final endIso = _dateRange.endDate.toIso8601String();
+      final entries = <_LedgerEntry>[];
+
+      switch (account.code) {
+        case '1000': // Cash
+          // Sales payments received
+          final salesRows = await db.customSelect(
+            '''
+            SELECT s.sale_date AS dt, s.invoice_number AS ref, s.paid_amount_cents AS amount
+            FROM sales s
+            WHERE s.status != 'voided' AND s.paid_amount_cents > 0
+              AND s.sale_date >= ? AND s.sale_date <= ?
+            ORDER BY s.sale_date
+            ''',
+            variables: [Variable.withString(startIso), Variable.withString(endIso)],
+            readsFrom: {db.sales},
+          ).get();
+          for (final r in salesRows) {
+            entries.add(_LedgerEntry(
+              date: DateTime.parse(r.read<String>('dt')),
+              description: 'Sale ${r.read<String>('ref')}',
+              debitCents: r.read<int>('amount'),
+              creditCents: 0,
+            ));
+          }
+          // Purchase payments made
+          final purchRows = await db.customSelect(
+            '''
+            SELECT p.purchase_date AS dt, p.purchase_number AS ref, p.paid_amount_cents AS amount
+            FROM purchases p
+            WHERE p.status != 'voided' AND p.paid_amount_cents > 0
+              AND p.purchase_date >= ? AND p.purchase_date <= ?
+            ORDER BY p.purchase_date
+            ''',
+            variables: [Variable.withString(startIso), Variable.withString(endIso)],
+            readsFrom: {db.purchases},
+          ).get();
+          for (final r in purchRows) {
+            entries.add(_LedgerEntry(
+              date: DateTime.parse(r.read<String>('dt')),
+              description: 'Purchase ${r.read<String>('ref')}',
+              debitCents: 0,
+              creditCents: r.read<int>('amount'),
+            ));
+          }
+          // Expenses paid
+          final expRows = await db.customSelect(
+            '''
+            SELECT e.expense_date AS dt, e.description AS ref, e.amount_cents AS amount
+            FROM expenses e
+            WHERE e.expense_date >= ? AND e.expense_date <= ?
+            ORDER BY e.expense_date
+            ''',
+            variables: [Variable.withString(startIso), Variable.withString(endIso)],
+            readsFrom: {db.expenses},
+          ).get();
+          for (final r in expRows) {
+            entries.add(_LedgerEntry(
+              date: DateTime.parse(r.read<String>('dt')),
+              description: 'Expense: ${r.read<String>('ref')}',
+              debitCents: 0,
+              creditCents: r.read<int>('amount'),
+            ));
+          }
+          // Sale returns (cash refunded)
+          final sRetRows = await db.customSelect(
+            '''
+            SELECT sr.return_date AS dt, sr.return_number AS ref, sr.total_cents AS amount
+            FROM sale_returns sr
+            WHERE sr.status = 'posted'
+              AND sr.return_date >= ? AND sr.return_date <= ?
+            ORDER BY sr.return_date
+            ''',
+            variables: [Variable.withString(startIso), Variable.withString(endIso)],
+            readsFrom: {db.saleReturns},
+          ).get();
+          for (final r in sRetRows) {
+            entries.add(_LedgerEntry(
+              date: DateTime.parse(r.read<String>('dt')),
+              description: 'Sale Return ${r.read<String>('ref')}',
+              debitCents: 0,
+              creditCents: r.read<int>('amount'),
+            ));
+          }
+          // Purchase returns (cash received)
+          final pRetRows = await db.customSelect(
+            '''
+            SELECT pr.return_date AS dt, pr.return_number AS ref, pr.total_cents AS amount
+            FROM purchase_returns pr
+            WHERE pr.status = 'posted'
+              AND pr.return_date >= ? AND pr.return_date <= ?
+            ORDER BY pr.return_date
+            ''',
+            variables: [Variable.withString(startIso), Variable.withString(endIso)],
+            readsFrom: {db.purchaseReturns},
+          ).get();
+          for (final r in pRetRows) {
+            entries.add(_LedgerEntry(
+              date: DateTime.parse(r.read<String>('dt')),
+              description: 'Purchase Return ${r.read<String>('ref')}',
+              debitCents: r.read<int>('amount'),
+              creditCents: 0,
+            ));
+          }
+
+        case '1100': // Accounts Receivable
+          final rows = await db.customSelect(
+            '''
+            SELECT s.sale_date AS dt, s.invoice_number AS ref,
+                   s.total_cents AS total, s.paid_amount_cents AS paid
+            FROM sales s
+            WHERE s.status != 'voided'
+              AND s.sale_date >= ? AND s.sale_date <= ?
+            ORDER BY s.sale_date
+            ''',
+            variables: [Variable.withString(startIso), Variable.withString(endIso)],
+            readsFrom: {db.sales},
+          ).get();
+          for (final r in rows) {
+            final unpaid = r.read<int>('total') - r.read<int>('paid');
+            if (unpaid > 0) {
+              entries.add(_LedgerEntry(
+                date: DateTime.parse(r.read<String>('dt')),
+                description: 'Sale ${r.read<String>('ref')} (unpaid)',
+                debitCents: unpaid,
+                creditCents: 0,
+              ));
+            }
+          }
+
+        case '1200': // Inventory
+          final purchRows = await db.customSelect(
+            '''
+            SELECT p.purchase_date AS dt, p.purchase_number AS ref,
+                   (p.total_cents - p.tax_cents) AS net
+            FROM purchases p
+            WHERE p.status != 'voided'
+              AND p.purchase_date >= ? AND p.purchase_date <= ?
+            ORDER BY p.purchase_date
+            ''',
+            variables: [Variable.withString(startIso), Variable.withString(endIso)],
+            readsFrom: {db.purchases},
+          ).get();
+          for (final r in purchRows) {
+            entries.add(_LedgerEntry(
+              date: DateTime.parse(r.read<String>('dt')),
+              description: 'Purchase ${r.read<String>('ref')}',
+              debitCents: r.read<int>('net'),
+              creditCents: 0,
+            ));
+          }
+          final retRows = await db.customSelect(
+            '''
+            SELECT pr.return_date AS dt, pr.return_number AS ref,
+                   (pr.total_cents - pr.tax_cents) AS net
+            FROM purchase_returns pr
+            WHERE pr.status = 'posted'
+              AND pr.return_date >= ? AND pr.return_date <= ?
+            ORDER BY pr.return_date
+            ''',
+            variables: [Variable.withString(startIso), Variable.withString(endIso)],
+            readsFrom: {db.purchaseReturns},
+          ).get();
+          for (final r in retRows) {
+            entries.add(_LedgerEntry(
+              date: DateTime.parse(r.read<String>('dt')),
+              description: 'Purchase Return ${r.read<String>('ref')}',
+              debitCents: 0,
+              creditCents: r.read<int>('net'),
+            ));
+          }
+
+        case '2000': // Accounts Payable
+          final rows = await db.customSelect(
+            '''
+            SELECT p.purchase_date AS dt, p.purchase_number AS ref,
+                   p.total_cents AS total, p.paid_amount_cents AS paid
+            FROM purchases p
+            WHERE p.status != 'voided'
+              AND p.purchase_date >= ? AND p.purchase_date <= ?
+            ORDER BY p.purchase_date
+            ''',
+            variables: [Variable.withString(startIso), Variable.withString(endIso)],
+            readsFrom: {db.purchases},
+          ).get();
+          for (final r in rows) {
+            final unpaid = r.read<int>('total') - r.read<int>('paid');
+            if (unpaid > 0) {
+              entries.add(_LedgerEntry(
+                date: DateTime.parse(r.read<String>('dt')),
+                description: 'Purchase ${r.read<String>('ref')} (unpaid)',
+                debitCents: 0,
+                creditCents: unpaid,
+              ));
+            }
+          }
+
+        case '4000': // Sales Revenue
+          final salesRows = await db.customSelect(
+            '''
+            SELECT s.sale_date AS dt, s.invoice_number AS ref,
+                   (s.total_cents - s.tax_cents) AS net_revenue
+            FROM sales s
+            WHERE s.status != 'voided'
+              AND s.sale_date >= ? AND s.sale_date <= ?
+            ORDER BY s.sale_date
+            ''',
+            variables: [Variable.withString(startIso), Variable.withString(endIso)],
+            readsFrom: {db.sales},
+          ).get();
+          for (final r in salesRows) {
+            entries.add(_LedgerEntry(
+              date: DateTime.parse(r.read<String>('dt')),
+              description: 'Sale ${r.read<String>('ref')}',
+              debitCents: 0,
+              creditCents: r.read<int>('net_revenue'),
+            ));
+          }
+          final retRows = await db.customSelect(
+            '''
+            SELECT sr.return_date AS dt, sr.return_number AS ref,
+                   (sr.total_cents - sr.tax_cents) AS net_return
+            FROM sale_returns sr
+            WHERE sr.status = 'posted'
+              AND sr.return_date >= ? AND sr.return_date <= ?
+            ORDER BY sr.return_date
+            ''',
+            variables: [Variable.withString(startIso), Variable.withString(endIso)],
+            readsFrom: {db.saleReturns},
+          ).get();
+          for (final r in retRows) {
+            entries.add(_LedgerEntry(
+              date: DateTime.parse(r.read<String>('dt')),
+              description: 'Sale Return ${r.read<String>('ref')}',
+              debitCents: r.read<int>('net_return'),
+              creditCents: 0,
+            ));
+          }
+
+        case '5000': // COGS
+          final purchRows = await db.customSelect(
+            '''
+            SELECT p.purchase_date AS dt, p.purchase_number AS ref,
+                   (p.total_cents - p.tax_cents) AS net_cost
+            FROM purchases p
+            WHERE p.status != 'voided'
+              AND p.purchase_date >= ? AND p.purchase_date <= ?
+            ORDER BY p.purchase_date
+            ''',
+            variables: [Variable.withString(startIso), Variable.withString(endIso)],
+            readsFrom: {db.purchases},
+          ).get();
+          for (final r in purchRows) {
+            entries.add(_LedgerEntry(
+              date: DateTime.parse(r.read<String>('dt')),
+              description: 'Purchase ${r.read<String>('ref')}',
+              debitCents: r.read<int>('net_cost'),
+              creditCents: 0,
+            ));
+          }
+          final retRows = await db.customSelect(
+            '''
+            SELECT pr.return_date AS dt, pr.return_number AS ref,
+                   (pr.total_cents - pr.tax_cents) AS net_return
+            FROM purchase_returns pr
+            WHERE pr.status = 'posted'
+              AND pr.return_date >= ? AND pr.return_date <= ?
+            ORDER BY pr.return_date
+            ''',
+            variables: [Variable.withString(startIso), Variable.withString(endIso)],
+            readsFrom: {db.purchaseReturns},
+          ).get();
+          for (final r in retRows) {
+            entries.add(_LedgerEntry(
+              date: DateTime.parse(r.read<String>('dt')),
+              description: 'Purchase Return ${r.read<String>('ref')}',
+              debitCents: 0,
+              creditCents: r.read<int>('net_return'),
+            ));
+          }
+
+        case '5100': // Operating Expenses
+          final rows = await db.customSelect(
+            '''
+            SELECT e.expense_date AS dt, e.description AS ref, e.amount_cents AS amount
+            FROM expenses e
+            WHERE e.expense_date >= ? AND e.expense_date <= ?
+            ORDER BY e.expense_date
+            ''',
+            variables: [Variable.withString(startIso), Variable.withString(endIso)],
+            readsFrom: {db.expenses},
+          ).get();
+          for (final r in rows) {
+            entries.add(_LedgerEntry(
+              date: DateTime.parse(r.read<String>('dt')),
+              description: r.read<String>('ref'),
+              debitCents: r.read<int>('amount'),
+              creditCents: 0,
+            ));
+          }
+      }
+
+      // Sort by date
+      entries.sort((a, b) => a.date.compareTo(b.date));
+
+      if (mounted) {
+        setState(() {
+          _entries = entries;
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _entries = [];
+          _loading = false;
+        });
+      }
+    }
 
     sl<AuditLogService>().log(
       entityType: 'report',
-      entityId: accountId,
+      entityId: 0,
       action: 'view_general_ledger',
     );
   }
@@ -180,11 +488,11 @@ class _GeneralLedgerViewState extends State<_GeneralLedgerView> {
       );
     }
 
-    if (_loadingLines) {
+    if (_loading) {
       return const Center(child: CircularProgressIndicator());
     }
 
-    if (_lines == null || _lines!.isEmpty) {
+    if (_entries == null || _entries!.isEmpty) {
       return Center(
         child: Text(
           'reports.no_transactions'.tr(),
@@ -198,7 +506,7 @@ class _GeneralLedgerViewState extends State<_GeneralLedgerView> {
     int runningBalance = 0;
     final account = _selectedAccount!;
     final isDebitNormal =
-        account.accountType == 'asset' || account.accountType == 'expense';
+        account.type == 'asset' || account.type == 'expense';
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -213,32 +521,29 @@ class _GeneralLedgerViewState extends State<_GeneralLedgerView> {
             DataColumn(label: Text('reports.credit'.tr()), numeric: true),
             DataColumn(label: Text('reports.balance'.tr()), numeric: true),
           ],
-          rows: _lines!.map((line) {
-            final debit = line.debitCents.toBigInt().toInt();
-            final credit = line.creditCents.toBigInt().toInt();
-
+          rows: _entries!.map((entry) {
             if (isDebitNormal) {
-              runningBalance += debit - credit;
+              runningBalance += entry.debitCents - entry.creditCents;
             } else {
-              runningBalance += credit - debit;
+              runningBalance += entry.creditCents - entry.debitCents;
             }
 
             return DataRow(cells: [
               DataCell(Text(
-                DateFormat.yMd().format(line.createdAt),
+                DateFormat.yMd().format(entry.date),
                 style: theme.textTheme.bodySmall,
               )),
-              DataCell(Text(line.description ?? '-')),
+              DataCell(Text(entry.description)),
               DataCell(Text(
-                debit > 0 ? cs.formatCents(debit) : '-',
+                entry.debitCents > 0 ? cs.formatCents(entry.debitCents) : '-',
                 style: TextStyle(
-                  fontWeight: debit > 0 ? FontWeight.bold : FontWeight.normal,
+                  fontWeight: entry.debitCents > 0 ? FontWeight.bold : FontWeight.normal,
                 ),
               )),
               DataCell(Text(
-                credit > 0 ? cs.formatCents(credit) : '-',
+                entry.creditCents > 0 ? cs.formatCents(entry.creditCents) : '-',
                 style: TextStyle(
-                  fontWeight: credit > 0 ? FontWeight.bold : FontWeight.normal,
+                  fontWeight: entry.creditCents > 0 ? FontWeight.bold : FontWeight.normal,
                 ),
               )),
               DataCell(Text(

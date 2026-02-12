@@ -1300,7 +1300,7 @@ class _PurchaseFormView extends StatelessWidget {
                     Icon(LucideIcons.shoppingCart, size: 12, color: colorScheme.onSurfaceVariant),
                     const SizedBox(width: 4),
                     Text(
-                      '${state.totalQuantity} ${'purchases.items_count'.tr()}',
+                      '${state.items.length} ${'purchases.items_count'.tr()}  •  ${state.totalQuantity} ${'purchases.pieces_count'.tr()}',
                       style: theme.textTheme.bodySmall?.copyWith(
                           color: colorScheme.onSurfaceVariant),
                     ),

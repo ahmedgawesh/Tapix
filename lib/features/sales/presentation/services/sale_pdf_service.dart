@@ -274,6 +274,12 @@ class SalePdfService {
                   children: [
                     _pdfMoneyRow('sales.total_items_count'.tr(), '${returnItems.length}', fonts.regular),
                     _pdfMoneyRow('sales.total_pieces_count'.tr(), '${returnItems.fold<int>(0, (sum, item) => sum + item.quantity)}', fonts.regular),
+                    pw.SizedBox(height: 4),
+                    _pdfMoneyRow('sales.subtotal'.tr(), cs.format(returnEntity.subtotalCents.toBigInt().toInt()), fonts.regular),
+                    if (returnEntity.discountCents.toBigInt().toInt() > 0)
+                      _pdfMoneyRow('sales.discount'.tr(), '- ${cs.format(returnEntity.discountCents.toBigInt().toInt())}', fonts.regular, valueColor: PdfColors.orange),
+                    if (returnEntity.taxCents.toBigInt().toInt() > 0)
+                      _pdfMoneyRow('sales.tax'.tr(), '+ ${cs.format(returnEntity.taxCents.toBigInt().toInt())}', fonts.regular),
                     pw.Divider(thickness: 2),
                     pw.Row(
                       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -314,10 +320,12 @@ class SalePdfService {
     return pw.Table(
       border: pw.TableBorder.all(color: PdfColors.grey300),
       columnWidths: {
-        0: const pw.FlexColumnWidth(1),
+        0: const pw.FlexColumnWidth(0.6),
         1: const pw.FlexColumnWidth(3),
-        2: const pw.FlexColumnWidth(1),
-        3: const pw.FlexColumnWidth(1.5),
+        2: const pw.FlexColumnWidth(0.8),
+        3: const pw.FlexColumnWidth(1.2),
+        4: const pw.FlexColumnWidth(1.2),
+        5: const pw.FlexColumnWidth(1.2),
       },
       children: [
         pw.TableRow(
@@ -326,17 +334,55 @@ class SalePdfService {
             _tableCell('#', fonts.bold, isHeader: true),
             _tableCell('sales.product_col'.tr(), fonts.bold, isHeader: true),
             _tableCell('sales.qty_col'.tr(), fonts.bold, isHeader: true),
+            _tableCell('sales.discount'.tr(), fonts.bold, isHeader: true),
+            _tableCell('sales.tax'.tr(), fonts.bold, isHeader: true),
             _tableCell('sales.customer_refund'.tr(), fonts.bold, isHeader: true),
           ],
         ),
         ...items.asMap().entries.map((entry) {
           final idx = entry.key;
           final item = entry.value;
+          // Build rich product name with color/size/SKU
+          final productName = item.productName ?? 'Item #${item.saleItemId}';
+          final variantParts = <String>[];
+          if (item.colorName != null && item.colorName!.isNotEmpty) {
+            variantParts.add(item.colorName!);
+          }
+          if (item.sizeName != null && item.sizeName!.isNotEmpty) {
+            variantParts.add(item.sizeName!);
+          }
+          if (item.variantSku != null && item.variantSku!.isNotEmpty) {
+            variantParts.add(item.variantSku!);
+          }
+          final variantLine = variantParts.isNotEmpty
+              ? variantParts.join(' \u00b7 ')
+              : null;
+
           return pw.TableRow(
             children: [
               _tableCell('${idx + 1}', fonts.regular),
-              _tableCell(item.displayName.isNotEmpty ? item.displayName : 'Item #${item.saleItemId}', fonts.regular),
+              pw.Padding(
+                padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    _bidiText(productName, fonts.regular, fontSize: 8),
+                    if (variantLine != null)
+                      _bidiText(variantLine, fonts.regular, fontSize: 7, color: PdfColors.grey600),
+                  ],
+                ),
+              ),
               _tableCell('${item.quantity}', fonts.regular),
+              _tableCell(
+                item.discountCents.toBigInt().toInt() > 0
+                    ? cs.format(item.discountCents.toBigInt().toInt())
+                    : '-',
+                fonts.regular),
+              _tableCell(
+                item.taxCents.toBigInt().toInt() > 0
+                    ? cs.format(item.taxCents.toBigInt().toInt())
+                    : '-',
+                fonts.regular),
               _tableCell(cs.format(item.refundCents.toBigInt().toInt()), fonts.regular),
             ],
           );

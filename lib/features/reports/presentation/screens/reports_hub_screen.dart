@@ -86,6 +86,24 @@ class _ReportsHubView extends StatelessWidget {
                 subtitle: 'reports.inventory_reports_desc'.tr(),
                 onTap: () => context.push('/reports/inventory'),
               ),
+              _ReportTile(
+                icon: LucideIcons.gitBranch,
+                title: 'reports.product_movement_detail'.tr(),
+                subtitle: 'reports.product_movement_detail_desc'.tr(),
+                onTap: () => context.push('/reports/product-movement-detail'),
+              ),
+              _ReportTile(
+                icon: LucideIcons.layers,
+                title: 'reports.variant_movement_report'.tr(),
+                subtitle: 'reports.variant_movement_report_desc'.tr(),
+                onTap: () => context.push('/reports/product-variant-movement'),
+              ),
+              _ReportTile(
+                icon: LucideIcons.folderOpen,
+                title: 'reports.category_movement_report'.tr(),
+                subtitle: 'reports.category_movement_report_desc'.tr(),
+                onTap: () => context.push('/reports/category-movement'),
+              ),
               const SizedBox(height: 24),
 
               // Customer Reports Section
@@ -205,6 +223,23 @@ class _ReportsHubView extends StatelessWidget {
                 title: 'reports.supplier_balance_drilldown'.tr(),
                 subtitle: 'reports.supplier_balance_drilldown_desc'.tr(),
                 onTap: () => context.push('/reports/supplier-balance-drilldown'),
+              ),
+              const SizedBox(height: 24),
+
+              // Tax Reports Section
+              _SectionHeader(title: 'reports.tax_reports'.tr()),
+              const SizedBox(height: 8),
+              _ReportTile(
+                icon: LucideIcons.receipt,
+                title: 'reports.sales_tax_report'.tr(),
+                subtitle: 'reports.sales_tax_report_desc'.tr(),
+                onTap: () => context.push('/reports/sales-tax'),
+              ),
+              _ReportTile(
+                icon: LucideIcons.fileInput,
+                title: 'reports.purchase_tax_report'.tr(),
+                subtitle: 'reports.purchase_tax_report_desc'.tr(),
+                onTap: () => context.push('/reports/purchase-tax'),
               ),
               const SizedBox(height: 24),
 

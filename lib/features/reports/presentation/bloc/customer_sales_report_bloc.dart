@@ -197,8 +197,8 @@ class CustomerSalesReportBloc
   }
 
   Future<List<CustomerSalesItem>> _loadCustomerSales() async {
-    final startUnix = _dateRange.startDate.millisecondsSinceEpoch ~/ 1000;
-    final endUnix = _dateRange.endDate.millisecondsSinceEpoch ~/ 1000;
+    final startIso = _dateRange.startDate.toIso8601String();
+    final endIso = _dateRange.endDate.toIso8601String();
 
     final rows = await _db.customSelect(
       '''
@@ -226,8 +226,8 @@ class CustomerSalesReportBloc
       ORDER BY total_sales_cents DESC
       ''',
       variables: [
-        Variable<int>(startUnix),
-        Variable<int>(endUnix),
+        Variable.withString(startIso),
+        Variable.withString(endIso),
       ],
       readsFrom: {
         _db.sales,
@@ -240,7 +240,7 @@ class CustomerSalesReportBloc
       final totalSales = row.read<int>('total_sales_cents');
       final invoices = row.read<int>('invoice_count');
       final avgOrder = invoices > 0 ? totalSales ~/ invoices : 0;
-      final lastDateVal = row.readNullable<int>('last_sale_date');
+      final lastDateVal = row.readNullable<String>('last_sale_date');
 
       return CustomerSalesItem(
         customerId: row.read<int>('customer_id'),
@@ -251,7 +251,7 @@ class CustomerSalesReportBloc
         totalQuantity: row.read<int>('total_quantity'),
         averageOrderCents: avgOrder,
         lastSaleDate: lastDateVal != null
-            ? DateTime.fromMillisecondsSinceEpoch(lastDateVal * 1000)
+            ? DateTime.parse(lastDateVal)
             : null,
       );
     }).toList();
