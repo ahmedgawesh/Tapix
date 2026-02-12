@@ -11,6 +11,7 @@ import 'package:decimal/decimal.dart';
 import '../../../../core/database/app_database.dart' show Customer, Employee;
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
+import '../../../../core/services/below_cost_sale_service.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../../products/domain/entities/product_entity.dart';
 import '../../../products/domain/entities/product_variant_entity.dart';
@@ -68,7 +69,10 @@ class _SaleFormViewState extends State<_SaleFormView> {
     final curr = sl<CurrencyService>();
 
     return BlocConsumer<SaleFormBloc, SaleFormState>(
-      listenWhen: (p, c) => p.isSuccess != c.isSuccess || p.error != c.error,
+      listenWhen: (p, c) =>
+          p.isSuccess != c.isSuccess ||
+          p.error != c.error ||
+          p.belowCostWarning != c.belowCostWarning,
       listener: (context, state) {
         if (state.isSuccess) {
           _showSaveConfirmationDialog(context, state);
@@ -81,6 +85,9 @@ class _SaleFormViewState extends State<_SaleFormView> {
               backgroundColor: cs.error,
             ),
           );
+        }
+        if (state.belowCostWarning != null && state.belowCostWarning!.isBelowCost) {
+          _showBelowCostWarningDialog(context, state.belowCostWarning!);
         }
       },
       builder: (context, state) {
@@ -685,6 +692,157 @@ class _SaleFormViewState extends State<_SaleFormView> {
           Navigator.pop(sc);
         },
         onRemoved: () { bloc.add(SaleLineItemRemoved(item.tempId)); Navigator.pop(sc); }));
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // BELOW-COST WARNING DIALOG
+  // ═══════════════════════════════════════════════════════
+  void _showBelowCostWarningDialog(BuildContext context, BelowCostCheckResult warning) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final curr = sl<CurrencyService>();
+    final bloc = context.read<SaleFormBloc>();
+    final reasonCtrl = TextEditingController();
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              Icon(
+                warning.canOverride ? LucideIcons.alertTriangle : LucideIcons.ban,
+                color: warning.canOverride ? Colors.deepOrange : cs.error,
+                size: 24,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'sales.below_cost_title'.tr(),
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: warning.canOverride ? Colors.deepOrange : cs.error,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Product info
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: (warning.canOverride ? Colors.deepOrange : cs.error).withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(warning.productName,
+                        style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 8),
+                      _belowCostInfoRow(theme, 'sales.below_cost_cost'.tr(),
+                        curr.formatCents(warning.costCents.toBigInt().toInt())),
+                      _belowCostInfoRow(theme, 'sales.below_cost_price'.tr(),
+                        curr.formatCents(warning.sellingPriceCents.toBigInt().toInt())),
+                      const Divider(height: 16),
+                      _belowCostInfoRow(theme, 'sales.below_cost_loss'.tr(),
+                        curr.formatCents(warning.lossCents.toBigInt().toInt()),
+                        valueColor: cs.error),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                // Message
+                Text(
+                  warning.canOverride
+                      ? 'sales.below_cost_override_hint'.tr()
+                      : 'sales.below_cost_blocked'.tr(),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: cs.onSurfaceVariant,
+                  ),
+                ),
+                // Override reason input (only for Manager/Owner)
+                if (warning.canOverride) ...[
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: reasonCtrl,
+                    decoration: InputDecoration(
+                      labelText: 'sales.below_cost_reason'.tr(),
+                      hintText: 'sales.below_cost_reason_hint'.tr(),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      prefixIcon: const Icon(LucideIcons.messageSquare, size: 18),
+                    ),
+                    maxLines: 2,
+                    textInputAction: TextInputAction.done,
+                  ),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            // Cancel / Remove item
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                bloc.add(const SaleBelowCostWarningDismissed());
+              },
+              child: Text(
+                warning.canOverride
+                    ? 'sales.below_cost_remove'.tr()
+                    : 'common.ok'.tr(),
+                style: TextStyle(color: cs.error),
+              ),
+            ),
+            // Override button (only for Manager/Owner)
+            if (warning.canOverride)
+              FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: Colors.deepOrange,
+                ),
+                onPressed: () {
+                  final reason = reasonCtrl.text.trim();
+                  if (reason.isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('sales.below_cost_reason_required'.tr()),
+                        backgroundColor: cs.error,
+                      ),
+                    );
+                    return;
+                  }
+                  Navigator.pop(ctx);
+                  bloc.add(SaleBelowCostOverrideApproved(reason));
+                },
+                child: Text('sales.below_cost_override'.tr()),
+              ),
+          ],
+        );
+      },
+    ).then((_) => reasonCtrl.dispose());
+  }
+
+  Widget _belowCostInfoRow(ThemeData theme, String label, String value, {Color? valueColor}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: theme.textTheme.bodySmall),
+          Text(value, style: theme.textTheme.bodySmall?.copyWith(
+            fontWeight: FontWeight.w600,
+            color: valueColor,
+          )),
+        ],
+      ),
+    );
   }
 
   // ═══════════════════════════════════════════════════════

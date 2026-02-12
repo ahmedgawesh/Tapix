@@ -25,11 +25,35 @@ class InventoryReportsPriceTypeChanged extends InventoryReportsEvent {
   const InventoryReportsPriceTypeChanged(this.priceType);
 }
 
+class InventoryMovementSearchChanged extends InventoryReportsEvent {
+  final String query;
+  const InventoryMovementSearchChanged(this.query);
+}
+
+class InventoryMovementCategoryFilterChanged extends InventoryReportsEvent {
+  final int? categoryId;
+  final String? categoryName;
+  const InventoryMovementCategoryFilterChanged(this.categoryId, this.categoryName);
+}
+
+class InventoryMovementSupplierFilterChanged extends InventoryReportsEvent {
+  final int? supplierId;
+  final String? supplierName;
+  const InventoryMovementSupplierFilterChanged(this.supplierId, this.supplierName);
+}
+
+class InventoryMovementSortChanged extends InventoryReportsEvent {
+  final MovementSort sort;
+  const InventoryMovementSortChanged(this.sort);
+}
+
 // ==================== ENUMS ====================
 
 enum StockValuationSort { nameAsc, nameDesc, valueDesc, valueAsc, stockDesc, stockAsc }
 
 enum PriceDisplayType { cost, sale, wholesale }
+
+enum MovementSort { mostActive, byName, netMovement }
 
 // ==================== DATA MODELS ====================
 
@@ -118,24 +142,34 @@ class LowStockItem {
 
 class ProductMovementItem {
   final int productId;
+  final int? variantId;
   final String productName;
   final String? sku;
+  final String? categoryName;
   final String? colorName;
+  final String? colorHex;
   final String? sizeName;
+  final bool hasVariants;
   final int purchasedQty;
   final int soldQty;
-  final int returnedQty;
+  final int saleReturnedQty;
+  final int purchaseReturnedQty;
   final int netMovement;
 
   const ProductMovementItem({
     required this.productId,
+    this.variantId,
     required this.productName,
     this.sku,
+    this.categoryName,
     this.colorName,
+    this.colorHex,
     this.sizeName,
+    this.hasVariants = false,
     required this.purchasedQty,
     required this.soldQty,
-    required this.returnedQty,
+    required this.saleReturnedQty,
+    required this.purchaseReturnedQty,
     required this.netMovement,
   });
 
@@ -145,6 +179,8 @@ class ProductMovementItem {
     if (sizeName != null) parts.add(sizeName!);
     return parts.join(' / ');
   }
+
+  int get totalActivity => purchasedQty + soldQty + saleReturnedQty + purchaseReturnedQty;
 }
 
 class InventoryReportsData {
@@ -156,6 +192,16 @@ class InventoryReportsData {
   final ReportDateRange dateRange;
   final StockValuationSort sort;
   final PriceDisplayType priceType;
+  // Movement tab filters
+  final String movementSearchQuery;
+  final int? movementCategoryId;
+  final String? movementCategoryName;
+  final int? movementSupplierId;
+  final String? movementSupplierName;
+  final MovementSort movementSort;
+  // Available categories and suppliers for filter dropdowns
+  final List<FilterOption> availableCategories;
+  final List<FilterOption> availableSuppliers;
 
   const InventoryReportsData({
     this.stockValuation = const [],
@@ -166,6 +212,14 @@ class InventoryReportsData {
     required this.dateRange,
     this.sort = StockValuationSort.valueDesc,
     this.priceType = PriceDisplayType.cost,
+    this.movementSearchQuery = '',
+    this.movementCategoryId,
+    this.movementCategoryName,
+    this.movementSupplierId,
+    this.movementSupplierName,
+    this.movementSort = MovementSort.mostActive,
+    this.availableCategories = const [],
+    this.availableSuppliers = const [],
   });
 
   InventoryReportsData copyWith({
@@ -177,6 +231,14 @@ class InventoryReportsData {
     ReportDateRange? dateRange,
     StockValuationSort? sort,
     PriceDisplayType? priceType,
+    String? movementSearchQuery,
+    int? Function()? movementCategoryId,
+    String? Function()? movementCategoryName,
+    int? Function()? movementSupplierId,
+    String? Function()? movementSupplierName,
+    MovementSort? movementSort,
+    List<FilterOption>? availableCategories,
+    List<FilterOption>? availableSuppliers,
   }) {
     return InventoryReportsData(
       stockValuation: stockValuation ?? this.stockValuation,
@@ -187,8 +249,22 @@ class InventoryReportsData {
       dateRange: dateRange ?? this.dateRange,
       sort: sort ?? this.sort,
       priceType: priceType ?? this.priceType,
+      movementSearchQuery: movementSearchQuery ?? this.movementSearchQuery,
+      movementCategoryId: movementCategoryId != null ? movementCategoryId() : this.movementCategoryId,
+      movementCategoryName: movementCategoryName != null ? movementCategoryName() : this.movementCategoryName,
+      movementSupplierId: movementSupplierId != null ? movementSupplierId() : this.movementSupplierId,
+      movementSupplierName: movementSupplierName != null ? movementSupplierName() : this.movementSupplierName,
+      movementSort: movementSort ?? this.movementSort,
+      availableCategories: availableCategories ?? this.availableCategories,
+      availableSuppliers: availableSuppliers ?? this.availableSuppliers,
     );
   }
+}
+
+class FilterOption {
+  final int id;
+  final String name;
+  const FilterOption({required this.id, required this.name});
 }
 
 // ==================== BLOC ====================
@@ -199,6 +275,13 @@ class InventoryReportsBloc
   ReportDateRange _dateRange = ReportDateRange.thisMonth();
   StockValuationSort _sort = StockValuationSort.valueDesc;
   PriceDisplayType _priceType = PriceDisplayType.cost;
+  // Movement filters
+  String _movementSearch = '';
+  int? _movementCategoryId;
+  String? _movementCategoryName;
+  int? _movementSupplierId;
+  String? _movementSupplierName;
+  MovementSort _movementSort = MovementSort.mostActive;
 
   InventoryReportsBloc(this._db) : super(const RealtimeLoading());
 
@@ -214,15 +297,19 @@ class InventoryReportsBloc
     on<InventoryReportsDateRangeChanged>(_onDateRangeChanged);
     on<InventoryReportsSortChanged>(_onSortChanged);
     on<InventoryReportsPriceTypeChanged>(_onPriceTypeChanged);
+    on<InventoryMovementSearchChanged>(_onMovementSearchChanged);
+    on<InventoryMovementCategoryFilterChanged>(_onMovementCategoryChanged);
+    on<InventoryMovementSupplierFilterChanged>(_onMovementSupplierChanged);
+    on<InventoryMovementSortChanged>(_onMovementSortChanged);
   }
 
   Stream<InventoryReportsData> _buildCombinedStream() {
-    // Watch product_variants for real-time stock changes
-    // This triggers whenever any variant is inserted/updated/deleted
     return _db.select(_db.productVariants).watch().asyncMap((_) async {
       final stockValuation = await _loadStockValuation();
       final lowStock = await _loadLowStock();
       final movement = await _loadProductMovement();
+      final categories = await _loadAvailableCategories();
+      final suppliers = await _loadAvailableSuppliers();
 
       int totalVal = 0;
       int totalUnits = 0;
@@ -242,6 +329,14 @@ class InventoryReportsBloc
         dateRange: _dateRange,
         sort: _sort,
         priceType: _priceType,
+        movementSearchQuery: _movementSearch,
+        movementCategoryId: _movementCategoryId,
+        movementCategoryName: _movementCategoryName,
+        movementSupplierId: _movementSupplierId,
+        movementSupplierName: _movementSupplierName,
+        movementSort: _movementSort,
+        availableCategories: categories,
+        availableSuppliers: suppliers,
       );
     });
   }
@@ -252,6 +347,49 @@ class InventoryReportsBloc
   ) async {
     _dateRange = event.dateRange;
     refresh();
+  }
+
+  Future<void> _onMovementSearchChanged(
+    InventoryMovementSearchChanged event,
+    Emitter<RealtimeState<InventoryReportsData>> emit,
+  ) async {
+    _movementSearch = event.query;
+    refresh();
+  }
+
+  Future<void> _onMovementCategoryChanged(
+    InventoryMovementCategoryFilterChanged event,
+    Emitter<RealtimeState<InventoryReportsData>> emit,
+  ) async {
+    _movementCategoryId = event.categoryId;
+    _movementCategoryName = event.categoryName;
+    refresh();
+  }
+
+  Future<void> _onMovementSupplierChanged(
+    InventoryMovementSupplierFilterChanged event,
+    Emitter<RealtimeState<InventoryReportsData>> emit,
+  ) async {
+    _movementSupplierId = event.supplierId;
+    _movementSupplierName = event.supplierName;
+    refresh();
+  }
+
+  void _onMovementSortChanged(
+    InventoryMovementSortChanged event,
+    Emitter<RealtimeState<InventoryReportsData>> emit,
+  ) {
+    _movementSort = event.sort;
+    final current = currentData;
+    if (current != null) {
+      final sorted = _applySortToMovement(current.productMovement, event.sort);
+      emit(RealtimeSuccess<InventoryReportsData>(
+        data: current.copyWith(
+          productMovement: sorted,
+          movementSort: event.sort,
+        ),
+      ));
+    }
   }
 
   void _onSortChanged(
@@ -399,65 +537,122 @@ class InventoryReportsBloc
     final startIso = _dateRange.startDate.toIso8601String();
     final endIso = _dateRange.endDate.toIso8601String();
 
+    // Build dynamic WHERE clauses for filters
+    final whereClauses = <String>['p.is_active = 1'];
+    final variables = <Variable<Object>>[];
+
+    if (_movementSearch.isNotEmpty) {
+      whereClauses.add('(p.name LIKE ? OR COALESCE(pv.sku, p.sku) LIKE ?)');
+      variables.add(Variable<String>('%$_movementSearch%'));
+      variables.add(Variable<String>('%$_movementSearch%'));
+    }
+    if (_movementCategoryId != null) {
+      whereClauses.add('p.category_id = ?');
+      variables.add(Variable<int>(_movementCategoryId!));
+    }
+    if (_movementSupplierId != null) {
+      whereClauses.add('''EXISTS (
+        SELECT 1 FROM purchase_items pi2
+        INNER JOIN purchases pu2 ON pu2.id = pi2.purchase_id
+        WHERE pi2.product_id = p.id AND pu2.supplier_id = ?
+      )''');
+      variables.add(Variable<int>(_movementSupplierId!));
+    }
+
+    final whereClause = whereClauses.join(' AND ');
+
+    // Date variables for the 4 subqueries (purchase, sale, sale_return, purchase_return)
+    // Each subquery needs startIso and endIso
+    final dateVars = [
+      Variable<String>(startIso), Variable<String>(endIso),
+      Variable<String>(startIso), Variable<String>(endIso),
+      Variable<String>(startIso), Variable<String>(endIso),
+      Variable<String>(startIso), Variable<String>(endIso),
+    ];
+
+    // The key fix: subqueries group by BOTH product_id AND variant_id
+    // to correctly attribute movements to specific variants.
+    // For products without variants, variant_id will be NULL.
     final rows = await _db.customSelect(
       '''
       SELECT 
         p.id AS product_id,
+        pv.id AS variant_id,
         p.name AS product_name,
-        p.sku AS product_sku,
+        COALESCE(pv.sku, p.sku) AS item_sku,
+        cat.name AS category_name,
         pc.name AS color_name,
+        pc.hex_code AS color_hex,
         sz.name AS size_name,
+        (SELECT COUNT(*) FROM product_variants pv2 
+         WHERE pv2.product_id = p.id AND pv2.is_active = 1 
+         AND (pv2.color_id IS NOT NULL OR pv2.size_id IS NOT NULL)) > 0 AS has_variants,
         COALESCE(purchased.qty, 0) AS purchased_qty,
         COALESCE(sold.qty, 0) AS sold_qty,
-        COALESCE(returned_s.qty, 0) + COALESCE(returned_p.qty, 0) AS returned_qty
+        COALESCE(sale_ret.qty, 0) AS sale_returned_qty,
+        COALESCE(purch_ret.qty, 0) AS purchase_returned_qty
       FROM products p
       LEFT JOIN product_variants pv ON pv.product_id = p.id AND pv.is_active = 1
+      LEFT JOIN product_categories cat ON cat.id = p.category_id
       LEFT JOIN product_colors pc ON pc.id = pv.color_id
       LEFT JOIN sizes sz ON sz.id = pv.size_id
       LEFT JOIN (
-        SELECT pi.product_id, SUM(pi.quantity) AS qty
+        SELECT pi.product_id, pi.variant_id, SUM(pi.quantity) AS qty
         FROM purchase_items pi
         INNER JOIN purchases pu ON pu.id = pi.purchase_id AND pu.status != 'voided'
         WHERE pu.purchase_date >= ? AND pu.purchase_date <= ?
-        GROUP BY pi.product_id
-      ) purchased ON purchased.product_id = p.id
+        GROUP BY pi.product_id, pi.variant_id
+      ) purchased ON purchased.product_id = p.id 
+        AND (purchased.variant_id = pv.id OR (purchased.variant_id IS NULL AND pv.id IS NOT NULL AND NOT EXISTS(
+          SELECT 1 FROM product_variants pv3 WHERE pv3.product_id = p.id AND pv3.is_active = 1 AND pv3.color_id IS NOT NULL
+        ) AND pv.color_id IS NULL AND pv.size_id IS NULL)
+        OR (purchased.variant_id IS NULL AND pv.id IS NULL))
       LEFT JOIN (
-        SELECT si.product_id, SUM(si.quantity) AS qty
+        SELECT si.product_id, si.variant_id, SUM(si.quantity) AS qty
         FROM sale_items si
         INNER JOIN sales s ON s.id = si.sale_id AND s.status != 'voided'
         WHERE s.sale_date >= ? AND s.sale_date <= ?
-        GROUP BY si.product_id
-      ) sold ON sold.product_id = p.id
+        GROUP BY si.product_id, si.variant_id
+      ) sold ON sold.product_id = p.id 
+        AND (sold.variant_id = pv.id OR (sold.variant_id IS NULL AND pv.id IS NOT NULL AND NOT EXISTS(
+          SELECT 1 FROM product_variants pv3 WHERE pv3.product_id = p.id AND pv3.is_active = 1 AND pv3.color_id IS NOT NULL
+        ) AND pv.color_id IS NULL AND pv.size_id IS NULL)
+        OR (sold.variant_id IS NULL AND pv.id IS NULL))
       LEFT JOIN (
-        SELECT si.product_id, SUM(sri.quantity) AS qty
+        SELECT si.product_id, si.variant_id, SUM(sri.quantity) AS qty
         FROM sale_return_items sri
         INNER JOIN sale_items si ON si.id = sri.sale_item_id
         INNER JOIN sale_returns sr ON sr.id = sri.return_id AND sr.status = 'posted'
         WHERE sr.return_date >= ? AND sr.return_date <= ?
-        GROUP BY si.product_id
-      ) returned_s ON returned_s.product_id = p.id
+        GROUP BY si.product_id, si.variant_id
+      ) sale_ret ON sale_ret.product_id = p.id 
+        AND (sale_ret.variant_id = pv.id OR (sale_ret.variant_id IS NULL AND pv.id IS NOT NULL AND NOT EXISTS(
+          SELECT 1 FROM product_variants pv3 WHERE pv3.product_id = p.id AND pv3.is_active = 1 AND pv3.color_id IS NOT NULL
+        ) AND pv.color_id IS NULL AND pv.size_id IS NULL)
+        OR (sale_ret.variant_id IS NULL AND pv.id IS NULL))
       LEFT JOIN (
-        SELECT pi.product_id, SUM(pri.quantity) AS qty
+        SELECT pi.product_id, pi.variant_id, SUM(pri.quantity) AS qty
         FROM purchase_return_items pri
         INNER JOIN purchase_items pi ON pi.id = pri.purchase_item_id
         INNER JOIN purchase_returns pr ON pr.id = pri.return_id AND pr.status = 'posted'
         WHERE pr.return_date >= ? AND pr.return_date <= ?
-        GROUP BY pi.product_id
-      ) returned_p ON returned_p.product_id = p.id
-      WHERE p.is_active = 1
+        GROUP BY pi.product_id, pi.variant_id
+      ) purch_ret ON purch_ret.product_id = p.id 
+        AND (purch_ret.variant_id = pv.id OR (purch_ret.variant_id IS NULL AND pv.id IS NOT NULL AND NOT EXISTS(
+          SELECT 1 FROM product_variants pv3 WHERE pv3.product_id = p.id AND pv3.is_active = 1 AND pv3.color_id IS NOT NULL
+        ) AND pv.color_id IS NULL AND pv.size_id IS NULL)
+        OR (purch_ret.variant_id IS NULL AND pv.id IS NULL))
+      WHERE $whereClause
         AND (COALESCE(purchased.qty, 0) + COALESCE(sold.qty, 0) + 
-             COALESCE(returned_s.qty, 0) + COALESCE(returned_p.qty, 0)) > 0
-      ORDER BY (COALESCE(sold.qty, 0)) DESC
+             COALESCE(sale_ret.qty, 0) + COALESCE(purch_ret.qty, 0)) > 0
+      ORDER BY (COALESCE(purchased.qty, 0) + COALESCE(sold.qty, 0) + 
+                COALESCE(sale_ret.qty, 0) + COALESCE(purch_ret.qty, 0)) DESC
       ''',
-      variables: [
-        Variable<String>(startIso), Variable<String>(endIso),
-        Variable<String>(startIso), Variable<String>(endIso),
-        Variable<String>(startIso), Variable<String>(endIso),
-        Variable<String>(startIso), Variable<String>(endIso),
-      ],
+      variables: [...dateVars, ...variables],
       readsFrom: {
         _db.products,
         _db.productVariants,
+        _db.productCategories,
         _db.productColors,
         _db.sizes,
         _db.purchaseItems,
@@ -471,21 +666,61 @@ class InventoryReportsBloc
       },
     ).get();
 
-    return rows.map((row) {
+    final items = rows.map((row) {
       final purchased = row.read<int>('purchased_qty');
       final sold = row.read<int>('sold_qty');
-      final returned = row.read<int>('returned_qty');
+      final saleReturned = row.read<int>('sale_returned_qty');
+      final purchaseReturned = row.read<int>('purchase_returned_qty');
       return ProductMovementItem(
         productId: row.read<int>('product_id'),
+        variantId: row.readNullable<int>('variant_id'),
         productName: row.read<String>('product_name'),
-        sku: row.readNullable<String>('product_sku'),
+        sku: row.readNullable<String>('item_sku'),
+        categoryName: row.readNullable<String>('category_name'),
         colorName: row.readNullable<String>('color_name'),
+        colorHex: row.readNullable<String>('color_hex'),
         sizeName: row.readNullable<String>('size_name'),
+        hasVariants: (row.read<int>('has_variants')) == 1,
         purchasedQty: purchased,
         soldQty: sold,
-        returnedQty: returned,
-        netMovement: purchased - sold + returned,
+        saleReturnedQty: saleReturned,
+        purchaseReturnedQty: purchaseReturned,
+        netMovement: purchased - sold + saleReturned - purchaseReturned,
       );
     }).toList();
+
+    return _applySortToMovement(items, _movementSort);
+  }
+
+  List<ProductMovementItem> _applySortToMovement(
+    List<ProductMovementItem> items,
+    MovementSort sort,
+  ) {
+    final list = List<ProductMovementItem>.from(items);
+    switch (sort) {
+      case MovementSort.mostActive:
+        list.sort((a, b) => b.totalActivity.compareTo(a.totalActivity));
+      case MovementSort.byName:
+        list.sort((a, b) => a.productName.compareTo(b.productName));
+      case MovementSort.netMovement:
+        list.sort((a, b) => b.netMovement.abs().compareTo(a.netMovement.abs()));
+    }
+    return list;
+  }
+
+  Future<List<FilterOption>> _loadAvailableCategories() async {
+    final rows = await _db.customSelect(
+      'SELECT id, name FROM product_categories WHERE is_active = 1 ORDER BY name',
+      readsFrom: {_db.productCategories},
+    ).get();
+    return rows.map((r) => FilterOption(id: r.read<int>('id'), name: r.read<String>('name'))).toList();
+  }
+
+  Future<List<FilterOption>> _loadAvailableSuppliers() async {
+    final rows = await _db.customSelect(
+      'SELECT id, name FROM suppliers WHERE is_active = 1 ORDER BY name',
+      readsFrom: {_db.suppliers},
+    ).get();
+    return rows.map((r) => FilterOption(id: r.read<int>('id'), name: r.read<String>('name'))).toList();
   }
 }

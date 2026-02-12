@@ -22,6 +22,10 @@ class RoutePermissions {
     '/employees/create': [UserRole.owner, UserRole.manager],
     '/employees/settings': [UserRole.owner, UserRole.manager],
     '/accounting': [UserRole.owner],
+    '/financial-management': [UserRole.owner],
+    '/financial-management/chart-of-accounts': [UserRole.owner],
+    '/financial-management/journal-entries': [UserRole.owner],
+    '/financial-management/periods': [UserRole.owner],
     '/audit': [UserRole.owner],
   };
 }

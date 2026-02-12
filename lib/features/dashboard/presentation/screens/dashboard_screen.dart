@@ -272,6 +272,44 @@ class DashboardScreen extends StatelessWidget {
                   ),
                 ],
               ),
+
+              // Financial Management section (Owner only)
+              BlocBuilder<AuthBloc, RealtimeState<UserEntity?>>(
+                builder: (context, state) {
+                  if (state is AuthAuthenticated && state.user.isOwner) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 32),
+                        Text(
+                          'dashboard.financial_management'.tr(),
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        GridView.count(
+                          crossAxisCount: crossAxisCount,
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          mainAxisSpacing: 12,
+                          crossAxisSpacing: 12,
+                          childAspectRatio: isDesktop ? 1.3 : 1.1,
+                          children: [
+                            _DashboardCard(
+                              icon: LucideIcons.landmark,
+                              title: 'dashboard.financial_mgmt'.tr(),
+                              color: const Color(0xFF1565C0),
+                              onTap: () => context.push('/financial-management'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    );
+                  }
+                  return const SizedBox.shrink();
+                },
+              ),
             ],
           ),
         ),

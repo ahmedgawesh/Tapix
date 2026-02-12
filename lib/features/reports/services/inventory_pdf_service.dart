@@ -241,6 +241,17 @@ class InventoryPdfService {
           pageFormat: PdfPageFormat.a4,
           textDirection: dir,
           build: (pw.Context context) {
+            final filterParts = <String>[];
+            if (data.movementCategoryName != null) {
+              filterParts.add('${_t('category', lang)}: ${data.movementCategoryName}');
+            }
+            if (data.movementSupplierName != null) {
+              filterParts.add('${_t('supplier', lang)}: ${data.movementSupplierName}');
+            }
+            if (data.movementSearchQuery.isNotEmpty) {
+              filterParts.add('${_t('search', lang)}: ${data.movementSearchQuery}');
+            }
+
             return [
               _buildHeader(company, _t('product_movement', lang), fonts, dir),
               pw.SizedBox(height: 8),
@@ -248,10 +259,17 @@ class InventoryPdfService {
                 '${_t('period', lang)}: ${DateFormat.yMMMd().format(data.dateRange.startDate)} — ${DateFormat.yMMMd().format(data.dateRange.endDate)}',
                 style: pw.TextStyle(font: fonts.regular, fontSize: 10),
               ),
+              if (filterParts.isNotEmpty) ...[  
+                pw.SizedBox(height: 4),
+                pw.Text(
+                  filterParts.join('  |  '),
+                  style: pw.TextStyle(font: fonts.regular, fontSize: 9, color: PdfColors.grey700),
+                ),
+              ],
               pw.SizedBox(height: 12),
               pw.TableHelper.fromTextArray(
-                headerStyle: pw.TextStyle(font: fonts.bold, fontSize: 9),
-                cellStyle: pw.TextStyle(font: fonts.regular, fontSize: 9),
+                headerStyle: pw.TextStyle(font: fonts.bold, fontSize: 8),
+                cellStyle: pw.TextStyle(font: fonts.regular, fontSize: 8),
                 headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
                 cellAlignments: {
                   0: pw.Alignment.centerLeft,
@@ -261,6 +279,7 @@ class InventoryPdfService {
                   4: pw.Alignment.centerRight,
                   5: pw.Alignment.centerRight,
                   6: pw.Alignment.centerRight,
+                  7: pw.Alignment.centerRight,
                 },
                 headers: [
                   _t('sku', lang),
@@ -268,7 +287,8 @@ class InventoryPdfService {
                   _t('color_size', lang),
                   _t('purchased', lang),
                   _t('sold', lang),
-                  _t('returned', lang),
+                  _t('sale_returned', lang),
+                  _t('purchase_returned', lang),
                   _t('net_movement', lang),
                 ],
                 data: data.productMovement.map((item) => [
@@ -277,7 +297,8 @@ class InventoryPdfService {
                   item.variantLabel.isNotEmpty ? item.variantLabel : '-',
                   '+${item.purchasedQty}',
                   '-${item.soldQty}',
-                  '${item.returnedQty}',
+                  '+${item.saleReturnedQty}',
+                  '-${item.purchaseReturnedQty}',
                   item.netMovement >= 0 ? '+${item.netMovement}' : '${item.netMovement}',
                 ]).toList(),
               ),
@@ -320,6 +341,10 @@ class InventoryPdfService {
     'purchased': {'en': 'Purchased', 'ar': 'مشتريات', 'fr': 'Acheté'},
     'sold': {'en': 'Sold', 'ar': 'مبيعات', 'fr': 'Vendu'},
     'returned': {'en': 'Returned', 'ar': 'مرتجعات', 'fr': 'Retourné'},
+    'sale_returned': {'en': 'Sale Ret.', 'ar': 'مرتجع بيع', 'fr': 'Ret. Vente'},
+    'purchase_returned': {'en': 'Purch. Ret.', 'ar': 'مرتجع شراء', 'fr': 'Ret. Achat'},
+    'supplier': {'en': 'Supplier', 'ar': 'المورد', 'fr': 'Fournisseur'},
+    'search': {'en': 'Search', 'ar': 'بحث', 'fr': 'Recherche'},
     'net_movement': {'en': 'Net', 'ar': 'الصافي', 'fr': 'Net'},
     'color_size': {'en': 'Color / Size', 'ar': 'اللون / المقاس', 'fr': 'Couleur / Taille'},
     'cost_price': {'en': 'Cost Price', 'ar': 'سعر التكلفة', 'fr': 'Prix Coût'},

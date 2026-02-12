@@ -2,7 +2,9 @@ import 'package:decimal/decimal.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 
+import '../../../../core/services/below_cost_sale_service.dart';
 import '../../domain/repositories/sale_repository.dart';
+import '../../../auth/domain/entities/user_entity.dart';
 import '../../../products/domain/entities/product_entity.dart';
 import '../../../products/domain/entities/product_variant_entity.dart';
 import '../../../products/domain/repositories/product_variant_repository.dart';
@@ -41,6 +43,8 @@ class SaleFormState extends Equatable {
   final bool isSubmitting;
   final String? error;
   final bool isSuccess;
+  final BelowCostCheckResult? belowCostWarning;
+  final List<BelowCostOverride> belowCostOverrides;
 
   SaleFormState({
     this.saleId,
@@ -63,6 +67,8 @@ class SaleFormState extends Equatable {
     this.isSubmitting = false,
     this.error,
     this.isSuccess = false,
+    this.belowCostWarning,
+    this.belowCostOverrides = const [],
   }) : invoiceDiscountCents = invoiceDiscountCents ?? Decimal.zero,
        taxRatePercent = taxRatePercent ?? Decimal.zero,
        paidAmountCents = paidAmountCents ?? Decimal.zero;
@@ -130,6 +136,9 @@ class SaleFormState extends Equatable {
     String? error,
     bool? isSuccess,
     bool clearCustomer = false,
+    BelowCostCheckResult? belowCostWarning,
+    bool clearBelowCostWarning = false,
+    List<BelowCostOverride>? belowCostOverrides,
   }) {
     return SaleFormState(
       saleId: saleId ?? this.saleId,
@@ -152,6 +161,8 @@ class SaleFormState extends Equatable {
       isSubmitting: isSubmitting ?? this.isSubmitting,
       error: error,
       isSuccess: isSuccess ?? this.isSuccess,
+      belowCostWarning: clearBelowCostWarning ? null : (belowCostWarning ?? this.belowCostWarning),
+      belowCostOverrides: belowCostOverrides ?? this.belowCostOverrides,
     );
   }
 
@@ -160,8 +171,32 @@ class SaleFormState extends Equatable {
         saleId, saleNumber, customerId, customerName, employeeId, employeeName, currencyId, items,
         discountMode, invoiceDiscountCents, notes, saleDate, dueDate,
         paymentMethod, taxRatePercent, salespersonMode, paidAmountCents,
-        isSubmitting, error, isSuccess,
+        isSubmitting, error, isSuccess, belowCostWarning, belowCostOverrides,
       ];
+}
+
+/// Tracks a below-cost override that was approved by a Manager/Owner.
+class BelowCostOverride extends Equatable {
+  final String tempId;
+  final int productId;
+  final String productName;
+  final Decimal costCents;
+  final Decimal sellingPriceCents;
+  final Decimal lossCents;
+  final String reason;
+
+  const BelowCostOverride({
+    required this.tempId,
+    required this.productId,
+    required this.productName,
+    required this.costCents,
+    required this.sellingPriceCents,
+    required this.lossCents,
+    required this.reason,
+  });
+
+  @override
+  List<Object?> get props => [tempId, productId, productName, costCents, sellingPriceCents, lossCents, reason];
 }
 
 /// A line item in the sale form
@@ -426,19 +461,37 @@ class SalePaidAmountChanged extends SaleFormEvent {
   List<Object?> get props => [paidAmountCents];
 }
 
+class SaleBelowCostOverrideApproved extends SaleFormEvent {
+  final String reason;
+  const SaleBelowCostOverrideApproved(this.reason);
+
+  @override
+  List<Object?> get props => [reason];
+}
+
+class SaleBelowCostWarningDismissed extends SaleFormEvent {
+  const SaleBelowCostWarningDismissed();
+}
+
 // ==================== BLOC ====================
 
 class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
   final SaleRepository _repository;
   final ProductVariantRepository _variantRepository;
+  final BelowCostSaleService _belowCostService;
+  UserRole currentUserRole;
   int _lineCounter = 0;
 
   Map<int, String> _colorNames = {};
   Map<int, String?> _colorHexes = {};
   Map<int, String> _sizeNames = {};
 
-  SaleFormBloc(this._repository, this._variantRepository)
-      : super(SaleFormState(
+  SaleFormBloc(this._repository, this._variantRepository, {
+    BelowCostSaleService? belowCostService,
+    UserRole userRole = UserRole.cashier,
+  })  : _belowCostService = belowCostService ?? const BelowCostSaleService(),
+        currentUserRole = userRole,
+        super(SaleFormState(
           currencyId: 1,
           saleDate: DateTime.now(),
         )) {
@@ -458,6 +511,8 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
     on<SaleSalespersonModeChanged>(_onSalespersonModeChanged);
     on<SalePaidAmountChanged>(_onPaidAmountChanged);
     on<SaleDueDateChanged>(_onDueDateChanged);
+    on<SaleBelowCostOverrideApproved>(_onBelowCostOverrideApproved);
+    on<SaleBelowCostWarningDismissed>(_onBelowCostWarningDismissed);
   }
 
   Future<void> _loadColorSizeLookups() async {
@@ -683,7 +738,26 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
       colorHex: _resolveColorHex(resolvedVariant?.colorId),
       sizeName: _resolveSizeName(resolvedVariant?.sizeId),
     );
-    emit(state.copyWith(items: [...state.items, newItem]));
+
+    // Below-cost check: use variant cost if available, else product cost
+    final costCents = resolvedVariant?.costCents ?? event.product.costCents;
+    final check = _belowCostService.check(
+      costCents: costCents,
+      sellingPriceCents: event.unitPriceCents,
+      productName: newItem.displayName,
+      productId: event.product.id,
+      userRole: currentUserRole,
+    );
+
+    if (check.isBelowCost) {
+      // Add item but show warning
+      emit(state.copyWith(
+        items: [...state.items, newItem],
+        belowCostWarning: check,
+      ));
+    } else {
+      emit(state.copyWith(items: [...state.items, newItem]));
+    }
   }
 
   void _onLineItemUpdated(
@@ -879,6 +953,67 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
     Emitter<SaleFormState> emit,
   ) {
     emit(state.copyWith(dueDate: event.date));
+  }
+
+  void _onBelowCostOverrideApproved(
+    SaleBelowCostOverrideApproved event,
+    Emitter<SaleFormState> emit,
+  ) {
+    final warning = state.belowCostWarning;
+    if (warning == null || !warning.isBelowCost) return;
+
+    // Find the last added item that matches the warning product
+    final matchingItem = state.items.lastWhere(
+      (item) => item.product.id == warning.productId,
+      orElse: () => state.items.last,
+    );
+
+    final override = BelowCostOverride(
+      tempId: matchingItem.tempId,
+      productId: warning.productId,
+      productName: warning.productName,
+      costCents: warning.costCents,
+      sellingPriceCents: warning.sellingPriceCents,
+      lossCents: warning.lossCents,
+      reason: event.reason,
+    );
+
+    emit(state.copyWith(
+      clearBelowCostWarning: true,
+      belowCostOverrides: [...state.belowCostOverrides, override],
+    ));
+  }
+
+  void _onBelowCostWarningDismissed(
+    SaleBelowCostWarningDismissed event,
+    Emitter<SaleFormState> emit,
+  ) {
+    final warning = state.belowCostWarning;
+    if (warning == null) return;
+
+    if (!warning.canOverride) {
+      // Cashier/Salesperson: remove the last item that triggered the warning
+      final updatedItems = List<SaleLineItem>.from(state.items);
+      final idx = updatedItems.lastIndexWhere(
+        (item) => item.product.id == warning.productId,
+      );
+      if (idx >= 0) updatedItems.removeAt(idx);
+      emit(state.copyWith(
+        items: updatedItems,
+        clearBelowCostWarning: true,
+      ));
+    } else {
+      // Manager/Owner dismissed without override: remove the item
+      final updatedItems = List<SaleLineItem>.from(state.items);
+      final idx = updatedItems.lastIndexWhere(
+        (item) => item.product.id == warning.productId,
+      );
+      if (idx >= 0) updatedItems.removeAt(idx);
+      emit(state.copyWith(
+        items: updatedItems,
+        clearBelowCostWarning: true,
+      ));
+    }
   }
 
   /// Distribute [total] proportionally across items based on [weights].

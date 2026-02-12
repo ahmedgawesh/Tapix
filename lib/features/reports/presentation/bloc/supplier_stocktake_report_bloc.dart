@@ -27,6 +27,17 @@ class SupplierStocktakeReportSortChanged extends SupplierStocktakeReportEvent {
   const SupplierStocktakeReportSortChanged(this.sort);
 }
 
+class SupplierStocktakeSearchChanged extends SupplierStocktakeReportEvent {
+  final String query;
+  const SupplierStocktakeSearchChanged(this.query);
+}
+
+class SupplierStocktakeCategoryFilterChanged extends SupplierStocktakeReportEvent {
+  final int? categoryId;
+  final String? categoryName;
+  const SupplierStocktakeCategoryFilterChanged(this.categoryId, this.categoryName);
+}
+
 // ==================== ENUMS ====================
 
 enum SupplierStocktakeSortType {
@@ -38,6 +49,7 @@ enum SupplierStocktakeSortType {
   stockAsc,
   soldDesc,
   purchasedDesc,
+  profitDesc,
 }
 
 // ==================== DATA MODELS ====================
@@ -49,11 +61,16 @@ class SupplierStocktakeProductItem {
   final int variantId;
   final String? colorName;
   final String? sizeName;
+  final String? categoryName;
   final int purchasedQuantity;
   final int soldQuantity;
+  final int saleReturnedQuantity;
+  final int purchaseReturnedQuantity;
   final int remainingQuantity;
   final int costCents;
+  final int priceCents;
   final int remainingValueCents;
+  final int profitCents;
 
   const SupplierStocktakeProductItem({
     required this.productId,
@@ -62,11 +79,16 @@ class SupplierStocktakeProductItem {
     required this.variantId,
     this.colorName,
     this.sizeName,
+    this.categoryName,
     required this.purchasedQuantity,
     required this.soldQuantity,
+    this.saleReturnedQuantity = 0,
+    this.purchaseReturnedQuantity = 0,
     required this.remainingQuantity,
     required this.costCents,
+    this.priceCents = 0,
     required this.remainingValueCents,
+    this.profitCents = 0,
   });
 
   String get variantLabel {
@@ -75,6 +97,18 @@ class SupplierStocktakeProductItem {
     if (sizeName != null && sizeName!.isNotEmpty) parts.add(sizeName!);
     return parts.join(' / ');
   }
+
+  /// Net sold = sold - sale returns
+  int get netSoldQuantity => soldQuantity - saleReturnedQuantity;
+
+  /// Net purchased = purchased - purchase returns
+  int get netPurchasedQuantity => purchasedQuantity - purchaseReturnedQuantity;
+}
+
+class SupplierStocktakeCategoryOption {
+  final int id;
+  final String name;
+  const SupplierStocktakeCategoryOption({required this.id, required this.name});
 }
 
 class SupplierOption {
@@ -97,12 +131,20 @@ class SupplierStocktakeReportData {
   final List<SupplierStocktakeProductItem> products;
   final int totalPurchasedQuantity;
   final int totalSoldQuantity;
+  final int totalSaleReturnedQuantity;
+  final int totalPurchaseReturnedQuantity;
   final int totalRemainingQuantity;
   final int totalRemainingValueCents;
+  final int totalProfitCents;
   final int totalProducts;
   final int totalVariants;
   final ReportDateRange dateRange;
   final SupplierStocktakeSortType sort;
+  // Search & filter
+  final String searchQuery;
+  final int? filterCategoryId;
+  final String? filterCategoryName;
+  final List<SupplierStocktakeCategoryOption> availableCategories;
 
   const SupplierStocktakeReportData({
     this.supplierId,
@@ -112,12 +154,19 @@ class SupplierStocktakeReportData {
     this.products = const [],
     this.totalPurchasedQuantity = 0,
     this.totalSoldQuantity = 0,
+    this.totalSaleReturnedQuantity = 0,
+    this.totalPurchaseReturnedQuantity = 0,
     this.totalRemainingQuantity = 0,
     this.totalRemainingValueCents = 0,
+    this.totalProfitCents = 0,
     this.totalProducts = 0,
     this.totalVariants = 0,
     required this.dateRange,
     this.sort = SupplierStocktakeSortType.valueDesc,
+    this.searchQuery = '',
+    this.filterCategoryId,
+    this.filterCategoryName,
+    this.availableCategories = const [],
   });
 
   SupplierStocktakeReportData copyWith({
@@ -128,12 +177,19 @@ class SupplierStocktakeReportData {
     List<SupplierStocktakeProductItem>? products,
     int? totalPurchasedQuantity,
     int? totalSoldQuantity,
+    int? totalSaleReturnedQuantity,
+    int? totalPurchaseReturnedQuantity,
     int? totalRemainingQuantity,
     int? totalRemainingValueCents,
+    int? totalProfitCents,
     int? totalProducts,
     int? totalVariants,
     ReportDateRange? dateRange,
     SupplierStocktakeSortType? sort,
+    String? searchQuery,
+    int? Function()? filterCategoryId,
+    String? Function()? filterCategoryName,
+    List<SupplierStocktakeCategoryOption>? availableCategories,
   }) {
     return SupplierStocktakeReportData(
       supplierId: supplierId ?? this.supplierId,
@@ -144,14 +200,23 @@ class SupplierStocktakeReportData {
       totalPurchasedQuantity:
           totalPurchasedQuantity ?? this.totalPurchasedQuantity,
       totalSoldQuantity: totalSoldQuantity ?? this.totalSoldQuantity,
+      totalSaleReturnedQuantity:
+          totalSaleReturnedQuantity ?? this.totalSaleReturnedQuantity,
+      totalPurchaseReturnedQuantity:
+          totalPurchaseReturnedQuantity ?? this.totalPurchaseReturnedQuantity,
       totalRemainingQuantity:
           totalRemainingQuantity ?? this.totalRemainingQuantity,
       totalRemainingValueCents:
           totalRemainingValueCents ?? this.totalRemainingValueCents,
+      totalProfitCents: totalProfitCents ?? this.totalProfitCents,
       totalProducts: totalProducts ?? this.totalProducts,
       totalVariants: totalVariants ?? this.totalVariants,
       dateRange: dateRange ?? this.dateRange,
       sort: sort ?? this.sort,
+      searchQuery: searchQuery ?? this.searchQuery,
+      filterCategoryId: filterCategoryId != null ? filterCategoryId() : this.filterCategoryId,
+      filterCategoryName: filterCategoryName != null ? filterCategoryName() : this.filterCategoryName,
+      availableCategories: availableCategories ?? this.availableCategories,
     );
   }
 }
@@ -164,6 +229,9 @@ class SupplierStocktakeReportBloc extends RealtimeBloc<
   ReportDateRange _dateRange = ReportDateRange.thisMonth();
   SupplierStocktakeSortType _sort = SupplierStocktakeSortType.valueDesc;
   int? _supplierId;
+  String _searchQuery = '';
+  int? _filterCategoryId;
+  String? _filterCategoryName;
 
   SupplierStocktakeReportBloc(this._db) : super(const RealtimeLoading());
 
@@ -180,6 +248,8 @@ class SupplierStocktakeReportBloc extends RealtimeBloc<
     on<SupplierStocktakeReportDateRangeChanged>(_onDateRangeChanged);
     on<SupplierStocktakeReportSupplierChanged>(_onSupplierChanged);
     on<SupplierStocktakeReportSortChanged>(_onSortChanged);
+    on<SupplierStocktakeSearchChanged>(_onSearchChanged);
+    on<SupplierStocktakeCategoryFilterChanged>(_onCategoryFilterChanged);
   }
 
   Stream<SupplierStocktakeReportData> _buildCombinedStream() {
@@ -202,6 +272,23 @@ class SupplierStocktakeReportBloc extends RealtimeBloc<
     Emitter<RealtimeState<SupplierStocktakeReportData>> emit,
   ) async {
     _supplierId = event.supplierId;
+    refresh();
+  }
+
+  Future<void> _onSearchChanged(
+    SupplierStocktakeSearchChanged event,
+    Emitter<RealtimeState<SupplierStocktakeReportData>> emit,
+  ) async {
+    _searchQuery = event.query;
+    refresh();
+  }
+
+  Future<void> _onCategoryFilterChanged(
+    SupplierStocktakeCategoryFilterChanged event,
+    Emitter<RealtimeState<SupplierStocktakeReportData>> emit,
+  ) async {
+    _filterCategoryId = event.categoryId;
+    _filterCategoryName = event.categoryName;
     refresh();
   }
 
@@ -249,14 +336,13 @@ class SupplierStocktakeReportBloc extends RealtimeBloc<
       case SupplierStocktakeSortType.purchasedDesc:
         list.sort(
             (a, b) => b.purchasedQuantity.compareTo(a.purchasedQuantity));
+      case SupplierStocktakeSortType.profitDesc:
+        list.sort((a, b) => b.profitCents.compareTo(a.profitCents));
     }
     return list;
   }
 
-  /// Loads supplier stocktake data:
-  /// 1. All suppliers for the dropdown
-  /// 2. If a supplier is selected: products linked via purchase invoices in date range
-  ///    with purchased qty, sold qty, remaining stock, and stock value
+  /// Loads supplier stocktake data with returns, profit, search, and category filter
   Future<SupplierStocktakeReportData> _loadStocktakeData() async {
     // Load supplier list for the selector
     final supplierRows = await _db.customSelect(
@@ -277,20 +363,32 @@ class SupplierStocktakeReportBloc extends RealtimeBloc<
             ))
         .toList();
 
+    // Load available categories
+    final catRows = await _db.customSelect(
+      'SELECT id, name FROM product_categories WHERE is_active = 1 ORDER BY name',
+      readsFrom: {_db.productCategories},
+    ).get();
+    final categories = catRows
+        .map((r) => SupplierStocktakeCategoryOption(
+              id: r.read<int>('id'),
+              name: r.read<String>('name'),
+            ))
+        .toList();
+
     if (_supplierId == null) {
       return SupplierStocktakeReportData(
         dateRange: _dateRange,
         suppliers: suppliers,
+        searchQuery: _searchQuery,
+        filterCategoryId: _filterCategoryId,
+        filterCategoryName: _filterCategoryName,
+        availableCategories: categories,
       );
     }
 
     // Load supplier info
     final supplierInfoRows = await _db.customSelect(
-      '''
-      SELECT s.name, s.phone
-      FROM suppliers s
-      WHERE s.id = ?
-      ''',
+      'SELECT s.name, s.phone FROM suppliers s WHERE s.id = ?',
       variables: [Variable.withInt(_supplierId!)],
       readsFrom: {_db.suppliers},
     ).get();
@@ -299,6 +397,7 @@ class SupplierStocktakeReportBloc extends RealtimeBloc<
       return SupplierStocktakeReportData(
         dateRange: _dateRange,
         suppliers: suppliers,
+        availableCategories: categories,
       );
     }
 
@@ -308,28 +407,43 @@ class SupplierStocktakeReportBloc extends RealtimeBloc<
       _dateRange.endDate.year,
       _dateRange.endDate.month,
       _dateRange.endDate.day,
-      23,
-      59,
-      59,
+      23, 59, 59,
     ).toIso8601String();
 
+    // Build dynamic WHERE for search + category
+    final extraWhere = StringBuffer();
+    final extraVars = <Variable<Object>>[];
+
+    if (_searchQuery.isNotEmpty) {
+      extraWhere.write(' AND (p.name LIKE ? OR COALESCE(pv.sku, p.sku) LIKE ?)');
+      extraVars.add(Variable<String>('%$_searchQuery%'));
+      extraVars.add(Variable<String>('%$_searchQuery%'));
+    }
+    if (_filterCategoryId != null) {
+      extraWhere.write(' AND p.category_id = ?');
+      extraVars.add(Variable<int>(_filterCategoryId!));
+    }
+
     // Get all product variants purchased from this supplier in the date range
-    // via purchase_items → purchases (where supplier_id matches and date in range)
     final purchasedRows = await _db.customSelect(
       '''
       SELECT 
         p.id AS product_id,
         p.name AS product_name,
-        p.sku AS product_sku,
+        COALESCE(pv.sku, p.sku) AS product_sku,
+        cat.name AS category_name,
         COALESCE(pi.variant_id, pv_default.id) AS variant_id,
         pc.name AS color_name,
         sz.name AS size_name,
         SUM(pi.quantity) AS purchased_qty,
-        COALESCE(pi.variant_id, pv_default.id) AS resolved_variant_id,
         COALESCE(
           CASE WHEN pi.variant_id IS NOT NULL THEN pv.cost_cents ELSE pv_default.cost_cents END,
           p.cost_cents
         ) AS cost_cents,
+        COALESCE(
+          CASE WHEN pi.variant_id IS NOT NULL THEN pv.price_cents ELSE pv_default.price_cents END,
+          p.price_cents
+        ) AS price_cents,
         COALESCE(
           CASE WHEN pi.variant_id IS NOT NULL THEN pv.stock_quantity ELSE pv_default.stock_quantity END,
           0
@@ -344,12 +458,14 @@ class SupplierStocktakeReportBloc extends RealtimeBloc<
           SELECT MIN(pv2.id) FROM product_variants pv2 
           WHERE pv2.product_id = p.id AND pv2.is_active = 1
         )
+      LEFT JOIN product_categories cat ON cat.id = p.category_id
       LEFT JOIN product_colors pc ON COALESCE(pv.color_id, pv_default.color_id) = pc.id
       LEFT JOIN sizes sz ON COALESCE(pv.size_id, pv_default.size_id) = sz.id
       WHERE pu.supplier_id = ?
         AND pu.status = 'posted'
         AND pu.purchase_date >= ?
         AND pu.purchase_date <= ?
+        $extraWhere
       GROUP BY p.id, COALESCE(pi.variant_id, pv_default.id)
       ORDER BY p.name, pc.name, sz.name
       ''',
@@ -357,23 +473,28 @@ class SupplierStocktakeReportBloc extends RealtimeBloc<
         Variable.withInt(_supplierId!),
         Variable.withString(startIso),
         Variable.withString(endIso),
+        ...extraVars,
       ],
       readsFrom: {
         _db.purchaseItems,
         _db.purchases,
         _db.products,
         _db.productVariants,
+        _db.productCategories,
         _db.productColors,
         _db.sizes,
       },
     ).get();
 
-    // For each purchased product/variant, get sold qty in the same date range
+    // For each purchased product/variant, get sold qty + returns in the same date range
     final products = <SupplierStocktakeProductItem>[];
     int totalPurchased = 0;
     int totalSold = 0;
+    int totalSaleReturned = 0;
+    int totalPurchaseReturned = 0;
     int totalRemaining = 0;
     int totalRemainingValue = 0;
+    int totalProfit = 0;
     final uniqueProductIds = <int>{};
 
     for (final row in purchasedRows) {
@@ -381,9 +502,10 @@ class SupplierStocktakeReportBloc extends RealtimeBloc<
       final variantId = row.readNullable<int>('variant_id');
       final purchasedQty = row.read<int>('purchased_qty');
       final costCents = row.read<int>('cost_cents');
+      final priceCents = row.read<int>('price_cents');
       final currentStock = row.read<int>('current_stock');
 
-      // Get sold quantity for this product/variant in the date range
+      // Get sold quantity
       int soldQty = 0;
       if (variantId != null) {
         final soldRows = await _db.customSelect(
@@ -391,11 +513,9 @@ class SupplierStocktakeReportBloc extends RealtimeBloc<
           SELECT COALESCE(SUM(si.quantity), 0) AS sold_qty
           FROM sale_items si
           JOIN sales sa ON si.sale_id = sa.id
-          WHERE si.product_id = ?
-            AND si.variant_id = ?
+          WHERE si.product_id = ? AND si.variant_id = ?
             AND sa.status IN ('completed', 'posted')
-            AND sa.sale_date >= ?
-            AND sa.sale_date <= ?
+            AND sa.sale_date >= ? AND sa.sale_date <= ?
           ''',
           variables: [
             Variable.withInt(productId),
@@ -405,9 +525,7 @@ class SupplierStocktakeReportBloc extends RealtimeBloc<
           ],
           readsFrom: {_db.saleItems, _db.sales},
         ).get();
-        if (soldRows.isNotEmpty) {
-          soldQty = soldRows.first.read<int>('sold_qty');
-        }
+        if (soldRows.isNotEmpty) soldQty = soldRows.first.read<int>('sold_qty');
       } else {
         final soldRows = await _db.customSelect(
           '''
@@ -416,8 +534,7 @@ class SupplierStocktakeReportBloc extends RealtimeBloc<
           JOIN sales sa ON si.sale_id = sa.id
           WHERE si.product_id = ?
             AND sa.status IN ('completed', 'posted')
-            AND sa.sale_date >= ?
-            AND sa.sale_date <= ?
+            AND sa.sale_date >= ? AND sa.sale_date <= ?
           ''',
           variables: [
             Variable.withInt(productId),
@@ -426,19 +543,76 @@ class SupplierStocktakeReportBloc extends RealtimeBloc<
           ],
           readsFrom: {_db.saleItems, _db.sales},
         ).get();
-        if (soldRows.isNotEmpty) {
-          soldQty = soldRows.first.read<int>('sold_qty');
-        }
+        if (soldRows.isNotEmpty) soldQty = soldRows.first.read<int>('sold_qty');
       }
 
-      // remaining = current stock (real-time from DB)
+      // Get sale returned quantity
+      int saleReturnedQty = 0;
+      {
+        final variantClause = variantId != null
+            ? 'AND si.variant_id = ?'
+            : '';
+        final vars = [
+          Variable.withInt(productId),
+          if (variantId != null) Variable.withInt(variantId),
+          Variable.withString(startIso),
+          Variable.withString(endIso),
+        ];
+        final retRows = await _db.customSelect(
+          '''
+          SELECT COALESCE(SUM(sri.quantity), 0) AS ret_qty
+          FROM sale_return_items sri
+          JOIN sale_items si ON si.id = sri.sale_item_id
+          JOIN sale_returns sr ON sr.id = sri.return_id AND sr.status = 'posted'
+          WHERE si.product_id = ? $variantClause
+            AND sr.return_date >= ? AND sr.return_date <= ?
+          ''',
+          variables: vars,
+          readsFrom: {_db.saleReturnItems, _db.saleItems, _db.saleReturns},
+        ).get();
+        if (retRows.isNotEmpty) saleReturnedQty = retRows.first.read<int>('ret_qty');
+      }
+
+      // Get purchase returned quantity
+      int purchaseReturnedQty = 0;
+      {
+        final variantClause = variantId != null
+            ? 'AND pi2.variant_id = ?'
+            : '';
+        final vars = [
+          Variable.withInt(productId),
+          if (variantId != null) Variable.withInt(variantId),
+          Variable.withString(startIso),
+          Variable.withString(endIso),
+        ];
+        final retRows = await _db.customSelect(
+          '''
+          SELECT COALESCE(SUM(pri.quantity), 0) AS ret_qty
+          FROM purchase_return_items pri
+          JOIN purchase_items pi2 ON pi2.id = pri.purchase_item_id
+          JOIN purchase_returns pr ON pr.id = pri.return_id AND pr.status = 'posted'
+          WHERE pi2.product_id = ? $variantClause
+            AND pr.return_date >= ? AND pr.return_date <= ?
+          ''',
+          variables: vars,
+          readsFrom: {_db.purchaseReturnItems, _db.purchaseItems, _db.purchaseReturns},
+        ).get();
+        if (retRows.isNotEmpty) purchaseReturnedQty = retRows.first.read<int>('ret_qty');
+      }
+
       final remainingValueCents = currentStock * costCents;
+      // Profit = (netSold * salePrice) - (netSold * costPrice)
+      final netSold = soldQty - saleReturnedQty;
+      final profitCents = netSold > 0 ? (netSold * priceCents) - (netSold * costCents) : 0;
 
       uniqueProductIds.add(productId);
       totalPurchased += purchasedQty;
       totalSold += soldQty;
+      totalSaleReturned += saleReturnedQty;
+      totalPurchaseReturned += purchaseReturnedQty;
       totalRemaining += currentStock;
       totalRemainingValue += remainingValueCents;
+      totalProfit += profitCents;
 
       products.add(SupplierStocktakeProductItem(
         productId: productId,
@@ -447,11 +621,16 @@ class SupplierStocktakeReportBloc extends RealtimeBloc<
         variantId: variantId ?? 0,
         colorName: row.readNullable<String>('color_name'),
         sizeName: row.readNullable<String>('size_name'),
+        categoryName: row.readNullable<String>('category_name'),
         purchasedQuantity: purchasedQty,
         soldQuantity: soldQty,
+        saleReturnedQuantity: saleReturnedQty,
+        purchaseReturnedQuantity: purchaseReturnedQty,
         remainingQuantity: currentStock,
         costCents: costCents,
+        priceCents: priceCents,
         remainingValueCents: remainingValueCents,
+        profitCents: profitCents,
       ));
     }
 
@@ -465,12 +644,19 @@ class SupplierStocktakeReportBloc extends RealtimeBloc<
       products: sorted,
       totalPurchasedQuantity: totalPurchased,
       totalSoldQuantity: totalSold,
+      totalSaleReturnedQuantity: totalSaleReturned,
+      totalPurchaseReturnedQuantity: totalPurchaseReturned,
       totalRemainingQuantity: totalRemaining,
       totalRemainingValueCents: totalRemainingValue,
+      totalProfitCents: totalProfit,
       totalProducts: uniqueProductIds.length,
       totalVariants: products.length,
       dateRange: _dateRange,
       sort: _sort,
+      searchQuery: _searchQuery,
+      filterCategoryId: _filterCategoryId,
+      filterCategoryName: _filterCategoryName,
+      availableCategories: categories,
     );
   }
 }

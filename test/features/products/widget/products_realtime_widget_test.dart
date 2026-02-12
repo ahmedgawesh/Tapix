@@ -10,6 +10,7 @@ import 'package:tapix/features/products/domain/entities/product_entity.dart';
 import 'package:tapix/features/products/data/repositories/product_repository_impl.dart';
 import 'package:tapix/features/products/data/datasources/product_local_datasource.dart';
 import 'package:tapix/features/products/presentation/bloc/products_bloc.dart';
+import 'package:tapix/core/services/audit_log_service.dart';
 
 void main() {
   testWidgets('UI updates when database changes via ProductsBloc stream', (tester) async {
@@ -48,7 +49,7 @@ void main() {
       ),
     );
 
-    final repository = ProductRepositoryImpl(ProductLocalDatasourceImpl(database.productDao));
+    final repository = ProductRepositoryImpl(ProductLocalDatasourceImpl(database.productDao), AuditLogService(database));
     bloc = ProductsBloc(repository);
 
     await tester.pumpWidget(

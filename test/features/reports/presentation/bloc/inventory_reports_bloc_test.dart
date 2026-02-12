@@ -61,14 +61,16 @@ void main() {
         sku: 'SKU-003',
         purchasedQty: 50,
         soldQty: 30,
-        returnedQty: 5,
-        netMovement: 25,
+        saleReturnedQty: 3,
+        purchaseReturnedQty: 2,
+        netMovement: 21,
       );
 
       expect(item.purchasedQty, 50);
       expect(item.soldQty, 30);
-      expect(item.returnedQty, 5);
-      expect(item.netMovement, 25);
+      expect(item.saleReturnedQty, 3);
+      expect(item.purchaseReturnedQty, 2);
+      expect(item.netMovement, 21);
     });
   });
 
@@ -255,11 +257,12 @@ void main() {
         productName: 'Test',
         purchasedQty: 100,
         soldQty: 30,
-        returnedQty: 5,
+        saleReturnedQty: 5,
+        purchaseReturnedQty: 0,
         netMovement: 75,
       );
       expect(item.netMovement, 75);
-      expect(item.netMovement, item.purchasedQty - item.soldQty + item.returnedQty);
+      expect(item.netMovement, item.purchasedQty - item.soldQty + item.saleReturnedQty - item.purchaseReturnedQty);
     });
 
     test('negative net movement when sales exceed purchases', () {
@@ -268,11 +271,12 @@ void main() {
         productName: 'Test',
         purchasedQty: 10,
         soldQty: 50,
-        returnedQty: 5,
+        saleReturnedQty: 5,
+        purchaseReturnedQty: 0,
         netMovement: -35,
       );
       expect(item.netMovement, -35);
-      expect(item.netMovement, item.purchasedQty - item.soldQty + item.returnedQty);
+      expect(item.netMovement, item.purchasedQty - item.soldQty + item.saleReturnedQty - item.purchaseReturnedQty);
     });
 
     test('zero net movement when balanced', () {
@@ -281,7 +285,8 @@ void main() {
         productName: 'Test',
         purchasedQty: 50,
         soldQty: 50,
-        returnedQty: 0,
+        saleReturnedQty: 0,
+        purchaseReturnedQty: 0,
         netMovement: 0,
       );
       expect(item.netMovement, 0);
@@ -399,7 +404,7 @@ void main() {
     test('ProductMovementItem variantLabel', () {
       const item = ProductMovementItem(
         productId: 1, productName: 'T', colorName: 'Black',
-        purchasedQty: 10, soldQty: 5, returnedQty: 0, netMovement: 5,
+        purchasedQty: 10, soldQty: 5, saleReturnedQty: 0, purchaseReturnedQty: 0, netMovement: 5,
       );
       expect(item.variantLabel, 'Black');
     });

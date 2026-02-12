@@ -8,6 +8,7 @@ import 'package:tapix/features/products/domain/repositories/product_repository.d
 import 'package:tapix/features/products/data/repositories/product_repository_impl.dart';
 import 'package:tapix/features/products/data/datasources/product_local_datasource.dart';
 import 'package:tapix/features/products/presentation/bloc/products_bloc.dart';
+import 'package:tapix/core/services/audit_log_service.dart';
 
 void main() {
   group('End-to-End Realtime Updates', () {
@@ -20,7 +21,7 @@ void main() {
     setUp(() async {
       database = AppDatabase.connect(DatabaseConnection(NativeDatabase.memory()));
       realtimeService = RealtimeService(database);
-      productRepository = ProductRepositoryImpl(ProductLocalDatasourceImpl(database.productDao));
+      productRepository = ProductRepositoryImpl(ProductLocalDatasourceImpl(database.productDao), AuditLogService(database));
       productsBloc = ProductsBloc(productRepository);
 
       currencyId = await database.into(database.currencies).insert(
@@ -163,7 +164,7 @@ void main() {
 
     setUp(() async {
       database = AppDatabase.connect(DatabaseConnection(NativeDatabase.memory()));
-      productRepository = ProductRepositoryImpl(ProductLocalDatasourceImpl(database.productDao)); // Use Impl
+      productRepository = ProductRepositoryImpl(ProductLocalDatasourceImpl(database.productDao), AuditLogService(database)); // Use Impl
       productsBloc = ProductsBloc(productRepository);
 
       currencyId = await database.into(database.currencies).insert(
@@ -244,7 +245,7 @@ void main() {
     test('No retained streams after bloc disposal', () async {
       final database = AppDatabase.connect(DatabaseConnection(NativeDatabase.memory()));
       final realtimeService = RealtimeService(database);
-      final productRepository = ProductRepositoryImpl(ProductLocalDatasourceImpl(database.productDao)); // Use Impl
+      final productRepository = ProductRepositoryImpl(ProductLocalDatasourceImpl(database.productDao), AuditLogService(database)); // Use Impl
       final productsBloc = ProductsBloc(productRepository);
 
       final currencyId = await database.into(database.currencies).insert(
@@ -284,7 +285,7 @@ void main() {
       final database = AppDatabase.connect(DatabaseConnection(NativeDatabase.memory()));
 
       for (int i = 0; i < 10; i++) {
-        final productRepository = ProductRepositoryImpl(ProductLocalDatasourceImpl(database.productDao)); // Use Impl
+        final productRepository = ProductRepositoryImpl(ProductLocalDatasourceImpl(database.productDao), AuditLogService(database)); // Use Impl
         final bloc = ProductsBloc(productRepository);
         await Future<void>.delayed(const Duration(milliseconds: 50));
         await bloc.close();

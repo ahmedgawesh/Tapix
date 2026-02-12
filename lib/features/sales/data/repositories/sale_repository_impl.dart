@@ -3,6 +3,7 @@ import 'package:drift/drift.dart';
 
 import '../../../../core/database/app_database.dart' as db;
 import '../../../../core/database/daos/sale_dao.dart' hide SaleDashboardStats;
+import '../../../../core/services/audit_log_service.dart';
 import '../../../../core/services/journal_entry_service.dart';
 import '../../domain/entities/sale_entity.dart';
 import '../../domain/repositories/sale_repository.dart';
@@ -12,8 +13,9 @@ class SaleRepositoryImpl implements SaleRepository {
   final SaleLocalDatasource _datasource;
   final SaleDao _dao;
   final JournalEntryService _journalService;
+  final AuditLogService _audit;
 
-  SaleRepositoryImpl(this._datasource, this._dao, this._journalService);
+  SaleRepositoryImpl(this._datasource, this._dao, this._journalService, this._audit);
 
   @override
   Future<String> generateInvoiceNumber() => _datasource.generateInvoiceNumber();
@@ -95,6 +97,14 @@ class SaleRepositoryImpl implements SaleRepository {
       currencyId: currencyId,
     );
 
+    // Audit: log sale creation
+    _audit.logSaleCreated(
+      saleId: saleId,
+      totalCents: totalCents.toBigInt().toInt(),
+      paymentMethod: paymentMethod,
+      customerId: customerId,
+    );
+
     return saleId;
   }
 
@@ -148,7 +158,11 @@ class SaleRepositoryImpl implements SaleRepository {
   Future<void> postSale(int saleId) => _dao.postSale(saleId);
 
   @override
-  Future<void> voidSale(int saleId) => _dao.voidSale(saleId);
+  Future<void> voidSale(int saleId) async {
+    await _dao.voidSale(saleId);
+    // Audit: log sale void (CRITICAL)
+    _audit.logSaleVoided(saleId: saleId, reason: 'voided');
+  }
 
   @override
   Future<void> deleteSale(int saleId) async {
@@ -227,11 +241,22 @@ class SaleRepositoryImpl implements SaleRepository {
       currencyId: currencyId,
     );
 
+    // Audit: log sale return creation
+    _audit.logSaleReturnCreated(
+      returnId: returnId,
+      saleId: saleId,
+      totalCents: totalCents.toBigInt().toInt(),
+    );
+
     return returnId;
   }
 
   @override
-  Future<void> voidSaleReturn(int returnId) => _datasource.voidSaleReturn(returnId);
+  Future<void> voidSaleReturn(int returnId) async {
+    await _datasource.voidSaleReturn(returnId);
+    // Audit: log sale return void (CRITICAL)
+    _audit.logVoid(entityType: 'sale_return', entityId: returnId, reason: 'voided');
+  }
 
   // ==================== SALE PAYMENTS ====================
 

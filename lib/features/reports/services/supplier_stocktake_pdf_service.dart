@@ -110,25 +110,56 @@ class SupplierStocktakePdfService {
               ),
             pw.SizedBox(height: 8),
 
+            // Filter info
+            if (data.searchQuery.isNotEmpty || data.filterCategoryName != null) ...[  
+              pw.SizedBox(height: 4),
+              pw.Text(
+                [
+                  if (data.filterCategoryName != null) '${_t('category', lang)}: ${data.filterCategoryName}',
+                  if (data.searchQuery.isNotEmpty) '${_t('search', lang)}: ${data.searchQuery}',
+                ].join('  |  '),
+                style: pw.TextStyle(font: fonts.regular, fontSize: 9, color: PdfColors.grey700),
+              ),
+            ],
+            pw.SizedBox(height: 8),
+
             // Summary row
             pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
               children: [
                 pw.Text(
                   '${_t('total_purchased', lang)}: ${data.totalPurchasedQuantity}',
-                  style: pw.TextStyle(font: fonts.bold, fontSize: 10),
+                  style: pw.TextStyle(font: fonts.bold, fontSize: 9),
                 ),
                 pw.Text(
                   '${_t('total_sold', lang)}: ${data.totalSoldQuantity}',
-                  style: pw.TextStyle(font: fonts.bold, fontSize: 10),
+                  style: pw.TextStyle(font: fonts.bold, fontSize: 9),
                 ),
                 pw.Text(
+                  '${_t('sale_returned', lang)}: ${data.totalSaleReturnedQuantity}',
+                  style: pw.TextStyle(font: fonts.bold, fontSize: 9),
+                ),
+                pw.Text(
+                  '${_t('purchase_returned', lang)}: ${data.totalPurchaseReturnedQuantity}',
+                  style: pw.TextStyle(font: fonts.bold, fontSize: 9),
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 4),
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text(
                   '${_t('total_remaining', lang)}: ${data.totalRemainingQuantity}',
-                  style: pw.TextStyle(font: fonts.bold, fontSize: 10),
+                  style: pw.TextStyle(font: fonts.bold, fontSize: 9),
                 ),
                 pw.Text(
                   '${_t('remaining_value', lang)}: ${cs.formatCents(data.totalRemainingValueCents)}',
-                  style: pw.TextStyle(font: fonts.bold, fontSize: 10),
+                  style: pw.TextStyle(font: fonts.bold, fontSize: 9),
+                ),
+                pw.Text(
+                  '${_t('total_profit', lang)}: ${cs.formatCents(data.totalProfitCents)}',
+                  style: pw.TextStyle(font: fonts.bold, fontSize: 9, color: data.totalProfitCents >= 0 ? PdfColors.teal : PdfColors.red),
                 ),
               ],
             ),
@@ -165,6 +196,9 @@ class SupplierStocktakePdfService {
                   6: pw.Alignment.centerRight,
                   7: pw.Alignment.centerRight,
                   8: pw.Alignment.centerRight,
+                  9: pw.Alignment.centerRight,
+                  10: pw.Alignment.centerRight,
+                  11: pw.Alignment.centerRight,
                 },
                 headers: [
                   '#',
@@ -173,9 +207,12 @@ class SupplierStocktakePdfService {
                   _t('variant', lang),
                   _t('purchased', lang),
                   _t('sold', lang),
+                  _t('sale_returned', lang),
+                  _t('purchase_returned', lang),
                   _t('remaining', lang),
                   _t('unit_cost', lang),
                   _t('remaining_value', lang),
+                  _t('profit', lang),
                 ],
                 data: data.products.asMap().entries.map((entry) {
                   final idx = entry.key + 1;
@@ -187,9 +224,12 @@ class SupplierStocktakePdfService {
                     item.variantLabel.isNotEmpty ? item.variantLabel : '-',
                     '${item.purchasedQuantity}',
                     '${item.soldQuantity}',
+                    '${item.saleReturnedQuantity}',
+                    '${item.purchaseReturnedQuantity}',
                     '${item.remainingQuantity}',
                     cs.formatCents(item.costCents),
                     cs.formatCents(item.remainingValueCents),
+                    cs.formatCents(item.profitCents),
                   ];
                 }).toList(),
               ),
@@ -202,33 +242,54 @@ class SupplierStocktakePdfService {
               decoration: pw.BoxDecoration(
                 border: pw.Border.all(color: PdfColors.grey400),
               ),
-              child: pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
                   pw.Text(
                     _t('grand_total', lang),
                     style: pw.TextStyle(font: fonts.bold, fontSize: 11),
                   ),
+                  pw.SizedBox(height: 4),
                   pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                     children: [
                       pw.Text(
                         '${_t('purchased', lang)}: ${data.totalPurchasedQuantity}',
-                        style: pw.TextStyle(font: fonts.regular, fontSize: 9),
+                        style: pw.TextStyle(font: fonts.regular, fontSize: 8),
                       ),
-                      pw.SizedBox(width: 12),
                       pw.Text(
                         '${_t('sold', lang)}: ${data.totalSoldQuantity}',
-                        style: pw.TextStyle(font: fonts.regular, fontSize: 9),
+                        style: pw.TextStyle(font: fonts.regular, fontSize: 8),
                       ),
-                      pw.SizedBox(width: 12),
+                      pw.Text(
+                        '${_t('sale_returned', lang)}: ${data.totalSaleReturnedQuantity}',
+                        style: pw.TextStyle(font: fonts.regular, fontSize: 8),
+                      ),
+                      pw.Text(
+                        '${_t('purchase_returned', lang)}: ${data.totalPurchaseReturnedQuantity}',
+                        style: pw.TextStyle(font: fonts.regular, fontSize: 8),
+                      ),
+                    ],
+                  ),
+                  pw.SizedBox(height: 2),
+                  pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: [
                       pw.Text(
                         '${_t('remaining', lang)}: ${data.totalRemainingQuantity}',
                         style: pw.TextStyle(font: fonts.bold, fontSize: 9),
                       ),
-                      pw.SizedBox(width: 12),
                       pw.Text(
                         '${_t('remaining_value', lang)}: ${cs.formatCents(data.totalRemainingValueCents)}',
-                        style: pw.TextStyle(font: fonts.bold, fontSize: 10),
+                        style: pw.TextStyle(font: fonts.bold, fontSize: 9),
+                      ),
+                      pw.Text(
+                        '${_t('total_profit', lang)}: ${cs.formatCents(data.totalProfitCents)}',
+                        style: pw.TextStyle(
+                          font: fonts.bold,
+                          fontSize: 9,
+                          color: data.totalProfitCents >= 0 ? PdfColors.teal : PdfColors.red,
+                        ),
                       ),
                     ],
                   ),
@@ -278,6 +339,16 @@ class SupplierStocktakePdfService {
       'ar': 'الهاتف',
       'fr': 'Téléphone',
     },
+    'category': {
+      'en': 'Category',
+      'ar': 'التصنيف',
+      'fr': 'Catégorie',
+    },
+    'search': {
+      'en': 'Search',
+      'ar': 'بحث',
+      'fr': 'Recherche',
+    },
     'total_purchased': {
       'en': 'Total Purchased',
       'ar': 'إجمالي المشتريات',
@@ -288,6 +359,16 @@ class SupplierStocktakePdfService {
       'ar': 'إجمالي المبيعات',
       'fr': 'Total Vendu',
     },
+    'sale_returned': {
+      'en': 'Sale Ret.',
+      'ar': 'مرتجع بيع',
+      'fr': 'Ret. Vente',
+    },
+    'purchase_returned': {
+      'en': 'Purch. Ret.',
+      'ar': 'مرتجع شراء',
+      'fr': 'Ret. Achat',
+    },
     'total_remaining': {
       'en': 'Total Remaining',
       'ar': 'إجمالي المتبقي',
@@ -297,6 +378,16 @@ class SupplierStocktakePdfService {
       'en': 'Remaining Value',
       'ar': 'قيمة المتبقي',
       'fr': 'Valeur Restante',
+    },
+    'total_profit': {
+      'en': 'Total Profit',
+      'ar': 'إجمالي الأرباح',
+      'fr': 'Profit Total',
+    },
+    'profit': {
+      'en': 'Profit',
+      'ar': 'الربح',
+      'fr': 'Profit',
     },
     'total_products': {
       'en': 'Total Products',

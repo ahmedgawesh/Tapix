@@ -16,6 +16,7 @@ import '../database/daos/sale_dao.dart';
 import '../services/currency_service.dart';
 import '../services/localization_service.dart';
 import '../services/audit_log_service.dart';
+import '../services/below_cost_sale_service.dart';
 import '../services/theme_service.dart';
 import '../../features/auth/auth.dart';
 import '../../features/products/domain/repositories/product_repository.dart';
@@ -110,6 +111,7 @@ import '../../features/accounting/presentation/bloc/accounts_bloc.dart';
 import '../../features/accounting/presentation/bloc/journal_entries_bloc.dart';
 import '../../features/accounting/presentation/bloc/journal_entry_form_bloc.dart';
 import '../../features/accounting/presentation/bloc/accounting_health_bloc.dart';
+import '../../features/financial_management/presentation/bloc/accounting_periods_bloc.dart';
 import '../../features/reports/presentation/bloc/reports_bloc.dart';
 import '../../features/reports/presentation/bloc/inventory_reports_bloc.dart';
 import '../../features/reports/presentation/bloc/product_movement_detail_bloc.dart';
@@ -185,6 +187,7 @@ Future<void> init() async {
   sl.registerLazySingleton(() => LocalizationService(sl()));
   sl.registerLazySingleton(() => CurrencyService(sl()));
   sl.registerLazySingleton(() => AuditLogService(sl<AppDatabase>()));
+  sl.registerLazySingleton(() => const BelowCostSaleService());
 
   // Datasources
   sl.registerLazySingleton<ProductLocalDatasource>(
@@ -196,7 +199,7 @@ Future<void> init() async {
 
   // Feature Repositories
   sl.registerLazySingleton<ProductRepository>(
-    () => ProductRepositoryImpl(sl()),
+    () => ProductRepositoryImpl(sl(), sl<AuditLogService>()),
   );
   sl.registerLazySingleton<ProductVariantRepository>(
     () => ProductVariantRepositoryImpl(sl()),
@@ -232,7 +235,7 @@ Future<void> init() async {
     () => SaleLocalDatasourceImpl(sl<SaleDao>()),
   );
   sl.registerLazySingleton<SaleRepository>(
-    () => SaleRepositoryImpl(sl<SaleLocalDatasource>(), sl<SaleDao>(), sl<JournalEntryService>()),
+    () => SaleRepositoryImpl(sl<SaleLocalDatasource>(), sl<SaleDao>(), sl<JournalEntryService>(), sl<AuditLogService>()),
   );
 
   // Customers
@@ -326,7 +329,7 @@ Future<void> init() async {
 
   // Sales Blocs
   sl.registerFactory(() => SalesBloc(sl<SaleRepository>()));
-  sl.registerFactory(() => SaleFormBloc(sl<SaleRepository>(), sl<ProductVariantRepository>()));
+  sl.registerFactory(() => SaleFormBloc(sl<SaleRepository>(), sl<ProductVariantRepository>(), belowCostService: sl<BelowCostSaleService>()));
   sl.registerFactory(() => SaleReturnsBloc(sl<SaleRepository>()));
   sl.registerFactory(() => SaleReturnFormBloc(sl<SaleRepository>()));
 
@@ -372,6 +375,7 @@ Future<void> init() async {
 
   // Accounting Blocs
   sl.registerFactory(() => AccountsBloc(sl<JournalRepository>()));
+  sl.registerFactory(() => AccountingPeriodsBloc(sl<JournalRepository>(), sl<AppDatabase>(), sl<AuditLogService>()));
   sl.registerFactory(() => JournalEntriesBloc(sl<JournalRepository>()));
   sl.registerFactory(() => JournalEntryFormBloc(sl<JournalRepository>()));
   sl.registerFactory(() => AccountingHealthBloc(sl<JournalRepository>()));

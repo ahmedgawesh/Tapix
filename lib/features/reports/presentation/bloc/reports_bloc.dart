@@ -286,10 +286,15 @@ class ReportsBloc extends RealtimeBloc<ReportsData, ReportsEvent> {
     addItem(7, '5000', 'Cost of Goods Sold', 'Expense', netCOGS);
     addItem(8, '5100', 'Operating Expenses', 'Expense', expenseTotal);
 
-    // Equity = Assets - Liabilities (retained earnings / balancing)
-    final totalAssets = cashBalance + receivables + inventory;
-    final totalLiabilities = payables + netTaxPayable;
-    final equity = totalAssets - totalLiabilities - netRevenue + netCOGS + expenseTotal;
+    // Equity (Owner's Capital) — represents actual capital invested.
+    // In this simplified system without capital injection tracking,
+    // equity is NOT a plug number. Retained earnings (net income) is
+    // computed separately in the balance sheet as Revenue - Expenses.
+    // The balance sheet honestly checks: Assets = Liabilities + Equity + Retained Earnings.
+    //
+    // We do NOT force balance here — that would hide real discrepancies.
+    // Equity = 0 when no capital has been explicitly injected.
+    const equity = 0;
     addItem(9, '3000', 'Equity', 'Equity', equity);
 
     items.sort((a, b) => a.accountCode.compareTo(b.accountCode));

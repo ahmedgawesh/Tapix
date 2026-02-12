@@ -1,6 +1,7 @@
 import 'package:decimal/decimal.dart';
 import 'package:drift/drift.dart';
 import '../../../../core/database/app_database.dart' as db;
+import '../../../../core/services/audit_log_service.dart';
 import '../../domain/entities/product_entity.dart';
 import '../../domain/entities/price_history_entity.dart';
 import '../../domain/repositories/product_repository.dart';
@@ -11,8 +12,9 @@ export '../../domain/repositories/product_repository.dart' show BulkProductData;
 
 class ProductRepositoryImpl implements ProductRepository {
   final ProductLocalDatasource _datasource;
+  final AuditLogService _audit;
 
-  ProductRepositoryImpl(this._datasource);
+  ProductRepositoryImpl(this._datasource, this._audit);
 
   @override
   Stream<List<Product>> watchAllProducts({bool? isActive = true}) {
@@ -122,8 +124,8 @@ class ProductRepositoryImpl implements ProductRepository {
     int salesTaxRateBps = 0,
     bool isActive = true,
     bool trackInventory = true,
-  }) {
-    return _datasource.createProduct(
+  }) async {
+    final productId = await _datasource.createProduct(
       db.ProductsCompanion(
         name: Value(name),
         nameAr: Value(nameAr),
@@ -148,10 +150,18 @@ class ProductRepositoryImpl implements ProductRepository {
         trackInventory: Value(trackInventory),
       ),
     );
+
+    // Audit: log product creation
+    _audit.logProductCreated(productId: productId, productName: name);
+
+    return productId;
   }
 
   @override
   Future<bool> updateProduct(Product product) {
+    // Audit: log product update
+    _audit.logProductUpdated(productId: product.id, productName: product.name);
+
     if (product is ProductModel) {
       return _datasource.updateProduct(product);
     } else {
@@ -186,7 +196,9 @@ class ProductRepositoryImpl implements ProductRepository {
   }
 
   @override
-  Future<int> deleteProduct(int id) {
+  Future<int> deleteProduct(int id) async {
+    // Audit: log product deletion (CRITICAL)
+    _audit.logProductDeleted(productId: id, productName: 'Product #$id');
     return _datasource.deleteProduct(id);
   }
 

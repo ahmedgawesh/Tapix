@@ -94,6 +94,9 @@ import '../../features/reports/presentation/screens/salespeople_commission_repor
 import '../../features/reports/presentation/screens/expense_report_screen.dart';
 import '../../features/reports/presentation/screens/sales_tax_report_screen.dart';
 import '../../features/reports/presentation/screens/purchase_tax_report_screen.dart';
+import '../../features/financial_management/presentation/screens/financial_management_hub_screen.dart';
+import '../../features/financial_management/presentation/screens/chart_of_accounts_screen.dart';
+import '../../features/financial_management/presentation/screens/accounting_periods_screen.dart';
 import '../di/injection_container.dart';
 import 'route_permissions.dart';
 
@@ -757,6 +760,38 @@ class AppRouter {
           GoRoute(
             path: 'settings',
             builder: (context, state) => const PlaceholderScreen(title: 'Employees Settings'),
+          ),
+        ],
+      ),
+      GoRoute(
+        path: '/financial-management',
+        builder: (context, state) => const FinancialManagementHubScreen(),
+        routes: [
+          GoRoute(
+            path: 'chart-of-accounts',
+            builder: (context, state) => const ChartOfAccountsScreen(),
+          ),
+          GoRoute(
+            path: 'journal-entries',
+            builder: (context, state) => const JournalEntriesListScreen(),
+            routes: [
+              GoRoute(
+                path: 'add',
+                builder: (context, state) => const JournalEntryFormScreen(),
+              ),
+              GoRoute(
+                path: ':id',
+                builder: (context, state) {
+                  final id = int.tryParse(state.pathParameters['id'] ?? '');
+                  if (id == null) return const JournalEntriesListScreen();
+                  return JournalEntryDetailScreen(entryId: id);
+                },
+              ),
+            ],
+          ),
+          GoRoute(
+            path: 'periods',
+            builder: (context, state) => const AccountingPeriodsScreen(),
           ),
         ],
       ),

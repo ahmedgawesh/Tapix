@@ -198,6 +198,7 @@ class JournalPdfService {
     required int totalLiabilitiesAndEquity,
     required bool isBalanced,
     required DateTime asOfDate,
+    List<String> diagnosticHints = const [],
   }) async {
     final cs = sl<CurrencyService>();
     final locale = context.locale;
@@ -214,6 +215,7 @@ class JournalPdfService {
       locale: locale,
       isRtl: isRtl,
       company: company,
+      diagnosticHints: diagnosticHints,
     );
 
     await Printing.layoutPdf(
@@ -230,6 +232,7 @@ class JournalPdfService {
     required int totalLiabilitiesAndEquity,
     required bool isBalanced,
     required DateTime asOfDate,
+    List<String> diagnosticHints = const [],
   }) async {
     final cs = sl<CurrencyService>();
     final locale = context.locale;
@@ -246,6 +249,7 @@ class JournalPdfService {
       locale: locale,
       isRtl: isRtl,
       company: company,
+      diagnosticHints: diagnosticHints,
     );
 
     final bytes = await pdf.save();
@@ -681,6 +685,7 @@ class JournalPdfService {
     required Locale locale,
     required bool isRtl,
     required CompanyProfile company,
+    List<String> diagnosticHints = const [],
   }) async {
     final fonts = await _loadFonts();
     final pdf = pw.Document();
@@ -772,18 +777,73 @@ class JournalPdfService {
                 ),
               ),
 
-              if (isBalanced)
-                pw.Padding(
-                  padding: const pw.EdgeInsets.only(top: 8),
-                  child: pw.Text(
-                    'reports.balance_sheet_balanced'.tr(),
-                    style: pw.TextStyle(
-                      font: fonts.bold,
-                      fontSize: 10,
-                      color: PdfColors.green700,
+              // Balance status
+              pw.Padding(
+                padding: const pw.EdgeInsets.only(top: 8),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      isBalanced
+                          ? 'reports.balance_sheet_balanced'.tr()
+                          : 'reports.balance_sheet_unbalanced'.tr(),
+                      style: pw.TextStyle(
+                        font: fonts.bold,
+                        fontSize: 10,
+                        color: isBalanced ? PdfColors.green700 : PdfColors.red,
+                      ),
                     ),
+                    if (!isBalanced)
+                      pw.Text(
+                        'reports.balance_sheet_difference'.tr(
+                          args: [cs.formatCents((totalAssets - totalLiabilitiesAndEquity).abs())],
+                        ),
+                        style: pw.TextStyle(
+                          font: fonts.regular,
+                          fontSize: 9,
+                          color: PdfColors.red,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+
+              // Diagnostic hints (when unbalanced)
+              if (!isBalanced && diagnosticHints.isNotEmpty) ...[
+                pw.SizedBox(height: 8),
+                pw.Container(
+                  padding: const pw.EdgeInsets.all(6),
+                  decoration: pw.BoxDecoration(
+                    border: pw.Border.all(color: PdfColors.orange),
+                    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+                  ),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(
+                        'reports.diag_panel_title'.tr(),
+                        style: pw.TextStyle(font: fonts.bold, fontSize: 9, color: PdfColors.orange),
+                      ),
+                      pw.SizedBox(height: 4),
+                      ...diagnosticHints.map((hint) => pw.Padding(
+                        padding: const pw.EdgeInsets.only(bottom: 2),
+                        child: pw.Row(
+                          crossAxisAlignment: pw.CrossAxisAlignment.start,
+                          children: [
+                            pw.Text('• ', style: pw.TextStyle(font: fonts.regular, fontSize: 8)),
+                            pw.Expanded(
+                              child: pw.Text(
+                                hint,
+                                style: pw.TextStyle(font: fonts.regular, fontSize: 8),
+                              ),
+                            ),
+                          ],
+                        ),
+                      )),
+                    ],
                   ),
                 ),
+              ],
 
               pw.Spacer(),
               pw.Divider(),

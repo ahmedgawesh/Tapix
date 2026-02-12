@@ -380,6 +380,14 @@ class _FilterSection extends StatelessWidget {
         return 'audit.entity_customer'.tr();
       case 'supplier':
         return 'audit.entity_supplier'.tr();
+      case 'user':
+        return 'audit.entity_user'.tr();
+      case 'accounting_period':
+        return 'audit.entity_accounting_period'.tr();
+      case 'journal_entry':
+        return 'audit.entity_journal_entry'.tr();
+      case 'expense':
+        return 'audit.entity_expense'.tr();
       default:
         return type.replaceAll('_', ' ');
     }
@@ -400,6 +408,13 @@ class _FilterSection extends StatelessWidget {
         return Colors.purple;
       case 'supplier':
         return Colors.teal;
+      case 'user':
+        return Colors.deepPurple;
+      case 'accounting_period':
+      case 'journal_entry':
+        return Colors.indigo;
+      case 'expense':
+        return Colors.deepOrange;
       default:
         return cs.secondary;
     }
@@ -425,6 +440,14 @@ class _FilterSection extends StatelessWidget {
         return 'audit.action_price_change'.tr();
       case 'stock_adjustment':
         return 'audit.action_stock_adjustment'.tr();
+      case 'close_period':
+        return 'audit.action_close_period'.tr();
+      case 'below_cost_override':
+        return 'audit.action_below_cost_override'.tr();
+      case 'login':
+        return 'audit.action_login'.tr();
+      case 'logout':
+        return 'audit.action_logout'.tr();
       default:
         return action.replaceAll('_', ' ');
     }
@@ -449,6 +472,14 @@ class _FilterSection extends StatelessWidget {
         return Colors.purple;
       case 'stock_adjustment':
         return Colors.indigo;
+      case 'close_period':
+        return Colors.red;
+      case 'below_cost_override':
+        return Colors.deepOrange;
+      case 'login':
+        return Colors.cyan;
+      case 'logout':
+        return Colors.grey;
       default:
         return cs.secondary;
     }

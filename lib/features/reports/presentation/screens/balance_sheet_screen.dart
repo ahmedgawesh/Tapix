@@ -6,6 +6,7 @@ import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/audit_log_service.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../../accounting/domain/services/balance_sheet_diagnostic_service.dart';
 import '../../../accounting/presentation/services/journal_pdf_service.dart';
 import '../../../accounting/domain/models/trial_balance.dart';
 import '../bloc/reports_bloc.dart';
@@ -25,6 +26,58 @@ class BalanceSheetScreen extends StatelessWidget {
 
 class _BalanceSheetView extends StatelessWidget {
   const _BalanceSheetView();
+
+  /// Compute all balance sheet figures from trial balance
+  static _BalanceSheetFigures _computeFigures(TrialBalance tb) {
+    final assetItems = tb.getItemsByType('asset');
+    final liabilityItems = tb.getItemsByType('liability');
+    final equityItems = tb.getItemsByType('equity');
+    final revenueItems = tb.getItemsByType('revenue');
+    final expenseItems = tb.getItemsByType('expense');
+
+    // Assets: normal debit balance
+    final totalAssets = assetItems.fold<int>(
+        0, (sum, item) => sum + item.debitCents - item.creditCents);
+    // Liabilities: normal credit balance
+    final totalLiabilities = liabilityItems.fold<int>(
+        0, (sum, item) => sum + item.creditCents - item.debitCents);
+    // Owner's Capital: normal credit balance
+    final ownerCapital = equityItems.fold<int>(
+        0, (sum, item) => sum + item.creditCents - item.debitCents);
+    // Revenue: normal credit balance
+    final totalRevenue = revenueItems.fold<int>(
+        0, (sum, item) => sum + item.creditCents - item.debitCents);
+    // Expenses: normal debit balance
+    final totalExpenses = expenseItems.fold<int>(
+        0, (sum, item) => sum + item.debitCents - item.creditCents);
+
+    // Net Income (Retained Earnings for the period)
+    final netIncome = totalRevenue - totalExpenses;
+
+    // Total Equity = Owner's Capital + Net Income
+    final totalEquity = ownerCapital + netIncome;
+
+    // Liabilities + Equity
+    final totalLiabilitiesAndEquity = totalLiabilities + totalEquity;
+
+    // Balance check: Assets must equal Liabilities + Equity
+    final isBalanced = totalAssets == totalLiabilitiesAndEquity;
+    final difference = totalAssets - totalLiabilitiesAndEquity;
+
+    return _BalanceSheetFigures(
+      assetItems: assetItems,
+      liabilityItems: liabilityItems,
+      equityItems: equityItems,
+      totalAssets: totalAssets,
+      totalLiabilities: totalLiabilities,
+      ownerCapital: ownerCapital,
+      netIncome: netIncome,
+      totalEquity: totalEquity,
+      totalLiabilitiesAndEquity: totalLiabilitiesAndEquity,
+      isBalanced: isBalanced,
+      difference: difference,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -80,30 +133,19 @@ class _BalanceSheetView extends StatelessWidget {
           }
 
           if (state is RealtimeSuccess<ReportsData>) {
-            final tb = state.data.trialBalance;
+            final fig = _computeFigures(state.data.trialBalance);
 
-            final assetItems = tb.getItemsByType('asset');
-            final liabilityItems = tb.getItemsByType('liability');
-            final equityItems = tb.getItemsByType('equity');
-
-            final totalAssets = assetItems.fold<int>(
-                0, (sum, item) => sum + item.debitCents - item.creditCents);
-            final totalLiabilities = liabilityItems.fold<int>(
-                0, (sum, item) => sum + item.creditCents - item.debitCents);
-            final totalEquity = equityItems.fold<int>(
-                0, (sum, item) => sum + item.creditCents - item.debitCents);
-
-            final revenueItems = tb.getItemsByType('revenue');
-            final expenseItems = tb.getItemsByType('expense');
-            final totalRevenue = revenueItems.fold<int>(
-                0, (sum, item) => sum + item.creditCents - item.debitCents);
-            final totalExpenses = expenseItems.fold<int>(
-                0, (sum, item) => sum + item.debitCents - item.creditCents);
-            final retainedEarnings = totalRevenue - totalExpenses;
-
-            final totalLiabilitiesAndEquity =
-                totalLiabilities + totalEquity + retainedEarnings;
-            final isBalanced = totalAssets == totalLiabilitiesAndEquity;
+            // Run diagnostics
+            const diagService = BalanceSheetDiagnosticService();
+            final diagResult = diagService.analyze(
+              totalAssets: fig.totalAssets,
+              totalLiabilities: fig.totalLiabilities,
+              ownerCapital: fig.ownerCapital,
+              netIncome: fig.netIncome,
+              totalEquity: fig.totalEquity,
+              differenceCents: fig.difference,
+              hasOpenPeriod: true, // simplified — always true for now
+            );
 
             return ListView(
               padding: const EdgeInsets.all(16),
@@ -117,8 +159,9 @@ class _BalanceSheetView extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
 
+                // Balance status banner
                 Card(
-                  color: isBalanced
+                  color: fig.isBalanced
                       ? colorScheme.primaryContainer
                       : colorScheme.errorContainer,
                   child: Padding(
@@ -126,50 +169,86 @@ class _BalanceSheetView extends StatelessWidget {
                     child: Row(
                       children: [
                         Icon(
-                          isBalanced ? Icons.check_circle : Icons.warning,
-                          color: isBalanced ? colorScheme.primary : colorScheme.error,
+                          fig.isBalanced ? Icons.check_circle : Icons.warning,
+                          color: fig.isBalanced ? colorScheme.primary : colorScheme.error,
                         ),
                         const SizedBox(width: 12),
-                        Text(
-                          isBalanced
-                              ? 'reports.balance_sheet_balanced'.tr()
-                              : 'reports.balance_sheet_unbalanced'.tr(),
-                          style: theme.textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.bold,
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                fig.isBalanced
+                                    ? 'reports.balance_sheet_balanced'.tr()
+                                    : 'reports.balance_sheet_unbalanced'.tr(),
+                                style: theme.textTheme.titleSmall?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              if (!fig.isBalanced) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  'reports.balance_sheet_difference'.tr(
+                                    args: [cs.formatCents(fig.difference.abs())],
+                                  ),
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: colorScheme.error,
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
                         ),
                       ],
                     ),
                   ),
                 ),
+
+                // ═══ DIAGNOSTIC PANEL (when unbalanced) ═══
+                if (!fig.isBalanced && diagResult.diagnostics.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  _DiagnosticPanel(
+                    diagnostics: diagResult.diagnostics,
+                    differenceCents: fig.difference,
+                    cs: cs,
+                  ),
+                ],
                 const SizedBox(height: 16),
 
+                // ═══ ASSETS ═══
                 _BalanceSection(
                   title: 'reports.assets'.tr(),
-                  items: assetItems, total: totalAssets,
-                  cs: cs, color: colorScheme.primary,
+                  items: fig.assetItems,
+                  total: fig.totalAssets,
+                  cs: cs,
+                  color: colorScheme.primary,
+                  isDebitNatural: true,
                 ),
                 const SizedBox(height: 16),
 
+                // ═══ LIABILITIES ═══
                 _BalanceSection(
                   title: 'reports.liabilities'.tr(),
-                  items: liabilityItems, total: totalLiabilities,
-                  cs: cs, color: colorScheme.error,
+                  items: fig.liabilityItems,
+                  total: fig.totalLiabilities,
+                  cs: cs,
+                  color: colorScheme.error,
+                  isDebitNatural: false,
                 ),
                 const SizedBox(height: 16),
 
-                _BalanceSection(
-                  title: 'reports.equity'.tr(),
-                  items: equityItems, total: totalEquity,
-                  cs: cs, color: colorScheme.tertiary,
-                  extraItems: retainedEarnings != 0
-                      ? [_ExtraLineItem(
-                          name: 'reports.retained_earnings'.tr(),
-                          amount: cs.formatCents(retainedEarnings))]
-                      : null,
+                // ═══ EQUITY ═══
+                _EquitySection(
+                  equityItems: fig.equityItems,
+                  ownerCapital: fig.ownerCapital,
+                  netIncome: fig.netIncome,
+                  totalEquity: fig.totalEquity,
+                  cs: cs,
+                  color: colorScheme.tertiary,
                 ),
                 const SizedBox(height: 16),
 
+                // ═══ SUMMARY ═══
                 Card(
                   child: Padding(
                     padding: const EdgeInsets.all(16),
@@ -177,24 +256,34 @@ class _BalanceSheetView extends StatelessWidget {
                       children: [
                         _SummaryRow(
                           label: 'reports.total_assets'.tr(),
-                          value: cs.formatCents(totalAssets),
+                          value: cs.formatCents(fig.totalAssets),
+                          isBold: true,
                         ),
-                        const Divider(),
+                        const Divider(height: 16),
                         _SummaryRow(
                           label: 'reports.total_liabilities'.tr(),
-                          value: cs.formatCents(totalLiabilities),
+                          value: cs.formatCents(fig.totalLiabilities),
                         ),
                         const SizedBox(height: 4),
                         _SummaryRow(
                           label: 'reports.total_equity'.tr(),
-                          value: cs.formatCents(totalEquity + retainedEarnings),
+                          value: cs.formatCents(fig.totalEquity),
                         ),
-                        const Divider(),
+                        const Divider(height: 16),
                         _SummaryRow(
                           label: 'reports.total_liabilities_equity'.tr(),
-                          value: cs.formatCents(totalLiabilitiesAndEquity),
+                          value: cs.formatCents(fig.totalLiabilitiesAndEquity),
                           isBold: true,
                         ),
+                        if (!fig.isBalanced) ...[
+                          const Divider(height: 16),
+                          _SummaryRow(
+                            label: 'reports.balance_sheet_difference_label'.tr(),
+                            value: cs.formatCents(fig.difference),
+                            isBold: true,
+                            isError: true,
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -210,20 +299,19 @@ class _BalanceSheetView extends StatelessWidget {
   }
 
   Future<void> _printReport(BuildContext context, ReportsData data) async {
-    final tb = data.trialBalance;
+    final fig = _computeFigures(data.trialBalance);
     final cs = sl<CurrencyService>();
-    final bsSections = _buildBsSections(tb, cs);
-    final totalAssets = tb.getItemsByType('asset').fold<int>(
-        0, (sum, item) => sum + item.debitCents - item.creditCents);
-    final totalLE = _totalLiabilitiesAndEquity(tb);
+    final bsSections = _buildBsSections(data.trialBalance, cs, fig);
+    final hints = _buildDiagnosticHints(fig);
 
     await JournalPdfService.printBalanceSheet(
       context: context,
       sections: bsSections,
-      totalAssets: totalAssets,
-      totalLiabilitiesAndEquity: totalLE,
-      isBalanced: totalAssets == totalLE,
-      asOfDate: tb.asOfDate,
+      totalAssets: fig.totalAssets,
+      totalLiabilitiesAndEquity: fig.totalLiabilitiesAndEquity,
+      isBalanced: fig.isBalanced,
+      asOfDate: data.trialBalance.asOfDate,
+      diagnosticHints: hints,
     );
     sl<AuditLogService>().log(
       entityType: 'report', entityId: 0, action: 'print_balance_sheet',
@@ -231,74 +319,246 @@ class _BalanceSheetView extends StatelessWidget {
   }
 
   Future<void> _shareReport(BuildContext context, ReportsData data) async {
-    final tb = data.trialBalance;
+    final fig = _computeFigures(data.trialBalance);
     final cs = sl<CurrencyService>();
-    final bsSections = _buildBsSections(tb, cs);
-    final totalAssets = tb.getItemsByType('asset').fold<int>(
-        0, (sum, item) => sum + item.debitCents - item.creditCents);
-    final totalLE = _totalLiabilitiesAndEquity(tb);
+    final bsSections = _buildBsSections(data.trialBalance, cs, fig);
+    final hints = _buildDiagnosticHints(fig);
 
     await JournalPdfService.shareBalanceSheet(
       context: context,
       sections: bsSections,
-      totalAssets: totalAssets,
-      totalLiabilitiesAndEquity: totalLE,
-      isBalanced: totalAssets == totalLE,
-      asOfDate: tb.asOfDate,
+      totalAssets: fig.totalAssets,
+      totalLiabilitiesAndEquity: fig.totalLiabilitiesAndEquity,
+      isBalanced: fig.isBalanced,
+      asOfDate: data.trialBalance.asOfDate,
+      diagnosticHints: hints,
     );
     sl<AuditLogService>().log(
       entityType: 'report', entityId: 0, action: 'share_balance_sheet',
     );
   }
 
-  int _totalLiabilitiesAndEquity(TrialBalance tb) {
-    final totalLiabilities = tb.getItemsByType('liability').fold<int>(
-        0, (sum, item) => sum + item.creditCents - item.debitCents);
-    final totalEquity = tb.getItemsByType('equity').fold<int>(
-        0, (sum, item) => sum + item.creditCents - item.debitCents);
-    final totalRevenue = tb.getItemsByType('revenue').fold<int>(
-        0, (sum, item) => sum + item.creditCents - item.debitCents);
-    final totalExpenses = tb.getItemsByType('expense').fold<int>(
-        0, (sum, item) => sum + item.debitCents - item.creditCents);
-    return totalLiabilities + totalEquity + (totalRevenue - totalExpenses);
+  List<String> _buildDiagnosticHints(_BalanceSheetFigures fig) {
+    if (fig.isBalanced) return [];
+    const diagService = BalanceSheetDiagnosticService();
+    final result = diagService.analyze(
+      totalAssets: fig.totalAssets,
+      totalLiabilities: fig.totalLiabilities,
+      ownerCapital: fig.ownerCapital,
+      netIncome: fig.netIncome,
+      totalEquity: fig.totalEquity,
+      differenceCents: fig.difference,
+      hasOpenPeriod: true,
+    );
+    return result.diagnostics
+        .map((d) => '${d.hintTitleKey.tr()}: ${d.hintDescriptionKey.tr()}')
+        .toList();
   }
 
-  List<BalanceSheetSection> _buildBsSections(TrialBalance tb, CurrencyService cs) {
-    List<BalanceSheetLineItem> toLineItems(List<TrialBalanceItem> items) {
+  List<BalanceSheetSection> _buildBsSections(
+      TrialBalance tb, CurrencyService cs, _BalanceSheetFigures fig) {
+    List<BalanceSheetLineItem> toAssetLineItems(List<TrialBalanceItem> items) {
       return items
           .where((i) => i.debitCents > 0 || i.creditCents > 0)
           .map((i) => BalanceSheetLineItem(
                 code: i.accountCode,
                 name: i.accountName,
-                amountCents: (i.debitCents - i.creditCents).abs(),
+                amountCents: i.debitCents - i.creditCents,
               ))
           .toList();
     }
 
-    final assetItems = tb.getItemsByType('asset');
-    final liabilityItems = tb.getItemsByType('liability');
-    final equityItems = tb.getItemsByType('equity');
+    List<BalanceSheetLineItem> toCreditLineItems(List<TrialBalanceItem> items) {
+      return items
+          .where((i) => i.debitCents > 0 || i.creditCents > 0)
+          .map((i) => BalanceSheetLineItem(
+                code: i.accountCode,
+                name: i.accountName,
+                amountCents: i.creditCents - i.debitCents,
+              ))
+          .toList();
+    }
+
+    // Build equity items including retained earnings
+    final equityLineItems = toCreditLineItems(fig.equityItems);
+    if (fig.netIncome != 0) {
+      equityLineItems.add(BalanceSheetLineItem(
+        code: '',
+        name: 'reports.net_income'.tr(),
+        amountCents: fig.netIncome,
+      ));
+    }
 
     return [
       BalanceSheetSection(
         title: 'reports.assets'.tr(),
-        items: toLineItems(assetItems),
-        totalCents: assetItems.fold<int>(
-            0, (sum, item) => sum + item.debitCents - item.creditCents),
+        items: toAssetLineItems(fig.assetItems),
+        totalCents: fig.totalAssets,
       ),
       BalanceSheetSection(
         title: 'reports.liabilities'.tr(),
-        items: toLineItems(liabilityItems),
-        totalCents: liabilityItems.fold<int>(
-            0, (sum, item) => sum + item.creditCents - item.debitCents),
+        items: toCreditLineItems(fig.liabilityItems),
+        totalCents: fig.totalLiabilities,
       ),
       BalanceSheetSection(
         title: 'reports.equity'.tr(),
-        items: toLineItems(equityItems),
-        totalCents: equityItems.fold<int>(
-            0, (sum, item) => sum + item.creditCents - item.debitCents),
+        items: equityLineItems,
+        totalCents: fig.totalEquity,
       ),
     ];
+  }
+}
+
+/// Holds all computed balance sheet figures
+class _BalanceSheetFigures {
+  final List<TrialBalanceItem> assetItems;
+  final List<TrialBalanceItem> liabilityItems;
+  final List<TrialBalanceItem> equityItems;
+  final int totalAssets;
+  final int totalLiabilities;
+  final int ownerCapital;
+  final int netIncome;
+  final int totalEquity;
+  final int totalLiabilitiesAndEquity;
+  final bool isBalanced;
+  final int difference;
+
+  const _BalanceSheetFigures({
+    required this.assetItems,
+    required this.liabilityItems,
+    required this.equityItems,
+    required this.totalAssets,
+    required this.totalLiabilities,
+    required this.ownerCapital,
+    required this.netIncome,
+    required this.totalEquity,
+    required this.totalLiabilitiesAndEquity,
+    required this.isBalanced,
+    required this.difference,
+  });
+}
+
+/// Diagnostic panel showing intelligent hints about balance sheet imbalance
+class _DiagnosticPanel extends StatelessWidget {
+  final List<BalanceSheetDiagnostic> diagnostics;
+  final int differenceCents;
+  final CurrencyService cs;
+
+  const _DiagnosticPanel({
+    required this.diagnostics,
+    required this.differenceCents,
+    required this.cs,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Card(
+      color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(LucideIcons.lightbulb, size: 18, color: colorScheme.tertiary),
+                const SizedBox(width: 8),
+                Text(
+                  'reports.diag_panel_title'.tr(),
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.tertiary,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            ...diagnostics.map((diag) => _DiagnosticTile(diagnostic: diag)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DiagnosticTile extends StatelessWidget {
+  final BalanceSheetDiagnostic diagnostic;
+
+  const _DiagnosticTile({required this.diagnostic});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    final Color iconColor;
+    final IconData iconData;
+    switch (diagnostic.severity) {
+      case DiagnosticSeverity.error:
+        iconColor = colorScheme.error;
+        iconData = LucideIcons.alertCircle;
+        break;
+      case DiagnosticSeverity.warning:
+        iconColor = Colors.orange;
+        iconData = LucideIcons.alertTriangle;
+        break;
+      case DiagnosticSeverity.info:
+        iconColor = colorScheme.primary;
+        iconData = LucideIcons.info;
+        break;
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(iconData, size: 16, color: iconColor),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  diagnostic.hintTitleKey.tr(),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: iconColor,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  diagnostic.hintDescriptionKey.tr(),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Icon(LucideIcons.wrench, size: 12, color: colorScheme.tertiary),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        diagnostic.suggestedActionKey.tr(),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontWeight: FontWeight.w500,
+                          color: colorScheme.tertiary,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -308,7 +568,7 @@ class _BalanceSection extends StatelessWidget {
   final int total;
   final CurrencyService cs;
   final Color color;
-  final List<_ExtraLineItem>? extraItems;
+  final bool isDebitNatural;
 
   const _BalanceSection({
     required this.title,
@@ -316,7 +576,7 @@ class _BalanceSection extends StatelessWidget {
     required this.total,
     required this.cs,
     required this.color,
-    this.extraItems,
+    required this.isDebitNatural,
   });
 
   @override
@@ -349,7 +609,10 @@ class _BalanceSection extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         ...nonZero.map((item) {
-          final net = item.debitCents - item.creditCents;
+          // Show amount in its natural balance direction
+          final amount = isDebitNatural
+              ? item.debitCents - item.creditCents
+              : item.creditCents - item.debitCents;
           return Padding(
             padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
             child: Row(
@@ -364,44 +627,122 @@ class _BalanceSection extends StatelessWidget {
                 const SizedBox(width: 12),
                 Expanded(child: Text(item.accountName)),
                 Text(
-                  cs.formatCents(net.abs()),
-                  style: const TextStyle(fontWeight: FontWeight.w500),
+                  cs.formatCents(amount),
+                  style: TextStyle(
+                    fontWeight: FontWeight.w500,
+                    color: amount < 0 ? theme.colorScheme.error : null,
+                  ),
                 ),
               ],
             ),
           );
         }),
-        if (extraItems != null) ...extraItems!,
       ],
     );
   }
 }
 
-class _ExtraLineItem extends StatelessWidget {
-  final String name;
-  final String amount;
+/// Equity section with Owner's Capital + Net Income (Retained Earnings)
+class _EquitySection extends StatelessWidget {
+  final List<TrialBalanceItem> equityItems;
+  final int ownerCapital;
+  final int netIncome;
+  final int totalEquity;
+  final CurrencyService cs;
+  final Color color;
 
-  const _ExtraLineItem({required this.name, required this.amount});
+  const _EquitySection({
+    required this.equityItems,
+    required this.ownerCapital,
+    required this.netIncome,
+    required this.totalEquity,
+    required this.cs,
+    required this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-      child: Row(
-        children: [
-          const SizedBox(width: 60),
-          Expanded(
-            child: Text(
-              name,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                fontStyle: FontStyle.italic,
+    final nonZero = equityItems
+        .where((i) => i.debitCents > 0 || i.creditCents > 0)
+        .toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'reports.equity'.tr(),
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: color,
               ),
             ),
+            Text(
+              cs.formatCents(totalEquity),
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        // Owner's Capital accounts
+        ...nonZero.map((item) {
+          final amount = item.creditCents - item.debitCents;
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+            child: Row(
+              children: [
+                Text(
+                  item.accountCode,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontFamily: 'monospace',
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(child: Text(item.accountName)),
+                Text(
+                  cs.formatCents(amount),
+                  style: TextStyle(
+                    fontWeight: FontWeight.w500,
+                    color: amount < 0 ? theme.colorScheme.error : null,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }),
+        // Net Income / Retained Earnings line
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+          child: Row(
+            children: [
+              const SizedBox(width: 60),
+              Expanded(
+                child: Text(
+                  'reports.net_income'.tr(),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontStyle: FontStyle.italic,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+              Text(
+                cs.formatCents(netIncome),
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: netIncome >= 0 ? Colors.teal : theme.colorScheme.error,
+                ),
+              ),
+            ],
           ),
-          Text(amount, style: const TextStyle(fontWeight: FontWeight.w500)),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -410,20 +751,26 @@ class _SummaryRow extends StatelessWidget {
   final String label;
   final String value;
   final bool isBold;
+  final bool isError;
 
   const _SummaryRow({
     required this.label,
     required this.value,
     this.isBold = false,
+    this.isError = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    final style = isBold
+    final baseStyle = isBold
         ? Theme.of(context).textTheme.titleMedium?.copyWith(
               fontWeight: FontWeight.bold,
             )
         : Theme.of(context).textTheme.bodyLarge;
+
+    final style = isError
+        ? baseStyle?.copyWith(color: Theme.of(context).colorScheme.error)
+        : baseStyle;
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
