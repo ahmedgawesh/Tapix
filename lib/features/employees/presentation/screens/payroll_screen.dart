@@ -820,7 +820,9 @@ class _PeriodSelectorDialogState extends State<_PeriodSelectorDialog> {
 
     return AlertDialog(
       title: Text('employees.select_period'.tr()),
-      content: Column(
+      content: SizedBox(
+        width: 300,
+        child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           // Year Selector
@@ -899,6 +901,7 @@ class _PeriodSelectorDialogState extends State<_PeriodSelectorDialog> {
             },
           ),
         ],
+      ),
       ),
       actions: [
         TextButton(
