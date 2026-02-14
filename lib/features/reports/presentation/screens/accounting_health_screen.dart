@@ -20,6 +20,7 @@ class AccountingHealthScreen extends StatelessWidget {
   }
 }
 
+
 class _AccountingHealthView extends StatelessWidget {
   const _AccountingHealthView();
 
@@ -179,6 +180,7 @@ class _AccountingHealthView extends StatelessWidget {
     return DateFormat.yMMMd().add_jm().format(ts);
   }
 }
+
 
 class _CheckCard extends StatelessWidget {
   final String title;

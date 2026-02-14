@@ -293,6 +293,27 @@ class MockProductVariantRepository extends _i1.Mock
           as _i3.Future<int>);
 
   @override
+  _i3.Future<void> adjustStock({
+    required int? variantId,
+    required int? quantityDelta,
+    required String? reason,
+    required int? currencyId,
+    int? userId,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(#adjustStock, [], {
+              #variantId: variantId,
+              #quantityDelta: quantityDelta,
+              #reason: reason,
+              #currencyId: currencyId,
+              #userId: userId,
+            }),
+            returnValue: _i3.Future<void>.value(),
+            returnValueForMissingStub: _i3.Future<void>.value(),
+          )
+          as _i3.Future<void>);
+
+  @override
   _i3.Future<bool> isSkuTaken(String? sku, {int? excludeVariantId}) =>
       (super.noSuchMethod(
             Invocation.method(

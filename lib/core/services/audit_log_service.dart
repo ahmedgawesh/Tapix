@@ -1,5 +1,8 @@
+import 'dart:developer' as developer;
+
 import 'package:drift/drift.dart';
 import '../database/app_database.dart';
+import '../../features/auth/data/services/session_service.dart';
 
 /// Severity levels for audit events.
 /// critical = immutable, cannot be ignored (e.g. void, period close, permission change)
@@ -12,8 +15,85 @@ enum AuditSeverity { normal, critical }
 /// ALL changes to financial data MUST be logged.
 class AuditLogService {
   final AppDatabase _db;
+  final SessionService? _sessionService;
 
-  AuditLogService(this._db);
+  AuditLogService(this._db, [this._sessionService]);
+
+  /// Cached current user info (id + username) resolved from the DB.
+  /// This avoids depending on FlutterSecureStorage which can be unreliable.
+  int? _cachedUserId;
+  String? _cachedUsername;
+
+  /// Resolve the current user (id + username) using a multi-tier strategy:
+  /// 1. Use explicit userId if provided by the caller.
+  /// 2. Try SessionService (in-memory cache → FlutterSecureStorage).
+  /// 3. Fallback: query the DB for the most recently logged-in active user.
+  ///
+  /// Returns a record with (userId, username).
+  Future<({int? id, String? name})> _resolveUser(int? explicit) async {
+    // Tier 1: explicit userId
+    if (explicit != null) {
+      // Look up the username for the explicit userId
+      if (_cachedUserId == explicit && _cachedUsername != null) {
+        return (id: explicit, name: _cachedUsername);
+      }
+      try {
+        final u = await (_db.select(_db.users)..where((t) => t.id.equals(explicit))).getSingleOrNull();
+        if (u != null) {
+          _cachedUserId = u.id;
+          _cachedUsername = u.username;
+          return (id: u.id, name: u.username);
+        }
+      } catch (_) {}
+      return (id: explicit, name: null);
+    }
+
+    // Tier 2: SessionService
+    final fromSession = await _sessionService?.getCurrentUserId();
+    if (fromSession != null) {
+      if (_cachedUserId == fromSession && _cachedUsername != null) {
+        return (id: fromSession, name: _cachedUsername);
+      }
+      try {
+        final u = await (_db.select(_db.users)..where((t) => t.id.equals(fromSession))).getSingleOrNull();
+        if (u != null) {
+          _cachedUserId = u.id;
+          _cachedUsername = u.username;
+          return (id: u.id, name: u.username);
+        }
+      } catch (_) {}
+      return (id: fromSession, name: null);
+    }
+
+    // Tier 3: in-memory cache from previous resolution
+    if (_cachedUserId != null) {
+      return (id: _cachedUserId, name: _cachedUsername);
+    }
+
+    // Tier 4: DB fallback — most recently logged-in active user
+    try {
+      final query = _db.select(_db.users)
+        ..where((u) => u.isActive.equals(1))
+        ..where((u) => u.lastLoginAt.isNotNull())
+        ..orderBy([(u) => OrderingTerm(expression: u.lastLoginAt, mode: OrderingMode.desc)])
+        ..limit(1);
+      final user = await query.getSingleOrNull();
+      if (user != null) {
+        _cachedUserId = user.id;
+        _cachedUsername = user.username;
+        developer.log(
+          'AuditLogService: DB fallback resolved user=${user.id} (${user.username})',
+          name: 'AuditLogService',
+        );
+        return (id: user.id, name: user.username);
+      }
+    } catch (e) {
+      developer.log('AuditLogService: DB fallback failed: $e', name: 'AuditLogService');
+    }
+
+    developer.log('AuditLogService: ALL tiers returned null', name: 'AuditLogService');
+    return (id: null, name: null);
+  }
 
   /// Log a general action
   Future<int> log({
@@ -26,6 +106,9 @@ class AuditLogService {
     String? userRole,
     AuditSeverity severity = AuditSeverity.normal,
   }) async {
+    final user = await _resolveUser(userId);
+    // ignore: avoid_print
+    print('[AuditLog] action=$action entity=$entityType userId=${user.id} userName=${user.name}');
     return await _db.into(_db.auditLogs).insert(
       AuditLogsCompanion.insert(
         targetTable: entityType,
@@ -37,8 +120,9 @@ class AuditLogService {
           'old': oldValue,
           'new': newValue,
           'timestamp': DateTime.now().toIso8601String(),
+          if (user.name != null) 'performedBy': user.name,
         },
-        userId: userId == null ? const Value.absent() : Value(userId),
+        userId: user.id == null ? const Value.absent() : Value(user.id!),
       ),
     );
   }
@@ -51,13 +135,15 @@ class AuditLogService {
     int? userId,
     String? userRole,
   }) async {
+    final user = await _resolveUser(userId);
+
     // Log to void_logs table
     await _db.into(_db.voidLogs).insert(
       VoidLogsCompanion.insert(
         targetTable: entityType,
         recordId: entityId,
         reason: reason,
-        voidedBy: userId == null ? const Value.absent() : Value(userId),
+        voidedBy: user.id == null ? const Value.absent() : Value(user.id!),
       ),
     );
 
@@ -67,7 +153,7 @@ class AuditLogService {
       entityId: entityId,
       action: 'void',
       newValue: {'reason': reason},
-      userId: userId,
+      userId: user.id,
       userRole: userRole,
       severity: AuditSeverity.critical,
     );
@@ -513,15 +599,15 @@ class AuditLogService {
 
   /// Log below-cost sale override (CRITICAL)
   Future<int> logBelowCostOverride({
-    required int saleId,
+    int saleId = 0,
     required int productId,
     required String productName,
     required int costCents,
     required int sellingPriceCents,
     required int lossCents,
     required String reason,
-    required int userId,
-    required String userRole,
+    int? userId,
+    String? userRole,
   }) {
     return log(
       entityType: 'sale',

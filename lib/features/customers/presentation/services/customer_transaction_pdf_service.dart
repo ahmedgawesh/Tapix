@@ -10,14 +10,16 @@ import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../../settings/data/services/company_profile_service.dart';
 import '../../../settings/domain/entities/company_profile.dart';
-import '../../domain/repositories/supplier_repository.dart';
+import '../../domain/repositories/customer_repository.dart';
 
-class SupplierTransactionPdfService {
-  /// Print a supplier transaction receipt
+class CustomerTransactionPdfService {
+  /// Print a customer transaction receipt
   static Future<void> printReceipt({
     required BuildContext context,
-    required SupplierTransaction transaction,
-    required String supplierName,
+    required CustomerTransaction transaction,
+    required String customerName,
+    String? customerPhone,
+    String? customerAddress,
   }) async {
     final cs = sl<CurrencyService>();
     final locale = context.locale;
@@ -26,7 +28,9 @@ class SupplierTransactionPdfService {
 
     final pdf = await _buildReceipt(
       transaction: transaction,
-      supplierName: supplierName,
+      customerName: customerName,
+      customerPhone: customerPhone,
+      customerAddress: customerAddress,
       cs: cs,
       locale: locale,
       isRtl: isRtl,
@@ -39,11 +43,13 @@ class SupplierTransactionPdfService {
     );
   }
 
-  /// Share a supplier transaction receipt as PDF
+  /// Share a customer transaction receipt as PDF
   static Future<void> shareReceipt({
     required BuildContext context,
-    required SupplierTransaction transaction,
-    required String supplierName,
+    required CustomerTransaction transaction,
+    required String customerName,
+    String? customerPhone,
+    String? customerAddress,
   }) async {
     final cs = sl<CurrencyService>();
     final locale = context.locale;
@@ -52,7 +58,9 @@ class SupplierTransactionPdfService {
 
     final pdf = await _buildReceipt(
       transaction: transaction,
-      supplierName: supplierName,
+      customerName: customerName,
+      customerPhone: customerPhone,
+      customerAddress: customerAddress,
       cs: cs,
       locale: locale,
       isRtl: isRtl,
@@ -70,18 +78,22 @@ class SupplierTransactionPdfService {
   static Future<void> printReceiptById({
     required BuildContext context,
     required int transactionId,
-    required String supplierName,
+    required String customerName,
+    String? customerPhone,
+    String? customerAddress,
   }) async {
     final cs = sl<CurrencyService>();
     final locale = context.locale;
     final isRtl = locale.languageCode == 'ar';
     final company = await sl<CompanyProfileService>().getProfile();
-    final tx = await sl<SupplierRepository>().getTransaction(transactionId);
+    final tx = await sl<CustomerRepository>().getTransaction(transactionId);
     if (tx == null) return;
 
     final pdf = await _buildReceipt(
       transaction: tx,
-      supplierName: supplierName,
+      customerName: customerName,
+      customerPhone: customerPhone,
+      customerAddress: customerAddress,
       cs: cs,
       locale: locale,
       isRtl: isRtl,
@@ -98,18 +110,22 @@ class SupplierTransactionPdfService {
   static Future<void> shareReceiptById({
     required BuildContext context,
     required int transactionId,
-    required String supplierName,
+    required String customerName,
+    String? customerPhone,
+    String? customerAddress,
   }) async {
     final cs = sl<CurrencyService>();
     final locale = context.locale;
     final isRtl = locale.languageCode == 'ar';
     final company = await sl<CompanyProfileService>().getProfile();
-    final tx = await sl<SupplierRepository>().getTransaction(transactionId);
+    final tx = await sl<CustomerRepository>().getTransaction(transactionId);
     if (tx == null) return;
 
     final pdf = await _buildReceipt(
       transaction: tx,
-      supplierName: supplierName,
+      customerName: customerName,
+      customerPhone: customerPhone,
+      customerAddress: customerAddress,
       cs: cs,
       locale: locale,
       isRtl: isRtl,
@@ -128,8 +144,10 @@ class SupplierTransactionPdfService {
   // ═══════════════════════════════════════════════════════
 
   static Future<pw.Document> _buildReceipt({
-    required SupplierTransaction transaction,
-    required String supplierName,
+    required CustomerTransaction transaction,
+    required String customerName,
+    String? customerPhone,
+    String? customerAddress,
     required CurrencyService cs,
     required Locale locale,
     required bool isRtl,
@@ -145,13 +163,13 @@ class SupplierTransactionPdfService {
     final String title;
     final PdfColor headerColor;
     if (isPayment) {
-      title = 'suppliers.payment_receipt'.tr();
+      title = 'customers.payment_receipt'.tr();
       headerColor = PdfColors.blue800;
     } else if (isDiscount) {
-      title = 'suppliers.discount_receipt'.tr();
+      title = 'customers.discount_receipt'.tr();
       headerColor = PdfColors.purple800;
     } else {
-      title = 'suppliers.receipt_type'.tr();
+      title = 'customers.receipt_type'.tr();
       headerColor = PdfColors.grey800;
     }
 
@@ -163,7 +181,7 @@ class SupplierTransactionPdfService {
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.stretch,
             children: [
-              // Header
+              // Header with company info
               _buildHeader(
                 company: company,
                 title: title,
@@ -171,7 +189,16 @@ class SupplierTransactionPdfService {
                 isRtl: isRtl,
                 headerColor: headerColor,
               ),
-              pw.SizedBox(height: 24),
+              pw.SizedBox(height: 20),
+
+              // Customer info box
+              _buildCustomerInfo(
+                customerName: customerName,
+                customerPhone: customerPhone,
+                customerAddress: customerAddress,
+                fonts: fonts,
+              ),
+              pw.SizedBox(height: 20),
 
               // Receipt info box
               pw.Container(
@@ -184,38 +211,38 @@ class SupplierTransactionPdfService {
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
                     _pdfInfoRow(
-                      'suppliers.receipt_number'.tr(),
+                      'customers.receipt_number'.tr(),
                       transaction.transactionNumber ?? 'TXN-${transaction.id}',
                       fonts.bold,
                     ),
                     pw.Divider(color: PdfColors.grey200),
                     _pdfInfoRow(
-                      'suppliers.receipt_date'.tr(),
+                      'customers.receipt_date'.tr(),
                       DateFormat.yMMMd(locale.toString())
                           .add_jm()
                           .format(transaction.transactionDate),
                       fonts.regular,
                     ),
                     _pdfInfoRow(
-                      'suppliers.receipt_supplier'.tr(),
-                      supplierName,
+                      'customers.receipt_customer'.tr(),
+                      customerName,
                       fonts.regular,
                     ),
                     _pdfInfoRow(
-                      'suppliers.receipt_type'.tr(),
+                      'customers.receipt_type'.tr(),
                       _localizedTransactionType(transaction.transactionType),
                       fonts.regular,
                     ),
                     if (isDiscount && transaction.discountType != null)
                       _pdfInfoRow(
-                        'suppliers.receipt_discount_type'.tr(),
+                        'customers.receipt_discount_type'.tr(),
                         _localizedDiscountType(transaction.discountType!),
                         fonts.regular,
                       ),
                     if (transaction.description != null &&
                         transaction.description!.isNotEmpty)
                       _pdfInfoRow(
-                        'suppliers.receipt_description'.tr(),
+                        'customers.receipt_description'.tr(),
                         transaction.description!,
                         fonts.regular,
                       ),
@@ -247,7 +274,7 @@ class SupplierTransactionPdfService {
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
                     _bidiText(
-                      'suppliers.receipt_amount'.tr(),
+                      'customers.receipt_amount'.tr(),
                       fonts.bold,
                       fontSize: 14,
                     ),
@@ -286,15 +313,15 @@ class SupplierTransactionPdfService {
   static String _localizedTransactionType(String type) {
     switch (type) {
       case 'payment':
-        return 'suppliers.transaction_payment'.tr();
+        return 'customers.transaction_payment'.tr();
       case 'discount':
-        return 'suppliers.transaction_discount'.tr();
-      case 'purchase':
-        return 'suppliers.transaction_purchase'.tr();
+        return 'customers.transaction_discount'.tr();
+      case 'sale':
+        return 'customers.transaction_sale'.tr();
       case 'return':
-        return 'suppliers.transaction_return'.tr();
+        return 'customers.transaction_return'.tr();
       case 'adjustment':
-        return 'suppliers.transaction_adjustment'.tr();
+        return 'customers.transaction_adjustment'.tr();
       default:
         return type;
     }
@@ -303,17 +330,17 @@ class SupplierTransactionPdfService {
   static String _localizedDiscountType(String type) {
     switch (type) {
       case 'seasonal':
-        return 'suppliers.discount_type_seasonal'.tr();
+        return 'customers.discount_type_seasonal'.tr();
       case 'volume':
-        return 'suppliers.discount_type_volume'.tr();
+        return 'customers.discount_type_volume'.tr();
       case 'loyalty':
-        return 'suppliers.discount_type_loyalty'.tr();
+        return 'customers.discount_type_loyalty'.tr();
       case 'promotional':
-        return 'suppliers.discount_type_promotional'.tr();
+        return 'customers.discount_type_promotional'.tr();
       case 'early_payment':
-        return 'suppliers.discount_type_early_payment'.tr();
+        return 'customers.discount_type_early_payment'.tr();
       case 'other':
-        return 'suppliers.discount_type_other'.tr();
+        return 'customers.discount_type_other'.tr();
       default:
         return type;
     }
@@ -357,12 +384,44 @@ class SupplierTransactionPdfService {
               if (company.phone != null && company.phone!.isNotEmpty)
                 _bidiText(company.phone!, fonts.regular,
                     fontSize: 8, color: PdfColors.grey600),
+              if (company.email != null && company.email!.isNotEmpty)
+                _bidiText(company.email!, fonts.regular,
+                    fontSize: 8, color: PdfColors.grey600),
               if (company.taxNumber != null && company.taxNumber!.isNotEmpty)
                 _bidiText('Tax: ${company.taxNumber}', fonts.regular,
                     fontSize: 8, color: PdfColors.grey600),
             ],
           ),
           _bidiText(title, fonts.bold, fontSize: 18, color: headerColor),
+        ],
+      ),
+    );
+  }
+
+  static pw.Widget _buildCustomerInfo({
+    required String customerName,
+    String? customerPhone,
+    String? customerAddress,
+    required _PdfFonts fonts,
+  }) {
+    return pw.Container(
+      padding: const pw.EdgeInsets.all(12),
+      decoration: pw.BoxDecoration(
+        border: pw.Border.all(color: PdfColors.grey300),
+        borderRadius: pw.BorderRadius.circular(8),
+        color: PdfColors.grey50,
+      ),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          _bidiText('customers.customer_info_label'.tr(), fonts.bold,
+              fontSize: 11, color: PdfColors.grey700),
+          pw.SizedBox(height: 6),
+          _pdfInfoRow('customers.receipt_customer'.tr(), customerName, fonts.regular),
+          if (customerPhone != null && customerPhone.isNotEmpty)
+            _pdfInfoRow('customers.phone_label'.tr(), customerPhone, fonts.regular),
+          if (customerAddress != null && customerAddress.isNotEmpty)
+            _pdfInfoRow('customers.address_label'.tr(), customerAddress, fonts.regular),
         ],
       ),
     );
@@ -384,7 +443,7 @@ class SupplierTransactionPdfService {
                 child: pw.SizedBox(height: 50),
               ),
               pw.SizedBox(height: 4),
-              _bidiText('suppliers.company_signature'.tr(), fonts.regular,
+              _bidiText('customers.company_signature'.tr(), fonts.regular,
                   fontSize: 9, color: PdfColors.grey600),
             ],
           ),
@@ -398,7 +457,7 @@ class SupplierTransactionPdfService {
                 child: pw.SizedBox(height: 50),
               ),
               pw.SizedBox(height: 4),
-              _bidiText('suppliers.supplier_signature'.tr(), fonts.regular,
+              _bidiText('customers.customer_signature'.tr(), fonts.regular,
                   fontSize: 9, color: PdfColors.grey600),
             ],
           ),

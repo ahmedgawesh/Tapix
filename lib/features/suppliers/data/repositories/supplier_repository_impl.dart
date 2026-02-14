@@ -2,6 +2,7 @@ import 'package:decimal/decimal.dart';
 import 'package:drift/drift.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/services/audit_log_service.dart';
+import '../../../../core/services/journal_entry_service.dart';
 import '../../../auth/data/services/session_service.dart';
 import '../../domain/repositories/supplier_repository.dart';
 import '../datasources/supplier_local_datasource.dart';
@@ -11,8 +12,10 @@ class SupplierRepositoryImpl implements SupplierRepository {
   final SupplierLocalDatasource _datasource;
   final AuditLogService _auditService;
   final SessionService _sessionService;
+  final JournalEntryService _journalService;
+  final AppDatabase _db;
 
-  SupplierRepositoryImpl(this._datasource, this._auditService, this._sessionService);
+  SupplierRepositoryImpl(this._datasource, this._auditService, this._sessionService, this._journalService, this._db);
 
   Future<int?> _currentUserId() => _sessionService.getCurrentUserId();
 
@@ -121,7 +124,7 @@ class SupplierRepositoryImpl implements SupplierRepository {
     String? referenceType,
     String? discountType,
     DateTime? transactionDate,
-  }) {
+  }) async {
     final now = DateTime.now();
     final companion = SupplierTransactionsCompanion(
       supplierId: Value(supplierId),
@@ -135,7 +138,35 @@ class SupplierRepositoryImpl implements SupplierRepository {
       transactionDate: Value(transactionDate ?? now),
       createdAt: Value(now),
     );
-    return _datasource.createTransaction(companion);
+    // ATOMIC: Wrap supplier transaction (which updates balance) and
+    // journal entry creation in a single transaction.
+    final userId = await _currentUserId();
+    final absAmount = amountCents.abs();
+
+    final txId = await _db.transaction(() async {
+      final id = await _datasource.createTransaction(companion);
+
+      // Post journal entries for direct party transactions
+      if (transactionType == 'payment' && absAmount > 0) {
+        await _journalService.recordDirectSupplierPaymentJournalEntry(
+          transactionId: id,
+          amountCents: absAmount,
+          currencyId: currencyId,
+          userId: userId,
+        );
+      } else if (transactionType == 'discount' && absAmount > 0) {
+        await _journalService.recordDirectSupplierDiscountJournalEntry(
+          transactionId: id,
+          amountCents: absAmount,
+          currencyId: currencyId,
+          userId: userId,
+        );
+      }
+
+      return id;
+    });
+
+    return txId;
   }
 
   @override

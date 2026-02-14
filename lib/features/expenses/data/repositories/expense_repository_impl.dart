@@ -1,14 +1,19 @@
 import 'package:decimal/decimal.dart';
 import 'package:drift/drift.dart';
 import '../../../../core/database/app_database.dart';
+import '../../../../core/services/audit_log_service.dart';
+import '../../../../core/services/journal_entry_service.dart';
 import '../../domain/repositories/expense_repository.dart';
 import '../datasources/expense_local_datasource.dart';
 
 /// Implementation of ExpenseRepository
 class ExpenseRepositoryImpl implements ExpenseRepository {
   final ExpenseLocalDatasource _datasource;
+  final JournalEntryService _journalService;
+  final AuditLogService _auditService;
+  final AppDatabase _db;
 
-  ExpenseRepositoryImpl(this._datasource);
+  ExpenseRepositoryImpl(this._datasource, this._journalService, this._auditService, this._db);
 
   // ── Expense Categories ──────────────────────────────────
 
@@ -93,7 +98,7 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
     int? accountId,
     DateTime? expenseDate,
     String? receiptPath,
-  }) {
+  }) async {
     final companion = ExpensesCompanion(
       categoryId: Value(categoryId),
       description: Value(description),
@@ -105,16 +110,93 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
       createdAt: Value(DateTime.now()),
       updatedAt: Value(DateTime.now()),
     );
-    return _datasource.createExpense(companion);
+    // ATOMIC: Wrap expense creation and journal entry in a single transaction.
+    // If the journal entry fails, the expense record is rolled back.
+    final expenseId = await _db.transaction(() async {
+      final id = await _datasource.createExpense(companion);
+
+      // Create journal entry — MANDATORY (Dr Expense, Cr Cash)
+      // Errors MUST propagate — silent failure causes unbalanced ledger
+      await _journalService.recordExpenseJournalEntry(
+        expenseId: id,
+        amountCents: amountCents.toBigInt().toInt(),
+        currencyId: currencyId,
+      );
+
+      return id;
+    });
+
+    // Audit log outside transaction (non-critical)
+    _auditService.log(
+      entityType: 'expense',
+      entityId: expenseId,
+      action: 'create',
+      newValue: {
+        'categoryId': categoryId,
+        'description': description,
+        'amountCents': amountCents.toString(),
+      },
+    );
+
+    return expenseId;
   }
 
   @override
-  Future<bool> updateExpense(Expense expense) {
-    return _datasource.updateExpense(expense);
+  Future<bool> updateExpense(Expense expense) async {
+    // ATOMIC: Wrap void + update + re-create in a single transaction.
+    final ok = await _db.transaction(() async {
+      await _journalService.voidJournalEntriesForSource(
+        sourceTable: 'expenses',
+        sourceId: expense.id,
+        reason: 'Expense updated',
+      );
+
+      final updated = await _datasource.updateExpense(expense);
+
+      if (updated) {
+        // Re-create journal entry with new amount
+        await _journalService.recordExpenseJournalEntry(
+          expenseId: expense.id,
+          amountCents: expense.amountCents.toBigInt().toInt(),
+          currencyId: expense.currencyId,
+        );
+      }
+
+      return updated;
+    });
+
+    if (ok) {
+      // Audit log outside transaction (non-critical)
+      _auditService.log(
+        entityType: 'expense',
+        entityId: expense.id,
+        action: 'update',
+        newValue: {
+          'amountCents': expense.amountCents.toString(),
+          'description': expense.description,
+        },
+      );
+    }
+
+    return ok;
   }
 
   @override
-  Future<int> deleteExpense(int id) {
+  Future<int> deleteExpense(int id) async {
+    // Void journal entries BEFORE deleting the expense record
+    await _journalService.voidJournalEntriesForSource(
+      sourceTable: 'expenses',
+      sourceId: id,
+      reason: 'Expense deleted',
+    );
+
+    // Audit: log expense deletion (CRITICAL — financial data removed)
+    await _auditService.logVoid(
+      entityType: 'expense',
+      entityId: id,
+      reason: 'Expense deleted',
+    );
+
     return _datasource.deleteExpense(id);
   }
 

@@ -130,7 +130,8 @@ class ExportServiceImpl implements ExportService {
         'track_inventory',
         'has_variants',
         'is_taxable',
-        'tax_rate_bps',
+        'purchase_tax_rate_bps',
+        'sales_tax_rate_bps',
         'is_active',
       ],
     ];
@@ -204,7 +205,7 @@ class ExportServiceImpl implements ExportService {
       }
     }
 
-      final csv = const ListToCsvConverter().convert(rows);
+      final csv = const CsvEncoder().convert(rows);
       
       LoggingService.info(
         'CSV export completed',
@@ -297,7 +298,8 @@ class ExportServiceImpl implements ExportService {
       'Track Inventory',
       'Has Variants',
       'Is Taxable',
-      'Tax Rate (BPS)',
+      'Purchase Tax Rate (BPS)',
+      'Sales Tax Rate (BPS)',
       'Is Active',
     ];
 

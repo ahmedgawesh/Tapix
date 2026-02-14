@@ -32,6 +32,7 @@ class SaleItems extends Table {
   IntColumn get saleId => integer().references(Sales, #id, onDelete: KeyAction.cascade)();
   IntColumn get productId => integer().references(Products, #id, onDelete: KeyAction.restrict)();
   IntColumn get variantId => integer().nullable().references(ProductVariants, #id, onDelete: KeyAction.restrict)();
+  IntColumn get employeeId => integer().nullable().references(Employees, #id, onDelete: KeyAction.setNull)();
   IntColumn get quantity => integer()();
   IntColumn get unitPriceCents => integer().map(const MoneyConverter())();
   IntColumn get subtotalCents => integer().map(const MoneyConverter())();

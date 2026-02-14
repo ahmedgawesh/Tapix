@@ -583,6 +583,19 @@ class _PayrollCard extends StatelessWidget {
       period,
     );
 
+    // Compute sales target bonus
+    final salesStats = await repository.getEmployeeSalesStats(
+      payroll.employeeId,
+      payroll.periodStart,
+      payroll.periodEnd,
+    );
+    final netSalesCents = (salesStats['salesTotalCents'] ?? 0) -
+        (salesStats['returnsTotalCents'] ?? 0);
+    final targetBonus = PayrollCalculationService.checkSalesTargetBonus(
+      employee: employee,
+      actualSalesCents: netSalesCents,
+    );
+
     if (!context.mounted) return;
 
     await PayslipPdfService.generateAndPrint(
@@ -593,6 +606,7 @@ class _PayrollCard extends StatelessWidget {
       payroll: payroll,
       totalCommissionCents: totalCommission,
       leaveRequests: leaveRequests,
+      salesTargetBonus: targetBonus,
     );
   }
 
@@ -922,6 +936,9 @@ class _CreatePayrollDialogState extends State<_CreatePayrollDialog> {
   List<Employee> _employees = [];
   bool _isLoading = true;
   PayrollCalculation? _calculation;
+  SalesTargetBonusResult? _targetBonusResult;
+  int _autoOvertimeMinutes = 0;
+  bool _overtimeManuallyEdited = false;
 
   @override
   void initState() {
@@ -941,6 +958,7 @@ class _CreatePayrollDialogState extends State<_CreatePayrollDialog> {
   Future<void> _recalculate() async {
     if (_selectedEmployee == null) return;
     final repository = sl<EmployeeRepository>();
+    final employee = _selectedEmployee!;
 
     final parts = widget.period.split('-');
     final year = int.parse(parts[0]);
@@ -949,27 +967,80 @@ class _CreatePayrollDialogState extends State<_CreatePayrollDialog> {
     final periodEnd = DateTime(year, month + 1, 0, 23, 59, 59);
 
     final counts = await repository.getEmployeeAttendanceCounts(
-      _selectedEmployee!.id,
+      employee.id,
       periodStart,
       periodEnd,
     );
 
     // Fetch commission for this period
     final commissionCents = await repository.getTotalCommissionCents(
-      _selectedEmployee!.id,
+      employee.id,
       widget.period,
     );
 
-    final bonus = (double.tryParse(_bonusController.text) ?? 0) * 100;
-    final overtime = (double.tryParse(_overtimeController.text) ?? 0) * 100;
+    // Check sales target bonus
+    // Determine target period dates based on employee's targetPeriod setting
+    final targetPeriod = employee.targetPeriod;
+    DateTime targetStart;
+    DateTime targetEnd;
+    if (targetPeriod == 'quarterly') {
+      final quarter = ((month - 1) ~/ 3);
+      targetStart = DateTime(year, quarter * 3 + 1, 1);
+      targetEnd = DateTime(year, quarter * 3 + 4, 0, 23, 59, 59);
+    } else if (targetPeriod == 'yearly') {
+      targetStart = DateTime(year, 1, 1);
+      targetEnd = DateTime(year, 12, 31, 23, 59, 59);
+    } else {
+      // monthly (default)
+      targetStart = periodStart;
+      targetEnd = periodEnd;
+    }
+
+    final salesStats = await repository.getEmployeeSalesStats(
+      employee.id,
+      targetStart,
+      targetEnd,
+    );
+    final netSalesCents = (salesStats['salesTotalCents'] ?? 0) -
+        (salesStats['returnsTotalCents'] ?? 0);
+
+    final targetBonusResult = PayrollCalculationService.checkSalesTargetBonus(
+      employee: employee,
+      actualSalesCents: netSalesCents,
+    );
+
+    final manualBonus = (double.tryParse(_bonusController.text) ?? 0) * 100;
+    final totalBonus = manualBonus.round() + targetBonusResult.targetBonusCents;
+
+    // Auto-calculate overtime pay from attendance overtime minutes
+    final overtimeMinutes = counts['overtimeMinutes'] ?? 0;
+    _autoOvertimeMinutes = overtimeMinutes;
+    int overtimeCents;
+    if (_overtimeManuallyEdited) {
+      overtimeCents = ((double.tryParse(_overtimeController.text) ?? 0) * 100).round();
+    } else {
+      // hourlyRate = dailyRate / workingHoursPerDay
+      // overtimePay = overtimeMinutes * hourlyRate / 60
+      final dailyRateCents = employee.workingDaysPerPeriod > 0
+          ? (employee.salaryCents?.toBigInt().toInt() ?? 0) ~/ employee.workingDaysPerPeriod
+          : 0;
+      final hoursPerDay = employee.workingHoursPerDay;
+      overtimeCents = hoursPerDay > 0
+          ? (overtimeMinutes * dailyRateCents) ~/ (hoursPerDay * 60)
+          : 0;
+      // Pre-fill the controller with auto-calculated value
+      final overtimeAmount = overtimeCents / 100;
+      _overtimeController.text = overtimeAmount > 0 ? overtimeAmount.toStringAsFixed(2) : '';
+    }
 
     setState(() {
+      _targetBonusResult = targetBonusResult;
       _calculation = PayrollCalculationService.calculate(
-        employee: _selectedEmployee!,
+        employee: employee,
         attendanceCounts: counts,
         commissionCents: commissionCents,
-        bonusCents: bonus.round(),
-        overtimeCents: overtime.round(),
+        bonusCents: totalBonus,
+        overtimeCents: overtimeCents,
       );
     });
   }
@@ -992,7 +1063,7 @@ class _CreatePayrollDialogState extends State<_CreatePayrollDialog> {
         children: [
           Icon(Icons.receipt_long_outlined, color: colorScheme.primary, size: 22),
           const SizedBox(width: 8),
-          Text('employees.create_payroll'.tr()),
+          Flexible(child: Text('employees.create_payroll'.tr(), overflow: TextOverflow.ellipsis)),
         ],
       ),
       content: _isLoading
@@ -1026,7 +1097,10 @@ class _CreatePayrollDialogState extends State<_CreatePayrollDialog> {
                           );
                         }).toList(),
                         onChanged: (value) {
-                          setState(() => _selectedEmployee = value);
+                          setState(() {
+                            _selectedEmployee = value;
+                            _overtimeManuallyEdited = false;
+                          });
                           _recalculate();
                         },
                         validator: (value) {
@@ -1062,12 +1136,68 @@ class _CreatePayrollDialogState extends State<_CreatePayrollDialog> {
                           labelText: 'employees.overtime_pay'.tr(),
                           prefixIcon: const Icon(Icons.more_time_outlined),
                           suffixText: cs.currencySymbol,
+                          helperText: _autoOvertimeMinutes > 0
+                              ? '${'employees.overtime'.tr()}: ${_autoOvertimeMinutes ~/ 60}h ${_autoOvertimeMinutes % 60}m'
+                              : null,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
                           ),
                         ),
-                        onChanged: (_) => _recalculate(),
+                        onChanged: (_) {
+                          _overtimeManuallyEdited = true;
+                          _recalculate();
+                        },
                       ),
+
+                      // Sales Target Bonus Info
+                      if (_targetBonusResult != null && _targetBonusResult!.salesTargetCents > 0) ...[
+                        const SizedBox(height: 16),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: _targetBonusResult!.achieved
+                                ? Colors.green.withValues(alpha: 0.08)
+                                : Colors.orange.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: _targetBonusResult!.achieved
+                                  ? Colors.green.withValues(alpha: 0.3)
+                                  : Colors.orange.withValues(alpha: 0.3),
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(children: [
+                                Icon(
+                                  _targetBonusResult!.achieved ? Icons.emoji_events : Icons.track_changes,
+                                  size: 16,
+                                  color: _targetBonusResult!.achieved ? Colors.green : Colors.orange,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  _targetBonusResult!.achieved
+                                      ? 'employees.target_achieved'.tr()
+                                      : 'employees.target_not_achieved'.tr(),
+                                  style: theme.textTheme.labelMedium?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                    color: _targetBonusResult!.achieved ? Colors.green.shade700 : Colors.orange.shade700,
+                                  ),
+                                ),
+                              ]),
+                              const SizedBox(height: 6),
+                              _calcRow(context, 'employees.sales_target'.tr(),
+                                  cs.format(_targetBonusResult!.salesTargetCents)),
+                              _calcRow(context, 'employees.actual_sales'.tr(),
+                                  cs.format(_targetBonusResult!.actualSalesCents)),
+                              if (_targetBonusResult!.achieved)
+                                _calcRow(context, 'employees.target_bonus'.tr(),
+                                    '+ ${cs.format(_targetBonusResult!.targetBonusCents)}',
+                                    color: Colors.green.shade700),
+                            ],
+                          ),
+                        ),
+                      ],
 
                       // Calculation Preview
                       if (_calculation != null) ...[

@@ -6,7 +6,9 @@ enum AttendanceStatus {
   late,
   absent,
   leave,
-  holiday;
+  holiday,
+  // ignore: constant_identifier_names
+  early_departure;
 
   String get displayName {
     switch (this) {
@@ -20,6 +22,8 @@ enum AttendanceStatus {
         return 'On Leave';
       case AttendanceStatus.holiday:
         return 'Holiday';
+      case AttendanceStatus.early_departure:
+        return 'Early Departure';
     }
   }
 

@@ -2,6 +2,7 @@ import 'package:decimal/decimal.dart';
 import 'package:drift/drift.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/services/audit_log_service.dart';
+import '../../../../core/services/journal_entry_service.dart';
 import '../../../auth/data/services/session_service.dart';
 import '../../domain/repositories/customer_repository.dart';
 import '../datasources/customer_local_datasource.dart';
@@ -11,8 +12,10 @@ class CustomerRepositoryImpl implements CustomerRepository {
   final CustomerLocalDatasource _datasource;
   final AuditLogService _auditService;
   final SessionService _sessionService;
+  final JournalEntryService _journalService;
+  final AppDatabase _db;
 
-  CustomerRepositoryImpl(this._datasource, this._auditService, this._sessionService);
+  CustomerRepositoryImpl(this._datasource, this._auditService, this._sessionService, this._journalService, this._db);
 
   Future<int?> _currentUserId() => _sessionService.getCurrentUserId();
 
@@ -128,7 +131,10 @@ class CustomerRepositoryImpl implements CustomerRepository {
     String? description,
     int? referenceId,
     String? referenceType,
-  }) {
+    String? discountType,
+    DateTime? transactionDate,
+  }) async {
+    final now = DateTime.now();
     final companion = CustomerTransactionsCompanion(
       customerId: Value(customerId),
       transactionType: Value(transactionType),
@@ -137,10 +143,44 @@ class CustomerRepositoryImpl implements CustomerRepository {
       description: Value(description),
       referenceId: Value(referenceId),
       referenceType: Value(referenceType),
-      transactionDate: Value(DateTime.now()),
-      createdAt: Value(DateTime.now()),
+      discountType: Value(discountType),
+      transactionDate: Value(transactionDate ?? now),
+      createdAt: Value(now),
     );
-    return _datasource.createTransaction(companion);
+    // ATOMIC: Wrap customer transaction (which updates balance) and
+    // journal entry creation in a single transaction.
+    final userId = await _currentUserId();
+    final absAmount = amountCents.abs();
+
+    final txId = await _db.transaction(() async {
+      final id = await _datasource.createTransaction(companion);
+
+      // Post journal entries for direct party transactions
+      if (transactionType == 'payment' && absAmount > 0) {
+        await _journalService.recordDirectCustomerPaymentJournalEntry(
+          transactionId: id,
+          amountCents: absAmount,
+          currencyId: currencyId,
+          userId: userId,
+        );
+      } else if (transactionType == 'discount' && absAmount > 0) {
+        await _journalService.recordDirectCustomerDiscountJournalEntry(
+          transactionId: id,
+          amountCents: absAmount,
+          currencyId: currencyId,
+          userId: userId,
+        );
+      }
+
+      return id;
+    });
+
+    return txId;
+  }
+
+  @override
+  Future<CustomerTransaction?> getTransaction(int transactionId) {
+    return _datasource.getTransaction(transactionId);
   }
 
   @override

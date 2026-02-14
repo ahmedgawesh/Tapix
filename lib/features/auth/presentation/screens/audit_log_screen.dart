@@ -233,9 +233,12 @@ class _AuditLogScreenContentState extends State<_AuditLogScreenContent> {
                     separatorBuilder: (_, _) => const SizedBox(height: 6),
                     itemBuilder: (context, index) {
                       final log = vm.filteredLogs[index];
+                      // Resolve username: userNames map → changes.performedBy fallback
+                      final resolvedName = (log.userId != null ? vm.userNames[log.userId] : null)
+                          ?? log.changes['performedBy']?.toString();
                       return _AuditLogTile(
                         log: log,
-                        userName: log.userId != null ? vm.userNames[log.userId] : null,
+                        userName: resolvedName,
                       );
                     },
                   );

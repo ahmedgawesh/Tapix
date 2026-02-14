@@ -302,6 +302,17 @@ class CustomerFormBloc extends Bloc<CustomerFormEvent, CustomerFormState> {
       errors['email'] = 'customers.email_invalid';
     }
 
+    // Check for duplicate name
+    if (currentState.name.isNotEmpty) {
+      final existing = await _repository.searchCustomers(currentState.name);
+      final duplicate = existing.any((c) =>
+          c.name.trim().toLowerCase() == currentState.name.trim().toLowerCase() &&
+          c.id != currentState.customerId);
+      if (duplicate) {
+        errors['name'] = 'customers.name_duplicate';
+      }
+    }
+
     if (errors.isNotEmpty) {
       emit(currentState.copyWith(errors: errors));
       return;

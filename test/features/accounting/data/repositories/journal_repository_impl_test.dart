@@ -2,6 +2,7 @@ import 'package:decimal/decimal.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tapix/core/database/app_database.dart';
 import 'package:tapix/features/accounting/data/datasources/journal_local_datasource.dart';
+import 'package:tapix/features/accounting/data/repositories/accounting_repository.dart';
 import 'package:tapix/features/accounting/data/repositories/journal_repository_impl.dart';
 import 'package:tapix/features/accounting/domain/repositories/journal_repository.dart';
 
@@ -17,10 +18,16 @@ class FakeJournalLocalDatasource extends Fake implements JournalLocalDatasource 
   JournalEntry? _entryToReturn;
   Account? Function(int id)? _accountLookup;
   List<JournalEntryLine> _linesToReturn = [];
+  bool _isDateInClosedPeriod = false;
+  int _customerBalanceTotal = 0;
+  int _supplierBalanceTotal = 0;
 
   void setEntryToReturn(JournalEntry? entry) => _entryToReturn = entry;
   void setAccountLookup(Account? Function(int id) fn) => _accountLookup = fn;
   void setLinesToReturn(List<JournalEntryLine> lines) => _linesToReturn = lines;
+  void setIsDateInClosedPeriod(bool value) => _isDateInClosedPeriod = value;
+  void setCustomerBalanceTotal(int value) => _customerBalanceTotal = value;
+  void setSupplierBalanceTotal(int value) => _supplierBalanceTotal = value;
 
   @override
   Future<String> generateNextEntryNumber() async => 'JE-000001';
@@ -56,6 +63,15 @@ class FakeJournalLocalDatasource extends Fake implements JournalLocalDatasource 
   Future<Account?> getAccount(int id) async => _accountLookup?.call(id);
 
   @override
+  Future<bool> isDateInClosedPeriod(DateTime date) async => _isDateInClosedPeriod;
+
+  @override
+  Future<int> getCustomerBalanceTotal() async => _customerBalanceTotal;
+
+  @override
+  Future<int> getSupplierBalanceTotal() async => _supplierBalanceTotal;
+
+  @override
   Future<bool> updateAccount(Account account) async {
     updateAccountCallCount++;
     return true;
@@ -81,13 +97,18 @@ class FakeJournalLocalDatasource extends Fake implements JournalLocalDatasource 
   }
 }
 
+/// Fake AccountingRepository for tests
+class FakeAccountingRepository extends Fake implements AccountingRepository {}
+
 void main() {
   late FakeJournalLocalDatasource fakeDatasource;
+  late FakeAccountingRepository fakeAccountingRepo;
   late JournalRepositoryImpl repository;
 
   setUp(() {
     fakeDatasource = FakeJournalLocalDatasource();
-    repository = JournalRepositoryImpl(fakeDatasource);
+    fakeAccountingRepo = FakeAccountingRepository();
+    repository = JournalRepositoryImpl(fakeDatasource, fakeAccountingRepo);
   });
 
   group('createJournalEntryWithLines', () {

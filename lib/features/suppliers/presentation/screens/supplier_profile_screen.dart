@@ -421,11 +421,9 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
                         );
                       },
                       icon: const Icon(LucideIcons.printer),
-                      label: Flexible(
-                        child: Text(
-                          'suppliers.print_receipt'.tr(),
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                      label: Text(
+                        'suppliers.print_receipt'.tr(),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ),
@@ -441,11 +439,9 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
                         );
                       },
                       icon: const Icon(LucideIcons.share2),
-                      label: Flexible(
-                        child: Text(
-                          'suppliers.share_receipt'.tr(),
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                      label: Text(
+                        'suppliers.share_receipt'.tr(),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ),
@@ -668,6 +664,7 @@ class _ProfileHeaderCard extends StatelessWidget {
     final colorScheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
     final isPayable = balanceCents > 0;
+    final isZero = balanceCents == 0;
 
     return Container(
       decoration: BoxDecoration(
@@ -739,16 +736,20 @@ class _ProfileHeaderCard extends StatelessWidget {
                     currencyService.format(balanceCents),
                     style: theme.textTheme.headlineMedium?.copyWith(
                       fontWeight: FontWeight.bold,
-                      color: isPayable
-                          ? (isDark ? const Color(0xFF90CAF9) : colorScheme.primary)
-                          : (isDark ? const Color(0xFFEF9A9A) : colorScheme.error),
+                      color: isZero
+                          ? (isDark ? const Color(0xFF64B5F6) : Colors.blue)
+                          : isPayable
+                              ? (isDark ? const Color(0xFFA5D6A7) : Colors.green)
+                              : (isDark ? const Color(0xFFEF9A9A) : Colors.red),
                     ),
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    isPayable
-                        ? 'suppliers.balance_payable'.tr()
-                        : 'suppliers.balance_credit'.tr(),
+                    isZero
+                        ? 'suppliers.balance_settled'.tr()
+                        : isPayable
+                            ? 'suppliers.balance_payable'.tr()
+                            : 'suppliers.balance_credit'.tr(),
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: colorScheme.onSurfaceVariant,
                     ),

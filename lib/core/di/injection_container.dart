@@ -91,6 +91,7 @@ import '../../features/suppliers/presentation/bloc/supplier_profile_bloc.dart';
 import '../../features/employees/domain/repositories/employee_repository.dart';
 import '../../features/employees/data/repositories/employee_repository_impl.dart';
 import '../../features/employees/presentation/bloc/employees_bloc.dart';
+import '../../features/employees/presentation/bloc/employee_detail_bloc.dart';
 import '../../features/employees/presentation/bloc/attendance_bloc.dart';
 import '../../features/employees/presentation/bloc/leave_requests_bloc.dart';
 import '../../features/employees/presentation/bloc/payroll_bloc.dart';
@@ -106,11 +107,13 @@ import '../../features/accounting/domain/repositories/journal_repository.dart';
 import '../../features/accounting/data/datasources/journal_local_datasource.dart';
 import '../../features/accounting/data/repositories/journal_repository_impl.dart';
 import '../../features/accounting/data/repositories/accounting_repository.dart';
+import '../../features/accounting/domain/services/accounting_close_service.dart';
 import '../services/journal_entry_service.dart';
+import '../services/ledger_rebuild_service.dart';
+import '../services/attendance_service.dart';
 import '../../features/accounting/presentation/bloc/accounts_bloc.dart';
 import '../../features/accounting/presentation/bloc/journal_entries_bloc.dart';
 import '../../features/accounting/presentation/bloc/journal_entry_form_bloc.dart';
-import '../../features/accounting/presentation/bloc/accounting_health_bloc.dart';
 import '../../features/financial_management/presentation/bloc/accounting_periods_bloc.dart';
 import '../../features/reports/presentation/bloc/reports_bloc.dart';
 import '../../features/reports/presentation/bloc/inventory_reports_bloc.dart';
@@ -186,7 +189,7 @@ Future<void> init() async {
   sl.registerLazySingleton(() => ThemeService(sl()));
   sl.registerLazySingleton(() => LocalizationService(sl()));
   sl.registerLazySingleton(() => CurrencyService(sl()));
-  sl.registerLazySingleton(() => AuditLogService(sl<AppDatabase>()));
+  sl.registerLazySingleton(() => AuditLogService(sl<AppDatabase>(), sl<SessionService>()));
   sl.registerLazySingleton(() => const BelowCostSaleService());
 
   // Datasources
@@ -199,7 +202,7 @@ Future<void> init() async {
 
   // Feature Repositories
   sl.registerLazySingleton<ProductRepository>(
-    () => ProductRepositoryImpl(sl(), sl<AuditLogService>()),
+    () => ProductRepositoryImpl(sl(), sl<AuditLogService>(), sl<SessionService>()),
   );
   sl.registerLazySingleton<ProductVariantRepository>(
     () => ProductVariantRepositoryImpl(sl()),
@@ -218,6 +221,10 @@ Future<void> init() async {
   sl.registerLazySingleton<AccountingRepository>(
     () => AccountingRepository(sl<AppDatabase>()),
   );
+  sl.registerLazySingleton(() => AccountingCloseService(
+    sl<AppDatabase>(),
+    sl<AccountingRepository>(),
+  ));
   sl.registerLazySingleton<JournalEntryService>(
     () => JournalEntryService(sl<AccountingRepository>()),
   );
@@ -227,7 +234,7 @@ Future<void> init() async {
     () => PurchaseLocalDatasourceImpl(sl<PurchaseDao>()),
   );
   sl.registerLazySingleton<PurchaseRepository>(
-    () => PurchaseRepositoryImpl(sl<PurchaseLocalDatasource>(), sl<AuditLogService>(), sl<SessionService>(), sl<JournalEntryService>()),
+    () => PurchaseRepositoryImpl(sl<PurchaseLocalDatasource>(), sl<AuditLogService>(), sl<SessionService>(), sl<JournalEntryService>(), sl<AppDatabase>()),
   );
 
   // Sales
@@ -235,7 +242,7 @@ Future<void> init() async {
     () => SaleLocalDatasourceImpl(sl<SaleDao>()),
   );
   sl.registerLazySingleton<SaleRepository>(
-    () => SaleRepositoryImpl(sl<SaleLocalDatasource>(), sl<SaleDao>(), sl<JournalEntryService>(), sl<AuditLogService>()),
+    () => SaleRepositoryImpl(sl<SaleLocalDatasource>(), sl<SaleDao>(), sl<EmployeeDao>(), sl<JournalEntryService>(), sl<AuditLogService>(), sl<SessionService>(), sl<LoyaltyRepository>()),
   );
 
   // Customers
@@ -247,10 +254,12 @@ Future<void> init() async {
       sl<CustomerLocalDatasource>(),
       sl<AuditLogService>(),
       sl<SessionService>(),
+      sl<JournalEntryService>(),
+      sl<AppDatabase>(),
     ),
   );
   sl.registerLazySingleton<LoyaltyRepository>(
-    () => LoyaltyRepositoryImpl(sl<AppDatabase>()),
+    () => LoyaltyRepositoryImpl(sl<AppDatabase>(), sl<JournalEntryService>()),
   );
 
   // Suppliers
@@ -262,12 +271,17 @@ Future<void> init() async {
       sl<SupplierLocalDatasource>(),
       sl<AuditLogService>(),
       sl<SessionService>(),
+      sl<JournalEntryService>(),
+      sl<AppDatabase>(),
     ),
   );
 
   // Employees
   sl.registerLazySingleton<EmployeeRepository>(
-    () => EmployeeRepositoryImpl(sl<EmployeeDao>()),
+    () => EmployeeRepositoryImpl(sl<EmployeeDao>(), sl<JournalEntryService>()),
+  );
+  sl.registerLazySingleton<AttendanceService>(
+    () => AttendanceService(sl<EmployeeDao>()),
   );
 
   // Blocs
@@ -329,7 +343,7 @@ Future<void> init() async {
 
   // Sales Blocs
   sl.registerFactory(() => SalesBloc(sl<SaleRepository>()));
-  sl.registerFactory(() => SaleFormBloc(sl<SaleRepository>(), sl<ProductVariantRepository>(), belowCostService: sl<BelowCostSaleService>()));
+  sl.registerFactory(() => SaleFormBloc(sl<SaleRepository>(), sl<ProductVariantRepository>(), sl<AuditLogService>(), belowCostService: sl<BelowCostSaleService>(), loyaltyRepository: sl<LoyaltyRepository>()));
   sl.registerFactory(() => SaleReturnsBloc(sl<SaleRepository>()));
   sl.registerFactory(() => SaleReturnFormBloc(sl<SaleRepository>()));
 
@@ -341,8 +355,8 @@ Future<void> init() async {
 
   // Employees Blocs
   sl.registerFactory(() => EmployeesBloc(sl<EmployeeRepository>()));
-  sl.registerFactory(() => EmployeeStatsBloc(sl<EmployeeRepository>()));
-  sl.registerFactory(() => AttendanceBloc(sl<EmployeeRepository>()));
+  sl.registerFactory(() => EmployeeDetailBloc(sl<EmployeeRepository>(), sl<EmployeeDao>()));
+  sl.registerFactory(() => AttendanceBloc(sl<EmployeeRepository>(), sl<AttendanceService>()));
   sl.registerFactory(() => LeaveRequestsBloc(sl<EmployeeRepository>()));
   sl.registerFactory(() => PayrollBloc(sl<EmployeeRepository>()));
   sl.registerFactory(() => RolesBloc(sl<EmployeeRepository>()));
@@ -357,7 +371,7 @@ Future<void> init() async {
     () => ExpenseLocalDatasourceImpl(sl<AccountingDao>()),
   );
   sl.registerLazySingleton<ExpenseRepository>(
-    () => ExpenseRepositoryImpl(sl<ExpenseLocalDatasource>()),
+    () => ExpenseRepositoryImpl(sl<ExpenseLocalDatasource>(), sl<JournalEntryService>(), sl<AuditLogService>(), sl<AppDatabase>()),
   );
 
   // Expenses Blocs
@@ -370,15 +384,20 @@ Future<void> init() async {
     () => JournalLocalDatasourceImpl(sl<AccountingDao>()),
   );
   sl.registerLazySingleton<JournalRepository>(
-    () => JournalRepositoryImpl(sl<JournalLocalDatasource>()),
+    () => JournalRepositoryImpl(sl<JournalLocalDatasource>(), sl<AccountingRepository>()),
   );
 
   // Accounting Blocs
   sl.registerFactory(() => AccountsBloc(sl<JournalRepository>()));
-  sl.registerFactory(() => AccountingPeriodsBloc(sl<JournalRepository>(), sl<AppDatabase>(), sl<AuditLogService>()));
+  sl.registerFactory(() => AccountingPeriodsBloc(
+    sl<JournalRepository>(),
+    sl<AppDatabase>(),
+    sl<AuditLogService>(),
+    sl<AccountingCloseService>(),
+    sl<SessionService>(),
+  ));
   sl.registerFactory(() => JournalEntriesBloc(sl<JournalRepository>()));
   sl.registerFactory(() => JournalEntryFormBloc(sl<JournalRepository>()));
-  sl.registerFactory(() => AccountingHealthBloc(sl<JournalRepository>()));
   sl.registerFactory(() => ReportsBloc(sl<JournalRepository>(), sl<AppDatabase>()));
   sl.registerFactory(() => InventoryReportsBloc(sl<AppDatabase>()));
   sl.registerFactory(() => ProductMovementDetailBloc(sl<AppDatabase>()));
@@ -405,6 +424,15 @@ Future<void> init() async {
   sl.registerFactory(() => ExpenseReportBloc(sl<AppDatabase>()));
   sl.registerFactory(() => SalesTaxReportBloc(sl<AppDatabase>()));
   sl.registerFactory(() => PurchaseTaxReportBloc(sl<AppDatabase>()));
+
+  // Ledger Rebuild Service
+  sl.registerLazySingleton<LedgerRebuildService>(
+    () => LedgerRebuildService(
+      db: sl<AppDatabase>(),
+      accountingRepo: sl<AccountingRepository>(),
+      journalService: sl<JournalEntryService>(),
+    ),
+  );
 
   // Barcode Services
   sl.registerLazySingleton(() => BarcodeValidationService());

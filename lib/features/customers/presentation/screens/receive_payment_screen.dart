@@ -3,12 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons/lucide_icons.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart' hide Size;
 import '../../../../core/services/currency_service.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../domain/repositories/customer_repository.dart';
 import '../bloc/customers_bloc.dart';
+import '../services/customer_transaction_pdf_service.dart';
 
 /// Screen for receiving payment from a customer
 class ReceivePaymentScreen extends StatefulWidget {
@@ -28,6 +30,7 @@ class _ReceivePaymentScreenState extends State<ReceivePaymentScreen> {
   
   Customer? _selectedCustomer;
   bool _isLoading = false;
+  DateTime _selectedDate = DateTime.now();
 
   @override
   void initState() {
@@ -130,6 +133,32 @@ class _ReceivePaymentScreenState extends State<ReceivePaymentScreen> {
                             }
                             return null;
                           },
+                        ),
+                        const SizedBox(height: 16),
+                        InkWell(
+                          onTap: () async {
+                            final picked = await showDatePicker(
+                              context: context,
+                              initialDate: _selectedDate,
+                              firstDate: DateTime(2000),
+                              lastDate: DateTime(2100),
+                            );
+                            if (picked != null) {
+                              setState(() => _selectedDate = picked);
+                            }
+                          },
+                          borderRadius: BorderRadius.circular(12),
+                          child: InputDecorator(
+                            decoration: InputDecoration(
+                              labelText: 'customers.payment_date'.tr(),
+                              prefixIcon: const Icon(LucideIcons.calendarDays),
+                              border: const OutlineInputBorder(),
+                            ),
+                            child: Text(
+                              '${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}',
+                              style: theme.textTheme.bodyLarge,
+                            ),
+                          ),
                         ),
                         const SizedBox(height: 16),
                         TextFormField(
@@ -486,7 +515,6 @@ class _ReceivePaymentScreenState extends State<ReceivePaymentScreen> {
     if (_selectedCustomer == null) return;
 
     final scaffoldMessenger = ScaffoldMessenger.of(context);
-    final router = GoRouter.of(context);
 
     setState(() {
       _isLoading = true;
@@ -497,7 +525,7 @@ class _ReceivePaymentScreenState extends State<ReceivePaymentScreen> {
       final amountCents = (amount * 100).round();
       final customer = _selectedCustomer!;
 
-      await sl<CustomerRepository>().recordTransaction(
+      final txId = await sl<CustomerRepository>().recordTransaction(
         customerId: customer.id,
         transactionType: 'payment',
         amountCents: -amountCents,
@@ -505,6 +533,7 @@ class _ReceivePaymentScreenState extends State<ReceivePaymentScreen> {
         description: _descriptionController.text.isEmpty
             ? null
             : _descriptionController.text,
+        transactionDate: _selectedDate,
       );
 
       if (mounted) {
@@ -514,7 +543,7 @@ class _ReceivePaymentScreenState extends State<ReceivePaymentScreen> {
             backgroundColor: Colors.green,
           ),
         );
-        router.pop();
+        _showReceiptDialog(txId, customer);
       }
     } catch (e) {
       if (mounted) {
@@ -529,5 +558,75 @@ class _ReceivePaymentScreenState extends State<ReceivePaymentScreen> {
         );
       }
     }
+  }
+
+  void _showReceiptDialog(int transactionId, Customer customer) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(LucideIcons.checkCircle, color: Colors.green, size: 48),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: () {
+                        Navigator.pop(dialogContext);
+                        CustomerTransactionPdfService.printReceiptById(
+                          context: context,
+                          transactionId: transactionId,
+                          customerName: customer.name,
+                          customerPhone: customer.phone,
+                          customerAddress: customer.address,
+                        );
+                      },
+                      icon: const Icon(LucideIcons.printer),
+                      label: Text(
+                        'customers.print_receipt'.tr(),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(dialogContext);
+                        CustomerTransactionPdfService.shareReceiptById(
+                          context: context,
+                          transactionId: transactionId,
+                          customerName: customer.name,
+                          customerPhone: customer.phone,
+                          customerAddress: customer.address,
+                        );
+                      },
+                      icon: const Icon(LucideIcons.share2),
+                      label: Text(
+                        'customers.share_receipt'.tr(),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(dialogContext);
+                  context.pop();
+                },
+                child: Text('common.close'.tr()),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

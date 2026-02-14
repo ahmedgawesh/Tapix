@@ -2,9 +2,12 @@ import 'package:decimal/decimal.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 
+import '../../../../core/database/app_database.dart' show LoyaltySettings;
+import '../../../../core/services/audit_log_service.dart';
 import '../../../../core/services/below_cost_sale_service.dart';
 import '../../domain/repositories/sale_repository.dart';
 import '../../../auth/domain/entities/user_entity.dart';
+import '../../../customers/domain/repositories/loyalty_repository.dart';
 import '../../../products/domain/entities/product_entity.dart';
 import '../../../products/domain/entities/product_variant_entity.dart';
 import '../../../products/domain/repositories/product_variant_repository.dart';
@@ -45,6 +48,12 @@ class SaleFormState extends Equatable {
   final bool isSuccess;
   final BelowCostCheckResult? belowCostWarning;
   final List<BelowCostOverride> belowCostOverrides;
+  // Loyalty points redemption
+  final int loyaltyPointsBalance;
+  final int loyaltyPointsToRedeem;
+  final int loyaltyDiscountCents;
+  final LoyaltySettings? loyaltySettings;
+  final bool loyaltyRedemptionEnabled;
 
   SaleFormState({
     this.saleId,
@@ -69,6 +78,11 @@ class SaleFormState extends Equatable {
     this.isSuccess = false,
     this.belowCostWarning,
     this.belowCostOverrides = const [],
+    this.loyaltyPointsBalance = 0,
+    this.loyaltyPointsToRedeem = 0,
+    this.loyaltyDiscountCents = 0,
+    this.loyaltySettings,
+    this.loyaltyRedemptionEnabled = false,
   }) : invoiceDiscountCents = invoiceDiscountCents ?? Decimal.zero,
        taxRatePercent = taxRatePercent ?? Decimal.zero,
        paidAmountCents = paidAmountCents ?? Decimal.zero;
@@ -97,8 +111,13 @@ class SaleFormState extends Equatable {
 
   Decimal get taxCents => itemTaxCents;
 
-  Decimal get totalCents {
+  Decimal get totalBeforeLoyaltyCents {
     final net = subtotalCents - totalDiscountCents + taxCents;
+    return net < Decimal.zero ? Decimal.zero : net;
+  }
+
+  Decimal get totalCents {
+    final net = totalBeforeLoyaltyCents - Decimal.fromInt(loyaltyDiscountCents);
     return net < Decimal.zero ? Decimal.zero : net;
   }
 
@@ -139,6 +158,12 @@ class SaleFormState extends Equatable {
     BelowCostCheckResult? belowCostWarning,
     bool clearBelowCostWarning = false,
     List<BelowCostOverride>? belowCostOverrides,
+    int? loyaltyPointsBalance,
+    int? loyaltyPointsToRedeem,
+    int? loyaltyDiscountCents,
+    LoyaltySettings? loyaltySettings,
+    bool? loyaltyRedemptionEnabled,
+    bool clearLoyalty = false,
   }) {
     return SaleFormState(
       saleId: saleId ?? this.saleId,
@@ -163,6 +188,11 @@ class SaleFormState extends Equatable {
       isSuccess: isSuccess ?? this.isSuccess,
       belowCostWarning: clearBelowCostWarning ? null : (belowCostWarning ?? this.belowCostWarning),
       belowCostOverrides: belowCostOverrides ?? this.belowCostOverrides,
+      loyaltyPointsBalance: clearLoyalty ? 0 : (loyaltyPointsBalance ?? this.loyaltyPointsBalance),
+      loyaltyPointsToRedeem: clearLoyalty ? 0 : (loyaltyPointsToRedeem ?? this.loyaltyPointsToRedeem),
+      loyaltyDiscountCents: clearLoyalty ? 0 : (loyaltyDiscountCents ?? this.loyaltyDiscountCents),
+      loyaltySettings: clearLoyalty ? null : (loyaltySettings ?? this.loyaltySettings),
+      loyaltyRedemptionEnabled: clearLoyalty ? false : (loyaltyRedemptionEnabled ?? this.loyaltyRedemptionEnabled),
     );
   }
 
@@ -172,6 +202,8 @@ class SaleFormState extends Equatable {
         discountMode, invoiceDiscountCents, notes, saleDate, dueDate,
         paymentMethod, taxRatePercent, salespersonMode, paidAmountCents,
         isSubmitting, error, isSuccess, belowCostWarning, belowCostOverrides,
+        loyaltyPointsBalance, loyaltyPointsToRedeem, loyaltyDiscountCents,
+        loyaltySettings, loyaltyRedemptionEnabled,
       ];
 }
 
@@ -473,23 +505,49 @@ class SaleBelowCostWarningDismissed extends SaleFormEvent {
   const SaleBelowCostWarningDismissed();
 }
 
+/// Fired when customer changes to load their loyalty data
+class SaleLoyaltyDataRequested extends SaleFormEvent {
+  final int customerId;
+  const SaleLoyaltyDataRequested(this.customerId);
+
+  @override
+  List<Object?> get props => [customerId];
+}
+
+/// Fired when user toggles loyalty redemption or changes points to redeem
+class SaleLoyaltyRedemptionChanged extends SaleFormEvent {
+  final bool enabled;
+  final int pointsToRedeem;
+  const SaleLoyaltyRedemptionChanged({required this.enabled, required this.pointsToRedeem});
+
+  @override
+  List<Object?> get props => [enabled, pointsToRedeem];
+}
+
 // ==================== BLOC ====================
 
 class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
   final SaleRepository _repository;
   final ProductVariantRepository _variantRepository;
   final BelowCostSaleService _belowCostService;
+  final AuditLogService _auditService;
+  final LoyaltyRepository? _loyaltyRepository;
   UserRole currentUserRole;
+  int? currentUserId;
   int _lineCounter = 0;
 
   Map<int, String> _colorNames = {};
   Map<int, String?> _colorHexes = {};
   Map<int, String> _sizeNames = {};
 
-  SaleFormBloc(this._repository, this._variantRepository, {
+  SaleFormBloc(this._repository, this._variantRepository, this._auditService, {
     BelowCostSaleService? belowCostService,
+    LoyaltyRepository? loyaltyRepository,
     UserRole userRole = UserRole.cashier,
+    int? userId,
   })  : _belowCostService = belowCostService ?? const BelowCostSaleService(),
+        _loyaltyRepository = loyaltyRepository,
+        currentUserId = userId,
         currentUserRole = userRole,
         super(SaleFormState(
           currencyId: 1,
@@ -513,6 +571,8 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
     on<SaleDueDateChanged>(_onDueDateChanged);
     on<SaleBelowCostOverrideApproved>(_onBelowCostOverrideApproved);
     on<SaleBelowCostWarningDismissed>(_onBelowCostWarningDismissed);
+    on<SaleLoyaltyDataRequested>(_onLoyaltyDataRequested);
+    on<SaleLoyaltyRedemptionChanged>(_onLoyaltyRedemptionChanged);
   }
 
   Future<void> _loadColorSizeLookups() async {
@@ -655,17 +715,21 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
     }
   }
 
-  void _onCustomerChanged(
+  Future<void> _onCustomerChanged(
     SaleCustomerChanged event,
     Emitter<SaleFormState> emit,
-  ) {
+  ) async {
     if (event.customerId == null) {
-      emit(state.copyWith(clearCustomer: true));
+      emit(state.copyWith(clearCustomer: true, clearLoyalty: true));
     } else {
       emit(state.copyWith(
         customerId: event.customerId,
         customerName: event.customerName,
       ));
+      // Auto-load loyalty data for the selected customer
+      if (_loyaltyRepository != null) {
+        add(SaleLoyaltyDataRequested(event.customerId!));
+      }
     }
   }
 
@@ -779,6 +843,37 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
       return item;
     }).toList();
     emit(state.copyWith(items: updatedItems));
+
+    // Re-check below-cost if price was changed
+    if (event.unitPriceCents != null) {
+      final item = updatedItems.firstWhere((i) => i.tempId == event.tempId);
+      // Remove any previous override for this item since price changed
+      final filteredOverrides = state.belowCostOverrides
+          .where((o) => o.tempId != event.tempId)
+          .toList();
+
+      final costCents = item.variant?.costCents ?? item.product.costCents;
+      final check = _belowCostService.check(
+        costCents: costCents,
+        sellingPriceCents: event.unitPriceCents!,
+        productName: item.displayName,
+        productId: item.product.id,
+        userRole: currentUserRole,
+      );
+
+      if (check.isBelowCost) {
+        emit(state.copyWith(
+          belowCostWarning: check,
+          belowCostOverrides: filteredOverrides,
+        ));
+      } else {
+        // Price is now above cost, clear any warning
+        emit(state.copyWith(
+          clearBelowCostWarning: true,
+          belowCostOverrides: filteredOverrides,
+        ));
+      }
+    }
   }
 
   void _onLineItemRemoved(
@@ -796,6 +891,26 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
     if (state.items.isEmpty) {
       emit(state.copyWith(error: 'Please add at least one item'));
       return;
+    }
+
+    // Below-cost final gate: check all items for unresolved below-cost violations
+    final overriddenTempIds = state.belowCostOverrides.map((o) => o.tempId).toSet();
+    for (final item in state.items) {
+      final costCents = item.variant?.costCents ?? item.product.costCents;
+      if (costCents > Decimal.zero && item.unitPriceCents < costCents) {
+        if (!overriddenTempIds.contains(item.tempId)) {
+          // This item is below cost and has no override — re-trigger warning
+          final check = _belowCostService.check(
+            costCents: costCents,
+            sellingPriceCents: item.unitPriceCents,
+            productName: item.displayName,
+            productId: item.product.id,
+            userRole: currentUserRole,
+          );
+          emit(state.copyWith(belowCostWarning: check));
+          return;
+        }
+      }
     }
 
     // Cash validation: paid amount must be >= total
@@ -845,6 +960,8 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
           discountCents: effectiveDiscount,
           taxCents: effectiveTax,
           totalCents: effectiveTotal,
+          employeeId: item.employeeId,
+          employeeName: item.employeeName,
         ));
       }
 
@@ -877,6 +994,24 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
           saleDate: state.saleDate,
           dueDate: state.dueDate,
         );
+
+        // Redeem loyalty points if applicable (non-critical, outside transaction)
+        if (state.loyaltyRedemptionEnabled &&
+            state.loyaltyPointsToRedeem > 0 &&
+            state.customerId != null &&
+            _loyaltyRepository != null) {
+          try {
+            await _loyaltyRepository.redeemPoints(
+              customerId: state.customerId!,
+              points: state.loyaltyPointsToRedeem,
+              reason: 'Points redeemed at checkout for sale #$saleId',
+              referenceId: saleId,
+              referenceType: 'sale_redemption',
+            );
+          } catch (_) {
+            // Loyalty redemption failure should not block the sale
+          }
+        }
 
         emit(state.copyWith(
           saleId: saleId,
@@ -955,10 +1090,10 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
     emit(state.copyWith(dueDate: event.date));
   }
 
-  void _onBelowCostOverrideApproved(
+  Future<void> _onBelowCostOverrideApproved(
     SaleBelowCostOverrideApproved event,
     Emitter<SaleFormState> emit,
-  ) {
+  ) async {
     final warning = state.belowCostWarning;
     if (warning == null || !warning.isBelowCost) return;
 
@@ -977,6 +1112,22 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
       lossCents: warning.lossCents,
       reason: event.reason,
     );
+
+    // Write audit log immediately
+    try {
+      await _auditService.logBelowCostOverride(
+        productId: warning.productId,
+        productName: warning.productName,
+        costCents: warning.costCents.toBigInt().toInt(),
+        sellingPriceCents: warning.sellingPriceCents.toBigInt().toInt(),
+        lossCents: warning.lossCents.toBigInt().toInt(),
+        reason: event.reason,
+        userId: currentUserId,
+        userRole: currentUserRole.name,
+      );
+    } catch (_) {
+      // Audit failure should not block the sale
+    }
 
     emit(state.copyWith(
       clearBelowCostWarning: true,
@@ -1014,6 +1165,82 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
         clearBelowCostWarning: true,
       ));
     }
+  }
+
+  Future<void> _onLoyaltyDataRequested(
+    SaleLoyaltyDataRequested event,
+    Emitter<SaleFormState> emit,
+  ) async {
+    if (_loyaltyRepository == null) return;
+
+    try {
+      final settings = await _loyaltyRepository.getLoyaltySettings();
+      if (settings == null || !settings.isEnabled || !settings.allowPointsRedemption) {
+        emit(state.copyWith(clearLoyalty: true));
+        return;
+      }
+
+      final summary = await _loyaltyRepository.getCustomerLoyaltySummary(event.customerId);
+      if (summary == null) {
+        emit(state.copyWith(clearLoyalty: true));
+        return;
+      }
+
+      emit(state.copyWith(
+        loyaltyPointsBalance: summary.pointsBalance,
+        loyaltySettings: settings,
+        loyaltyPointsToRedeem: 0,
+        loyaltyDiscountCents: 0,
+        loyaltyRedemptionEnabled: false,
+      ));
+    } catch (_) {
+      emit(state.copyWith(clearLoyalty: true));
+    }
+  }
+
+  void _onLoyaltyRedemptionChanged(
+    SaleLoyaltyRedemptionChanged event,
+    Emitter<SaleFormState> emit,
+  ) {
+    final settings = state.loyaltySettings;
+    if (settings == null) return;
+
+    if (!event.enabled) {
+      emit(state.copyWith(
+        loyaltyRedemptionEnabled: false,
+        loyaltyPointsToRedeem: 0,
+        loyaltyDiscountCents: 0,
+      ));
+      return;
+    }
+
+    // Calculate max redeemable points based on settings constraints
+    final pointValueCents = settings.pointValueCents;
+    final maxPercentBps = settings.maxRedemptionPercentBps;
+    final invoiceTotal = state.totalBeforeLoyaltyCents.toBigInt().toInt();
+
+    // Max discount from percentage cap: (invoiceTotal * maxPercentBps) / 10000
+    final maxDiscountFromPercent = (invoiceTotal * maxPercentBps) ~/ 10000;
+
+    // Max discount from available points: pointsBalance * pointValueCents
+    final maxDiscountFromPoints = state.loyaltyPointsBalance * pointValueCents;
+
+    // The actual max discount is the minimum of both caps and the invoice total
+    final maxDiscount = [maxDiscountFromPercent, maxDiscountFromPoints, invoiceTotal]
+        .reduce((a, b) => a < b ? a : b);
+
+    // Max redeemable points = maxDiscount / pointValueCents
+    final maxRedeemablePoints = pointValueCents > 0 ? maxDiscount ~/ pointValueCents : 0;
+
+    // Clamp requested points to valid range
+    final pointsToRedeem = event.pointsToRedeem.clamp(0, maxRedeemablePoints);
+    final discountCents = pointsToRedeem * pointValueCents;
+
+    emit(state.copyWith(
+      loyaltyRedemptionEnabled: true,
+      loyaltyPointsToRedeem: pointsToRedeem,
+      loyaltyDiscountCents: discountCents,
+    ));
   }
 
   /// Distribute [total] proportionally across items based on [weights].

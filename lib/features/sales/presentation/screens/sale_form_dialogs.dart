@@ -1057,9 +1057,18 @@ class _CheckoutSheet extends StatefulWidget {
 
 class _CheckoutSheetState extends State<_CheckoutSheet> {
   final _paidCtrl = TextEditingController();
+  bool _loyaltyLoadTriggered = false;
 
   @override
   void dispose() { _paidCtrl.dispose(); super.dispose(); }
+
+  void _ensureLoyaltyDataLoaded(BuildContext context, SaleFormState state) {
+    if (_loyaltyLoadTriggered) return;
+    if (state.customerId != null && state.loyaltySettings == null) {
+      _loyaltyLoadTriggered = true;
+      context.read<SaleFormBloc>().add(SaleLoyaltyDataRequested(state.customerId!));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1068,6 +1077,7 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
 
     return BlocBuilder<SaleFormBloc, SaleFormState>(
       builder: (context, state) {
+        _ensureLoyaltyDataLoaded(context, state);
         return DraggableScrollableSheet(
           initialChildSize: 0.85, maxChildSize: 0.95, minChildSize: 0.5, expand: false,
           builder: (context, scrollCtrl) => Column(children: [
@@ -1148,7 +1158,18 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                         currencyService: widget.currencyService,
                       ),
                     ),
-                  const SizedBox(height: 16),
+                  // Loyalty Points Redemption
+                  if (state.customerId != null &&
+                      state.loyaltySettings != null &&
+                      state.loyaltyPointsBalance > 0 &&
+                      state.loyaltySettings!.allowPointsRedemption &&
+                      state.loyaltyPointsBalance >= state.loyaltySettings!.minRedemptionPoints) ...[
+                    _LoyaltyRedemptionSection(
+                      state: state,
+                      currencyService: widget.currencyService,
+                    ),
+                    const SizedBox(height: 16),
+                  ],
 
                   // Payment Method
                   _section(theme, cs, LucideIcons.wallet, 'sales.payment_method'.tr(),
@@ -1377,6 +1398,12 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                         const SizedBox(height: 8),
                         _cRow(theme, 'sales.tax'.tr(),
                           widget.currencyService.format(state.taxCents.toBigInt().toInt())),
+                      ],
+                      if (state.loyaltyDiscountCents > 0) ...[
+                        const SizedBox(height: 8),
+                        _cRow(theme, 'sales.loyalty_discount'.tr(),
+                          '- ${widget.currencyService.format(state.loyaltyDiscountCents)}',
+                          valueColor: Colors.deepPurple),
                       ],
                       Divider(height: 20, color: cs.outlineVariant.withValues(alpha: 0.5)),
                       _cRow(theme, 'sales.total'.tr(),
@@ -1725,5 +1752,244 @@ class _CustomerBalanceInfo extends StatelessWidget {
         ),
       ),
     ]);
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// LOYALTY POINTS REDEMPTION SECTION
+// ═══════════════════════════════════════════════════════
+class _LoyaltyRedemptionSection extends StatefulWidget {
+  final SaleFormState state;
+  final CurrencyService currencyService;
+
+  const _LoyaltyRedemptionSection({
+    required this.state,
+    required this.currencyService,
+  });
+
+  @override
+  State<_LoyaltyRedemptionSection> createState() => _LoyaltyRedemptionSectionState();
+}
+
+class _LoyaltyRedemptionSectionState extends State<_LoyaltyRedemptionSection> {
+  late TextEditingController _pointsCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _pointsCtrl = TextEditingController(
+      text: widget.state.loyaltyPointsToRedeem > 0
+          ? widget.state.loyaltyPointsToRedeem.toString()
+          : '',
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant _LoyaltyRedemptionSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.state.loyaltyPointsToRedeem != widget.state.loyaltyPointsToRedeem) {
+      final newText = widget.state.loyaltyPointsToRedeem > 0
+          ? widget.state.loyaltyPointsToRedeem.toString()
+          : '';
+      if (_pointsCtrl.text != newText) {
+        _pointsCtrl.text = newText;
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _pointsCtrl.dispose();
+    super.dispose();
+  }
+
+  int _maxRedeemablePoints() {
+    final settings = widget.state.loyaltySettings;
+    if (settings == null) return 0;
+
+    final pointValueCents = settings.pointValueCents;
+    final maxPercentBps = settings.maxRedemptionPercentBps;
+    final invoiceTotal = widget.state.totalBeforeLoyaltyCents.toBigInt().toInt();
+
+    final maxDiscountFromPercent = (invoiceTotal * maxPercentBps) ~/ 10000;
+    final maxDiscountFromPoints = widget.state.loyaltyPointsBalance * pointValueCents;
+    final maxDiscount = [maxDiscountFromPercent, maxDiscountFromPoints, invoiceTotal]
+        .reduce((a, b) => a < b ? a : b);
+
+    return pointValueCents > 0 ? maxDiscount ~/ pointValueCents : 0;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final settings = widget.state.loyaltySettings!;
+    final pointValueCents = settings.pointValueCents;
+    final balance = widget.state.loyaltyPointsBalance;
+    final balanceValueCents = balance * pointValueCents;
+    final maxPoints = _maxRedeemablePoints();
+    final maxPercent = (settings.maxRedemptionPercentBps / 100).toStringAsFixed(0);
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.deepPurple.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.deepPurple.withValues(alpha: 0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Row(children: [
+            const Icon(LucideIcons.award, size: 18, color: Colors.deepPurple),
+            const SizedBox(width: 8),
+            Text('sales.loyalty_points'.tr(),
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w600, color: Colors.deepPurple)),
+            const Spacer(),
+            // Points balance badge
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.deepPurple.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                '$balance ${'sales.points'.tr()}',
+                style: theme.textTheme.labelMedium?.copyWith(
+                  fontWeight: FontWeight.bold, color: Colors.deepPurple),
+              ),
+            ),
+          ]),
+          const SizedBox(height: 8),
+
+          // Points value info
+          Row(children: [
+            Icon(LucideIcons.coins, size: 14, color: cs.onSurfaceVariant),
+            const SizedBox(width: 6),
+            Text(
+              '${'sales.points_value'.tr()}: ${widget.currencyService.format(balanceValueCents)}',
+              style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+            ),
+            const Spacer(),
+            Text(
+              '${'sales.max_discount'.tr()}: $maxPercent%',
+              style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+            ),
+          ]),
+          const SizedBox(height: 12),
+
+          // Toggle + redeem controls
+          Row(children: [
+            Switch.adaptive(
+              value: widget.state.loyaltyRedemptionEnabled,
+              activeTrackColor: Colors.deepPurple,
+              onChanged: (enabled) {
+                if (enabled) {
+                  // Auto-set to max redeemable points
+                  context.read<SaleFormBloc>().add(
+                    SaleLoyaltyRedemptionChanged(enabled: true, pointsToRedeem: maxPoints));
+                } else {
+                  context.read<SaleFormBloc>().add(
+                    const SaleLoyaltyRedemptionChanged(enabled: false, pointsToRedeem: 0));
+                }
+              },
+            ),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Text(
+                'sales.use_loyalty_points'.tr(),
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w500,
+                  color: widget.state.loyaltyRedemptionEnabled ? Colors.deepPurple : cs.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ]),
+
+          // Points input + slider (only when enabled)
+          if (widget.state.loyaltyRedemptionEnabled && maxPoints > 0) ...[
+            const SizedBox(height: 8),
+            // Slider
+            SliderTheme(
+              data: SliderThemeData(
+                activeTrackColor: Colors.deepPurple,
+                thumbColor: Colors.deepPurple,
+                inactiveTrackColor: Colors.deepPurple.withValues(alpha: 0.15),
+                overlayColor: Colors.deepPurple.withValues(alpha: 0.1),
+              ),
+              child: Slider(
+                value: widget.state.loyaltyPointsToRedeem.toDouble(),
+                min: 0,
+                max: maxPoints.toDouble(),
+                divisions: maxPoints > 0 ? maxPoints : 1,
+                label: '${widget.state.loyaltyPointsToRedeem}',
+                onChanged: (val) {
+                  context.read<SaleFormBloc>().add(
+                    SaleLoyaltyRedemptionChanged(enabled: true, pointsToRedeem: val.round()));
+                },
+              ),
+            ),
+            // Points input field
+            Row(children: [
+              Expanded(
+                child: TextField(
+                  controller: _pointsCtrl,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  decoration: InputDecoration(
+                    labelText: 'sales.points_to_redeem'.tr(),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    isDense: true,
+                    suffixText: '/ $maxPoints',
+                  ),
+                  onChanged: (v) {
+                    final pts = int.tryParse(v) ?? 0;
+                    context.read<SaleFormBloc>().add(
+                      SaleLoyaltyRedemptionChanged(enabled: true, pointsToRedeem: pts));
+                  },
+                ),
+              ),
+              const SizedBox(width: 12),
+              // Quick max button
+              FilledButton.tonal(
+                onPressed: () {
+                  context.read<SaleFormBloc>().add(
+                    SaleLoyaltyRedemptionChanged(enabled: true, pointsToRedeem: maxPoints));
+                },
+                style: FilledButton.styleFrom(
+                  backgroundColor: Colors.deepPurple.withValues(alpha: 0.12),
+                  foregroundColor: Colors.deepPurple,
+                ),
+                child: Text('sales.max'.tr()),
+              ),
+            ]),
+            const SizedBox(height: 10),
+            // Discount preview
+            if (widget.state.loyaltyDiscountCents > 0)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.deepPurple.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(children: [
+                  const Icon(LucideIcons.tag, size: 14, color: Colors.deepPurple),
+                  const SizedBox(width: 6),
+                  Text('sales.loyalty_discount'.tr(),
+                    style: theme.textTheme.bodySmall?.copyWith(color: Colors.deepPurple)),
+                  const Spacer(),
+                  Text(
+                    '- ${widget.currencyService.format(widget.state.loyaltyDiscountCents)}',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.bold, color: Colors.deepPurple),
+                  ),
+                ]),
+              ),
+          ],
+        ],
+      ),
+    );
   }
 }

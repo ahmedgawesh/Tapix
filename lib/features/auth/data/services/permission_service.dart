@@ -6,6 +6,7 @@ class PermissionService {
   static const List<UserRole> _roleHierarchy = [
     UserRole.salesperson,
     UserRole.cashier,
+    UserRole.accountant,
     UserRole.manager,
     UserRole.owner,
   ];
@@ -108,6 +109,30 @@ class PermissionService {
       'manage_expenses',
       'void_transactions',
       'export_data',
+    ],
+    UserRole.accountant: [
+      // Financial & Accounting
+      Permissions.viewReports,
+      Permissions.viewDailyReports,
+      Permissions.manageExpenses,
+      Permissions.manageAccounting,
+      Permissions.exportData,
+      Permissions.viewAuditLogs,
+      // View only (read access to data for reconciliation)
+      Permissions.viewProducts,
+      Permissions.viewCustomers,
+      Permissions.viewSuppliers,
+      Permissions.viewPurchases,
+      // Legacy permissions
+      'view_reports',
+      'manage_expenses',
+      'manage_accounting',
+      'export_data',
+      'view_audit_logs',
+      'view_customers',
+      'view_products',
+      'view_suppliers',
+      'view_purchases',
     ],
     UserRole.cashier: [
       // Sales Operations

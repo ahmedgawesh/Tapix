@@ -201,6 +201,7 @@ class SalePdfService {
             balanceCents: customer.balanceCents.toBigInt().toInt(),
             cs: cs,
             fonts: fonts,
+            loyaltyPoints: customer.loyaltyPointsBalance,
           );
         }
       }
@@ -417,6 +418,7 @@ class SalePdfService {
             balanceCents: customer.balanceCents.toBigInt().toInt(),
             cs: cs,
             fonts: fonts,
+            loyaltyPoints: customer.loyaltyPointsBalance,
           );
         }
       }
@@ -441,6 +443,7 @@ class SalePdfService {
                 invoiceNumber: state.saleNumber ?? '${state.saleId ?? ''}',
                 date: state.saleDate,
                 customerName: state.customerName ?? 'sales.walk_in'.tr(),
+                salespersonName: state.employeeName,
                 locale: locale,
                 fonts: fonts,
               ),
@@ -451,6 +454,7 @@ class SalePdfService {
                   variantSku: item.variant?.sku,
                   colorName: item.colorName,
                   sizeName: item.sizeName,
+                  employeeName: item.employeeName,
                   quantity: item.quantity,
                   unitPriceCents: item.unitPriceCents.toBigInt().toInt(),
                   totalCents: item.totalCents.toBigInt().toInt(),
@@ -530,6 +534,7 @@ class SalePdfService {
             balanceCents: customer.balanceCents.toBigInt().toInt(),
             cs: cs,
             fonts: fonts,
+            loyaltyPoints: customer.loyaltyPointsBalance,
           );
         }
       }
@@ -554,6 +559,7 @@ class SalePdfService {
                 invoiceNumber: sale.invoiceNumber,
                 date: sale.saleDate,
                 customerName: sale.customerName ?? 'sales.walk_in'.tr(),
+                salespersonName: sale.employeeName,
                 locale: locale,
                 fonts: fonts,
               ),
@@ -564,6 +570,7 @@ class SalePdfService {
                   variantSku: item.variantSku,
                   colorName: item.colorName,
                   sizeName: item.sizeName,
+                  employeeName: item.employeeName,
                   quantity: item.quantity,
                   unitPriceCents: item.unitPriceCents.toBigInt().toInt(),
                   totalCents: item.totalCents.toBigInt().toInt(),
@@ -668,6 +675,7 @@ class SalePdfService {
     required String invoiceNumber,
     required DateTime date,
     required String customerName,
+    String? salespersonName,
     required Locale locale,
     required _PdfFonts fonts,
   }) {
@@ -684,6 +692,8 @@ class SalePdfService {
           _pdfInfoRow('sales.invoice_date'.tr(),
               DateFormat.yMMMd(locale.toString()).format(date), fonts.regular),
           _pdfInfoRow('sales.customer'.tr(), customerName, fonts.regular),
+          if (salespersonName != null && salespersonName.isNotEmpty)
+            _pdfInfoRow('sales.salesperson'.tr(), salespersonName, fonts.regular),
         ],
       ),
     );
@@ -695,15 +705,26 @@ class SalePdfService {
     required _PdfFonts fonts,
     required bool isRtl,
   }) {
+    final hasPerItemSalesperson = items.any((i) => i.employeeName != null && i.employeeName!.isNotEmpty);
+
     return pw.Table(
       border: pw.TableBorder.all(color: PdfColors.grey300),
-      columnWidths: {
-        0: const pw.FlexColumnWidth(1),
-        1: const pw.FlexColumnWidth(3),
-        2: const pw.FlexColumnWidth(1),
-        3: const pw.FlexColumnWidth(1.5),
-        4: const pw.FlexColumnWidth(1.5),
-      },
+      columnWidths: hasPerItemSalesperson
+          ? {
+              0: const pw.FlexColumnWidth(0.8),
+              1: const pw.FlexColumnWidth(2.5),
+              2: const pw.FlexColumnWidth(1.5),
+              3: const pw.FlexColumnWidth(0.8),
+              4: const pw.FlexColumnWidth(1.3),
+              5: const pw.FlexColumnWidth(1.3),
+            }
+          : {
+              0: const pw.FlexColumnWidth(1),
+              1: const pw.FlexColumnWidth(3),
+              2: const pw.FlexColumnWidth(1),
+              3: const pw.FlexColumnWidth(1.5),
+              4: const pw.FlexColumnWidth(1.5),
+            },
       children: [
         // Header
         pw.TableRow(
@@ -711,6 +732,8 @@ class SalePdfService {
           children: [
             _tableCell('#', fonts.bold, isHeader: true),
             _tableCell('sales.product_col'.tr(), fonts.bold, isHeader: true),
+            if (hasPerItemSalesperson)
+              _tableCell('sales.salesperson'.tr(), fonts.bold, isHeader: true),
             _tableCell('sales.qty_col'.tr(), fonts.bold, isHeader: true),
             _tableCell('sales.unit_price'.tr(), fonts.bold, isHeader: true),
             _tableCell('sales.total'.tr(), fonts.bold, isHeader: true),
@@ -725,6 +748,8 @@ class SalePdfService {
             children: [
               _tableCell('${idx + 1}', fonts.regular),
               _tableCell(displayName, fonts.regular),
+              if (hasPerItemSalesperson)
+                _tableCell(item.employeeName ?? '', fonts.regular),
               _tableCell('${item.quantity}', fonts.regular),
               _tableCell(cs.format(item.unitPriceCents), fonts.regular),
               _tableCell(cs.format(item.totalCents), fonts.regular),
@@ -788,6 +813,7 @@ class SalePdfService {
     required int balanceCents,
     required CurrencyService cs,
     required _PdfFonts fonts,
+    int loyaltyPoints = 0,
   }) {
     final hasBalance = balanceCents != 0;
     final isOwed = balanceCents > 0; // positive = customer owes us
@@ -812,6 +838,19 @@ class SalePdfService {
             children: [
               _bidiText('sales.customer_account'.tr(), fonts.bold, fontSize: 9),
               _bidiText(customerName, fonts.regular, fontSize: 8, color: PdfColors.grey600),
+              if (loyaltyPoints > 0) ...[
+                pw.SizedBox(height: 4),
+                pw.Row(
+                  children: [
+                    _bidiText('sales.loyalty_points_balance'.tr(), fonts.regular, fontSize: 8, color: PdfColors.amber800),
+                    pw.SizedBox(width: 4),
+                    pw.Text(
+                      '$loyaltyPoints',
+                      style: pw.TextStyle(font: fonts.bold, fontSize: 9, color: PdfColors.amber800),
+                    ),
+                  ],
+                ),
+              ],
             ],
           ),
           pw.Column(
@@ -912,6 +951,7 @@ class _PdfLineItem {
   final String? variantSku;
   final String? colorName;
   final String? sizeName;
+  final String? employeeName;
   final int quantity;
   final int unitPriceCents;
   final int totalCents;
@@ -921,6 +961,7 @@ class _PdfLineItem {
     this.variantSku,
     this.colorName,
     this.sizeName,
+    this.employeeName,
     required this.quantity,
     required this.unitPriceCents,
     required this.totalCents,

@@ -33,6 +33,18 @@ abstract class ProductVariantRepository {
 
   Future<bool> updateVariant(ProductVariant variant);
   Future<int> deleteVariant(int id);
+
+  /// Adjust stock quantity for a variant with accounting journal entry.
+  /// [quantityDelta] is positive for increase, negative for decrease.
+  /// [reason] is required for audit trail.
+  /// [currencyId] and [userId] are needed for journal entry posting.
+  Future<void> adjustStock({
+    required int variantId,
+    required int quantityDelta,
+    required String reason,
+    required int currencyId,
+    int? userId,
+  });
   
   // Validation helpers
   Future<bool> isSkuTaken(String sku, {int? excludeVariantId});

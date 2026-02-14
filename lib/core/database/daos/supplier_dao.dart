@@ -58,37 +58,56 @@ class SupplierDao extends DatabaseAccessor<AppDatabase> with _$SupplierDaoMixin 
     return '$prefix-${(count + 1).toString().padLeft(4, '0')}';
   }
 
+  /// Transaction types that are managed by PurchaseDao and must NOT be routed
+  /// through this method. PurchaseDao updates supplier balance directly, so
+  /// routing these here would cause double balance updates.
+  static const _purchaseOwnedTypes = {
+    'purchase',
+    'purchase_void',
+    'purchase_return',
+    'refund',
+    'refund_reversal',
+  };
+
   Future<int> createTransaction(SupplierTransactionsCompanion tx) {
     return transaction(() async {
+      // Guard: reject types owned by PurchaseDao to prevent double balance updates
+      final type = tx.transactionType.value;
+      if (_purchaseOwnedTypes.contains(type)) {
+        throw StateError(
+          'SupplierDao.createTransaction() must not be used for "$type" transactions. '
+          'These are managed by PurchaseDao which updates balance directly.',
+        );
+      }
+
       // Auto-generate transaction number if not provided
       var companion = tx;
       if (!tx.transactionNumber.present || tx.transactionNumber.value == null) {
-        final type = tx.transactionType.value;
         String prefix;
         switch (type) {
           case 'payment':
-            prefix = 'PAY';
+            prefix = 'SPAY';
             break;
           case 'discount':
-            prefix = 'DSC';
+            prefix = 'SDSC';
             break;
           case 'purchase':
             prefix = 'PUR';
             break;
           case 'return':
-            prefix = 'RET';
+            prefix = 'PRET';
             break;
           case 'payment_reversal':
-            prefix = 'PRV';
+            prefix = 'SPRV';
             break;
           case 'credit_note':
-            prefix = 'CRN';
+            prefix = 'SCRN';
             break;
           case 'adjustment':
-            prefix = 'ADJ';
+            prefix = 'SADJ';
             break;
           default:
-            prefix = 'TXN';
+            prefix = 'STXN';
         }
         final txNumber = await _nextTransactionNumber(prefix);
         companion = companion.copyWith(transactionNumber: Value(txNumber));
@@ -99,7 +118,6 @@ class SupplierDao extends DatabaseAccessor<AppDatabase> with _$SupplierDaoMixin 
       final supplierId = tx.supplierId.value;
       final deltaCents = tx.amountCents.value.toBigInt().toInt();
 
-      final type = tx.transactionType.value;
       final affectsBalance = type == 'purchase' ||
           type == 'payment' ||
           type == 'payment_reversal' ||

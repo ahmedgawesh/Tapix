@@ -116,7 +116,7 @@ abstract class JournalRepository {
 
   // ── Trial Balance & Reconciliation ────────────────────────
 
-  /// Get trial balance computed from current account balances
+  /// Trial Balance — SINGLE SOURCE OF TRUTH: journal_lines table.
   Future<TrialBalance> getTrialBalance({DateTime? asOfDate});
 
   /// Run reconciliation checks and return any issues found

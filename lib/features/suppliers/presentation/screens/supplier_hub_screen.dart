@@ -33,9 +33,9 @@ class _SupplierHubContent extends StatefulWidget {
 class _SupplierHubContentState extends State<_SupplierHubContent> {
   final _searchController = TextEditingController();
 
-  Future<void> _showSupplierPicker({
+  void _showSupplierPickerBottomSheet({
     required List<Supplier> suppliers,
-  }) async {
+  }) {
     if (suppliers.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('suppliers.empty'.tr())),
@@ -43,38 +43,27 @@ class _SupplierHubContentState extends State<_SupplierHubContent> {
       return;
     }
 
-    final supplierId = await showDialog<int?>(
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final currencyService = sl<CurrencyService>();
+
+    showModalBottomSheet<Supplier>(
       context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: Text('purchases.select_supplier'.tr()),
-          content: SizedBox(
-            width: 420,
-            child: ListView.separated(
-              shrinkWrap: true,
-              itemCount: suppliers.length,
-              separatorBuilder: (_, _) => const Divider(height: 1),
-              itemBuilder: (context, index) {
-                final supplier = suppliers[index];
-                return ListTile(
-                  title: Text(supplier.name),
-                  onTap: () => Navigator.pop(dialogContext, supplier.id),
-                );
-              },
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: Text('common.cancel'.tr()),
-            ),
-          ],
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (sheetContext) {
+        return _SupplierPickerSheet(
+          suppliers: suppliers,
+          theme: theme,
+          colorScheme: colorScheme,
+          currencyService: currencyService,
         );
       },
-    );
-
-    if (!mounted || supplierId == null) return;
-    context.push('/suppliers/$supplierId');
+    ).then((supplier) {
+      if (supplier != null && mounted) {
+        context.push('/suppliers/${supplier.id}');
+      }
+    });
   }
 
   @override
@@ -162,6 +151,7 @@ class _SupplierHubContentState extends State<_SupplierHubContent> {
   Widget _buildContent(BuildContext context, SuppliersData data) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     final currencyService = sl<CurrencyService>();
 
     // Calculate metrics
@@ -170,10 +160,10 @@ class _SupplierHubContentState extends State<_SupplierHubContent> {
       0,
       (sum, s) {
         final balance = s.balanceCents.toBigInt().toInt();
-        return balance > 0 ? sum + balance : sum;
+        return balance != 0 ? sum + balance.abs() : sum;
       },
     );
-    final withBalanceCount = data.suppliers.where((s) => s.balanceCents.toBigInt().toInt() > 0).length;
+    final withBalanceCount = data.suppliers.where((s) => s.balanceCents.toBigInt().toInt() != 0).length;
 
     return RefreshIndicator(
       onRefresh: () async {
@@ -297,22 +287,49 @@ class _SupplierHubContentState extends State<_SupplierHubContent> {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  ActionChip(
-                    avatar: const Icon(LucideIcons.plus, size: 18),
-                    label: Text('suppliers.add'.tr()),
+                  OutlinedButton.icon(
                     onPressed: () => context.push('/suppliers/new'),
-                  ),
-                  ActionChip(
-                    avatar: const Icon(LucideIcons.banknote, size: 18),
-                    label: Text('suppliers.make_payment'.tr()),
-                    onPressed: () => _showSupplierPicker(
-                      suppliers: data.suppliers,
+                    icon: const Icon(LucideIcons.plus, size: 18),
+                    label: Text('suppliers.add'.tr()),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: isDark ? const Color(0xFF90CAF9) : null,
+                      side: BorderSide(
+                        color: (isDark ? const Color(0xFF1E3A5F) : colorScheme.outlineVariant)
+                            .withValues(alpha: isDark ? 0.9 : 0.8),
+                      ),
+                      backgroundColor: isDark ? const Color(0xFF0B0F14) : null,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                     ),
                   ),
-                  ActionChip(
-                    avatar: const Icon(LucideIcons.barChart3, size: 18),
-                    label: Text('suppliers.view_reports'.tr()),
+                  OutlinedButton.icon(
+                    onPressed: () => _showSupplierPickerBottomSheet(
+                      suppliers: data.suppliers,
+                    ),
+                    icon: const Icon(LucideIcons.banknote, size: 18),
+                    label: Text('suppliers.make_payment'.tr()),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: isDark ? const Color(0xFFFFB74D) : null,
+                      side: BorderSide(
+                        color: (isDark ? const Color(0xFF3D2E10) : colorScheme.outlineVariant)
+                            .withValues(alpha: isDark ? 0.9 : 0.8),
+                      ),
+                      backgroundColor: isDark ? const Color(0xFF0B0F14) : null,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    ),
+                  ),
+                  OutlinedButton.icon(
                     onPressed: () => context.push('/reports'),
+                    icon: const Icon(LucideIcons.barChart3, size: 18),
+                    label: Text('suppliers.view_reports'.tr()),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: isDark ? const Color(0xFFB0BEC5) : null,
+                      side: BorderSide(
+                        color: (isDark ? const Color(0xFF253242) : colorScheme.outlineVariant)
+                            .withValues(alpha: isDark ? 0.9 : 0.8),
+                      ),
+                      backgroundColor: isDark ? const Color(0xFF0B0F14) : null,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    ),
                   ),
                 ],
               ),
@@ -547,7 +564,7 @@ class _SupplierListTile extends StatelessWidget {
               Text(
                 currencyService.format(balanceCents),
                 style: theme.textTheme.titleMedium?.copyWith(
-                  color: balanceCents > 0 ? Colors.red : Colors.green,
+                  color: balanceCents > 0 ? Colors.red : balanceCents < 0 ? Colors.green : Colors.blue,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -555,6 +572,135 @@ class _SupplierListTile extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _SupplierPickerSheet extends StatefulWidget {
+  const _SupplierPickerSheet({
+    required this.suppliers,
+    required this.theme,
+    required this.colorScheme,
+    required this.currencyService,
+  });
+
+  final List<Supplier> suppliers;
+  final ThemeData theme;
+  final ColorScheme colorScheme;
+  final CurrencyService currencyService;
+
+  @override
+  State<_SupplierPickerSheet> createState() => _SupplierPickerSheetState();
+}
+
+class _SupplierPickerSheetState extends State<_SupplierPickerSheet> {
+  final _searchController = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.7,
+      minChildSize: 0.5,
+      maxChildSize: 0.95,
+      expand: false,
+      builder: (context, scrollController) {
+        final query = _searchController.text.toLowerCase();
+        final filtered = query.isEmpty
+            ? widget.suppliers
+            : widget.suppliers.where((s) => s.name.toLowerCase().contains(query)).toList();
+
+        return Column(
+          children: [
+            Container(
+              margin: const EdgeInsets.only(top: 12),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: widget.colorScheme.outline.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Text(
+                    'purchases.select_supplier'.tr(),
+                    style: widget.theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text('common.cancel'.tr()),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: TextField(
+                controller: _searchController,
+                decoration: InputDecoration(
+                  hintText: 'suppliers.search_hint'.tr(),
+                  prefixIcon: const Icon(LucideIcons.search),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  filled: true,
+                ),
+                onChanged: (_) => setState(() {}),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: filtered.isEmpty
+                  ? Center(child: Text('suppliers.no_results'.tr()))
+                  : ListView.builder(
+                      controller: scrollController,
+                      itemCount: filtered.length,
+                      itemBuilder: (context, index) {
+                        final supplier = filtered[index];
+                        final balanceCents = supplier.balanceCents.toBigInt().toInt();
+
+                        return ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: widget.colorScheme.primaryContainer,
+                            child: Text(
+                              supplier.name.isNotEmpty
+                                  ? supplier.name[0].toUpperCase()
+                                  : '?',
+                              style: TextStyle(
+                                color: widget.colorScheme.onPrimaryContainer,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          title: Text(
+                            supplier.name,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          subtitle: Text(
+                            widget.currencyService.format(balanceCents),
+                            style: TextStyle(
+                              color: balanceCents > 0 ? Colors.red : balanceCents < 0 ? Colors.green : Colors.blue,
+                            ),
+                          ),
+                          onTap: () => Navigator.pop(context, supplier),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

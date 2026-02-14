@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:developer' as developer;
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -9,6 +10,12 @@ class SessionService {
   static const String _userIdKey = 'current_user_id';
   static const String _sessionTokenKey = 'session_token';
   static const String _lastActivityKey = 'last_activity';
+
+  /// In-memory cache of the current user ID.
+  /// This avoids relying on async FlutterSecureStorage reads for every
+  /// audit log call, which can return null on some Android devices.
+  int? _cachedUserId;
+  bool _cacheInitialized = false;
 
   final _sessionController = StreamController<int?>.broadcast();
 
@@ -23,6 +30,9 @@ class SessionService {
   Stream<int?> get sessionStream => _sessionController.stream;
 
   Future<void> saveSession(int userId) async {
+    _cachedUserId = userId;
+    _cacheInitialized = true;
+    developer.log('SessionService.saveSession: userId=$userId', name: 'SessionService');
     final token = _generateToken();
     await _storage.write(key: _userIdKey, value: userId.toString());
     await _storage.write(key: _sessionTokenKey, value: token);
@@ -31,9 +41,22 @@ class SessionService {
   }
 
   Future<int?> getCurrentUserId() async {
-    final userIdStr = await _storage.read(key: _userIdKey);
-    if (userIdStr == null) return null;
-    return int.tryParse(userIdStr);
+    // Fast path: return from in-memory cache
+    if (_cacheInitialized) {
+      return _cachedUserId;
+    }
+
+    // First call: hydrate cache from storage
+    try {
+      final userIdStr = await _storage.read(key: _userIdKey);
+      _cachedUserId = userIdStr != null ? int.tryParse(userIdStr) : null;
+    } catch (e) {
+      developer.log('SessionService.getCurrentUserId: storage read failed: $e', name: 'SessionService');
+      _cachedUserId = null;
+    }
+    _cacheInitialized = true;
+    developer.log('SessionService.getCurrentUserId: resolved userId=$_cachedUserId', name: 'SessionService');
+    return _cachedUserId;
   }
 
   Future<bool> isSessionValid() async {
@@ -55,6 +78,8 @@ class SessionService {
   }
 
   Future<void> clearSession() async {
+    _cachedUserId = null;
+    _cacheInitialized = true;
     await _storage.delete(key: _userIdKey);
     await _storage.delete(key: _sessionTokenKey);
     await _storage.delete(key: _lastActivityKey);

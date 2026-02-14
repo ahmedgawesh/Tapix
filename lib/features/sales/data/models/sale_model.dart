@@ -9,6 +9,7 @@ class SaleModel extends SaleEntity {
     super.customerId,
     super.customerName,
     super.employeeId,
+    super.employeeName,
     required super.subtotalCents,
     required super.taxCents,
     required super.discountCents,
@@ -53,6 +54,7 @@ class SaleModel extends SaleEntity {
       customerId: swc.sale.customerId,
       customerName: swc.customer?.name,
       employeeId: swc.sale.employeeId,
+      employeeName: swc.employee?.name,
       subtotalCents: swc.sale.subtotalCents,
       taxCents: swc.sale.taxCents,
       discountCents: swc.sale.discountCents,
@@ -87,6 +89,8 @@ class SaleItemModel extends SaleItemEntity {
     required super.discountCents,
     required super.taxCents,
     required super.totalCents,
+    super.employeeId,
+    super.employeeName,
     required super.createdAt,
   });
 
@@ -123,6 +127,8 @@ class SaleItemModel extends SaleItemEntity {
       discountCents: details.item.discountCents,
       taxCents: details.item.taxCents,
       totalCents: details.item.totalCents,
+      employeeId: details.item.employeeId,
+      employeeName: details.employee?.name,
       createdAt: details.item.createdAt,
     );
   }

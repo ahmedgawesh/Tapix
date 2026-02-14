@@ -34,12 +34,19 @@ class _VirtualAccount {
 
 const _virtualAccounts = [
   _VirtualAccount('1000', 'Cash', 'asset'),
+  _VirtualAccount('1010', 'Bank', 'asset'),
   _VirtualAccount('1100', 'Accounts Receivable', 'asset'),
   _VirtualAccount('1200', 'Inventory', 'asset'),
+  _VirtualAccount('1300', 'VAT Receivable', 'asset'),
   _VirtualAccount('2000', 'Accounts Payable', 'liability'),
+  _VirtualAccount('2100', 'VAT Payable', 'liability'),
+  _VirtualAccount('2300', 'Loyalty Points Liability', 'liability'),
+  _VirtualAccount('3000', 'Owner Capital', 'equity'),
   _VirtualAccount('4000', 'Sales Revenue', 'revenue'),
-  _VirtualAccount('5000', 'Cost of Goods Sold', 'expense'),
-  _VirtualAccount('5100', 'Operating Expenses', 'expense'),
+  _VirtualAccount('5100', 'Expenses', 'expense'),
+  _VirtualAccount('5200', 'Salaries Expense', 'expense'),
+  _VirtualAccount('5500', 'Discounts Given', 'expense'),
+  _VirtualAccount('5600', 'Commissions Expense', 'expense'),
 ];
 
 class GeneralLedgerScreen extends StatelessWidget {
@@ -377,49 +384,7 @@ class _GeneralLedgerViewState extends State<_GeneralLedgerView> {
             ));
           }
 
-        case '5000': // COGS
-          final purchRows = await db.customSelect(
-            '''
-            SELECT p.purchase_date AS dt, p.purchase_number AS ref,
-                   (p.total_cents - p.tax_cents) AS net_cost
-            FROM purchases p
-            WHERE p.status != 'voided'
-              AND p.purchase_date >= ? AND p.purchase_date <= ?
-            ORDER BY p.purchase_date
-            ''',
-            variables: [Variable.withString(startIso), Variable.withString(endIso)],
-            readsFrom: {db.purchases},
-          ).get();
-          for (final r in purchRows) {
-            entries.add(_LedgerEntry(
-              date: DateTime.parse(r.read<String>('dt')),
-              description: 'Purchase ${r.read<String>('ref')}',
-              debitCents: r.read<int>('net_cost'),
-              creditCents: 0,
-            ));
-          }
-          final retRows = await db.customSelect(
-            '''
-            SELECT pr.return_date AS dt, pr.return_number AS ref,
-                   (pr.total_cents - pr.tax_cents) AS net_return
-            FROM purchase_returns pr
-            WHERE pr.status = 'posted'
-              AND pr.return_date >= ? AND pr.return_date <= ?
-            ORDER BY pr.return_date
-            ''',
-            variables: [Variable.withString(startIso), Variable.withString(endIso)],
-            readsFrom: {db.purchaseReturns},
-          ).get();
-          for (final r in retRows) {
-            entries.add(_LedgerEntry(
-              date: DateTime.parse(r.read<String>('dt')),
-              description: 'Purchase Return ${r.read<String>('ref')}',
-              debitCents: 0,
-              creditCents: r.read<int>('net_return'),
-            ));
-          }
-
-        case '5100': // Operating Expenses
+        case '5100': // Expenses
           final rows = await db.customSelect(
             '''
             SELECT e.expense_date AS dt, e.description AS ref, e.amount_cents AS amount

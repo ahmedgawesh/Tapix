@@ -3,6 +3,7 @@ import 'package:equatable/equatable.dart';
 enum UserRole {
   owner,
   manager,
+  accountant,
   cashier,
   salesperson;
 
@@ -19,6 +20,8 @@ enum UserRole {
         return 'Owner';
       case UserRole.manager:
         return 'Manager';
+      case UserRole.accountant:
+        return 'Accountant';
       case UserRole.cashier:
         return 'Cashier';
       case UserRole.salesperson:
@@ -50,6 +53,7 @@ class UserEntity extends Equatable {
 
   bool get isOwner => role == UserRole.owner;
   bool get isManager => role == UserRole.manager;
+  bool get isAccountant => role == UserRole.accountant;
   bool get isCashier => role == UserRole.cashier;
   bool get isSalesperson => role == UserRole.salesperson;
 
@@ -57,6 +61,7 @@ class UserEntity extends Equatable {
     const hierarchy = [
       UserRole.salesperson,
       UserRole.cashier,
+      UserRole.accountant,
       UserRole.manager,
       UserRole.owner,
     ];

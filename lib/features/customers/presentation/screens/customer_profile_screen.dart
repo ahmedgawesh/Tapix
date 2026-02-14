@@ -3,6 +3,7 @@ import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons/lucide_icons.dart';
 import '../../../../core/theme/colors.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart';
@@ -14,6 +15,7 @@ import '../../domain/repositories/customer_repository.dart';
 import '../../domain/repositories/loyalty_repository.dart';
 import '../bloc/customer_loyalty_bloc.dart';
 import '../bloc/customer_profile_bloc.dart';
+import '../services/customer_transaction_pdf_service.dart';
 
 /// Customer profile screen with 360° view
 class CustomerProfileScreen extends StatefulWidget {
@@ -348,10 +350,7 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                     ],
                     _QuickActionsSection(
                       customer: customer,
-                      onPaymentPressed: () => context.push(
-                        '/customers/receive-payment',
-                        extra: {'customerId': customer.id},
-                      ),
+                      onPaymentPressed: () => _showPaymentDialog(context, customer),
                       onDiscountPressed: () => _showDiscountDialog(context, customer),
                       onReturnPressed: () => _selectSaleForReturn(context, customer),
                     ),
@@ -360,7 +359,7 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                     const SizedBox(height: 16),
                     _ContactInformationSection(customer: customer),
                     const SizedBox(height: 16),
-                    _RecentTransactionsSection(customerId: widget.customerId),
+                    _RecentTransactionsSection(customerId: widget.customerId, customer: customer),
                   ],
                 ),
               ),
@@ -465,81 +464,433 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
     await sl<CustomerRepository>().updateCustomer(updatedCustomer);
   }
 
-  void _showDiscountDialog(BuildContext context, Customer customer) {
+  void _showPaymentDialog(BuildContext context, Customer customer) {
     final profileBloc = context.read<CustomerProfileBloc>();
     final loyaltyBloc = context.read<CustomerLoyaltyBloc>();
     final amountController = TextEditingController();
     final descriptionController = TextEditingController();
+    var selectedDate = DateTime.now();
 
     showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text('customers.add_discount'.tr()),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: amountController,
-              decoration: InputDecoration(
-                labelText: 'customers.discount_amount'.tr(),
-                prefixIcon: const Icon(Icons.discount_outlined),
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (stfContext, setState) {
+          final theme = Theme.of(stfContext);
+          final colorScheme = theme.colorScheme;
+
+          return Dialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(LucideIcons.banknote, size: 40, color: colorScheme.primary),
+                    const SizedBox(height: 12),
+                    Text(
+                      'customers.receive_payment'.tr(),
+                      style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 24),
+                    TextField(
+                      controller: amountController,
+                      decoration: InputDecoration(
+                        labelText: 'customers.payment_amount'.tr(),
+                        prefixIcon: const Icon(LucideIcons.badgeDollarSign),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        filled: true,
+                      ),
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      autofocus: true,
+                      onTap: () {
+                        if (amountController.text == '0.00' || amountController.text.isEmpty) {
+                          amountController.clear();
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    InkWell(
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: dialogContext,
+                          initialDate: selectedDate,
+                          firstDate: DateTime(2000),
+                          lastDate: DateTime(2100),
+                        );
+                        if (picked != null) {
+                          setState(() => selectedDate = picked);
+                        }
+                      },
+                      borderRadius: BorderRadius.circular(12),
+                      child: InputDecorator(
+                        decoration: InputDecoration(
+                          labelText: 'customers.payment_date'.tr(),
+                          prefixIcon: const Icon(LucideIcons.calendarDays),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          filled: true,
+                        ),
+                        child: Text(
+                          '${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',
+                          style: theme.textTheme.bodyLarge,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: descriptionController,
+                      decoration: InputDecoration(
+                        labelText: 'customers.description'.tr(),
+                        hintText: 'customers.payment_description_hint'.tr(),
+                        prefixIcon: const Icon(LucideIcons.fileText),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        filled: true,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.of(dialogContext).pop(),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                            child: Text('common.cancel'.tr()),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: FilledButton(
+                            onPressed: () async {
+                              final scaffoldMessenger = ScaffoldMessenger.of(dialogContext);
+                              final navigator = Navigator.of(dialogContext);
+                              final amount = double.tryParse(amountController.text);
+                              if (amount == null || amount <= 0) {
+                                scaffoldMessenger.showSnackBar(
+                                  SnackBar(content: Text('customers.amount_invalid'.tr())),
+                                );
+                                return;
+                              }
+
+                              navigator.pop();
+
+                              try {
+                                final amountCents = (amount * 100).round();
+                                final txId = await sl<CustomerRepository>().recordTransaction(
+                                  customerId: customer.id,
+                                  transactionType: 'payment',
+                                  amountCents: -amountCents,
+                                  currencyId: customer.currencyId,
+                                  description: descriptionController.text.isEmpty
+                                      ? null
+                                      : descriptionController.text,
+                                  transactionDate: selectedDate,
+                                );
+
+                                profileBloc.refresh();
+                                loyaltyBloc.refresh();
+
+                                if (mounted) {
+                                  scaffoldMessenger.showSnackBar(
+                                    SnackBar(content: Text('customers.payment_recorded'.tr())),
+                                  );
+                                  _showReceiptDialog(this.context, txId, customer);
+                                }
+                              } catch (e) {
+                                if (mounted) {
+                                  scaffoldMessenger.showSnackBar(
+                                    SnackBar(
+                                      content: Text('common.error'.tr()),
+                                      backgroundColor: Colors.red,
+                                    ),
+                                  );
+                                }
+                              }
+                            },
+                            style: FilledButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                            child: Text('customers.confirm_payment'.tr()),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              autofocus: true,
             ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: descriptionController,
-              decoration: InputDecoration(
-                labelText: 'customers.description'.tr(),
-                hintText: 'customers.discount_description_hint'.tr(),
-                prefixIcon: const Icon(Icons.notes),
+          );
+        },
+      ),
+    );
+  }
+
+  void _showReceiptDialog(BuildContext context, int transactionId, Customer customer) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(LucideIcons.checkCircle, color: Colors.green, size: 48),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: () {
+                        Navigator.pop(dialogContext);
+                        CustomerTransactionPdfService.printReceiptById(
+                          context: context,
+                          transactionId: transactionId,
+                          customerName: customer.name,
+                          customerPhone: customer.phone,
+                          customerAddress: customer.address,
+                        );
+                      },
+                      icon: const Icon(LucideIcons.printer),
+                      label: Text(
+                        'customers.print_receipt'.tr(),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(dialogContext);
+                        CustomerTransactionPdfService.shareReceiptById(
+                          context: context,
+                          transactionId: transactionId,
+                          customerName: customer.name,
+                          customerPhone: customer.phone,
+                          customerAddress: customer.address,
+                        );
+                      },
+                      icon: const Icon(LucideIcons.share2),
+                      label: Text(
+                        'customers.share_receipt'.tr(),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ),
-          ],
+              const SizedBox(height: 12),
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: Text('common.close'.tr()),
+              ),
+            ],
+          ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('common.cancel'.tr()),
-          ),
-          FilledButton(
-            onPressed: () async {
-              final scaffoldMessenger = ScaffoldMessenger.of(context);
-              final navigator = Navigator.of(context);
-              final amount = double.tryParse(amountController.text);
-              if (amount == null || amount <= 0) {
-                scaffoldMessenger.showSnackBar(
-                  SnackBar(content: Text('customers.amount_invalid'.tr())),
-                );
-                return;
-              }
+      ),
+    );
+  }
 
-              navigator.pop();
-              
-              final amountCents = (amount * 100).round();
-              await sl<CustomerRepository>().recordTransaction(
-                customerId: customer.id,
-                transactionType: 'discount',
-                amountCents: -amountCents,
-                currencyId: customer.currencyId,
-                description: descriptionController.text.isEmpty
-                    ? null
-                    : descriptionController.text,
-              );
+  void _showDiscountDialog(BuildContext context, Customer customer) {
+    final profileBloc = context.read<CustomerProfileBloc>();
+    final loyaltyBloc = context.read<CustomerLoyaltyBloc>();
 
-              profileBloc.refresh();
-              loyaltyBloc.refresh();
-              
-              if (mounted) {
-                scaffoldMessenger.showSnackBar(
-                  SnackBar(content: Text('customers.discount_applied'.tr())),
-                );
-              }
-            },
-            child: Text('customers.apply_discount'.tr()),
-          ),
-        ],
+    final amountController = TextEditingController();
+    final descriptionController = TextEditingController();
+
+    var selectedDiscountType = 'seasonal';
+    var selectedDate = DateTime.now();
+
+    final discountTypes = [
+      'seasonal',
+      'volume',
+      'loyalty',
+      'promotional',
+      'early_payment',
+      'other',
+    ];
+
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (stfContext, setState) {
+          final theme = Theme.of(stfContext);
+          final colorScheme = theme.colorScheme;
+
+          return Dialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(LucideIcons.badgePercent, size: 40, color: colorScheme.primary),
+                    const SizedBox(height: 12),
+                    Text(
+                      'customers.add_discount'.tr(),
+                      style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 24),
+                    DropdownButtonFormField<String>(
+                      initialValue: selectedDiscountType,
+                      decoration: InputDecoration(
+                        labelText: 'customers.discount_type'.tr(),
+                        prefixIcon: const Icon(LucideIcons.tag),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        filled: true,
+                      ),
+                      items: discountTypes.map((type) {
+                        return DropdownMenuItem(
+                          value: type,
+                          child: Text('customers.discount_type_$type'.tr()),
+                        );
+                      }).toList(),
+                      onChanged: (v) {
+                        if (v != null) {
+                          setState(() => selectedDiscountType = v);
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: amountController,
+                      decoration: InputDecoration(
+                        labelText: 'customers.discount_amount'.tr(),
+                        prefixIcon: const Icon(LucideIcons.badgeDollarSign),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        filled: true,
+                      ),
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      autofocus: true,
+                      onTap: () {
+                        if (amountController.text == '0.00' || amountController.text.isEmpty) {
+                          amountController.clear();
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    InkWell(
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: dialogContext,
+                          initialDate: selectedDate,
+                          firstDate: DateTime(2000),
+                          lastDate: DateTime(2100),
+                        );
+                        if (picked != null) {
+                          setState(() => selectedDate = picked);
+                        }
+                      },
+                      borderRadius: BorderRadius.circular(12),
+                      child: InputDecorator(
+                        decoration: InputDecoration(
+                          labelText: 'customers.discount_date'.tr(),
+                          prefixIcon: const Icon(LucideIcons.calendarDays),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          filled: true,
+                        ),
+                        child: Text(
+                          '${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',
+                          style: theme.textTheme.bodyLarge,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: descriptionController,
+                      decoration: InputDecoration(
+                        labelText: 'customers.description'.tr(),
+                        hintText: 'customers.discount_description_hint'.tr(),
+                        prefixIcon: const Icon(LucideIcons.fileText),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        filled: true,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.of(dialogContext).pop(),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                            child: Text('common.cancel'.tr()),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: FilledButton(
+                            onPressed: () async {
+                              final scaffoldMessenger = ScaffoldMessenger.of(dialogContext);
+                              final navigator = Navigator.of(dialogContext);
+
+                              final amount = double.tryParse(amountController.text);
+                              if (amount == null || amount <= 0) {
+                                scaffoldMessenger.showSnackBar(
+                                  SnackBar(content: Text('customers.amount_invalid'.tr())),
+                                );
+                                return;
+                              }
+
+                              navigator.pop();
+
+                              try {
+                                final amountCents = (amount * 100).round();
+
+                                final txId = await sl<CustomerRepository>().recordTransaction(
+                                  customerId: customer.id,
+                                  transactionType: 'discount',
+                                  amountCents: -amountCents,
+                                  currencyId: customer.currencyId,
+                                  description: descriptionController.text.isEmpty
+                                      ? 'customers.discount_type_$selectedDiscountType'.tr()
+                                      : descriptionController.text,
+                                  discountType: selectedDiscountType,
+                                  transactionDate: selectedDate,
+                                );
+
+                                profileBloc.refresh();
+                                loyaltyBloc.refresh();
+
+                                if (mounted) {
+                                  scaffoldMessenger.showSnackBar(
+                                    SnackBar(content: Text('customers.discount_applied'.tr())),
+                                  );
+                                  _showReceiptDialog(this.context, txId, customer);
+                                }
+                              } catch (e) {
+                                if (mounted) {
+                                  scaffoldMessenger.showSnackBar(
+                                    SnackBar(
+                                      content: Text('common.error'.tr()),
+                                      backgroundColor: Colors.red,
+                                    ),
+                                  );
+                                }
+                              }
+                            },
+                            style: FilledButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                            child: Text('customers.apply_discount'.tr()),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -730,6 +1081,7 @@ class _BalanceCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isReceivable = balanceCents > 0;
+    final isZero = balanceCents == 0;
     final isDark = theme.brightness == Brightness.dark;
     final colorScheme = theme.colorScheme;
 
@@ -763,16 +1115,20 @@ class _BalanceCard extends StatelessWidget {
               currencyService.format(balanceCents),
               style: theme.textTheme.headlineMedium?.copyWith(
                 fontWeight: FontWeight.bold,
-                color: isReceivable
-                    ? (isDark ? const Color(0xFF90CAF9) : colorScheme.tertiary)
-                    : (isDark ? const Color(0xFFA5D6A7) : Colors.green),
+                color: isZero
+                    ? (isDark ? const Color(0xFF64B5F6) : Colors.blue)
+                    : isReceivable
+                        ? (isDark ? const Color(0xFFA5D6A7) : Colors.green)
+                        : (isDark ? const Color(0xFFEF9A9A) : Colors.red),
               ),
             ),
             const SizedBox(height: 4),
             Text(
-              isReceivable
-                  ? 'customers.balance_receivable'.tr()
-                  : 'customers.balance_credit'.tr(),
+              isZero
+                  ? 'customers.balance_settled'.tr()
+                  : isReceivable
+                      ? 'customers.balance_receivable'.tr()
+                      : 'customers.balance_credit'.tr(),
               style: theme.textTheme.bodySmall?.copyWith(
                 color: isDark
                     ? Colors.white.withValues(alpha: 0.65)
@@ -1166,8 +1522,9 @@ class _QuickActionsSection extends StatelessWidget {
 
 class _RecentTransactionsSection extends StatelessWidget {
   final int customerId;
+  final Customer customer;
 
-  const _RecentTransactionsSection({required this.customerId});
+  const _RecentTransactionsSection({required this.customerId, required this.customer});
 
   @override
   Widget build(BuildContext context) {
@@ -1212,11 +1569,17 @@ class _RecentTransactionsSection extends StatelessWidget {
                   Center(
                     child: Padding(
                       padding: const EdgeInsets.all(20),
-                      child: Text(
-                        'customers.no_transactions'.tr(),
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.outline,
-                        ),
+                      child: Column(
+                        children: [
+                          Icon(LucideIcons.receipt, size: 40, color: theme.colorScheme.outline.withValues(alpha: 0.5)),
+                          const SizedBox(height: 8),
+                          Text(
+                            'customers.no_transactions'.tr(),
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: theme.colorScheme.outline,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   )
@@ -1224,6 +1587,7 @@ class _RecentTransactionsSection extends StatelessWidget {
                   ...transactions.take(5).map((tx) => _TransactionTile(
                     transaction: tx,
                     currencyService: currencyService,
+                    customer: customer,
                   )),
               ],
             ),
@@ -1237,17 +1601,19 @@ class _RecentTransactionsSection extends StatelessWidget {
 class _TransactionTile extends StatelessWidget {
   final CustomerTransaction transaction;
   final CurrencyService currencyService;
+  final Customer? customer;
 
   const _TransactionTile({
     required this.transaction,
     required this.currencyService,
+    this.customer,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final amountCents = transaction.amountCents.toDouble().round();
-    final isPositive = amountCents > 0;
+    final isNegative = amountCents < 0;
 
     IconData icon;
     Color color;
@@ -1255,50 +1621,176 @@ class _TransactionTile extends StatelessWidget {
 
     switch (transaction.transactionType) {
       case 'payment':
-        icon = Icons.payment;
-        color = Colors.green;
+        icon = LucideIcons.banknote;
+        color = Colors.blue;
         typeLabel = 'customers.transaction_payment'.tr();
         break;
       case 'discount':
-        icon = Icons.discount;
-        color = Colors.orange;
+        icon = LucideIcons.badgePercent;
+        color = Colors.purple;
         typeLabel = 'customers.transaction_discount'.tr();
         break;
       case 'return':
-        icon = Icons.assignment_return;
-        color = Colors.blue;
+        icon = LucideIcons.arrowLeftRight;
+        color = Colors.green;
         typeLabel = 'customers.transaction_return'.tr();
         break;
       case 'sale':
-        icon = Icons.shopping_cart;
-        color = Colors.red;
+        icon = LucideIcons.shoppingCart;
+        color = Colors.orange;
         typeLabel = 'customers.transaction_sale'.tr();
         break;
       default:
-        icon = Icons.swap_horiz;
+        icon = LucideIcons.fileText;
         color = theme.colorScheme.outline;
         typeLabel = 'customers.transaction_adjustment'.tr();
     }
 
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      leading: CircleAvatar(
-        backgroundColor: color.withValues(alpha: 0.1),
-        child: Icon(icon, color: color, size: 20),
-      ),
-      title: Text(typeLabel),
-      subtitle: Text(
-        transaction.description ?? DateFormat.yMMMd().format(transaction.transactionDate),
-        style: theme.textTheme.bodySmall,
-      ),
-      trailing: Text(
-        currencyService.format(amountCents),
-        style: theme.textTheme.titleMedium?.copyWith(
-          color: isPositive ? Colors.red : Colors.green,
-          fontWeight: FontWeight.bold,
+    final canPrint = transaction.transactionType == 'payment' ||
+        transaction.transactionType == 'discount';
+
+    return InkWell(
+      onTap: canPrint && customer != null
+          ? () => _showTxReceiptOptions(context)
+          : null,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 18,
+              backgroundColor: color.withValues(alpha: 0.1),
+              child: Icon(icon, size: 18, color: color),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        typeLabel,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: color,
+                        ),
+                      ),
+                      if (transaction.transactionType == 'discount' &&
+                          transaction.discountType != null) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: Colors.purple.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            'customers.discount_type_${transaction.discountType}'.tr(),
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: Colors.purple,
+                              fontSize: 9,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  if (transaction.transactionNumber != null)
+                    Text(
+                      transaction.transactionNumber!,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w500,
+                        fontSize: 10,
+                      ),
+                    ),
+                  if (transaction.description != null)
+                    Text(
+                      transaction.description!,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  currencyService.format(amountCents.abs()),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: isNegative ? Colors.green : Colors.red,
+                  ),
+                ),
+                Text(
+                  _formatDate(transaction.transactionDate),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.outline,
+                    fontSize: 10,
+                  ),
+                ),
+              ],
+            ),
+            if (canPrint) ...[
+              const SizedBox(width: 4),
+              Icon(LucideIcons.chevronRight, size: 14, color: theme.colorScheme.outline),
+            ],
+          ],
         ),
       ),
     );
+  }
+
+  void _showTxReceiptOptions(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(LucideIcons.printer),
+              title: Text('customers.print_receipt'.tr()),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                CustomerTransactionPdfService.printReceipt(
+                  context: context,
+                  transaction: transaction,
+                  customerName: customer!.name,
+                  customerPhone: customer!.phone,
+                  customerAddress: customer!.address,
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(LucideIcons.share2),
+              title: Text('customers.share_receipt'.tr()),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                CustomerTransactionPdfService.shareReceipt(
+                  context: context,
+                  transaction: transaction,
+                  customerName: customer!.name,
+                  customerPhone: customer!.phone,
+                  customerAddress: customer!.address,
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.day}/${date.month}/${date.year}';
   }
 }
 

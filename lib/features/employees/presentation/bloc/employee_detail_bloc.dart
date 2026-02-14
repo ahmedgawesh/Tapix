@@ -2,7 +2,10 @@ import 'dart:async';
 
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/database/app_database.dart';
+import '../../../../core/database/daos/employee_dao.dart';
+import '../../domain/entities/employee_entity.dart';
 import '../../domain/repositories/employee_repository.dart';
+import '../../domain/services/payroll_calculation_service.dart';
 
 // ==================== EVENTS ====================
 
@@ -52,6 +55,20 @@ class _CommissionDataReceived extends EmployeeDetailEvent {
   const _CommissionDataReceived(this.commissions);
 }
 
+class _SalesStatsReceived extends EmployeeDetailEvent {
+  final Map<String, int> stats;
+
+  const _SalesStatsReceived(this.stats);
+}
+
+class EmployeeDetailSettleAccount extends EmployeeDetailEvent {
+  const EmployeeDetailSettleAccount();
+}
+
+class EmployeeDetailDeleteEmployee extends EmployeeDetailEvent {
+  const EmployeeDetailDeleteEmployee();
+}
+
 // ==================== STATE ====================
 
 class EmployeeDetailState {
@@ -64,6 +81,11 @@ class EmployeeDetailState {
   final List<LeaveRequest> leaveRequests;
   final List<Commission> commissions;
   final Map<String, int> attendanceCounts;
+  // Sales statistics for the period
+  final int salesCount;
+  final int salesTotalCents;
+  final int returnsCount;
+  final int returnsTotalCents;
   final bool isLoading;
   final String? error;
 
@@ -77,6 +99,10 @@ class EmployeeDetailState {
     this.leaveRequests = const [],
     this.commissions = const [],
     this.attendanceCounts = const {},
+    this.salesCount = 0,
+    this.salesTotalCents = 0,
+    this.returnsCount = 0,
+    this.returnsTotalCents = 0,
     this.isLoading = true,
     this.error,
   });
@@ -88,15 +114,46 @@ class EmployeeDetailState {
   int get totalAttendanceDays =>
       presentCount + lateCount + absentCount + leaveCount;
 
-  int get totalCommissionCents {
+  /// Total commission earned (positive entries only)
+  int get earnedCommissionCents {
     int total = 0;
     for (final c in commissions) {
-      total += c.commissionAmountCents.toBigInt().toInt();
+      final amt = c.commissionAmountCents.toBigInt().toInt();
+      if (amt > 0) total += amt;
     }
     return total;
   }
 
+  /// Total commission deducted from returns (negative entries, returned as positive)
+  int get deductedCommissionCents {
+    int total = 0;
+    for (final c in commissions) {
+      final amt = c.commissionAmountCents.toBigInt().toInt();
+      if (amt < 0) total += amt.abs();
+    }
+    return total;
+  }
+
+  /// Net commission = earned - deducted
+  int get totalCommissionCents => earnedCommissionCents - deductedCommissionCents;
+
   Payroll? get latestPayroll => payrolls.isNotEmpty ? payrolls.first : null;
+
+  /// Find the payroll record for the current period
+  Payroll? get periodPayroll {
+    for (final p in payrolls) {
+      final pStart = p.periodStart;
+      final pPeriod = '${pStart.year}-${pStart.month.toString().padLeft(2, '0')}';
+      if (pPeriod == period) return p;
+    }
+    return null;
+  }
+
+  /// Whether the current period already has a paid payroll
+  bool get isPeriodSettled {
+    final p = periodPayroll;
+    return p != null && p.status == 'paid';
+  }
 
   EmployeeDetailState copyWith({
     int? employeeId,
@@ -108,6 +165,10 @@ class EmployeeDetailState {
     List<LeaveRequest>? leaveRequests,
     List<Commission>? commissions,
     Map<String, int>? attendanceCounts,
+    int? salesCount,
+    int? salesTotalCents,
+    int? returnsCount,
+    int? returnsTotalCents,
     bool? isLoading,
     String? error,
   }) {
@@ -121,6 +182,10 @@ class EmployeeDetailState {
       leaveRequests: leaveRequests ?? this.leaveRequests,
       commissions: commissions ?? this.commissions,
       attendanceCounts: attendanceCounts ?? this.attendanceCounts,
+      salesCount: salesCount ?? this.salesCount,
+      salesTotalCents: salesTotalCents ?? this.salesTotalCents,
+      returnsCount: returnsCount ?? this.returnsCount,
+      returnsTotalCents: returnsTotalCents ?? this.returnsTotalCents,
       isLoading: isLoading ?? this.isLoading,
       error: error,
     );
@@ -132,6 +197,7 @@ class EmployeeDetailState {
 class EmployeeDetailBloc
     extends Bloc<EmployeeDetailEvent, EmployeeDetailState> {
   final EmployeeRepository _repository;
+  final EmployeeDao _employeeDao;
 
   StreamSubscription<Employee?>? _employeeSub;
   StreamSubscription<List<Attendance>>? _attendanceSub;
@@ -139,7 +205,7 @@ class EmployeeDetailBloc
   StreamSubscription<List<LeaveRequest>>? _leaveSub;
   StreamSubscription<List<Commission>>? _commissionSub;
 
-  EmployeeDetailBloc(this._repository)
+  EmployeeDetailBloc(this._repository, this._employeeDao)
       : super(EmployeeDetailState(
           employeeId: 0,
           period: _currentPeriod(),
@@ -151,6 +217,9 @@ class EmployeeDetailBloc
     on<_PayrollDataReceived>(_onPayrollDataReceived);
     on<_LeaveDataReceived>(_onLeaveDataReceived);
     on<_CommissionDataReceived>(_onCommissionDataReceived);
+    on<_SalesStatsReceived>(_onSalesStatsReceived);
+    on<EmployeeDetailSettleAccount>(_onSettleAccount);
+    on<EmployeeDetailDeleteEmployee>(_onDeleteEmployee);
   }
 
   static String _currentPeriod() {
@@ -192,7 +261,7 @@ class EmployeeDetailBloc
     _subscribePeriodData(employeeId, period);
   }
 
-  void _subscribePeriodData(int employeeId, String period) {
+  void _subscribePeriodData(int employeeId, String period) async {
     _attendanceSub?.cancel();
     _payrollSub?.cancel();
     _leaveSub?.cancel();
@@ -228,11 +297,37 @@ class EmployeeDetailBloc
         );
 
     _commissionSub = _repository
-        .watchEmployeeCommissions(employeeId)
+        .watchCommissionsByPeriod(period)
         .listen(
-          (data) => add(_CommissionDataReceived(data)),
+          (data) {
+            // Filter to only this employee's commissions
+            final filtered = data.where((c) => c.employeeId == employeeId).toList();
+            add(_CommissionDataReceived(filtered));
+          },
           onError: (_) {},
         );
+
+    // Load sales statistics for this period
+    _loadSalesStats(employeeId, period);
+  }
+
+  Future<void> _loadSalesStats(int employeeId, String period) async {
+    try {
+      final parts = period.split('-');
+      final year = int.parse(parts[0]);
+      final month = int.parse(parts[1]);
+      final periodStart = DateTime(year, month, 1);
+      final periodEnd = DateTime(year, month + 1, 0, 23, 59, 59);
+
+      final stats = await _employeeDao.getEmployeeSalesStats(
+        employeeId,
+        periodStart,
+        periodEnd,
+      );
+      add(_SalesStatsReceived(stats));
+    } catch (_) {
+      // Non-critical, don't block UI
+    }
   }
 
   Future<void> _onEmployeeDataReceived(
@@ -259,6 +354,7 @@ class EmployeeDetailBloc
       'late': 0,
       'absent': 0,
       'leave': 0,
+      'early_departure': 0,
     };
     for (final a in event.attendances) {
       counts[a.status] = (counts[a.status] ?? 0) + 1;
@@ -289,6 +385,99 @@ class EmployeeDetailBloc
     Emitter<EmployeeDetailState> emit,
   ) {
     emit(state.copyWith(commissions: event.commissions, isLoading: false));
+  }
+
+  void _onSalesStatsReceived(
+    _SalesStatsReceived event,
+    Emitter<EmployeeDetailState> emit,
+  ) {
+    emit(state.copyWith(
+      salesCount: event.stats['salesCount'] ?? 0,
+      salesTotalCents: event.stats['salesTotalCents'] ?? 0,
+      returnsCount: event.stats['returnsCount'] ?? 0,
+      returnsTotalCents: event.stats['returnsTotalCents'] ?? 0,
+      isLoading: false,
+    ));
+  }
+
+  Future<void> _onSettleAccount(
+    EmployeeDetailSettleAccount event,
+    Emitter<EmployeeDetailState> emit,
+  ) async {
+    final employee = state.employee;
+    if (employee == null) return;
+
+    // Prevent duplicate settlement
+    if (state.isPeriodSettled) return;
+
+    try {
+      emit(state.copyWith(isLoading: true));
+
+      final parts = state.period.split('-');
+      final year = int.parse(parts[0]);
+      final month = int.parse(parts[1]);
+      final periodStart = DateTime(year, month, 1);
+      final periodEnd = DateTime(year, month + 1, 0, 23, 59, 59);
+
+      // Calculate payroll
+      final netSalesCents = state.salesTotalCents - state.returnsTotalCents;
+      final targetBonus = PayrollCalculationService.checkSalesTargetBonus(
+        employee: employee,
+        actualSalesCents: netSalesCents,
+      );
+      final payroll = state.latestPayroll;
+      final manualBonus = payroll?.bonusCents.toBigInt().toInt() ?? 0;
+      final overtime = payroll?.overtimeCents.toBigInt().toInt() ?? 0;
+      final totalBonus = manualBonus + targetBonus.targetBonusCents;
+
+      final calc = PayrollCalculationService.calculate(
+        employee: employee,
+        attendanceCounts: state.attendanceCounts,
+        commissionCents: state.totalCommissionCents,
+        bonusCents: totalBonus,
+        overtimeCents: overtime,
+      );
+
+      // Create payroll and mark as paid
+      final payrollId = await _repository.createPayroll(
+        employeeId: employee.id,
+        periodStart: periodStart,
+        periodEnd: periodEnd,
+        basicSalaryCents: calc.basicSalaryCents,
+        commissionCents: calc.commissionCents,
+        bonusCents: calc.bonusCents,
+        overtimeCents: calc.overtimeCents,
+        deductionCents: calc.totalDeductionCents,
+        netPayCents: calc.netPayCents,
+        currencyId: employee.currencyId,
+      );
+
+      await _repository.updatePayrollStatus(
+        id: payrollId,
+        status: PayrollStatus.paid,
+        processedAt: DateTime.now(),
+      );
+
+      emit(state.copyWith(isLoading: false, error: null));
+    } catch (e) {
+      emit(state.copyWith(isLoading: false, error: e.toString()));
+    }
+  }
+
+  Future<void> _onDeleteEmployee(
+    EmployeeDetailDeleteEmployee event,
+    Emitter<EmployeeDetailState> emit,
+  ) async {
+    final employee = state.employee;
+    if (employee == null) return;
+
+    try {
+      emit(state.copyWith(isLoading: true));
+      await _repository.deleteEmployee(employee.id);
+      // State will be handled by the UI (pop navigation)
+    } catch (e) {
+      emit(state.copyWith(isLoading: false, error: e.toString()));
+    }
   }
 
   void _cancelAll() {

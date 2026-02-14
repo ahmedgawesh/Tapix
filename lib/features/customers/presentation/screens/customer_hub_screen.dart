@@ -1,12 +1,15 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons/lucide_icons.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../domain/repositories/customer_repository.dart';
+import '../../domain/repositories/loyalty_repository.dart';
 import '../bloc/customers_bloc.dart';
 
 /// Main customer hub screen with quick stats, segments, and customer list
@@ -54,6 +57,14 @@ class _CustomerHubContentState extends State<_CustomerHubContent> {
         ),
         title: Text('customers.title'.tr()),
         actions: [
+          IconButton(
+            icon: const Icon(LucideIcons.award),
+            onPressed: () => showDialog<void>(
+              context: context,
+              builder: (ctx) => const _LoyaltySettingsDialog(),
+            ),
+            tooltip: 'customers.loyalty_settings'.tr(),
+          ),
           IconButton(
             icon: const Icon(Icons.settings_outlined),
             onPressed: () => context.push('/settings'),
@@ -650,7 +661,7 @@ class _CustomerListTile extends StatelessWidget {
               Text(
                 currencyService.format(balanceCents),
                 style: theme.textTheme.titleMedium?.copyWith(
-                  color: balanceCents > 0 ? Colors.red : Colors.green,
+                  color: balanceCents > 0 ? Colors.green : balanceCents < 0 ? Colors.red : Colors.blue,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -705,6 +716,269 @@ class _CustomerListTile extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// LOYALTY SETTINGS DIALOG
+// ═══════════════════════════════════════════════════════
+class _LoyaltySettingsDialog extends StatefulWidget {
+  const _LoyaltySettingsDialog();
+
+  @override
+  State<_LoyaltySettingsDialog> createState() => _LoyaltySettingsDialogState();
+}
+
+class _LoyaltySettingsDialogState extends State<_LoyaltySettingsDialog> {
+  final _pointValueCtrl = TextEditingController();
+  final _minRedemptionCtrl = TextEditingController();
+  final _maxPercentCtrl = TextEditingController();
+  final _pointsPerUnitCtrl = TextEditingController();
+  final _minSpendCtrl = TextEditingController();
+  bool _isEnabled = true;
+  bool _allowRedemption = true;
+  bool _isLoading = true;
+  bool _isSaving = false;
+  LoyaltySettings? _currentSettings;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSettings();
+  }
+
+  Future<void> _loadSettings() async {
+    try {
+      final repo = sl<LoyaltyRepository>();
+      var settings = await repo.getLoyaltySettings();
+
+      // Auto-create default settings if none exist
+      if (settings == null) {
+        final db = sl<AppDatabase>();
+        await db.customStatement('''
+          INSERT INTO loyalty_settings (
+            points_per_currency_unit, min_spend_for_points,
+            referral_bonus_points, signup_bonus_points, review_bonus_points,
+            is_enabled, point_value_cents, min_redemption_points,
+            max_redemption_percent_bps, allow_points_redemption,
+            created_at, updated_at
+          ) VALUES (1, 0, 100, 50, 10, 1, 1, 100, 5000, 1,
+            datetime('now'), datetime('now'))
+        ''');
+        settings = await repo.getLoyaltySettings();
+      }
+
+      if (settings != null && mounted) {
+        setState(() {
+          _currentSettings = settings;
+          _isEnabled = settings!.isEnabled;
+          _allowRedemption = settings.allowPointsRedemption;
+          _pointValueCtrl.text = settings.pointValueCents.toString();
+          _minRedemptionCtrl.text = settings.minRedemptionPoints.toString();
+          _maxPercentCtrl.text = (settings.maxRedemptionPercentBps / 100).toStringAsFixed(0);
+          _pointsPerUnitCtrl.text = settings.pointsPerCurrencyUnit.toString();
+          _minSpendCtrl.text = (settings.minSpendForPoints / 100).toStringAsFixed(2);
+          _isLoading = false;
+        });
+      } else {
+        if (mounted) setState(() => _isLoading = false);
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _save() async {
+    if (_currentSettings == null) return;
+    setState(() => _isSaving = true);
+
+    try {
+      final repo = sl<LoyaltyRepository>();
+      final pointValueCents = int.tryParse(_pointValueCtrl.text) ?? 1;
+      final minRedemptionPoints = int.tryParse(_minRedemptionCtrl.text) ?? 100;
+      final maxPercent = int.tryParse(_maxPercentCtrl.text) ?? 50;
+      final pointsPerUnit = int.tryParse(_pointsPerUnitCtrl.text) ?? 1;
+      final minSpend = double.tryParse(_minSpendCtrl.text) ?? 0;
+      final minSpendCents = (minSpend * 100).round();
+
+      final updated = LoyaltySettings(
+        id: _currentSettings!.id,
+        pointsPerCurrencyUnit: pointsPerUnit,
+        minSpendForPoints: minSpendCents,
+        pointsExpiryDays: _currentSettings!.pointsExpiryDays,
+        referralBonusPoints: _currentSettings!.referralBonusPoints,
+        signupBonusPoints: _currentSettings!.signupBonusPoints,
+        reviewBonusPoints: _currentSettings!.reviewBonusPoints,
+        isEnabled: _isEnabled,
+        pointValueCents: pointValueCents.clamp(1, 10000),
+        minRedemptionPoints: minRedemptionPoints.clamp(0, 100000),
+        maxRedemptionPercentBps: (maxPercent * 100).clamp(0, 10000),
+        allowPointsRedemption: _allowRedemption,
+        createdAt: _currentSettings!.createdAt,
+        updatedAt: DateTime.now(),
+      );
+
+      await repo.updateLoyaltySettings(updated);
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('customers.loyalty_settings_saved'.tr())),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _pointValueCtrl.dispose();
+    _minRedemptionCtrl.dispose();
+    _maxPercentCtrl.dispose();
+    _pointsPerUnitCtrl.dispose();
+    _minSpendCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final currencyService = sl<CurrencyService>();
+
+    return AlertDialog(
+      title: Row(children: [
+        const Icon(LucideIcons.award, color: Colors.deepPurple),
+        const SizedBox(width: 8),
+        Text('customers.loyalty_settings'.tr()),
+      ]),
+      content: _isLoading
+          ? const SizedBox(height: 100, child: Center(child: CircularProgressIndicator()))
+          : _currentSettings == null
+              ? Text('customers.loyalty_no_settings'.tr())
+              : SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Master toggle
+                      SwitchListTile(
+                        value: _isEnabled,
+                        onChanged: (v) => setState(() => _isEnabled = v),
+                        title: Text('customers.loyalty_enabled'.tr()),
+                        secondary: Icon(
+                          _isEnabled ? LucideIcons.toggleRight : LucideIcons.toggleLeft,
+                          color: _isEnabled ? Colors.deepPurple : cs.outline,
+                        ),
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                      const Divider(),
+
+                      // Earning section
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8, bottom: 12),
+                        child: Text('customers.loyalty_earning_settings'.tr(),
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w600, color: Colors.deepPurple)),
+                      ),
+                      TextField(
+                        controller: _pointsPerUnitCtrl,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                        decoration: InputDecoration(
+                          labelText: 'customers.loyalty_points_per_unit'.tr(),
+                          helperText: 'customers.loyalty_points_per_unit_hint'.tr(),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          isDense: true,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _minSpendCtrl,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        decoration: InputDecoration(
+                          labelText: 'customers.loyalty_min_spend'.tr(),
+                          helperText: 'customers.loyalty_min_spend_hint'.tr(),
+                          suffixText: currencyService.currencySymbol,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          isDense: true,
+                        ),
+                      ),
+                      const Divider(height: 24),
+
+                      // Redemption section
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Text('customers.loyalty_redemption_settings'.tr(),
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w600, color: Colors.deepPurple)),
+                      ),
+                      SwitchListTile(
+                        value: _allowRedemption,
+                        onChanged: (v) => setState(() => _allowRedemption = v),
+                        title: Text('customers.loyalty_allow_redemption'.tr()),
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _pointValueCtrl,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                        decoration: InputDecoration(
+                          labelText: 'customers.loyalty_point_value'.tr(),
+                          helperText: 'customers.loyalty_point_value_hint'.tr(),
+                          suffixText: 'customers.loyalty_cents'.tr(),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          isDense: true,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _minRedemptionCtrl,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                        decoration: InputDecoration(
+                          labelText: 'customers.loyalty_min_redemption'.tr(),
+                          helperText: 'customers.loyalty_min_redemption_hint'.tr(),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          isDense: true,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _maxPercentCtrl,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                        decoration: InputDecoration(
+                          labelText: 'customers.loyalty_max_percent'.tr(),
+                          helperText: 'customers.loyalty_max_percent_hint'.tr(),
+                          suffixText: '%',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          isDense: true,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text('common.cancel'.tr()),
+        ),
+        FilledButton(
+          onPressed: _isSaving ? null : _save,
+          child: _isSaving
+              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+              : Text('common.save'.tr()),
+        ),
+      ],
     );
   }
 }

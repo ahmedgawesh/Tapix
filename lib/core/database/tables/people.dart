@@ -41,6 +41,16 @@ class Employees extends Table {
   IntColumn get salaryCents => integer().map(const MoneyConverter()).nullable()();
   /// Default commission rate in basis points (e.g., 500 = 5%)
   IntColumn get defaultCommissionRateBps => integer().withDefault(const Constant(0))();
+  /// Fixed commission amount in cents (used when commission type is 'fixed')
+  IntColumn get fixedCommissionCents => integer().map(const MoneyConverter()).nullable()();
+  /// Commission type: 'percentage' or 'fixed'
+  TextColumn get commissionType => text().withDefault(const Constant('percentage'))();
+  /// Monthly sales target in cents
+  IntColumn get salesTargetCents => integer().map(const MoneyConverter()).nullable()();
+  /// Bonus amount in cents when sales target is achieved
+  IntColumn get targetBonusCents => integer().map(const MoneyConverter()).nullable()();
+  /// Target period: monthly, quarterly, yearly
+  TextColumn get targetPeriod => text().withDefault(const Constant('monthly'))();
   /// Pay period type: monthly, weekly, daily
   TextColumn get payPeriodType => text().withDefault(const Constant('monthly'))();
   /// Working days per pay period (e.g., 26 for monthly)
@@ -55,6 +65,10 @@ class Employees extends Table {
   BoolColumn get isActive => boolean().withDefault(const Constant(true))();
   DateTimeColumn get hireDate => dateTime().nullable()();
   DateTimeColumn get terminationDate => dateTime().nullable()();
+  /// JSON array of weekly off-day numbers (1=Mon..7=Sun), e.g. "[5,6]" for Fri+Sat
+  TextColumn get weeklyOffDays => text().withDefault(const Constant('[5,6]'))();
+  /// Annual leave allowance in days
+  IntColumn get annualLeaveDays => integer().withDefault(const Constant(21))();
   TextColumn get notes => text().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();

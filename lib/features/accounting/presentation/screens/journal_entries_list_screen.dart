@@ -40,11 +40,6 @@ class _JournalEntriesListView extends StatelessWidget {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => context.push('/accounting/journal-entries/add'),
-        tooltip: 'accounting.add_journal_entry'.tr(),
-        child: const Icon(Icons.add),
-      ),
       body: BlocBuilder<JournalEntriesBloc, RealtimeState<JournalEntriesData>>(
         builder: (context, state) {
           if (state is RealtimeLoading<JournalEntriesData>) {

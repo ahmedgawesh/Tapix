@@ -53,6 +53,8 @@ class AccountingHealthState {
 
 // ==================== BLOC ====================
 
+/// Read-only health check bloc. No repair actions — journal_lines is the
+/// single source of truth and must never be mutated outside business operations.
 class AccountingHealthBloc
     extends Bloc<AccountingHealthEvent, AccountingHealthState> {
   final JournalRepository _repository;

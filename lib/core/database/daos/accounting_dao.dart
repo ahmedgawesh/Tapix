@@ -251,6 +251,15 @@ class AccountingDao extends DatabaseAccessor<AppDatabase> with _$AccountingDaoMi
         .get();
   }
 
+  Future<bool> isDateInClosedPeriod(DateTime date) async {
+    final closedPeriods = await (select(accountingPeriods)
+          ..where((p) => p.isClosed.equals(true))
+          ..where((p) => p.startDate.isSmallerOrEqualValue(date))
+          ..where((p) => p.endDate.isBiggerOrEqualValue(date)))
+        .get();
+    return closedPeriods.isNotEmpty;
+  }
+
   // ── Expense Categories ────────────────────────────────────
 
   Stream<List<ExpenseCategory>> watchAllExpenseCategories({bool? isActive}) {

@@ -123,6 +123,9 @@ abstract class LoyaltyRepository {
   /// Get tier benefits summary for display
   TierBenefitsSummary getTierBenefitsSummary(LoyaltyTier tier);
 
-  /// Calculate points to earn for a purchase amount
+  /// Calculate points to earn for a purchase amount (sync, uses defaults)
   int calculatePointsToEarn(int amountCents, double multiplier);
+
+  /// Calculate points to earn using actual LoyaltySettings (async, accurate)
+  Future<int> calculatePointsToEarnWithSettings(int amountCents, double multiplier);
 }

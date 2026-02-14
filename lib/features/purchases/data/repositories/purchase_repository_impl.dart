@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:decimal/decimal.dart';
 import 'package:drift/drift.dart';
 import '../../../../core/database/app_database.dart' as db;
@@ -13,8 +15,9 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
   final AuditLogService _auditService;
   final SessionService _sessionService;
   final JournalEntryService _journalService;
+  final db.AppDatabase _db;
 
-  PurchaseRepositoryImpl(this._datasource, this._auditService, this._sessionService, this._journalService);
+  PurchaseRepositoryImpl(this._datasource, this._auditService, this._sessionService, this._journalService, this._db);
 
   /// Get the current user ID from the session for audit logging.
   Future<int?> _currentUserId() => _sessionService.getCurrentUserId();
@@ -113,10 +116,28 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
           expiryDate: Value(item.expiryDate),
         )).toList();
 
-    final purchaseId = await _datasource.createPurchase(purchase, itemCompanions);
+    // ATOMIC: Wrap purchase creation and journal entries in a single transaction.
+    // If any step fails, everything rolls back — preventing GL ↔ sub-ledger drift.
+    final userId = await _currentUserId();
 
-    // Audit: log purchase creation
-    await _auditService.log(
+    final purchaseId = await _db.transaction(() async {
+      final id = await _datasource.createPurchase(purchase, itemCompanions);
+
+      // Create journal entries — MANDATORY, errors propagate
+      await _journalService.recordPurchaseJournalEntry(
+        purchaseId: id,
+        totalCents: totalCents.toBigInt().toInt(),
+        paidAmountCents: paidAmountCents.toBigInt().toInt(),
+        currencyId: currencyId,
+        paymentMethod: paymentMethod,
+        userId: userId,
+      );
+
+      return id;
+    });
+
+    // Audit log outside transaction (non-critical, fire-and-forget)
+    _auditService.log(
       entityType: 'purchase',
       entityId: purchaseId,
       action: 'create',
@@ -126,15 +147,7 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
         'totalCents': totalCents.toString(),
         'itemCount': items.length,
       },
-      userId: await _currentUserId(),
-    );
-
-    // Create journal entries (best-effort)
-    await _journalService.recordPurchaseJournalEntry(
-      purchaseId: purchaseId,
-      totalCents: totalCents.toBigInt().toInt(),
-      paidAmountCents: paidAmountCents.toBigInt().toInt(),
-      currencyId: currencyId,
+      userId: userId,
     );
 
     return purchaseId;
@@ -157,6 +170,15 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
     DateTime? purchaseDate,
     DateTime? dueDate,
   }) async {
+    // Guard: only draft/pending purchases can be edited.
+    // Posted/voided purchases have journal entries that would become stale.
+    final existing = await getPurchaseById(purchaseId);
+    if (existing != null && !existing.isDraft) {
+      throw Exception(
+        'Cannot edit a ${existing.status} purchase. Void it and create a new one instead.',
+      );
+    }
+
     final purchase = db.PurchasesCompanion(
       supplierId: Value(supplierId),
       currencyId: Value(currencyId),
@@ -189,9 +211,27 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
           expiryDate: Value(item.expiryDate),
         )).toList();
 
+    // Void old journal entries BEFORE updating the purchase record
+    await _journalService.voidJournalEntriesForSource(
+      sourceTable: 'purchases',
+      sourceId: purchaseId,
+      reason: 'Purchase updated',
+      userId: await _currentUserId(),
+    );
+
     final ok = await _datasource.updatePurchase(purchaseId, purchase, itemCompanions);
 
     if (ok) {
+      // Re-create journal entries with new amounts
+      await _journalService.recordPurchaseJournalEntry(
+        purchaseId: purchaseId,
+        totalCents: totalCents.toBigInt().toInt(),
+        paidAmountCents: paidAmountCents.toBigInt().toInt(),
+        currencyId: currencyId,
+        paymentMethod: paymentMethod,
+        userId: await _currentUserId(),
+      );
+
       // Audit: log purchase update
       await _auditService.log(
         entityType: 'purchase',
@@ -225,6 +265,19 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
 
   @override
   Future<void> voidPurchase(int purchaseId) async {
+    // Void journal entries BEFORE voiding the purchase
+    try {
+      await _journalService.voidJournalEntriesForSource(
+        sourceTable: 'purchases',
+        sourceId: purchaseId,
+        reason: 'Purchase voided',
+        userId: await _currentUserId(),
+      );
+    } catch (e) {
+      developer.log('Warning: Failed to void journal entries for purchase #$purchaseId: $e',
+          name: 'PurchaseRepository');
+    }
+
     await _datasource.voidPurchase(purchaseId);
 
     // Audit: log purchase voiding (stock was reversed)
@@ -338,13 +391,30 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
           reason: Value(item.reason),
         )).toList();
 
-    final returnId = await _datasource.createPurchaseReturn(returnData, itemCompanions);
+    // ATOMIC: Wrap return creation, stock deduction, and journal entries
+    // in a single transaction.
+    final userId = await _currentUserId();
 
-    // Auto-post the return (update stock)
-    await _datasource.postPurchaseReturn(returnId);
+    final returnId = await _db.transaction(() async {
+      final id = await _datasource.createPurchaseReturn(returnData, itemCompanions);
 
-    // Audit: log return creation + posting
-    await _auditService.log(
+      // Auto-post the return (update stock)
+      await _datasource.postPurchaseReturn(id);
+
+      // Create journal entries — MANDATORY
+      await _journalService.recordPurchaseReturnJournalEntry(
+        returnId: id,
+        totalCents: totalCents.toBigInt().toInt(),
+        currencyId: currencyId,
+        refundMethod: refundMethod,
+        userId: userId,
+      );
+
+      return id;
+    });
+
+    // Audit log outside transaction (non-critical)
+    _auditService.log(
       entityType: 'purchase_return',
       entityId: returnId,
       action: 'create_and_post',
@@ -355,14 +425,7 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
         'dispositionType': dispositionType,
         'itemCount': items.length,
       },
-      userId: await _currentUserId(),
-    );
-
-    // Create journal entries (best-effort)
-    await _journalService.recordPurchaseReturnJournalEntry(
-      returnId: returnId,
-      totalCents: totalCents.toBigInt().toInt(),
-      currencyId: currencyId,
+      userId: userId,
     );
 
     return returnId;
@@ -383,6 +446,19 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
 
   @override
   Future<void> voidPurchaseReturn(int returnId) async {
+    // Void journal entries BEFORE voiding the return
+    try {
+      await _journalService.voidJournalEntriesForSource(
+        sourceTable: 'purchase_returns',
+        sourceId: returnId,
+        reason: 'Purchase return voided',
+        userId: await _currentUserId(),
+      );
+    } catch (e) {
+      developer.log('Warning: Failed to void journal entries for purchase return #$returnId: $e',
+          name: 'PurchaseRepository');
+    }
+
     await _datasource.voidPurchaseReturn(returnId);
 
     await _auditService.logVoid(
@@ -424,10 +500,27 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
       notes: Value(notes),
       paymentDate: Value(paymentDate ?? DateTime.now()),
     );
-    final paymentId = await _datasource.recordPayment(payment);
+    // ATOMIC: Wrap payment recording (which updates supplier balance)
+    // and journal entry creation in a single transaction.
+    final userId = await _currentUserId();
 
-    // Audit: log payment recording
-    await _auditService.log(
+    final paymentId = await _db.transaction(() async {
+      final id = await _datasource.recordPayment(payment);
+
+      // Post journal entry: Dr Accounts Payable, Cr Cash/Bank
+      await _journalService.recordSupplierPaymentJournalEntry(
+        paymentId: id,
+        amountCents: amountCents.toBigInt().toInt(),
+        currencyId: currencyId,
+        paymentMethod: paymentMethod,
+        userId: userId,
+      );
+
+      return id;
+    });
+
+    // Audit log outside transaction (non-critical)
+    _auditService.log(
       entityType: 'purchase_payment',
       entityId: paymentId,
       action: 'create',
@@ -436,7 +529,7 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
         'amountCents': amountCents.toString(),
         'paymentMethod': paymentMethod,
       },
-      userId: await _currentUserId(),
+      userId: userId,
     );
 
     return paymentId;
@@ -444,6 +537,14 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
 
   @override
   Future<void> deletePayment(int paymentId) async {
+    // Void journal entries BEFORE deleting the payment
+    await _journalService.voidJournalEntriesForSource(
+      sourceTable: 'purchase_payments',
+      sourceId: paymentId,
+      reason: 'Purchase payment deleted',
+      userId: await _currentUserId(),
+    );
+
     // Audit: log before deletion
     await _auditService.log(
       entityType: 'purchase_payment',

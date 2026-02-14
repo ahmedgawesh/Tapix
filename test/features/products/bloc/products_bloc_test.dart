@@ -10,6 +10,7 @@ import 'package:tapix/features/products/data/repositories/product_repository_imp
 import 'package:tapix/features/products/data/datasources/product_local_datasource.dart';
 import 'package:tapix/features/products/presentation/bloc/products_bloc.dart';
 import 'package:tapix/core/services/audit_log_service.dart';
+import 'package:tapix/features/auth/data/services/session_service.dart';
 
 void main() {
   group('ProductsBloc', () {
@@ -20,7 +21,7 @@ void main() {
 
     setUp(() async {
       database = AppDatabase.connect(DatabaseConnection(NativeDatabase.memory()));
-      repository = ProductRepositoryImpl(ProductLocalDatasourceImpl(database.productDao), AuditLogService(database));
+      repository = ProductRepositoryImpl(ProductLocalDatasourceImpl(database.productDao), AuditLogService(database), SessionService());
       bloc = ProductsBloc(repository);
 
       currencyId = await database.into(database.currencies).insert(

@@ -458,6 +458,11 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
             const SizedBox(height: 10),
             _detailRow(theme, LucideIcons.creditCard, 'sales.payment_method'.tr(),
                 sale.paymentMethod),
+            if (sale.employeeName != null && sale.employeeName!.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              _detailRow(theme, LucideIcons.userCheck, 'sales.salesperson'.tr(),
+                  sale.employeeName!),
+            ],
             const SizedBox(height: 10),
             _detailRow(theme, LucideIcons.clock, 'sales.created_at'.tr(),
                 DateFormat.yMMMd().add_jm().format(sale.createdAt)),

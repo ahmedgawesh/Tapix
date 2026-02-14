@@ -4,18 +4,20 @@ import '../../features/accounting/domain/models/journal_entry_data.dart';
 import 'validation_engine.dart';
 import 'audit_log_service.dart';
 
-/// TransactionOrchestrator - Coordinates all financial operations
-/// 
-/// This is the CENTRAL service for all transactions that affect:
-/// - Account balances
-/// - Inventory levels
-/// - Customer/Supplier balances
-/// 
-/// ALL financial operations MUST go through this orchestrator to ensure:
-/// - Validation before execution
-/// - Atomic transactions
-/// - Proper journal entries
-/// - Complete audit trail
+/// TransactionOrchestrator - DEPRECATED / NOT IN USE
+///
+/// ⚠️ WARNING: This class is a design skeleton with UnimplementedError stubs.
+/// It is NOT registered in DI and NOT called by any production code.
+///
+/// The actual enforced path for all financial operations is:
+///   Business Blocs → JournalEntryService → AccountingRepository.createJournalEntry()
+///
+/// JournalEntryService is the MANDATORY gateway for all journal creation.
+/// AccountingRepository enforces double-entry validation and closed-period locks.
+///
+/// DO NOT use this class. If you need to add a new financial event type,
+/// add a method to JournalEntryService instead.
+@Deprecated('Use JournalEntryService instead. This class is an unfinished skeleton.')
 class TransactionOrchestrator {
   final AppDatabase _db;
   final AccountingRepository _accountingRepo;

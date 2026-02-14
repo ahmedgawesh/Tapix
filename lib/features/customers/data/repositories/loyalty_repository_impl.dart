@@ -1,13 +1,15 @@
 import 'dart:async';
 import 'package:drift/drift.dart';
 import '../../../../core/database/app_database.dart';
+import '../../../../core/services/journal_entry_service.dart';
 import '../../domain/repositories/loyalty_repository.dart';
 
 /// Implementation of LoyaltyRepository
 class LoyaltyRepositoryImpl implements LoyaltyRepository {
   final AppDatabase _database;
+  final JournalEntryService? _journalService;
 
-  LoyaltyRepositoryImpl(this._database);
+  LoyaltyRepositoryImpl(this._database, [this._journalService]);
 
   @override
   Stream<List<LoyaltyTier>> watchAllTiers() {
@@ -408,7 +410,7 @@ class LoyaltyRepositoryImpl implements LoyaltyRepository {
     );
 
     // Record redemption
-    await _database.into(_database.customerRewardRedemptions).insert(
+    final redemptionId = await _database.into(_database.customerRewardRedemptions).insert(
       CustomerRewardRedemptionsCompanion(
         customerId: Value(customerId),
         rewardId: Value(rewardId),
@@ -426,6 +428,19 @@ class LoyaltyRepositoryImpl implements LoyaltyRepository {
           totalRedemptions: Value(reward.totalRedemptions + 1),
           updatedAt: Value(DateTime.now()),
         ));
+
+    // Post journal entry for monetary reward redemptions:
+    // Dr Loyalty Points Liability (2300), Cr Discounts Given (5500)
+    if (_journalService != null && reward.valueCents != null && reward.valueCents! > 0) {
+      // Use currency from the first available source (default to 1)
+      final customer = await _database.customerDao.getCustomer(customerId);
+      final currencyId = customer?.currencyId ?? 1;
+      await _journalService.recordLoyaltyRedemptionJournalEntry(
+        redemptionId: redemptionId,
+        valueCents: reward.valueCents!,
+        currencyId: currencyId,
+      );
+    }
   }
 
   @override
@@ -447,8 +462,26 @@ class LoyaltyRepositoryImpl implements LoyaltyRepository {
 
   @override
   int calculatePointsToEarn(int amountCents, double multiplier) {
-    // Default: 1 point per 100 cents (1 currency unit)
+    // Uses cached settings if available; falls back to 1 point per currency unit
+    // For real-time accuracy, callers should fetch settings first.
+    // This is a synchronous convenience method for UI previews.
+    return _calculatePointsSync(amountCents, multiplier);
+  }
+
+  int _calculatePointsSync(int amountCents, double multiplier) {
+    // Fallback: 1 point per 100 cents (1 currency unit)
     final basePoints = amountCents ~/ 100;
+    return (basePoints * multiplier).round();
+  }
+
+  @override
+  Future<int> calculatePointsToEarnWithSettings(int amountCents, double multiplier) async {
+    final settings = await getLoyaltySettings();
+    if (settings == null || !settings.isEnabled) return 0;
+    if (amountCents < settings.minSpendForPoints) return 0;
+
+    final pointsPerUnit = settings.pointsPerCurrencyUnit;
+    final basePoints = (amountCents * pointsPerUnit) ~/ 100;
     return (basePoints * multiplier).round();
   }
 }

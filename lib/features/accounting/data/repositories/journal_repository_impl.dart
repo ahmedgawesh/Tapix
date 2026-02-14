@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:decimal/decimal.dart';
 import 'package:drift/drift.dart';
 import '../../../../core/database/app_database.dart';
@@ -5,12 +7,33 @@ import '../../domain/models/trial_balance.dart';
 import '../../domain/models/reconciliation_result.dart';
 import '../../domain/repositories/journal_repository.dart';
 import '../datasources/journal_local_datasource.dart';
+import 'accounting_repository.dart';
 
 /// Implementation of JournalRepository
 class JournalRepositoryImpl implements JournalRepository {
   final JournalLocalDatasource _datasource;
+  // ignore: unused_field
+  final AccountingRepository _accountingRepo;
 
-  JournalRepositoryImpl(this._datasource);
+  static const Set<String> _validAccountTypes = {
+    'asset',
+    'liability',
+    'equity',
+    'revenue',
+    'expense',
+  };
+
+  /// Control account codes that MUST NOT be touched by manual journal entries.
+  static const Set<String> _controlAccountCodes = {'1100', '2000'};
+
+  /// Entry types that are allowed to touch control accounts.
+  static const Set<String> _systemEntryTypes = {
+    'sale', 'purchase', 'payment', 'saleReturn', 'purchaseReturn',
+    'reversal', 'customer_payment', 'customer_discount',
+    'supplier_payment', 'supplier_discount', 'closing',
+  };
+
+  JournalRepositoryImpl(this._datasource, this._accountingRepo);
 
   // ── Accounts ──────────────────────────────────────────────
 
@@ -45,10 +68,12 @@ class JournalRepositoryImpl implements JournalRepository {
     int displayOrder = 0,
     String? description,
   }) {
+    final normalizedType = _normalizeAccountType(accountType);
+    _validateAccountType(normalizedType);
     final companion = AccountsCompanion(
       accountCode: Value(accountCode),
       accountName: Value(accountName),
-      accountType: Value(accountType),
+      accountType: Value(normalizedType),
       currencyId: Value(currencyId),
       parentAccountId: Value(parentAccountId),
       isSystemAccount: Value(isSystemAccount),
@@ -134,6 +159,27 @@ class JournalRepositoryImpl implements JournalRepository {
       throw ArgumentError('Journal entry must have at least 2 lines');
     }
 
+    if (await _datasource.isDateInClosedPeriod(entryDate)) {
+      throw StateError(
+        'Cannot create journal entry: date ${entryDate.toIso8601String().substring(0, 10)} '
+        'falls in a closed accounting period',
+      );
+    }
+
+    // Enforce control account protection: manual entries cannot touch AR/AP
+    if (!_systemEntryTypes.contains(entryType)) {
+      for (final line in lines) {
+        final account = await _datasource.getAccount(line.accountId);
+        if (account != null && _controlAccountCodes.contains(account.accountCode)) {
+          throw ArgumentError(
+            'Cannot modify control account "${account.accountName}" (${account.accountCode}) '
+            'via manual journal entry. Use the appropriate business transaction '
+            '(sale, purchase, payment) instead.',
+          );
+        }
+      }
+    }
+
     // Generate entry number
     final entryNumber = await _datasource.generateNextEntryNumber();
 
@@ -181,6 +227,13 @@ class JournalRepositoryImpl implements JournalRepository {
     if (entry == null) throw ArgumentError('Journal entry not found: $entryId');
     if (entry.status != 'draft') {
       throw StateError('Only draft entries can be posted. Current status: ${entry.status}');
+    }
+
+    if (await _datasource.isDateInClosedPeriod(entry.entryDate)) {
+      throw StateError(
+        'Cannot post journal entry: date ${entry.entryDate.toIso8601String().substring(0, 10)} '
+        'falls in a closed accounting period',
+      );
     }
 
     // Update entry status to posted
@@ -298,32 +351,79 @@ class JournalRepositoryImpl implements JournalRepository {
 
   // ── Trial Balance & Reconciliation ───────────────────────
 
+  /// Trial Balance — SINGLE SOURCE OF TRUTH: journal_lines table.
+  /// Never uses cached balanceCents. Always aggregates from posted journal lines.
   @override
   Future<TrialBalance> getTrialBalance({DateTime? asOfDate}) async {
     final accounts = await _datasource.getAllActiveAccounts();
+    final effectiveDate = asOfDate ?? DateTime.now();
+
+    // ALWAYS compute from journal_lines — the only source of truth
+    final lines = await _datasource
+        .watchPostedLinesByDateRange(DateTime.fromMillisecondsSinceEpoch(0), effectiveDate)
+        .first;
+
+    final balanceByAccountId = <int, int>{};
+    int rawTotalDebits = 0;
+    int rawTotalCredits = 0;
+    for (final line in lines) {
+      final debit = line.debitCents.toBigInt().toInt();
+      final credit = line.creditCents.toBigInt().toInt();
+      rawTotalDebits += debit;
+      rawTotalCredits += credit;
+      balanceByAccountId.update(
+        line.accountId,
+        (value) => value + debit - credit,
+        ifAbsent: () => debit - credit,
+      );
+    }
+
+    // Diagnostic: raw journal_lines totals
+    developer.log(
+      'DIAGNOSTIC: journal_lines raw totals — '
+      'Debits=$rawTotalDebits, Credits=$rawTotalCredits, '
+      'Diff=${rawTotalDebits - rawTotalCredits}, Lines=${lines.length}',
+      name: 'TrialBalance',
+    );
+
+    if (rawTotalDebits != rawTotalCredits) {
+      developer.log(
+        'WARNING: Raw journal line totals unbalanced! '
+        'Debits=$rawTotalDebits, Credits=$rawTotalCredits, '
+        'Diff=${rawTotalDebits - rawTotalCredits}',
+        name: 'TrialBalance',
+      );
+    }
 
     int totalDebits = 0;
     int totalCredits = 0;
     final items = <TrialBalanceItem>[];
 
     for (final account in accounts) {
-      final balance = account.balanceCents.toBigInt().toInt();
+      // rawBalance = SUM(debit) - SUM(credit) for this account
+      final rawBalance = balanceByAccountId[account.id] ?? 0;
 
       int debit = 0;
       int credit = 0;
 
       final type = account.accountType.toLowerCase();
       if (type == 'asset' || type == 'expense') {
-        if (balance >= 0) {
-          debit = balance;
+        // Normal debit balance: positive rawBalance → debit column
+        if (rawBalance >= 0) {
+          debit = rawBalance;
         } else {
-          credit = -balance;
+          credit = -rawBalance;
         }
       } else {
-        if (balance >= 0) {
-          credit = balance;
+        // Liability/Equity/Revenue: normal credit balance.
+        // rawBalance is (debit - credit), so negate to get natural balance.
+        // Positive natural balance → credit column (normal).
+        // Negative natural balance → debit column (abnormal).
+        final naturalBalance = -rawBalance;
+        if (naturalBalance >= 0) {
+          credit = naturalBalance;
         } else {
-          debit = -balance;
+          debit = -naturalBalance;
         }
       }
 
@@ -340,8 +440,27 @@ class JournalRepositoryImpl implements JournalRepository {
       ));
     }
 
+    // Diagnostic: if trial balance doesn't match, print per-account deltas
+    if (totalDebits != totalCredits) {
+      developer.log(
+        'WARNING: Trial Balance unbalanced after classification! '
+        'Debits=$totalDebits, Credits=$totalCredits, Diff=${totalDebits - totalCredits}',
+        name: 'TrialBalance',
+      );
+      for (final item in items) {
+        if (item.debitCents != 0 || item.creditCents != 0) {
+          developer.log(
+            '  Account ${item.accountCode} (${item.accountName}, ${item.accountType}): '
+            'Dr=${item.debitCents}, Cr=${item.creditCents}, '
+            'RawBalance=${balanceByAccountId[item.accountId] ?? 0}',
+            name: 'TrialBalance',
+          );
+        }
+      }
+    }
+
     return TrialBalance(
-      asOfDate: asOfDate ?? DateTime.now(),
+      asOfDate: effectiveDate,
       items: items,
       totalDebitCents: totalDebits,
       totalCreditCents: totalCredits,
@@ -370,6 +489,52 @@ class JournalRepositoryImpl implements JournalRepository {
       }
     }
 
+    final accounts = await _datasource.getAllActiveAccounts();
+    for (final account in accounts) {
+      final normalizedType = _normalizeAccountType(account.accountType);
+      if (!_validAccountTypes.contains(normalizedType)) {
+        issues.add(
+          'Invalid account type for ${account.accountCode} (${account.accountName}): '
+          '${account.accountType}',
+        );
+        continue;
+      }
+
+      final expectedType = _expectedTypeForCode(account.accountCode);
+      if (expectedType != null && expectedType != normalizedType) {
+        issues.add(
+          'Account type mismatch for ${account.accountCode} (${account.accountName}): '
+          'expected $expectedType, found ${account.accountType}',
+        );
+      }
+    }
+
+    // AR/AP checks: derive GL balance from journal_lines, not cached balanceCents
+    final arAccount = await _datasource.findByCode('1100');
+    if (arAccount != null) {
+      final arItem = trialBalance.items.where((i) => i.accountId == arAccount.id).firstOrNull;
+      final arBalance = arItem != null ? (arItem.debitCents - arItem.creditCents) : 0;
+      final customerTotal = await _datasource.getCustomerBalanceTotal();
+      if (arBalance != customerTotal) {
+        issues.add(
+          'Accounts receivable mismatch: GL(journal_lines)=$arBalance, Customers=$customerTotal',
+        );
+      }
+    }
+
+    final apAccount = await _datasource.findByCode('2000');
+    if (apAccount != null) {
+      final apItem = trialBalance.items.where((i) => i.accountId == apAccount.id).firstOrNull;
+      // AP is liability — credit balance is positive, so net = credit - debit
+      final apBalance = apItem != null ? (apItem.creditCents - apItem.debitCents) : 0;
+      final supplierTotal = await _datasource.getSupplierBalanceTotal();
+      if (apBalance != supplierTotal) {
+        issues.add(
+          'Accounts payable mismatch: GL(journal_lines)=$apBalance, Suppliers=$supplierTotal',
+        );
+      }
+    }
+
     return ReconciliationResult(
       isHealthy: issues.isEmpty,
       issues: issues,
@@ -377,52 +542,76 @@ class JournalRepositoryImpl implements JournalRepository {
     );
   }
 
+  String _normalizeAccountType(String accountType) =>
+      accountType.trim().toLowerCase();
+
+  void _validateAccountType(String accountType) {
+    if (!_validAccountTypes.contains(accountType)) {
+      throw ArgumentError('Invalid account type: $accountType');
+    }
+  }
+
+  String? _expectedTypeForCode(String accountCode) {
+    final trimmed = accountCode.trim();
+    if (trimmed.isEmpty) return null;
+    switch (trimmed[0]) {
+      case '1':
+        return 'asset';
+      case '2':
+        return 'liability';
+      case '3':
+        return 'equity';
+      case '4':
+        return 'revenue';
+      case '5':
+        return 'expense';
+      default:
+        return null;
+    }
+  }
+
   // ── Seeding ───────────────────────────────────────────────
 
   @override
   Future<void> seedDefaultAccounts(int currencyId) async {
-    // Check if accounts already exist (idempotent)
-    final existing = await _datasource.findByCode('10000');
-    if (existing != null) return;
-
     final now = DateTime.now();
 
-    // Default Chart of Accounts
+    // STRICT Chart of Accounts — NO MORE THAN THESE.
+    // Every account code here MUST match what JournalEntryService
+    // and AccountingRepository reference via getAccountByCode().
+    //
+    // DO NOT add temporary, clearing, suspense, or smart accounts.
     final defaultAccounts = <Map<String, dynamic>>[
-      // Assets (1xxxx)
-      {'code': '10000', 'name': 'Assets', 'type': 'asset', 'system': true, 'order': 1},
-      {'code': '10100', 'name': 'Cash', 'type': 'asset', 'parent': '10000', 'system': true, 'order': 2},
-      {'code': '10200', 'name': 'Bank', 'type': 'asset', 'parent': '10000', 'system': true, 'order': 3},
-      {'code': '10300', 'name': 'Accounts Receivable', 'type': 'asset', 'parent': '10000', 'system': true, 'order': 4},
-      {'code': '10400', 'name': 'Inventory', 'type': 'asset', 'parent': '10000', 'system': true, 'order': 5},
-      // Liabilities (2xxxx)
-      {'code': '20000', 'name': 'Liabilities', 'type': 'liability', 'system': true, 'order': 10},
-      {'code': '20100', 'name': 'Accounts Payable', 'type': 'liability', 'parent': '20000', 'system': true, 'order': 11},
-      {'code': '20200', 'name': 'Tax Payable', 'type': 'liability', 'parent': '20000', 'system': true, 'order': 12},
-      // Equity (3xxxx)
-      {'code': '30000', 'name': 'Equity', 'type': 'equity', 'system': true, 'order': 20},
-      {'code': '30100', 'name': 'Owner Equity', 'type': 'equity', 'parent': '30000', 'system': true, 'order': 21},
-      {'code': '30200', 'name': 'Retained Earnings', 'type': 'equity', 'parent': '30000', 'system': true, 'order': 22},
-      // Revenue (4xxxx)
-      {'code': '40000', 'name': 'Revenue', 'type': 'revenue', 'system': true, 'order': 30},
-      {'code': '40100', 'name': 'Sales Revenue', 'type': 'revenue', 'parent': '40000', 'system': true, 'order': 31},
-      {'code': '40200', 'name': 'Service Revenue', 'type': 'revenue', 'parent': '40000', 'system': true, 'order': 32},
-      {'code': '40300', 'name': 'Other Income', 'type': 'revenue', 'parent': '40000', 'system': true, 'order': 33},
-      // Expenses (5xxxx)
-      {'code': '50000', 'name': 'Expenses', 'type': 'expense', 'system': true, 'order': 40},
-      {'code': '50100', 'name': 'Cost of Goods Sold', 'type': 'expense', 'parent': '50000', 'system': true, 'order': 41},
-      {'code': '50200', 'name': 'Operating Expenses', 'type': 'expense', 'parent': '50000', 'system': true, 'order': 42},
-      {'code': '50300', 'name': 'Salaries & Wages', 'type': 'expense', 'parent': '50000', 'system': true, 'order': 43},
-      {'code': '50400', 'name': 'Rent Expense', 'type': 'expense', 'parent': '50000', 'system': true, 'order': 44},
-      {'code': '50500', 'name': 'Utilities Expense', 'type': 'expense', 'parent': '50000', 'system': true, 'order': 45},
+      // ── Assets (1xxx) ──
+      {'code': '1000', 'name': 'Cash', 'type': 'asset', 'system': true, 'order': 1},              // الصندوق
+      {'code': '1010', 'name': 'Bank', 'type': 'asset', 'system': true, 'order': 2},
+      {'code': '1100', 'name': 'Accounts Receivable', 'type': 'asset', 'system': true, 'order': 3}, // Customers
+      {'code': '1200', 'name': 'Inventory', 'type': 'asset', 'system': true, 'order': 4},
+      {'code': '1300', 'name': 'VAT Receivable', 'type': 'asset', 'system': true, 'order': 5},      // Purchase Tax
+      // ── Liabilities (2xxx) ──
+      {'code': '2000', 'name': 'Accounts Payable', 'type': 'liability', 'system': true, 'order': 10}, // Suppliers
+      {'code': '2100', 'name': 'VAT Payable', 'type': 'liability', 'system': true, 'order': 11},      // Sales Tax
+      {'code': '2300', 'name': 'Loyalty Points Liability', 'type': 'liability', 'system': true, 'order': 12},
+      // ── Equity (3xxx) ──
+      {'code': '3000', 'name': 'Owner Capital', 'type': 'equity', 'system': true, 'order': 20},
+      // ── Income (4xxx) ──
+      {'code': '4000', 'name': 'Sales Revenue', 'type': 'revenue', 'system': true, 'order': 30},
+      // ── Expenses (5xxx) ──
+      {'code': '5100', 'name': 'Expenses', 'type': 'expense', 'system': true, 'order': 41},
+      {'code': '5200', 'name': 'Salaries Expense', 'type': 'expense', 'system': true, 'order': 42},
+      {'code': '5500', 'name': 'Discounts Given', 'type': 'expense', 'system': true, 'order': 43},
+      {'code': '5600', 'name': 'Commissions Expense', 'type': 'expense', 'system': true, 'order': 44},
     ];
 
-    // First pass: create all accounts without parent references
-    final codeToId = <String, int>{};
+    // Idempotent: skip accounts that already exist, create only missing ones
     for (final acct in defaultAccounts) {
-      final id = await _datasource.createAccount(
+      final code = acct['code'] as String;
+      final existing = await _datasource.findByCode(code);
+      if (existing != null) continue;
+
+      await _datasource.createAccount(
         AccountsCompanion(
-          accountCode: Value(acct['code'] as String),
+          accountCode: Value(code),
           accountName: Value(acct['name'] as String),
           accountType: Value(acct['type'] as String),
           currencyId: Value(currencyId),
@@ -434,26 +623,6 @@ class JournalRepositoryImpl implements JournalRepository {
           updatedAt: Value(now),
         ),
       );
-      codeToId[acct['code'] as String] = id;
-    }
-
-    // Second pass: update parent references
-    for (final acct in defaultAccounts) {
-      if (acct.containsKey('parent')) {
-        final parentCode = acct['parent'] as String;
-        final parentId = codeToId[parentCode];
-        final childId = codeToId[acct['code'] as String];
-        if (parentId != null && childId != null) {
-          final child = await _datasource.getAccount(childId);
-          if (child != null) {
-            final updated = child.copyWith(
-              parentAccountId: Value(parentId),
-              updatedAt: now,
-            );
-            await _datasource.updateAccount(updated);
-          }
-        }
-      }
     }
   }
 

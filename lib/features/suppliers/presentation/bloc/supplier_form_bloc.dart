@@ -260,6 +260,17 @@ class SupplierFormBloc extends Bloc<SupplierFormEvent, SupplierFormState> {
       errors['email'] = 'suppliers.email_invalid';
     }
 
+    // Check for duplicate name
+    if (currentState.name.isNotEmpty) {
+      final existing = await _repository.searchSuppliers(currentState.name);
+      final duplicate = existing.any((s) =>
+          s.name.trim().toLowerCase() == currentState.name.trim().toLowerCase() &&
+          s.id != currentState.supplierId);
+      if (duplicate) {
+        errors['name'] = 'suppliers.name_duplicate';
+      }
+    }
+
     if (errors.isNotEmpty) {
       emit(currentState.copyWith(errors: errors));
       return;

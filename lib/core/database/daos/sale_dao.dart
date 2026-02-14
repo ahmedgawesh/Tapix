@@ -4,15 +4,17 @@ import '../app_database.dart';
 import '../tables/transactions.dart';
 import '../tables/parties.dart';
 import '../tables/products.dart';
+import '../tables/people.dart';
 
 part 'sale_dao.g.dart';
 
-/// Data class for sale with customer info
+/// Data class for sale with customer and employee info
 class SaleWithCustomer {
   final Sale sale;
   final Customer? customer;
+  final Employee? employee;
 
-  SaleWithCustomer({required this.sale, this.customer});
+  SaleWithCustomer({required this.sale, this.customer, this.employee});
 }
 
 /// Data class for sale item with product and variant info
@@ -23,6 +25,7 @@ class SaleItemWithDetails {
   final String? colorName;
   final String? colorHex;
   final String? sizeName;
+  final Employee? employee;
 
   SaleItemWithDetails({
     required this.item,
@@ -31,6 +34,7 @@ class SaleItemWithDetails {
     this.colorName,
     this.colorHex,
     this.sizeName,
+    this.employee,
   });
 }
 
@@ -87,6 +91,7 @@ class SaleDashboardStats {
   CustomerTransactions,
   Products,
   ProductVariants,
+  Employees,
 ])
 class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
   SaleDao(super.db);
@@ -100,10 +105,11 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
         .watch();
   }
 
-  /// Watch all sales with customer info
+  /// Watch all sales with customer and employee info
   Stream<List<SaleWithCustomer>> watchAllSalesWithCustomer() {
     final query = select(sales).join([
       leftOuterJoin(customers, customers.id.equalsExp(sales.customerId)),
+      leftOuterJoin(employees, employees.id.equalsExp(sales.employeeId)),
     ])
       ..orderBy([OrderingTerm.desc(sales.saleDate)]);
 
@@ -111,6 +117,7 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
           return SaleWithCustomer(
             sale: row.readTable(sales),
             customer: row.readTableOrNull(customers),
+            employee: row.readTableOrNull(employees),
           );
         }).toList());
   }
@@ -125,10 +132,11 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
     return (select(sales)..where((s) => s.id.equals(id))).getSingleOrNull();
   }
 
-  /// Get sale with customer by ID
+  /// Get sale with customer and employee by ID
   Future<SaleWithCustomer?> getSaleWithCustomerById(int id) async {
     final query = select(sales).join([
       leftOuterJoin(customers, customers.id.equalsExp(sales.customerId)),
+      leftOuterJoin(employees, employees.id.equalsExp(sales.employeeId)),
     ])
       ..where(sales.id.equals(id));
 
@@ -138,6 +146,7 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
     return SaleWithCustomer(
       sale: row.readTable(sales),
       customer: row.readTableOrNull(customers),
+      employee: row.readTableOrNull(employees),
     );
   }
 
@@ -162,6 +171,7 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
     final searchQuery = '%$query%';
     final joinQuery = select(sales).join([
       leftOuterJoin(customers, customers.id.equalsExp(sales.customerId)),
+      leftOuterJoin(employees, employees.id.equalsExp(sales.employeeId)),
     ])
       ..where(sales.invoiceNumber.like(searchQuery) |
           customers.name.like(searchQuery))
@@ -171,6 +181,7 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
           return SaleWithCustomer(
             sale: row.readTable(sales),
             customer: row.readTableOrNull(customers),
+            employee: row.readTableOrNull(employees),
           );
         }).toList());
   }
@@ -571,6 +582,7 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
       leftOuterJoin(productVariants, productVariants.id.equalsExp(saleItems.variantId)),
       leftOuterJoin(productColors, productColors.id.equalsExp(productVariants.colorId)),
       leftOuterJoin(sizes, sizes.id.equalsExp(productVariants.sizeId)),
+      leftOuterJoin(employees, employees.id.equalsExp(saleItems.employeeId)),
     ])
       ..where(saleItems.saleId.equals(saleId));
 
@@ -583,6 +595,7 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
         colorName: row.readTableOrNull(productColors)?.name,
         colorHex: row.readTableOrNull(productColors)?.hexCode,
         sizeName: row.readTableOrNull(sizes)?.name,
+        employee: row.readTableOrNull(employees),
       );
     }).toList();
   }
@@ -594,6 +607,7 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
       leftOuterJoin(productVariants, productVariants.id.equalsExp(saleItems.variantId)),
       leftOuterJoin(productColors, productColors.id.equalsExp(productVariants.colorId)),
       leftOuterJoin(sizes, sizes.id.equalsExp(productVariants.sizeId)),
+      leftOuterJoin(employees, employees.id.equalsExp(saleItems.employeeId)),
     ])
       ..where(saleItems.saleId.equals(saleId));
 
@@ -605,6 +619,7 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
             colorName: row.readTableOrNull(productColors)?.name,
             colorHex: row.readTableOrNull(productColors)?.hexCode,
             sizeName: row.readTableOrNull(sizes)?.name,
+            employee: row.readTableOrNull(employees),
           );
         }).toList());
   }

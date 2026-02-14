@@ -95,6 +95,14 @@ class LoyaltySettingsTable extends Table {
   IntColumn get signupBonusPoints => integer().withDefault(const Constant(50))();
   IntColumn get reviewBonusPoints => integer().withDefault(const Constant(10))();
   BoolColumn get isEnabled => boolean().withDefault(const Constant(true))();
+  /// How much 1 point is worth in cents (e.g., 1 = 1 cent, 10 = 10 cents)
+  IntColumn get pointValueCents => integer().withDefault(const Constant(1))();
+  /// Minimum points required before a customer can redeem at checkout
+  IntColumn get minRedemptionPoints => integer().withDefault(const Constant(100))();
+  /// Maximum percentage of invoice total that can be paid with points (basis points: 5000 = 50%)
+  IntColumn get maxRedemptionPercentBps => integer().withDefault(const Constant(5000))();
+  /// Whether points redemption at checkout is enabled
+  BoolColumn get allowPointsRedemption => boolean().withDefault(const Constant(true))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
 }

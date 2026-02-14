@@ -51,7 +51,7 @@ class _BalanceSheetView extends StatelessWidget {
     final totalExpenses = expenseItems.fold<int>(
         0, (sum, item) => sum + item.debitCents - item.creditCents);
 
-    // Net Income (Retained Earnings for the period)
+    // Net Income = Revenue - Expenses
     final netIncome = totalRevenue - totalExpenses;
 
     // Total Equity = Owner's Capital + Net Income
@@ -379,7 +379,7 @@ class _BalanceSheetView extends StatelessWidget {
           .toList();
     }
 
-    // Build equity items including retained earnings
+    // Build equity items including net income
     final equityLineItems = toCreditLineItems(fig.equityItems);
     if (fig.netIncome != 0) {
       equityLineItems.add(BalanceSheetLineItem(
@@ -642,7 +642,7 @@ class _BalanceSection extends StatelessWidget {
   }
 }
 
-/// Equity section with Owner's Capital + Net Income (Retained Earnings)
+/// Equity section with Owner's Capital + Net Income
 class _EquitySection extends StatelessWidget {
   final List<TrialBalanceItem> equityItems;
   final int ownerCapital;
@@ -717,7 +717,7 @@ class _EquitySection extends StatelessWidget {
             ),
           );
         }),
-        // Net Income / Retained Earnings line
+        // Net Income line
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
           child: Row(

@@ -144,6 +144,41 @@ class ProductVariantRepositoryImpl implements ProductVariantRepository {
   }
 
   @override
+  Future<void> adjustStock({
+    required int variantId,
+    required int quantityDelta,
+    required String reason,
+    required int currencyId,
+    int? userId,
+  }) async {
+    final variant = await _datasource.getVariantById(variantId);
+    if (variant == null) throw Exception('Variant not found');
+
+    final newStock = variant.stockQuantity + quantityDelta;
+    if (newStock < 0) throw Exception('Stock cannot be negative');
+
+    // Update the stock quantity
+    final updated = ProductVariantModel(
+      id: variant.id,
+      productId: variant.productId,
+      sku: variant.sku,
+      barcode: variant.barcode,
+      colorId: variant.colorId,
+      sizeId: variant.sizeId,
+      costCents: variant.costCents,
+      priceCents: variant.priceCents,
+      wholesalePriceCents: variant.wholesalePriceCents,
+      priceAdjustmentCents: variant.priceAdjustmentCents,
+      stockQuantity: newStock,
+      isActive: variant.isActive,
+    );
+    await _datasource.updateVariant(updated);
+
+    // NOTE: No inventory adjustment journal entry.
+    // Inventory account only changes via purchases and returns.
+  }
+
+  @override
   Future<bool> isSkuTaken(String sku, {int? excludeVariantId}) async {
     final variant = await _datasource.getVariantBySku(sku);
     if (variant == null) return false;

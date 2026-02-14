@@ -2,6 +2,7 @@ import 'package:decimal/decimal.dart';
 import 'package:drift/drift.dart';
 import '../../../../core/database/app_database.dart' as db;
 import '../../../../core/services/audit_log_service.dart';
+import '../../../auth/data/services/session_service.dart';
 import '../../domain/entities/product_entity.dart';
 import '../../domain/entities/price_history_entity.dart';
 import '../../domain/repositories/product_repository.dart';
@@ -13,8 +14,11 @@ export '../../domain/repositories/product_repository.dart' show BulkProductData;
 class ProductRepositoryImpl implements ProductRepository {
   final ProductLocalDatasource _datasource;
   final AuditLogService _audit;
+  final SessionService _sessionService;
 
-  ProductRepositoryImpl(this._datasource, this._audit);
+  ProductRepositoryImpl(this._datasource, this._audit, this._sessionService);
+
+  Future<int?> _currentUserId() => _sessionService.getCurrentUserId();
 
   @override
   Stream<List<Product>> watchAllProducts({bool? isActive = true}) {
@@ -152,15 +156,15 @@ class ProductRepositoryImpl implements ProductRepository {
     );
 
     // Audit: log product creation
-    _audit.logProductCreated(productId: productId, productName: name);
+    _audit.logProductCreated(productId: productId, productName: name, userId: await _currentUserId());
 
     return productId;
   }
 
   @override
-  Future<bool> updateProduct(Product product) {
+  Future<bool> updateProduct(Product product) async {
     // Audit: log product update
-    _audit.logProductUpdated(productId: product.id, productName: product.name);
+    _audit.logProductUpdated(productId: product.id, productName: product.name, userId: await _currentUserId());
 
     if (product is ProductModel) {
       return _datasource.updateProduct(product);
@@ -198,7 +202,7 @@ class ProductRepositoryImpl implements ProductRepository {
   @override
   Future<int> deleteProduct(int id) async {
     // Audit: log product deletion (CRITICAL)
-    _audit.logProductDeleted(productId: id, productName: 'Product #$id');
+    _audit.logProductDeleted(productId: id, productName: 'Product #$id', userId: await _currentUserId());
     return _datasource.deleteProduct(id);
   }
 

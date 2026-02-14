@@ -454,6 +454,12 @@ FROM product_variants__old
     await _safeAddColumn('employees', 'working_hours_per_day', 'INTEGER NOT NULL DEFAULT 8');
     await _safeAddColumn('employees', 'absence_deduction_rate_bps', 'INTEGER NOT NULL DEFAULT 10000');
     await _safeAddColumn('employees', 'late_deduction_rate_bps', 'INTEGER NOT NULL DEFAULT 2500');
+    await _safeAddColumn('employees', 'weekly_off_days', "TEXT NOT NULL DEFAULT '[5,6]'");
+    await _safeAddColumn('employees', 'annual_leave_days', 'INTEGER NOT NULL DEFAULT 21');
+
+    // Customer transactions: number + discount type
+    await _safeAddColumn('customer_transactions', 'transaction_number', 'TEXT');
+    await _safeAddColumn('customer_transactions', 'discount_type', 'TEXT');
 
     // Customers advanced fields (segmentation + loyalty + analytics)
     await _safeAddColumn('customers', 'segment', "TEXT NOT NULL DEFAULT 'retail'");
@@ -649,7 +655,7 @@ CREATE TABLE IF NOT EXISTS sale_payments (
   }
 
   @override
-  int get schemaVersion => 10026;
+  int get schemaVersion => 10031;
 
   @override
   MigrationStrategy get migration {
@@ -914,6 +920,40 @@ CREATE TABLE IF NOT EXISTS sale_payments (
           }
         }
 
+        // Migration 10026 -> 10027: Customer transaction number + discount type
+        if (from < 10027) {
+          await _safeAddColumn('customer_transactions', 'transaction_number', 'TEXT');
+          await _safeAddColumn('customer_transactions', 'discount_type', 'TEXT');
+        }
+
+        // Migration 10027 -> 10028: Employee commission & sales target fields
+        if (from < 10028) {
+          await _safeAddColumn('employees', 'fixed_commission_cents', 'INTEGER');
+          await _safeAddColumn('employees', 'commission_type', "TEXT NOT NULL DEFAULT 'percentage'");
+          await _safeAddColumn('employees', 'sales_target_cents', 'INTEGER');
+          await _safeAddColumn('employees', 'target_bonus_cents', 'INTEGER');
+          await _safeAddColumn('employees', 'target_period', "TEXT NOT NULL DEFAULT 'monthly'");
+        }
+
+        // Migration 10028 -> 10029: Per-item salesperson on sale_items
+        if (from < 10029) {
+          await _safeAddColumn('sale_items', 'employee_id', 'INTEGER REFERENCES employees(id) ON DELETE SET NULL');
+        }
+
+        // Migration 10029 -> 10030: Loyalty points redemption settings
+        if (from < 10030) {
+          await _safeAddColumn('loyalty_settings', 'point_value_cents', 'INTEGER NOT NULL DEFAULT 1');
+          await _safeAddColumn('loyalty_settings', 'min_redemption_points', 'INTEGER NOT NULL DEFAULT 100');
+          await _safeAddColumn('loyalty_settings', 'max_redemption_percent_bps', 'INTEGER NOT NULL DEFAULT 5000');
+          await _safeAddColumn('loyalty_settings', 'allow_points_redemption', 'INTEGER NOT NULL DEFAULT 1');
+        }
+
+        // Migration 10030 -> 10031: Employee weekly off-days and annual leave
+        if (from < 10031) {
+          await _safeAddColumn('employees', 'weekly_off_days', "TEXT NOT NULL DEFAULT '[5,6]'");
+          await _safeAddColumn('employees', 'annual_leave_days', 'INTEGER NOT NULL DEFAULT 21');
+        }
+
         await _createIndexes();
         await _seedInitialData();
       },
@@ -930,6 +970,12 @@ CREATE TABLE IF NOT EXISTS sale_payments (
           await _seedDefaultBarcodeTemplates();
         } catch (e, st) {
           debugPrint('DB seed skipped (barcode templates): $e');
+          debugPrint('$st');
+        }
+        try {
+          await _seedDefaultLoyaltySettings();
+        } catch (e, st) {
+          debugPrint('DB seed skipped (loyalty settings): $e');
           debugPrint('$st');
         }
       },
@@ -1106,45 +1152,106 @@ CREATE TABLE IF NOT EXISTS sale_payments (
       exchangeRate: Decimal.parse('135.0'),
     );
 
+    // ── Assets (1xxx) ──────────────────────────────────────
     await upsertAccount(
       accountCode: '1000',
       accountName: 'Cash',
-      accountType: 'Asset',
+      accountType: 'asset',
+      currencyId: usdId,
+    );
+
+    await upsertAccount(
+      accountCode: '1010',
+      accountName: 'Bank',
+      accountType: 'asset',
       currencyId: usdId,
     );
 
     await upsertAccount(
       accountCode: '1100',
       accountName: 'Accounts Receivable',
-      accountType: 'Asset',
+      accountType: 'asset',
       currencyId: usdId,
     );
 
+    await upsertAccount(
+      accountCode: '1200',
+      accountName: 'Inventory',
+      accountType: 'asset',
+      currencyId: usdId,
+    );
+
+    await upsertAccount(
+      accountCode: '1300',
+      accountName: 'VAT Receivable',
+      accountType: 'asset',
+      currencyId: usdId,
+    );
+
+    // ── Liabilities (2xxx) ───────────────────────────────
     await upsertAccount(
       accountCode: '2000',
       accountName: 'Accounts Payable',
-      accountType: 'Liability',
+      accountType: 'liability',
       currencyId: usdId,
     );
 
     await upsertAccount(
-      accountCode: '3000',
-      accountName: 'Equity',
-      accountType: 'Equity',
+      accountCode: '2100',
+      accountName: 'VAT Payable',
+      accountType: 'liability',
       currencyId: usdId,
     );
 
+    await upsertAccount(
+      accountCode: '2300',
+      accountName: 'Loyalty Points Liability',
+      accountType: 'liability',
+      currencyId: usdId,
+    );
+
+    // ── Equity (3xxx) ────────────────────────────────────
+    await upsertAccount(
+      accountCode: '3000',
+      accountName: 'Owner Capital',
+      accountType: 'equity',
+      currencyId: usdId,
+    );
+
+    // ── Income (4xxx) ────────────────────────────────────
     await upsertAccount(
       accountCode: '4000',
       accountName: 'Sales Revenue',
-      accountType: 'Revenue',
+      accountType: 'revenue',
+      currencyId: usdId,
+    );
+
+    // ── Expenses (5xxx) ──────────────────────────────────
+    await upsertAccount(
+      accountCode: '5100',
+      accountName: 'Expenses',
+      accountType: 'expense',
       currencyId: usdId,
     );
 
     await upsertAccount(
-      accountCode: '5000',
-      accountName: 'Cost of Goods Sold',
-      accountType: 'Expense',
+      accountCode: '5200',
+      accountName: 'Salaries Expense',
+      accountType: 'expense',
+      currencyId: usdId,
+    );
+
+    await upsertAccount(
+      accountCode: '5500',
+      accountName: 'Discounts Given',
+      accountType: 'expense',
+      currencyId: usdId,
+    );
+
+    await upsertAccount(
+      accountCode: '5600',
+      accountName: 'Commissions Expense',
+      accountType: 'expense',
       currencyId: usdId,
     );
 
@@ -1172,6 +1279,12 @@ CREATE TABLE IF NOT EXISTS sale_payments (
       await _seedDefaultLoyaltyTiers();
     } catch (e, st) {
       debugPrint('DB seed skipped (default loyalty tiers): $e');
+      debugPrint('$st');
+    }
+    try {
+      await _seedDefaultLoyaltySettings();
+    } catch (e, st) {
+      debugPrint('DB seed skipped (default loyalty settings): $e');
       debugPrint('$st');
     }
     try {
@@ -1362,6 +1475,22 @@ CREATE TABLE IF NOT EXISTS sale_payments (
       await (update(roles)..where((r) => r.name.equals(roleName)))
           .write(RolesCompanion(permissions: Value(updatedPerms)));
     }
+  }
+
+  Future<void> _seedDefaultLoyaltySettings() async {
+    final existing = await select(loyaltySettingsTable).getSingleOrNull();
+    if (existing != null) return;
+
+    await customStatement('''
+      INSERT INTO loyalty_settings (
+        points_per_currency_unit, min_spend_for_points,
+        referral_bonus_points, signup_bonus_points, review_bonus_points,
+        is_enabled, point_value_cents, min_redemption_points,
+        max_redemption_percent_bps, allow_points_redemption,
+        created_at, updated_at
+      ) VALUES (1, 0, 100, 50, 10, 1, 1, 100, 5000, 1,
+        datetime('now'), datetime('now'))
+    ''');
   }
 
   Future<void> _seedDefaultLoyaltyTiers() async {

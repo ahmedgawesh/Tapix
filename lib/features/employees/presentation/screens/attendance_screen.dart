@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/services/attendance_service.dart';
 import '../../domain/repositories/employee_repository.dart';
 import '../bloc/attendance_bloc.dart';
 import '../bloc/employees_bloc.dart';
@@ -17,7 +18,7 @@ class AttendanceScreen extends StatelessWidget {
     return MultiBlocProvider(
       providers: [
         BlocProvider(
-          create: (context) => AttendanceBloc(sl<EmployeeRepository>())
+          create: (context) => AttendanceBloc(sl<EmployeeRepository>(), sl<AttendanceService>())
             ..add(AttendanceInitialized(DateTime.now())),
         ),
         BlocProvider(
@@ -78,6 +79,7 @@ class _AttendanceScreenContentState extends State<_AttendanceScreenContent> {
                           ? _EmptyState()
                           : _AttendanceList(
                               attendances: state.attendances,
+                              employeeNames: state.employeeNames,
                             ),
                 ),
               ],
@@ -87,6 +89,7 @@ class _AttendanceScreenContentState extends State<_AttendanceScreenContent> {
       ),
       floatingActionButton: _AttendanceFAB(
         onCheckIn: () => _showCheckInDialog(context),
+        onCheckOut: () => _showCheckOutDialog(context),
         onMarkLate: () => _showMarkLateDialog(context),
         onMarkAbsent: () => _showMarkAbsentDialog(context),
       ),
@@ -118,6 +121,7 @@ class _AttendanceScreenContentState extends State<_AttendanceScreenContent> {
             AttendanceCheckInRequested(
               employeeId: result.employeeId,
               checkInMethod: 'manual',
+              checkInTime: result.dateTime,
             ),
           );
     }
@@ -132,6 +136,7 @@ class _AttendanceScreenContentState extends State<_AttendanceScreenContent> {
             AttendanceMarkLateRequested(
               employeeId: result.employeeId,
               notes: result.notes,
+              checkInTime: result.dateTime,
             ),
           );
     }
@@ -148,6 +153,55 @@ class _AttendanceScreenContentState extends State<_AttendanceScreenContent> {
               notes: result.notes,
             ),
           );
+    }
+  }
+
+  Future<void> _showCheckOutDialog(BuildContext context) async {
+    final bloc = context.read<AttendanceBloc>();
+    final checkedInAttendances = bloc.state.attendances.where((a) {
+      return a.checkInTime != null &&
+          a.checkOutTime == null &&
+          (a.status == 'present' || a.status == 'late');
+    }).toList();
+
+    if (checkedInAttendances.isEmpty) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('employees.no_checked_in_employees'.tr()),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+      return;
+    }
+
+    final result = await showDialog<_CheckOutResult>(
+      context: context,
+      useRootNavigator: true,
+      builder: (dialogContext) => _CheckOutSelectorDialog(
+        attendances: checkedInAttendances,
+        employeeNames: bloc.state.employeeNames,
+      ),
+    );
+
+    if (result != null && context.mounted) {
+      // Build the check-out DateTime from the selected date + time
+      final selectedDate = bloc.state.selectedDate;
+      DateTime? checkOutTime;
+      if (result.checkOutTime != null) {
+        checkOutTime = DateTime(
+          selectedDate.year,
+          selectedDate.month,
+          selectedDate.day,
+          result.checkOutTime!.hour,
+          result.checkOutTime!.minute,
+        );
+      }
+      bloc.add(AttendanceCheckOutRequested(
+        employeeId: result.attendance.employeeId,
+        checkOutTime: checkOutTime,
+      ));
     }
   }
 
@@ -178,12 +232,20 @@ class _AttendanceActionResult {
   final int employeeId;
   final DateTime date;
   final String? notes;
+  final TimeOfDay? time;
 
   const _AttendanceActionResult({
     required this.employeeId,
     required this.date,
     this.notes,
+    this.time,
   });
+
+  /// Combine date + time into a single DateTime for check-in/check-out
+  DateTime? get dateTime {
+    if (time == null) return null;
+    return DateTime(date.year, date.month, date.day, time!.hour, time!.minute);
+  }
 }
 
 class _AttendanceActionDialog extends StatefulWidget {
@@ -200,12 +262,19 @@ class _AttendanceActionDialogState extends State<_AttendanceActionDialog> {
   final _formKey = GlobalKey<FormState>();
   late Employee _selectedEmployee;
   DateTime _selectedDate = DateTime.now();
+  TimeOfDay? _selectedTime;
   final _notesController = TextEditingController();
+
+  /// Whether this action needs a time picker (check-in and late need it, absent does not)
+  bool get _needsTime => widget.action != _AttendanceAction.absent;
 
   @override
   void initState() {
     super.initState();
     _selectedEmployee = widget.initialEmployee;
+    if (_needsTime) {
+      _selectedTime = TimeOfDay.now();
+    }
   }
 
   @override
@@ -234,6 +303,16 @@ class _AttendanceActionDialogState extends State<_AttendanceActionDialog> {
     );
     if (picked != null) {
       setState(() => _selectedDate = picked);
+    }
+  }
+
+  Future<void> _pickTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _selectedTime ?? TimeOfDay.now(),
+    );
+    if (picked != null) {
+      setState(() => _selectedTime = picked);
     }
   }
 
@@ -306,6 +385,32 @@ class _AttendanceActionDialogState extends State<_AttendanceActionDialog> {
                   ),
                 ),
               ),
+
+              // Time picker (for check-in and late only)
+              if (_needsTime) ...[
+                const SizedBox(height: 12),
+                InkWell(
+                  onTap: _pickTime,
+                  borderRadius: BorderRadius.circular(12),
+                  child: InputDecorator(
+                    decoration: InputDecoration(
+                      labelText: 'employees.select_time'.tr(),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      prefixIcon: const Icon(Icons.access_time_outlined),
+                    ),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        _selectedTime != null
+                            ? _selectedTime!.format(context)
+                            : 'employees.select_time'.tr(),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
               const SizedBox(height: 12),
 
               // Notes
@@ -335,6 +440,7 @@ class _AttendanceActionDialogState extends State<_AttendanceActionDialog> {
                 employeeId: _selectedEmployee.id,
                 date: DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day),
                 notes: _notesController.text.isEmpty ? null : _notesController.text,
+                time: _selectedTime,
               ),
             );
           },
@@ -453,8 +559,9 @@ class _EmptyState extends StatelessWidget {
 
 class _AttendanceList extends StatelessWidget {
   final List<Attendance> attendances;
+  final Map<int, String> employeeNames;
 
-  const _AttendanceList({required this.attendances});
+  const _AttendanceList({required this.attendances, required this.employeeNames});
 
   @override
   Widget build(BuildContext context) {
@@ -463,7 +570,10 @@ class _AttendanceList extends StatelessWidget {
       itemCount: attendances.length,
       itemBuilder: (context, index) {
         final attendance = attendances[index];
-        return _AttendanceCard(attendance: attendance);
+        return _AttendanceCard(
+          attendance: attendance,
+          employeeName: employeeNames[attendance.employeeId],
+        );
       },
     );
   }
@@ -471,8 +581,9 @@ class _AttendanceList extends StatelessWidget {
 
 class _AttendanceCard extends StatelessWidget {
   final Attendance attendance;
+  final String? employeeName;
 
-  const _AttendanceCard({required this.attendance});
+  const _AttendanceCard({required this.attendance, this.employeeName});
 
   @override
   Widget build(BuildContext context) {
@@ -482,42 +593,154 @@ class _AttendanceCard extends StatelessWidget {
     final statusColor = _getStatusColor(attendance.status);
     final statusIcon = _getStatusIcon(attendance.status);
 
+    final hasCheckedIn = attendance.checkInTime != null;
+    final hasCheckedOut = attendance.checkOutTime != null;
+    final canCheckOut = hasCheckedIn && !hasCheckedOut &&
+        (attendance.status == 'present' || attendance.status == 'late');
+
+    // Calculate hours worked
+    String? hoursWorkedText;
+    if (hasCheckedIn && hasCheckedOut) {
+      final duration = attendance.checkOutTime!.difference(attendance.checkInTime!);
+      final hours = duration.inHours;
+      final minutes = duration.inMinutes % 60;
+      hoursWorkedText = '${hours}h ${minutes}m';
+    }
+
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: statusColor.withValues(alpha: 0.1),
-          child: Icon(statusIcon, color: statusColor, size: 20),
-        ),
-        title: Text('Employee #${attendance.employeeId}'),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
           children: [
-            if (attendance.checkInTime != null)
-              Text(
-                '${'employees.check_in'.tr()}: ${timeFormat.format(attendance.checkInTime!)}',
-                style: theme.textTheme.bodySmall,
-              ),
-            if (attendance.checkOutTime != null)
-              Text(
-                '${'employees.check_out'.tr()}: ${timeFormat.format(attendance.checkOutTime!)}',
-                style: theme.textTheme.bodySmall,
-              ),
-          ],
-        ),
-        trailing: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: statusColor.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Text(
-            _getStatusLabel(attendance.status),
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: statusColor,
-              fontWeight: FontWeight.w600,
+            CircleAvatar(
+              backgroundColor: statusColor.withValues(alpha: 0.1),
+              child: Icon(statusIcon, color: statusColor, size: 20),
             ),
-          ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    employeeName ?? 'Employee #${attendance.employeeId}',
+                    style: theme.textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      if (hasCheckedIn) ...[
+                        Icon(Icons.login, size: 14, color: Colors.green.shade600),
+                        const SizedBox(width: 4),
+                        Text(
+                          timeFormat.format(attendance.checkInTime!),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: Colors.green.shade600,
+                          ),
+                        ),
+                      ],
+                      if (hasCheckedOut) ...[
+                        const SizedBox(width: 12),
+                        Icon(Icons.logout, size: 14, color: Colors.red.shade600),
+                        const SizedBox(width: 4),
+                        Text(
+                          timeFormat.format(attendance.checkOutTime!),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: Colors.red.shade600,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  if (hoursWorkedText != null) ...[
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        Icon(Icons.schedule, size: 14, color: theme.colorScheme.primary),
+                        const SizedBox(width: 4),
+                        Text(
+                          hoursWorkedText,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
+                        if (attendance.overtimeMinutes > 0) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              'OT: ${attendance.overtimeMinutes}m',
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: Colors.orange.shade700,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    _getStatusLabel(attendance.status),
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: statusColor,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                if (canCheckOut) ...[
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    height: 30,
+                    child: FilledButton.tonalIcon(
+                      onPressed: () async {
+                        final time = await showTimePicker(
+                          context: context,
+                          initialTime: TimeOfDay.now(),
+                        );
+                        if (time != null && context.mounted) {
+                          final bloc = context.read<AttendanceBloc>();
+                          final date = bloc.state.selectedDate;
+                          final checkOutTime = DateTime(
+                            date.year, date.month, date.day,
+                            time.hour, time.minute,
+                          );
+                          bloc.add(
+                            AttendanceCheckOutRequested(
+                              employeeId: attendance.employeeId,
+                              checkOutTime: checkOutTime,
+                            ),
+                          );
+                        }
+                      },
+                      icon: const Icon(Icons.logout, size: 14),
+                      label: Text(
+                        'employees.check_out'.tr(),
+                        style: const TextStyle(fontSize: 11),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ],
         ),
       ),
     );
@@ -533,6 +756,8 @@ class _AttendanceCard extends StatelessWidget {
         return Colors.red;
       case 'leave':
         return Colors.blue;
+      case 'early_departure':
+        return Colors.deepOrange;
       default:
         return Colors.grey;
     }
@@ -548,6 +773,8 @@ class _AttendanceCard extends StatelessWidget {
         return Icons.cancel_outlined;
       case 'leave':
         return Icons.beach_access_outlined;
+      case 'early_departure':
+        return Icons.exit_to_app_outlined;
       default:
         return Icons.help_outline;
     }
@@ -563,19 +790,137 @@ class _AttendanceCard extends StatelessWidget {
         return 'employees.status_absent'.tr();
       case 'leave':
         return 'employees.status_on_leave'.tr();
+      case 'early_departure':
+        return 'employees.status_early_departure'.tr();
       default:
         return status;
     }
   }
 }
 
+class _CheckOutResult {
+  final Attendance attendance;
+  final TimeOfDay? checkOutTime;
+
+  const _CheckOutResult({required this.attendance, this.checkOutTime});
+}
+
+class _CheckOutSelectorDialog extends StatefulWidget {
+  final List<Attendance> attendances;
+  final Map<int, String> employeeNames;
+
+  const _CheckOutSelectorDialog({required this.attendances, required this.employeeNames});
+
+  @override
+  State<_CheckOutSelectorDialog> createState() => _CheckOutSelectorDialogState();
+}
+
+class _CheckOutSelectorDialogState extends State<_CheckOutSelectorDialog> {
+  TimeOfDay _checkOutTime = TimeOfDay.now();
+
+  Future<void> _pickTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _checkOutTime,
+    );
+    if (picked != null) {
+      setState(() => _checkOutTime = picked);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final timeFormat = DateFormat('hh:mm a');
+
+    return AlertDialog(
+      title: Row(
+        children: [
+          Icon(Icons.logout, color: Colors.red.shade600, size: 22),
+          const SizedBox(width: 8),
+          Text('employees.check_out'.tr()),
+        ],
+      ),
+      content: SizedBox(
+        width: 400,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'employees.select_employee_checkout'.tr(),
+              style: theme.textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 12),
+            // Check-out time picker
+            InkWell(
+              onTap: _pickTime,
+              borderRadius: BorderRadius.circular(12),
+              child: InputDecorator(
+                decoration: InputDecoration(
+                  labelText: 'employees.select_checkout_time'.tr(),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  prefixIcon: const Icon(Icons.access_time_outlined),
+                ),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(_checkOutTime.format(context)),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            ...widget.attendances.map((a) => Card(
+              margin: const EdgeInsets.only(bottom: 8),
+              child: ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: a.status == 'late'
+                      ? Colors.orange.withValues(alpha: 0.1)
+                      : Colors.green.withValues(alpha: 0.1),
+                  child: Icon(
+                    Icons.person_outline,
+                    color: a.status == 'late' ? Colors.orange : Colors.green,
+                  ),
+                ),
+                title: Text(widget.employeeNames[a.employeeId] ?? 'Employee #${a.employeeId}'),
+                subtitle: a.checkInTime != null
+                    ? Text(
+                        '${'employees.check_in'.tr()}: ${timeFormat.format(a.checkInTime!)}',
+                        style: theme.textTheme.bodySmall,
+                      )
+                    : null,
+                trailing: FilledButton.tonalIcon(
+                  onPressed: () => Navigator.of(context).pop(
+                    _CheckOutResult(attendance: a, checkOutTime: _checkOutTime),
+                  ),
+                  icon: const Icon(Icons.logout, size: 16),
+                  label: Text('employees.check_out'.tr()),
+                ),
+              ),
+            )),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text('common.cancel'.tr()),
+        ),
+      ],
+    );
+  }
+}
+
 class _AttendanceFAB extends StatefulWidget {
   final VoidCallback onCheckIn;
+  final VoidCallback onCheckOut;
   final VoidCallback onMarkLate;
   final VoidCallback onMarkAbsent;
 
   const _AttendanceFAB({
     required this.onCheckIn,
+    required this.onCheckOut,
     required this.onMarkLate,
     required this.onMarkAbsent,
   });
@@ -623,6 +968,16 @@ class _AttendanceFABState extends State<_AttendanceFAB> {
             onPressed: () {
               setState(() => _isExpanded = false);
               widget.onCheckIn();
+            },
+          ),
+          const SizedBox(height: 8),
+          _buildMiniButton(
+            icon: Icons.logout,
+            label: 'employees.check_out'.tr(),
+            color: Colors.red.shade600,
+            onPressed: () {
+              setState(() => _isExpanded = false);
+              widget.onCheckOut();
             },
           ),
           const SizedBox(height: 16),

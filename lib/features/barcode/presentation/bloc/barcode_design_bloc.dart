@@ -171,6 +171,10 @@ class BarcodeDesignBloc extends RealtimeBloc<BarcodeDesignData, BarcodeDesignEve
     _currentQuantities = {
       for (final line in event.invoiceData.lines) line.variantId: line.quantity,
     };
+    // Populate selectedProducts from invoice lines so the UI preview renders.
+    _selectedProducts = event.invoiceData.lines
+        .map(_productFromInvoiceLine)
+        .toList();
     emit(RealtimeSuccess(data: _currentData));
   }
 

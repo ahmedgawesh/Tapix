@@ -7,6 +7,7 @@ class SaleEntity extends Equatable {
   final int? customerId;
   final String? customerName;
   final int? employeeId;
+  final String? employeeName;
   final Decimal subtotalCents;
   final Decimal taxCents;
   final Decimal discountCents;
@@ -27,6 +28,7 @@ class SaleEntity extends Equatable {
     this.customerId,
     this.customerName,
     this.employeeId,
+    this.employeeName,
     required this.subtotalCents,
     required this.taxCents,
     required this.discountCents,
@@ -76,6 +78,8 @@ class SaleItemEntity extends Equatable {
   final Decimal discountCents;
   final Decimal taxCents;
   final Decimal totalCents;
+  final int? employeeId;
+  final String? employeeName;
   final DateTime createdAt;
 
   const SaleItemEntity({
@@ -94,6 +98,8 @@ class SaleItemEntity extends Equatable {
     required this.discountCents,
     required this.taxCents,
     required this.totalCents,
+    this.employeeId,
+    this.employeeName,
     required this.createdAt,
   });
 
@@ -115,7 +121,7 @@ class SaleItemEntity extends Equatable {
         id, saleId, productId, productName, variantId, variantSku,
         colorName, colorHex, sizeName,
         quantity, unitPriceCents, subtotalCents, discountCents,
-        taxCents, totalCents, createdAt,
+        taxCents, totalCents, employeeId, employeeName, createdAt,
       ];
 }
 

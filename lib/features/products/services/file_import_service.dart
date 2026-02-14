@@ -118,8 +118,8 @@ class FileImportService implements ParseImportFile {
   Future<ImportFileData> _parseCsv(List<int> bytes, String fileName) async {
     try {
       final csvString = _decodeCsvBytes(bytes);
-      final csvConverter = const CsvToListConverter(eol: '\n');
-      final rows = csvConverter.convert(csvString);
+      final csvDecoder = const CsvDecoder();
+      final rows = csvDecoder.convert(csvString);
 
       if (rows.isEmpty) {
         throw Exception('CSV file is empty');

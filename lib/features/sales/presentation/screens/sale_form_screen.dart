@@ -13,6 +13,8 @@ import '../../../../core/di/injection_container.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/services/below_cost_sale_service.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../../auth/presentation/bloc/auth_bloc.dart';
+import '../../../auth/domain/entities/user_entity.dart';
 import '../../../products/domain/entities/product_entity.dart';
 import '../../../products/domain/entities/product_variant_entity.dart';
 import '../../../products/domain/entities/category_entity.dart';
@@ -39,9 +41,23 @@ class SaleFormScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Read user role from AuthBloc to pass to SaleFormBloc
+    final authState = context.read<AuthBloc>().state;
+    UserRole userRole = UserRole.cashier;
+    int? userId;
+    if (authState is AuthAuthenticated) {
+      userRole = authState.user.role;
+      userId = authState.user.id;
+    }
+
     return BlocProvider(
-      create: (_) => sl<SaleFormBloc>()
-        ..add(SaleFormInitialized(saleId: saleId, currencyId: 1)),
+      create: (_) {
+        final bloc = sl<SaleFormBloc>();
+        bloc.currentUserRole = userRole;
+        bloc.currentUserId = userId;
+        bloc.add(SaleFormInitialized(saleId: saleId, currencyId: 1));
+        return bloc;
+      },
       child: const _SaleFormView(),
     );
   }
@@ -760,6 +776,34 @@ class _SaleFormViewState extends State<_SaleFormView> {
                   ),
                 ),
                 const SizedBox(height: 12),
+                // Threshold exceeded warning
+                if (warning.exceedsThreshold) ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: cs.error.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: cs.error.withValues(alpha: 0.3)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(LucideIcons.shieldAlert, color: cs.error, size: 18),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'sales.below_cost_threshold_exceeded'.tr(args: [warning.lossPercent.toStringAsFixed(1)]),
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: cs.error,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
                 // Message
                 Text(
                   warning.canOverride

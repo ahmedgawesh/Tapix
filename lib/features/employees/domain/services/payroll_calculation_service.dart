@@ -8,6 +8,7 @@ class PayrollCalculation {
   final int overtimeCents;
   final int absenceDeductionCents;
   final int lateDeductionCents;
+  final int earlyDepartureDeductionCents;
   final int totalDeductionCents;
   final int grossPayCents;
   final int netPayCents;
@@ -18,6 +19,7 @@ class PayrollCalculation {
   final int lateDays;
   final int absentDays;
   final int leaveDays;
+  final int earlyDepartureDays;
   final int dailyRateCents;
 
   const PayrollCalculation({
@@ -27,6 +29,7 @@ class PayrollCalculation {
     required this.overtimeCents,
     required this.absenceDeductionCents,
     required this.lateDeductionCents,
+    required this.earlyDepartureDeductionCents,
     required this.totalDeductionCents,
     required this.grossPayCents,
     required this.netPayCents,
@@ -35,7 +38,23 @@ class PayrollCalculation {
     required this.lateDays,
     required this.absentDays,
     required this.leaveDays,
+    required this.earlyDepartureDays,
     required this.dailyRateCents,
+  });
+}
+
+/// Result of sales target bonus check
+class SalesTargetBonusResult {
+  final int salesTargetCents;
+  final int actualSalesCents;
+  final int targetBonusCents;
+  final bool achieved;
+
+  const SalesTargetBonusResult({
+    required this.salesTargetCents,
+    required this.actualSalesCents,
+    required this.targetBonusCents,
+    required this.achieved,
   });
 }
 
@@ -50,13 +69,32 @@ class PayrollCalculation {
 class PayrollCalculationService {
   const PayrollCalculationService._();
 
-  /// Calculate payroll for an employee given attendance counts.
-  ///
-  /// [employee] - the employee record (contains salary and payroll config)
-  /// [attendanceCounts] - map with keys: present, late, absent, leave
-  /// [commissionCents] - total commission earned in the period
-  /// [bonusCents] - bonus for the period
-  /// [overtimeCents] - overtime pay for the period
+  /// Check if an employee achieved their sales target and return the bonus.
+  static SalesTargetBonusResult checkSalesTargetBonus({
+    required Employee employee,
+    required int actualSalesCents,
+  }) {
+    final targetCents = employee.salesTargetCents?.toBigInt().toInt() ?? 0;
+    final bonusCents = employee.targetBonusCents?.toBigInt().toInt() ?? 0;
+
+    if (targetCents <= 0 || bonusCents <= 0) {
+      return SalesTargetBonusResult(
+        salesTargetCents: targetCents,
+        actualSalesCents: actualSalesCents,
+        targetBonusCents: 0,
+        achieved: false,
+      );
+    }
+
+    final achieved = actualSalesCents >= targetCents;
+    return SalesTargetBonusResult(
+      salesTargetCents: targetCents,
+      actualSalesCents: actualSalesCents,
+      targetBonusCents: achieved ? bonusCents : 0,
+      achieved: achieved,
+    );
+  }
+
   static PayrollCalculation calculate({
     required Employee employee,
     required Map<String, int> attendanceCounts,
@@ -64,41 +102,55 @@ class PayrollCalculationService {
     int bonusCents = 0,
     int overtimeCents = 0,
   }) {
-    final basicSalary = employee.salaryCents?.toBigInt().toInt() ?? 0;
+    final fullSalary = employee.salaryCents?.toBigInt().toInt() ?? 0;
     final workingDays = employee.workingDaysPerPeriod;
-    final absenceRateBps = employee.absenceDeductionRateBps;
     final lateRateBps = employee.lateDeductionRateBps;
 
     final presentDays = attendanceCounts['present'] ?? 0;
     final lateDays = attendanceCounts['late'] ?? 0;
     final absentDays = attendanceCounts['absent'] ?? 0;
     final leaveDays = attendanceCounts['leave'] ?? 0;
+    final earlyDepartureDays = attendanceCounts['early_departure'] ?? 0;
 
     // Daily rate in cents (integer math to avoid floating point)
-    final dailyRateCents = workingDays > 0 ? basicSalary ~/ workingDays : 0;
+    final dailyRateCents = workingDays > 0 ? fullSalary ~/ workingDays : 0;
 
-    // Absence deduction: absentDays × dailyRate × (absenceRateBps / 10000)
-    // Using integer math: (absentDays * dailyRate * absenceRateBps) / 10000
-    final absenceDeduction = workingDays > 0
-        ? (absentDays * dailyRateCents * absenceRateBps) ~/ 10000
+    // Paid days = days the employee worked or was on approved leave
+    // present + late + leave + early_departure all count as paid days
+    // absent days and unrecorded days get NO pay
+    final paidDays = presentDays + lateDays + leaveDays + earlyDepartureDays;
+
+    // Prorated basic salary based on actual paid days
+    final basicSalary = workingDays > 0
+        ? (dailyRateCents * paidDays)
         : 0;
+
+    // Absence deduction is implicit (unrecorded/absent days simply don't get paid)
+    // We track it for display: difference between full salary and prorated salary
+    final absenceDeduction = fullSalary - basicSalary;
 
     // Late deduction: lateDays × dailyRate × (lateRateBps / 10000)
     final lateDeduction = workingDays > 0
         ? (lateDays * dailyRateCents * lateRateBps) ~/ 10000
         : 0;
 
-    final totalDeduction = absenceDeduction + lateDeduction;
-    final grossPay = basicSalary + commissionCents + bonusCents + overtimeCents;
+    // Early departure deduction: same rate as late (>2hrs early = late rate)
+    final earlyDepartureDeduction = workingDays > 0
+        ? (earlyDepartureDays * dailyRateCents * lateRateBps) ~/ 10000
+        : 0;
+
+    final totalDeduction = absenceDeduction + lateDeduction + earlyDepartureDeduction;
+    final grossPay = fullSalary + commissionCents + bonusCents + overtimeCents;
     final netPay = grossPay - totalDeduction;
 
     return PayrollCalculation(
-      basicSalaryCents: basicSalary,
+      basicSalaryCents: fullSalary,
       commissionCents: commissionCents,
       bonusCents: bonusCents,
       overtimeCents: overtimeCents,
       absenceDeductionCents: absenceDeduction,
       lateDeductionCents: lateDeduction,
+      earlyDepartureDeductionCents: earlyDepartureDeduction,
       totalDeductionCents: totalDeduction,
       grossPayCents: grossPay,
       netPayCents: netPay,
@@ -107,6 +159,7 @@ class PayrollCalculationService {
       lateDays: lateDays,
       absentDays: absentDays,
       leaveDays: leaveDays,
+      earlyDepartureDays: earlyDepartureDays,
       dailyRateCents: dailyRateCents,
     );
   }

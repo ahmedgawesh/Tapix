@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:decimal/decimal.dart';
 import 'package:drift/drift.dart';
 
@@ -19,6 +21,34 @@ import '../../domain/exceptions/accounting_exception.dart';
 /// - Complete audit trail
 class AccountingRepository {
   final AppDatabase _db;
+
+  static const Set<String> _validAccountTypes = {
+    'asset',
+    'liability',
+    'equity',
+    'revenue',
+    'expense',
+  };
+
+  /// Control account codes that MUST NOT be touched by manual journal entries.
+  /// Only system-generated entries (sale, purchase, payment, reversal, etc.)
+  /// are allowed to modify these accounts.
+  static const Set<String> _controlAccountCodes = {'1100', '2000'};
+
+  /// Entry types that are allowed to touch control accounts.
+  static const Set<String> _systemEntryTypes = {
+    'sale',
+    'purchase',
+    'payment',
+    'saleReturn',
+    'purchaseReturn',
+    'reversal',
+    'customer_payment',
+    'customer_discount',
+    'supplier_payment',
+    'supplier_discount',
+    'closing',
+  };
 
   AccountingRepository(this._db);
 
@@ -63,11 +93,13 @@ class AccountingRepository {
     bool isSystemAccount = false,
     int displayOrder = 0,
   }) async {
+    final normalizedType = _normalizeAccountType(accountType);
+    _validateAccountType(normalizedType);
     return await _db.into(_db.accounts).insert(
       AccountsCompanion.insert(
         accountCode: accountCode,
         accountName: accountName,
-        accountType: accountType,
+        accountType: normalizedType,
         currencyId: currencyId,
         parentAccountId: Value(parentAccountId),
         description: Value(description),
@@ -150,6 +182,29 @@ class AccountingRepository {
       );
     }
 
+    // Enforce control account protection: manual entries cannot touch AR/AP
+    final entryType = entryData.entryType ?? 'manual';
+    if (!_systemEntryTypes.contains(entryType)) {
+      for (final line in entryData.lines) {
+        final account = await getAccountById(line.accountId);
+        if (account != null && _controlAccountCodes.contains(account.accountCode)) {
+          throw AccountingException(
+            'Cannot modify control account "${account.accountName}" (${account.accountCode}) '
+            'via manual journal entry. Use the appropriate business transaction '
+            '(sale, purchase, payment) instead.',
+          );
+        }
+      }
+    }
+
+    // Enforce closed period lock
+    final entryDate = entryData.entryDate ?? DateTime.now();
+    if (await isDateInClosedPeriod(entryDate)) {
+      throw AccountingException(
+        'Cannot post journal entry: date ${entryDate.toIso8601String().substring(0, 10)} falls in a closed accounting period'
+      );
+    }
+
     // Execute in atomic transaction
     return await _db.transaction(() async {
       // Generate entry number
@@ -219,6 +274,13 @@ class AccountingRepository {
     
     if (entry.status != 'draft') {
       throw AccountingException('Only draft entries can be posted');
+    }
+
+    // Enforce closed period lock
+    if (await isDateInClosedPeriod(entry.entryDate)) {
+      throw AccountingException(
+        'Cannot post journal entry: date ${entry.entryDate.toIso8601String().substring(0, 10)} falls in a closed accounting period'
+      );
     }
     
     return await _db.transaction(() async {
@@ -342,48 +404,102 @@ class AccountingRepository {
         .get();
   }
 
+  /// Get all journal entries linked to a source document
+  Future<List<JournalEntry>> getJournalEntriesForSource(
+    String sourceTable, int sourceId,
+  ) {
+    return (_db.select(_db.journalEntries)
+          ..where((e) => e.sourceTable.equals(sourceTable))
+          ..where((e) => e.sourceId.equals(sourceId)))
+        .get();
+  }
+
   // ============================================================
   // TRIAL BALANCE & REPORTS
   // ============================================================
 
-  /// Get trial balance
+  /// Trial Balance — SINGLE SOURCE OF TRUTH: journal_lines table.
+  /// Never uses cached balanceCents. Always aggregates from posted journal lines.
   Future<TrialBalance> getTrialBalance({DateTime? asOfDate}) async {
     final accounts = await (_db.select(_db.accounts)
           ..where((a) => a.isActive.equals(true))
           ..orderBy([(a) => OrderingTerm(expression: a.accountCode)]))
         .get();
-    
+
+    final effectiveDate = asOfDate ?? DateTime.now();
+
+    // ALWAYS compute from journal_lines — the only source of truth
+    final query = _db.select(_db.journalEntryLines).join([
+      innerJoin(
+        _db.journalEntries,
+        _db.journalEntries.id.equalsExp(_db.journalEntryLines.journalEntryId),
+      ),
+    ]);
+    query.where(
+      _db.journalEntries.status.equals('posted') &
+          _db.journalEntries.entryDate.isSmallerOrEqualValue(effectiveDate),
+    );
+
+    final rows = await query.get();
+    final balanceByAccountId = <int, int>{};
+    int rawTotalDebits = 0;
+    int rawTotalCredits = 0;
+    for (final row in rows) {
+      final line = row.readTable(_db.journalEntryLines);
+      final debit = line.debitCents.toBigInt().toInt();
+      final credit = line.creditCents.toBigInt().toInt();
+      rawTotalDebits += debit;
+      rawTotalCredits += credit;
+      balanceByAccountId.update(
+        line.accountId,
+        (value) => value + debit - credit,
+        ifAbsent: () => debit - credit,
+      );
+    }
+
+    // Diagnostic: raw journal_lines totals
+    developer.log(
+      'DIAGNOSTIC [AccountingRepo]: journal_lines raw totals — '
+      'Debits=$rawTotalDebits, Credits=$rawTotalCredits, '
+      'Diff=${rawTotalDebits - rawTotalCredits}, Lines=${rows.length}',
+      name: 'TrialBalance',
+    );
+
     int totalDebits = 0;
     int totalCredits = 0;
     final items = <TrialBalanceItem>[];
-    
+
     for (final account in accounts) {
-      final balance = account.balanceCents.toBigInt().toInt();
-      
+      // rawBalance = SUM(debit) - SUM(credit) for this account
+      final rawBalance = balanceByAccountId[account.id] ?? 0;
+
       int debit = 0;
       int credit = 0;
-      
-      // Determine debit/credit based on account type and balance
+
       final type = account.accountType.toLowerCase();
       if (type == 'asset' || type == 'expense') {
-        // Normal debit balance
-        if (balance >= 0) {
-          debit = balance;
+        // Normal debit balance: positive rawBalance → debit column
+        if (rawBalance >= 0) {
+          debit = rawBalance;
         } else {
-          credit = -balance;
+          credit = -rawBalance;
         }
       } else {
-        // Normal credit balance (liability, equity, revenue)
-        if (balance >= 0) {
-          credit = balance;
+        // Liability/Equity/Revenue: normal credit balance.
+        // rawBalance is (debit - credit), so negate to get natural balance.
+        // Positive natural balance → credit column (normal).
+        // Negative natural balance → debit column (abnormal).
+        final naturalBalance = -rawBalance;
+        if (naturalBalance >= 0) {
+          credit = naturalBalance;
         } else {
-          debit = -balance;
+          debit = -naturalBalance;
         }
       }
-      
+
       totalDebits += debit;
       totalCredits += credit;
-      
+
       items.add(TrialBalanceItem(
         accountId: account.id,
         accountCode: account.accountCode,
@@ -393,9 +509,28 @@ class AccountingRepository {
         creditCents: credit,
       ));
     }
-    
+
+    // Diagnostic: if trial balance doesn't match, print per-account deltas
+    if (totalDebits != totalCredits) {
+      developer.log(
+        'WARNING [AccountingRepo]: Trial Balance unbalanced! '
+        'Debits=$totalDebits, Credits=$totalCredits, Diff=${totalDebits - totalCredits}',
+        name: 'TrialBalance',
+      );
+      for (final item in items) {
+        if (item.debitCents != 0 || item.creditCents != 0) {
+          developer.log(
+            '  Account ${item.accountCode} (${item.accountName}, ${item.accountType}): '
+            'Dr=${item.debitCents}, Cr=${item.creditCents}, '
+            'RawBalance=${balanceByAccountId[item.accountId] ?? 0}',
+            name: 'TrialBalance',
+          );
+        }
+      }
+    }
+
     return TrialBalance(
-      asOfDate: asOfDate ?? DateTime.now(),
+      asOfDate: effectiveDate,
       items: items,
       totalDebitCents: totalDebits,
       totalCreditCents: totalCredits,
@@ -406,32 +541,113 @@ class AccountingRepository {
   /// Reconcile all balances - verify data integrity
   Future<ReconciliationResult> reconcileBalances() async {
     final issues = <String>[];
-    
-    // Check 1: Trial balance
+
     final trialBalance = await getTrialBalance();
     if (!trialBalance.isBalanced) {
       issues.add(
         'Trial balance mismatch: Debits=${trialBalance.totalDebitCents}, '
-        'Credits=${trialBalance.totalCreditCents}'
+        'Credits=${trialBalance.totalCreditCents}',
       );
     }
-    
-    // Check 2: All posted entries are balanced
+
     final entries = await (_db.select(_db.journalEntries)
           ..where((e) => e.status.equals('posted')))
         .get();
-    
     for (final entry in entries) {
       if (entry.totalDebitCents != entry.totalCreditCents) {
         issues.add('Unbalanced posted entry: ${entry.entryNumber}');
       }
     }
-    
+
+    final accounts = await (_db.select(_db.accounts)
+          ..where((a) => a.isActive.equals(true)))
+        .get();
+    for (final account in accounts) {
+      final normalizedType = _normalizeAccountType(account.accountType);
+      if (!_validAccountTypes.contains(normalizedType)) {
+        issues.add(
+          'Invalid account type for ${account.accountCode} (${account.accountName}): '
+          '${account.accountType}',
+        );
+        continue;
+      }
+
+      final expectedType = _expectedTypeForCode(account.accountCode);
+      if (expectedType != null && expectedType != normalizedType) {
+        issues.add(
+          'Account type mismatch for ${account.accountCode} (${account.accountName}): '
+          'expected $expectedType, found ${account.accountType}',
+        );
+      }
+    }
+
+    // AR/AP checks: derive GL balance from journal_lines, not cached balanceCents
+    final arAccount = await getAccountByCode('1100');
+    if (arAccount != null) {
+      final arItem = trialBalance.items.where((i) => i.accountId == arAccount.id).firstOrNull;
+      final arBalance = arItem != null ? (arItem.debitCents - arItem.creditCents) : 0;
+      final row = await _db.customSelect(
+        'SELECT COALESCE(SUM(balance_cents), 0) AS total FROM customers',
+        readsFrom: {_db.customers},
+      ).getSingle();
+      final customerTotal = row.read<int>('total');
+      if (arBalance != customerTotal) {
+        issues.add(
+          'Accounts receivable mismatch: GL(journal_lines)=$arBalance, Customers=$customerTotal',
+        );
+      }
+    }
+
+    final apAccount = await getAccountByCode('2000');
+    if (apAccount != null) {
+      final apItem = trialBalance.items.where((i) => i.accountId == apAccount.id).firstOrNull;
+      // AP is liability — credit balance is positive, so net = credit - debit
+      final apBalance = apItem != null ? (apItem.creditCents - apItem.debitCents) : 0;
+      final row = await _db.customSelect(
+        'SELECT COALESCE(SUM(balance_cents), 0) AS total FROM suppliers',
+        readsFrom: {_db.suppliers},
+      ).getSingle();
+      final supplierTotal = row.read<int>('total');
+      if (apBalance != supplierTotal) {
+        issues.add(
+          'Accounts payable mismatch: GL(journal_lines)=$apBalance, Suppliers=$supplierTotal',
+        );
+      }
+    }
+
     return ReconciliationResult(
       isHealthy: issues.isEmpty,
       issues: issues,
       timestamp: DateTime.now(),
     );
+  }
+
+  String _normalizeAccountType(String accountType) =>
+      accountType.trim().toLowerCase();
+
+  void _validateAccountType(String accountType) {
+    if (!_validAccountTypes.contains(accountType)) {
+      throw AccountingException('Invalid account type: $accountType');
+    }
+  }
+
+  String? _expectedTypeForCode(String accountCode) {
+    final trimmed = accountCode.trim();
+    if (trimmed.isEmpty) return null;
+    switch (trimmed[0]) {
+      case '1':
+        return 'asset';
+      case '2':
+        return 'liability';
+      case '3':
+        return 'equity';
+      case '4':
+        return 'revenue';
+      case '5':
+        return 'expense';
+      default:
+        return null;
+    }
   }
 
   // ============================================================
@@ -461,11 +677,25 @@ class AccountingRepository {
     );
   }
 
-  /// Close accounting period
+  /// Mark an accounting period as closed.
+  ///
+  /// Marks the period as closed. No closing journal entries are created.
+  /// Revenue and expense accounts accumulate continuously.
   Future<bool> closeAccountingPeriod({
     required int periodId,
     required int userId,
   }) async {
+    // Validate trial balance is balanced before allowing close
+    final trialBalance = await getTrialBalance();
+    if (!trialBalance.isBalanced) {
+      throw AccountingException(
+        'Cannot close period: Trial balance is not balanced. '
+        'Debits=${trialBalance.totalDebitCents}, Credits=${trialBalance.totalCreditCents}. '
+        'Fix all imbalances before closing.',
+      );
+    }
+
+    // Mark period as closed
     final updated = await (_db.update(_db.accountingPeriods)
           ..where((p) => p.id.equals(periodId)))
         .write(AccountingPeriodsCompanion(
@@ -475,6 +705,17 @@ class AccountingRepository {
           updatedAt: Value(DateTime.now()),
         ));
     return updated > 0;
+  }
+
+  /// Check if a date falls within a closed accounting period.
+  /// Returns true if the date is in a closed period (transaction should be blocked).
+  Future<bool> isDateInClosedPeriod(DateTime date) async {
+    final closedPeriods = await (_db.select(_db.accountingPeriods)
+          ..where((p) => p.isClosed.equals(true))
+          ..where((p) => p.startDate.isSmallerOrEqualValue(date))
+          ..where((p) => p.endDate.isBiggerOrEqualValue(date)))
+        .get();
+    return closedPeriods.isNotEmpty;
   }
 
   // ============================================================

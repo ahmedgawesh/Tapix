@@ -4,14 +4,16 @@ import 'package:decimal/decimal.dart';
 import 'package:drift/drift.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/database/daos/employee_dao.dart';
+import '../../../../core/services/journal_entry_service.dart';
 import '../../domain/entities/employee_entity.dart';
 import '../../domain/repositories/employee_repository.dart';
 
 /// Implementation of EmployeeRepository
 class EmployeeRepositoryImpl implements EmployeeRepository {
   final EmployeeDao _dao;
+  final JournalEntryService _journalService;
 
-  EmployeeRepositoryImpl(this._dao);
+  EmployeeRepositoryImpl(this._dao, this._journalService);
 
   // ==================== EMPLOYEES ====================
 
@@ -58,6 +60,11 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
     int? managerId,
     int? salaryCents,
     int defaultCommissionRateBps = 0,
+    int? fixedCommissionCents,
+    String commissionType = 'percentage',
+    int? salesTargetCents,
+    int? targetBonusCents,
+    String targetPeriod = 'monthly',
     String payPeriodType = 'monthly',
     int workingDaysPerPeriod = 26,
     int workingHoursPerDay = 8,
@@ -65,6 +72,8 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
     int lateDeductionRateBps = 2500,
     required int currencyId,
     DateTime? hireDate,
+    String weeklyOffDays = '[5,6]',
+    int annualLeaveDays = 21,
     String? notes,
   }) {
     final now = DateTime.now();
@@ -82,6 +91,11 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
       managerId: Value(managerId),
       salaryCents: Value(salaryCents != null ? Decimal.fromInt(salaryCents) : null),
       defaultCommissionRateBps: Value(defaultCommissionRateBps),
+      fixedCommissionCents: Value(fixedCommissionCents != null ? Decimal.fromInt(fixedCommissionCents) : null),
+      commissionType: Value(commissionType),
+      salesTargetCents: Value(salesTargetCents != null ? Decimal.fromInt(salesTargetCents) : null),
+      targetBonusCents: Value(targetBonusCents != null ? Decimal.fromInt(targetBonusCents) : null),
+      targetPeriod: Value(targetPeriod),
       payPeriodType: Value(payPeriodType),
       workingDaysPerPeriod: Value(workingDaysPerPeriod),
       workingHoursPerDay: Value(workingHoursPerDay),
@@ -89,6 +103,8 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
       lateDeductionRateBps: Value(lateDeductionRateBps),
       currencyId: Value(currencyId),
       hireDate: Value(hireDate ?? now),
+      weeklyOffDays: Value(weeklyOffDays),
+      annualLeaveDays: Value(annualLeaveDays),
       notes: Value(notes),
       isActive: const Value(true),
       createdAt: Value(now),
@@ -221,12 +237,23 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
     String? notes,
   }) async {
     final existing = await _dao.getAttendance(employeeId, date);
-    if (existing != null) {
-      throw Exception('Attendance already exists for this date');
-    }
-
     final now = DateTime.now();
     final statusStr = status?.name ?? 'present';
+
+    if (existing != null) {
+      // Update existing record (e.g. auto-generated absent → present)
+      final updated = existing.copyWith(
+        checkInTime: Value(checkInTime),
+        status: statusStr,
+        checkInMethod: Value(checkInMethod),
+        location: Value(location),
+        notes: Value(notes),
+        updatedAt: now,
+      );
+      await _dao.updateAttendance(updated);
+      return existing.id;
+    }
+
     final companion = AttendancesCompanion(
       employeeId: Value(employeeId),
       attendanceDate: Value(DateTime(date.year, date.month, date.day)),
@@ -248,11 +275,21 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
     String? notes,
   }) async {
     final existing = await _dao.getAttendance(employeeId, date);
+    final now = DateTime.now();
+
     if (existing != null) {
-      throw Exception('Attendance already exists for this date');
+      // Update existing record to absent
+      final updated = existing.copyWith(
+        status: 'absent',
+        checkInTime: const Value(null),
+        checkOutTime: const Value(null),
+        notes: Value(notes),
+        updatedAt: now,
+      );
+      await _dao.updateAttendance(updated);
+      return existing.id;
     }
 
-    final now = DateTime.now();
     final companion = AttendancesCompanion(
       employeeId: Value(employeeId),
       attendanceDate: Value(DateTime(date.year, date.month, date.day)),
@@ -276,9 +313,22 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
       throw Exception('No check-in found for this date');
     }
 
+    // Auto-calculate overtime if check-in time is available
+    int computedOvertime = overtimeMinutes;
+    if (existing.checkInTime != null && overtimeMinutes == 0) {
+      final employee = await _dao.getEmployee(employeeId);
+      if (employee != null) {
+        final workedMinutes = checkOutTime.difference(existing.checkInTime!).inMinutes;
+        final expectedMinutes = employee.workingHoursPerDay * 60;
+        if (workedMinutes > expectedMinutes) {
+          computedOvertime = workedMinutes - expectedMinutes;
+        }
+      }
+    }
+
     final updated = existing.copyWith(
       checkOutTime: Value(checkOutTime),
-      overtimeMinutes: overtimeMinutes,
+      overtimeMinutes: computedOvertime,
       updatedAt: DateTime.now(),
     );
     return _dao.updateAttendance(updated);
@@ -496,7 +546,7 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
     required int netPayCents,
     required int currencyId,
     String? notes,
-  }) {
+  }) async {
     final now = DateTime.now();
     final companion = PayrollsCompanion(
       employeeId: Value(employeeId),
@@ -514,7 +564,11 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
       createdAt: Value(now),
       updatedAt: Value(now),
     );
-    return _dao.createPayroll(companion);
+    // No journal entry on creation — only when paid.
+    // STRICT RULE: No accrual. Direct expense on payment only.
+    final payrollId = await _dao.createPayroll(companion);
+
+    return payrollId;
   }
 
   @override
@@ -533,7 +587,29 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
       bankReference: Value(bankReference),
       updatedAt: DateTime.now(),
     );
-    return _dao.updatePayroll(updated);
+
+    // ATOMIC: Wrap status update and payment journal entry in a single
+    // transaction so both succeed or fail together.
+    final ok = await _dao.db.transaction(() async {
+      final result = await _dao.updatePayroll(updated);
+
+      // STRICT RULE: Dr Salaries Expense (5200), Cr Cash/Bank
+      // No accrual. Direct expense on payment only.
+      if (result && status == PayrollStatus.paid) {
+        final netPayCents = payroll.netPayCents.toBigInt().toInt();
+        if (netPayCents > 0) {
+          await _journalService.recordPayrollJournalEntry(
+            payrollId: id,
+            netPayCents: netPayCents,
+            currencyId: payroll.currencyId,
+          );
+        }
+      }
+
+      return result;
+    });
+
+    return ok;
   }
 
   @override
@@ -610,11 +686,10 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
     required int id,
     required CommissionStatus status,
   }) async {
-    final commissions = await _dao.watchEmployeeCommissions(0).first;
-    final commission = commissions.firstWhere(
-      (c) => c.id == id,
-      orElse: () => throw Exception('Commission not found'),
-    );
+    final commission = await _dao.getCommissionById(id);
+    if (commission == null) {
+      throw Exception('Commission #$id not found');
+    }
 
     final updated = commission.copyWith(status: status.name);
     return _dao.updateCommission(updated);
@@ -623,6 +698,15 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
   @override
   Future<int> getTotalCommissionCents(int employeeId, String period) {
     return _dao.getTotalCommissionCents(employeeId, period);
+  }
+
+  @override
+  Future<Map<String, int>> getEmployeeSalesStats(
+    int employeeId,
+    DateTime periodStart,
+    DateTime periodEnd,
+  ) {
+    return _dao.getEmployeeSalesStats(employeeId, periodStart, periodEnd);
   }
 
   // ==================== PERFORMANCE ====================

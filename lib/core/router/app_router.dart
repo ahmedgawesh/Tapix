@@ -61,7 +61,6 @@ import '../../features/expenses/presentation/screens/expenses_screen.dart';
 import '../../features/expenses/presentation/screens/expense_form_screen.dart';
 import '../../features/expenses/presentation/screens/expense_categories_screen.dart';
 import '../../features/accounting/presentation/screens/journal_entries_list_screen.dart';
-import '../../features/accounting/presentation/screens/journal_entry_form_screen.dart';
 import '../../features/accounting/presentation/screens/journal_entry_detail_screen.dart';
 import '../../features/reports/presentation/screens/reports_hub_screen.dart';
 import '../../features/reports/presentation/screens/trial_balance_screen.dart';
@@ -776,10 +775,6 @@ class AppRouter {
             builder: (context, state) => const JournalEntriesListScreen(),
             routes: [
               GoRoute(
-                path: 'add',
-                builder: (context, state) => const JournalEntryFormScreen(),
-              ),
-              GoRoute(
                 path: ':id',
                 builder: (context, state) {
                   final id = int.tryParse(state.pathParameters['id'] ?? '');
@@ -803,10 +798,6 @@ class AppRouter {
             path: 'journal-entries',
             builder: (context, state) => const JournalEntriesListScreen(),
             routes: [
-              GoRoute(
-                path: 'add',
-                builder: (context, state) => const JournalEntryFormScreen(),
-              ),
               GoRoute(
                 path: ':id',
                 builder: (context, state) {

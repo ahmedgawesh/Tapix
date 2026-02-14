@@ -204,10 +204,12 @@ class AuditLogBloc extends RealtimeBloc<AuditLogViewModel, AuditLogEvent> {
     if (searchQuery.isNotEmpty) {
       final q = searchQuery.toLowerCase();
       result = result.where((l) {
+        final performedBy = l.changes['performedBy']?.toString().toLowerCase() ?? '';
         return l.targetTable.toLowerCase().contains(q) ||
             l.action.toLowerCase().contains(q) ||
             l.recordId.toString().contains(q) ||
-            (userNames[l.userId]?.toLowerCase().contains(q) ?? false);
+            (userNames[l.userId]?.toLowerCase().contains(q) ?? false) ||
+            performedBy.contains(q);
       }).toList();
     }
 

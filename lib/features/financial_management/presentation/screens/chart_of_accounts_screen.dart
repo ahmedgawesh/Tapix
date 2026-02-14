@@ -8,6 +8,7 @@ import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../../accounting/domain/repositories/journal_repository.dart';
 import '../../../accounting/presentation/bloc/accounts_bloc.dart';
 
 class ChartOfAccountsScreen extends StatelessWidget {
@@ -138,6 +139,7 @@ class _ChartViewState extends State<_ChartView> {
                         cs: cs,
                         onEdit: (acc) => _showAccountDialog(context, account: acc),
                         onDelete: (acc) => _confirmDelete(context, acc),
+                        onInfo: (acc) => _showAccountDiagnostic(context, acc),
                       );
                     },
                   );
@@ -269,6 +271,13 @@ class _ChartViewState extends State<_ChartView> {
     );
   }
 
+  void _showAccountDiagnostic(BuildContext context, Account account) {
+    showDialog<void>(
+      context: context,
+      builder: (_) => _AccountDiagnosticDialog(account: account),
+    );
+  }
+
   void _confirmDelete(BuildContext context, Account account) {
     final colorScheme = Theme.of(context).colorScheme;
 
@@ -319,6 +328,7 @@ class _AccountTypeGroup extends StatelessWidget {
   final CurrencyService cs;
   final void Function(Account) onEdit;
   final void Function(Account) onDelete;
+  final void Function(Account) onInfo;
 
   const _AccountTypeGroup({
     required this.type,
@@ -326,6 +336,7 @@ class _AccountTypeGroup extends StatelessWidget {
     required this.cs,
     required this.onEdit,
     required this.onDelete,
+    required this.onInfo,
   });
 
   Color _typeColor(String type) {
@@ -488,9 +499,18 @@ class _AccountTypeGroup extends StatelessWidget {
                         },
                       ),
                     ],
+                    IconButton(
+                      icon: Icon(LucideIcons.info, size: 16,
+                          color: colorScheme.onSurfaceVariant.withValues(alpha: 0.6)),
+                      tooltip: 'View journal entries',
+                      onPressed: () => onInfo(acc),
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                    ),
                     if (acc.isSystemAccount)
                       Padding(
-                        padding: const EdgeInsets.only(left: 8),
+                        padding: const EdgeInsets.only(left: 4),
                         child: Icon(LucideIcons.lock, size: 14,
                             color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5)),
                       ),
@@ -499,6 +519,244 @@ class _AccountTypeGroup extends StatelessWidget {
               ),
             )),
         const SizedBox(height: 12),
+      ],
+    );
+  }
+}
+
+class _AccountDiagnosticDialog extends StatelessWidget {
+  final Account account;
+
+  const _AccountDiagnosticDialog({required this.account});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = sl<CurrencyService>();
+    final repo = sl<JournalRepository>();
+
+    return Dialog(
+      insetPadding: const EdgeInsets.all(16),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 600, maxHeight: 500),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Header
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 20, 8, 0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${account.accountCode} — ${account.accountName}',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Type: ${account.accountType} · Balance: ${cs.formatCents(account.balanceCents.toBigInt().toInt())}',
+                          style: theme.textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(),
+
+            // Journal lines stream
+            Flexible(
+              child: StreamBuilder<List<JournalEntryLine>>(
+                stream: repo.watchJournalLinesByAccount(account.id),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+
+                  final lines = snapshot.data ?? [];
+                  if (lines.isEmpty) {
+                    return const Padding(
+                      padding: EdgeInsets.all(32),
+                      child: Text('No journal entry lines for this account.'),
+                    );
+                  }
+
+                  // Compute totals
+                  int totalDebits = 0;
+                  int totalCredits = 0;
+                  for (final line in lines) {
+                    totalDebits += line.debitCents.toBigInt().toInt();
+                    totalCredits += line.creditCents.toBigInt().toInt();
+                  }
+
+                  final type = account.accountType.toLowerCase();
+                  int computedBalance;
+                  if (type == 'asset' || type == 'expense') {
+                    computedBalance = totalDebits - totalCredits;
+                  } else {
+                    computedBalance = totalCredits - totalDebits;
+                  }
+
+                  final cachedBalance = account.balanceCents.toBigInt().toInt();
+                  final balanceMatch = cachedBalance == computedBalance;
+
+                  return Column(
+                    children: [
+                      // Balance comparison
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: _DiagnosticStat(
+                                label: 'Total Debits',
+                                value: cs.formatCents(totalDebits),
+                              ),
+                            ),
+                            Expanded(
+                              child: _DiagnosticStat(
+                                label: 'Total Credits',
+                                value: cs.formatCents(totalCredits),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: _DiagnosticStat(
+                                label: 'Cached Balance',
+                                value: cs.formatCents(cachedBalance),
+                              ),
+                            ),
+                            Expanded(
+                              child: _DiagnosticStat(
+                                label: 'Computed Balance',
+                                value: cs.formatCents(computedBalance),
+                                color: balanceMatch ? null : theme.colorScheme.error,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (!balanceMatch)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
+                          child: Row(
+                            children: [
+                              Icon(Icons.warning_amber, size: 16, color: theme.colorScheme.error),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Cached balance differs from journal_lines (informational only).',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.error,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      const Divider(),
+
+                      // Lines list
+                      Expanded(
+                        child: ListView.separated(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          itemCount: lines.length,
+                          separatorBuilder: (context, index) => const Divider(height: 1),
+                          itemBuilder: (context, index) {
+                            final line = lines[index];
+                            final debit = line.debitCents.toBigInt().toInt();
+                            final credit = line.creditCents.toBigInt().toInt();
+
+                            return ListTile(
+                              dense: true,
+                              title: Text(
+                                line.description ?? 'Line #${line.lineNumber}',
+                                style: theme.textTheme.bodySmall,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              subtitle: Text(
+                                'Entry #${line.journalEntryId}',
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (debit > 0)
+                                    Text(
+                                      'Dr ${cs.formatCents(debit)}',
+                                      style: theme.textTheme.bodySmall?.copyWith(
+                                        color: Colors.blue,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  if (credit > 0)
+                                    Text(
+                                      'Cr ${cs.formatCents(credit)}',
+                                      style: theme.textTheme.bodySmall?.copyWith(
+                                        color: Colors.orange,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DiagnosticStat extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color? color;
+
+  const _DiagnosticStat({
+    required this.label,
+    required this.value,
+    this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: theme.textTheme.labelSmall),
+        Text(
+          value,
+          style: theme.textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w600,
+            color: color,
+          ),
+        ),
       ],
     );
   }

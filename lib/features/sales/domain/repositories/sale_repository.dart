@@ -12,6 +12,8 @@ class SaleItemInput {
   final Decimal discountCents;
   final Decimal taxCents;
   final Decimal totalCents;
+  final int? employeeId;
+  final String? employeeName;
 
   const SaleItemInput({
     required this.productId,
@@ -22,6 +24,8 @@ class SaleItemInput {
     required this.discountCents,
     required this.taxCents,
     required this.totalCents,
+    this.employeeId,
+    this.employeeName,
   });
 }
 

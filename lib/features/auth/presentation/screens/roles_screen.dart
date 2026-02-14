@@ -109,6 +109,8 @@ class _RolesScreenContentState extends State<_RolesScreenContent> {
         return 'users.role_owner'.tr();
       case UserRole.manager:
         return 'users.role_manager'.tr();
+      case UserRole.accountant:
+        return 'users.role_accountant'.tr();
       case UserRole.cashier:
         return 'users.role_cashier'.tr();
       case UserRole.salesperson:
@@ -122,6 +124,8 @@ class _RolesScreenContentState extends State<_RolesScreenContent> {
         return Icons.workspace_premium_outlined;
       case UserRole.manager:
         return Icons.manage_accounts_outlined;
+      case UserRole.accountant:
+        return Icons.account_balance_outlined;
       case UserRole.cashier:
         return Icons.point_of_sale_outlined;
       case UserRole.salesperson:
@@ -135,6 +139,8 @@ class _RolesScreenContentState extends State<_RolesScreenContent> {
         return Colors.amber.shade700;
       case UserRole.manager:
         return Colors.blue;
+      case UserRole.accountant:
+        return Colors.indigo;
       case UserRole.cashier:
         return Colors.green;
       case UserRole.salesperson:
@@ -148,6 +154,8 @@ class _RolesScreenContentState extends State<_RolesScreenContent> {
         return 'users.role_owner_desc'.tr();
       case UserRole.manager:
         return 'users.role_manager_desc'.tr();
+      case UserRole.accountant:
+        return 'users.role_accountant_desc'.tr();
       case UserRole.cashier:
         return 'users.role_cashier_desc'.tr();
       case UserRole.salesperson:

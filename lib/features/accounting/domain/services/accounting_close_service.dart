@@ -1,7 +1,6 @@
 import 'package:drift/drift.dart' show Variable;
 
 import '../../../../core/database/app_database.dart';
-import '../models/journal_entry_data.dart';
 import '../../data/repositories/accounting_repository.dart';
 
 /// Result of pre-close validation
@@ -89,10 +88,8 @@ class PeriodCloseResult {
 /// 3. Net loss for the period
 ///
 /// CLOSE ACTIONS:
-/// 1. Create closing journal entry: transfer net income to retained earnings
-/// 2. Mark period as closed with timestamp and user
-/// 3. Lock all journal entries in the period (prevent modifications)
-/// 4. Create period snapshot for audit trail
+/// 1. Mark period as closed with timestamp and user
+/// No closing journal entries. No retained earnings transfer.
 class AccountingCloseService {
   final AppDatabase _db;
   final AccountingRepository _accountingRepo;
@@ -223,15 +220,9 @@ class AccountingCloseService {
 
   /// Execute period close
   ///
-  /// Steps:
-  /// 1. Re-validate (safety check)
-  /// 2. Create closing journal entry (transfer net income → retained earnings)
-  /// 3. Mark period as closed
-  ///
-  /// The closing journal entry:
-  /// - Debits all revenue accounts (zeroing them out)
-  /// - Credits all expense accounts (zeroing them out)
-  /// - Credits/Debits Retained Earnings for the net income/loss
+  /// Simply marks the period as closed. No closing journal entries.
+  /// No retained earnings transfer. Revenue and expense accounts
+  /// are NOT zeroed out — they accumulate continuously.
   Future<PeriodCloseResult> closePeriod({
     required int periodId,
     required int userId,
@@ -245,142 +236,14 @@ class AccountingCloseService {
       );
     }
 
-    final summary = validation.summary!;
-
-    // Only create closing entry if there's net income to transfer
-    int? closingEntryId;
-    if (summary.netIncomeCents != 0) {
-      // Find or verify retained earnings account exists
-      final retainedEarningsAccount =
-          await _accountingRepo.getAccountByCode('3100');
-
-      int retainedEarningsAccountId;
-      if (retainedEarningsAccount == null) {
-        // Create retained earnings account if it doesn't exist
-        retainedEarningsAccountId = await _accountingRepo.createAccount(
-          accountCode: '3100',
-          accountName: 'Retained Earnings',
-          accountType: 'equity',
-          currencyId: 1,
-          isSystemAccount: true,
-        );
-      } else {
-        retainedEarningsAccountId = retainedEarningsAccount.id;
-      }
-
-      // Build closing journal entry lines
-      final period = await (_db.select(_db.accountingPeriods)
-            ..where((p) => p.id.equals(periodId)))
-          .getSingle();
-
-      final trialBalance = await _accountingRepo.getTrialBalance(
-        asOfDate: period.endDate,
-      );
-
-      final lines = <_ClosingLine>[];
-
-      // Close revenue accounts (debit to zero them)
-      for (final item in trialBalance.getItemsByType('revenue')) {
-        if (item.creditCents > 0 || item.debitCents > 0) {
-          final balance = item.creditCents - item.debitCents;
-          if (balance > 0) {
-            lines.add(_ClosingLine(
-              accountId: item.accountId,
-              debitCents: balance,
-              creditCents: 0,
-            ));
-          } else if (balance < 0) {
-            lines.add(_ClosingLine(
-              accountId: item.accountId,
-              debitCents: 0,
-              creditCents: -balance,
-            ));
-          }
-        }
-      }
-
-      // Close expense accounts (credit to zero them)
-      for (final item in trialBalance.getItemsByType('expense')) {
-        if (item.debitCents > 0 || item.creditCents > 0) {
-          final balance = item.debitCents - item.creditCents;
-          if (balance > 0) {
-            lines.add(_ClosingLine(
-              accountId: item.accountId,
-              debitCents: 0,
-              creditCents: balance,
-            ));
-          } else if (balance < 0) {
-            lines.add(_ClosingLine(
-              accountId: item.accountId,
-              debitCents: -balance,
-              creditCents: 0,
-            ));
-          }
-        }
-      }
-
-      // Transfer net income to retained earnings
-      if (summary.netIncomeCents > 0) {
-        // Profit: credit retained earnings
-        lines.add(_ClosingLine(
-          accountId: retainedEarningsAccountId,
-          debitCents: 0,
-          creditCents: summary.netIncomeCents,
-        ));
-      } else {
-        // Loss: debit retained earnings
-        lines.add(_ClosingLine(
-          accountId: retainedEarningsAccountId,
-          debitCents: -summary.netIncomeCents,
-          creditCents: 0,
-        ));
-      }
-
-      // Create the closing journal entry via repository
-      if (lines.isNotEmpty) {
-        closingEntryId = await _accountingRepo.createJournalEntry(
-          entryData: JournalEntryData(
-            description:
-                'Period Close: ${summary.periodName} — Net Income Transfer',
-            entryDate: summary.endDate,
-            entryType: 'closing',
-            accountingPeriodId: periodId,
-            lines: lines
-                .map((l) => JournalEntryLineData(
-                      accountId: l.accountId,
-                      debitCents: l.debitCents,
-                      creditCents: l.creditCents,
-                      currencyId: 1,
-                    ))
-                .toList(),
-            autoPost: true,
-          ),
-          userId: userId,
-        );
-      }
-    }
-
-    // Mark period as closed
+    // Mark period as closed — no closing journal entries
     await _accountingRepo.closeAccountingPeriod(
       periodId: periodId,
       userId: userId,
     );
 
-    return PeriodCloseResult(
+    return const PeriodCloseResult(
       success: true,
-      closingJournalEntryId: closingEntryId,
     );
   }
-}
-
-class _ClosingLine {
-  final int accountId;
-  final int debitCents;
-  final int creditCents;
-
-  const _ClosingLine({
-    required this.accountId,
-    required this.debitCents,
-    required this.creditCents,
-  });
 }

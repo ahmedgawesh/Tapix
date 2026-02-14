@@ -23,6 +23,7 @@ class PayslipPdfService {
     Payroll? payroll,
     required int totalCommissionCents,
     required List<LeaveRequest> leaveRequests,
+    SalesTargetBonusResult? salesTargetBonus,
   }) async {
     final cs = sl<CurrencyService>();
     final locale = context.locale;
@@ -175,6 +176,43 @@ class PayslipPdfService {
                 ),
               ),
               pw.SizedBox(height: 16),
+
+              // Sales Target
+              if (salesTargetBonus != null && salesTargetBonus.salesTargetCents > 0) ...[
+                pw.Container(
+                  padding: const pw.EdgeInsets.all(12),
+                  decoration: pw.BoxDecoration(
+                    border: pw.Border.all(
+                      color: salesTargetBonus.achieved ? PdfColors.green300 : PdfColors.orange300,
+                    ),
+                    borderRadius: pw.BorderRadius.circular(6),
+                    color: salesTargetBonus.achieved ? PdfColors.green50 : PdfColors.orange50,
+                  ),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(
+                        salesTargetBonus.achieved
+                            ? 'employees.target_achieved'.tr()
+                            : 'employees.target_not_achieved'.tr(),
+                        style: subHeaderStyle.copyWith(
+                          color: salesTargetBonus.achieved ? PdfColors.green800 : PdfColors.orange800,
+                        ),
+                      ),
+                      pw.SizedBox(height: 8),
+                      _pdfMoneyRow('employees.sales_target'.tr(),
+                          cs.format(salesTargetBonus.salesTargetCents), baseStyle),
+                      _pdfMoneyRow('employees.actual_sales'.tr(),
+                          cs.format(salesTargetBonus.actualSalesCents), baseStyle),
+                      if (salesTargetBonus.achieved)
+                        _pdfMoneyRow('employees.target_bonus'.tr(),
+                            '+ ${cs.format(salesTargetBonus.targetBonusCents)}', boldStyle,
+                            valueColor: PdfColors.green800),
+                    ],
+                  ),
+                ),
+                pw.SizedBox(height: 16),
+              ],
 
               // Salary Breakdown
               pw.Container(
@@ -253,6 +291,7 @@ class PayslipPdfService {
     Payroll? payroll,
     required int totalCommissionCents,
     required List<LeaveRequest> leaveRequests,
+    SalesTargetBonusResult? salesTargetBonus,
   }) async {
     final pdfBytes = await _generatePdfBytes(
       context: context,
@@ -263,6 +302,7 @@ class PayslipPdfService {
       payroll: payroll,
       totalCommissionCents: totalCommissionCents,
       leaveRequests: leaveRequests,
+      salesTargetBonus: salesTargetBonus,
     );
 
     final dir = await getTemporaryDirectory();
@@ -287,6 +327,7 @@ class PayslipPdfService {
     Payroll? payroll,
     required int totalCommissionCents,
     required List<LeaveRequest> leaveRequests,
+    SalesTargetBonusResult? salesTargetBonus,
   }) async {
     final cs = sl<CurrencyService>();
     final locale = context.locale;
@@ -439,6 +480,43 @@ class PayslipPdfService {
                 ),
               ),
               pw.SizedBox(height: 16),
+
+              // Sales Target
+              if (salesTargetBonus != null && salesTargetBonus.salesTargetCents > 0) ...[
+                pw.Container(
+                  padding: const pw.EdgeInsets.all(12),
+                  decoration: pw.BoxDecoration(
+                    border: pw.Border.all(
+                      color: salesTargetBonus.achieved ? PdfColors.green300 : PdfColors.orange300,
+                    ),
+                    borderRadius: pw.BorderRadius.circular(6),
+                    color: salesTargetBonus.achieved ? PdfColors.green50 : PdfColors.orange50,
+                  ),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(
+                        salesTargetBonus.achieved
+                            ? 'employees.target_achieved'.tr()
+                            : 'employees.target_not_achieved'.tr(),
+                        style: subHeaderStyle.copyWith(
+                          color: salesTargetBonus.achieved ? PdfColors.green800 : PdfColors.orange800,
+                        ),
+                      ),
+                      pw.SizedBox(height: 8),
+                      _pdfMoneyRow('employees.sales_target'.tr(),
+                          cs.format(salesTargetBonus.salesTargetCents), baseStyle),
+                      _pdfMoneyRow('employees.actual_sales'.tr(),
+                          cs.format(salesTargetBonus.actualSalesCents), baseStyle),
+                      if (salesTargetBonus.achieved)
+                        _pdfMoneyRow('employees.target_bonus'.tr(),
+                            '+ ${cs.format(salesTargetBonus.targetBonusCents)}', boldStyle,
+                            valueColor: PdfColors.green800),
+                    ],
+                  ),
+                ),
+                pw.SizedBox(height: 16),
+              ],
 
               // Salary Breakdown
               pw.Container(

@@ -60,7 +60,12 @@ abstract class CustomerRepository {
     String? description,
     int? referenceId,
     String? referenceType,
+    String? discountType,
+    DateTime? transactionDate,
   });
+
+  /// Get a single customer transaction by ID
+  Future<CustomerTransaction?> getTransaction(int transactionId);
 
   /// Watch customer transactions
   Stream<List<CustomerTransaction>> watchCustomerTransactions(int customerId);

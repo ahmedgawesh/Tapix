@@ -9373,6 +9373,18 @@ class $CustomerTransactionsTable extends CustomerTransactions
       'REFERENCES customers (id) ON DELETE RESTRICT',
     ),
   );
+  static const VerificationMeta _transactionNumberMeta = const VerificationMeta(
+    'transactionNumber',
+  );
+  @override
+  late final GeneratedColumn<String> transactionNumber =
+      GeneratedColumn<String>(
+        'transaction_number',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _transactionTypeMeta = const VerificationMeta(
     'transactionType',
   );
@@ -9383,6 +9395,17 @@ class $CustomerTransactionsTable extends CustomerTransactions
     false,
     type: DriftSqlType.string,
     requiredDuringInsert: true,
+  );
+  static const VerificationMeta _discountTypeMeta = const VerificationMeta(
+    'discountType',
+  );
+  @override
+  late final GeneratedColumn<String> discountType = GeneratedColumn<String>(
+    'discount_type',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
   );
   @override
   late final GeneratedColumnWithTypeConverter<Decimal, int> amountCents =
@@ -9471,7 +9494,9 @@ class $CustomerTransactionsTable extends CustomerTransactions
   List<GeneratedColumn> get $columns => [
     id,
     customerId,
+    transactionNumber,
     transactionType,
+    discountType,
     amountCents,
     currencyId,
     description,
@@ -9503,6 +9528,15 @@ class $CustomerTransactionsTable extends CustomerTransactions
     } else if (isInserting) {
       context.missing(_customerIdMeta);
     }
+    if (data.containsKey('transaction_number')) {
+      context.handle(
+        _transactionNumberMeta,
+        transactionNumber.isAcceptableOrUnknown(
+          data['transaction_number']!,
+          _transactionNumberMeta,
+        ),
+      );
+    }
     if (data.containsKey('transaction_type')) {
       context.handle(
         _transactionTypeMeta,
@@ -9513,6 +9547,15 @@ class $CustomerTransactionsTable extends CustomerTransactions
       );
     } else if (isInserting) {
       context.missing(_transactionTypeMeta);
+    }
+    if (data.containsKey('discount_type')) {
+      context.handle(
+        _discountTypeMeta,
+        discountType.isAcceptableOrUnknown(
+          data['discount_type']!,
+          _discountTypeMeta,
+        ),
+      );
     }
     if (data.containsKey('currency_id')) {
       context.handle(
@@ -9581,10 +9624,18 @@ class $CustomerTransactionsTable extends CustomerTransactions
         DriftSqlType.int,
         data['${effectivePrefix}customer_id'],
       )!,
+      transactionNumber: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}transaction_number'],
+      ),
       transactionType: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}transaction_type'],
       )!,
+      discountType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}discount_type'],
+      ),
       amountCents: $CustomerTransactionsTable.$converteramountCents.fromSql(
         attachedDatabase.typeMapping.read(
           DriftSqlType.int,
@@ -9631,7 +9682,11 @@ class CustomerTransaction extends DataClass
     implements Insertable<CustomerTransaction> {
   final int id;
   final int customerId;
+  final String? transactionNumber;
   final String transactionType;
+
+  /// For discount transactions: seasonal, volume, loyalty, promotional, early_payment, other
+  final String? discountType;
   final Decimal amountCents;
   final int currencyId;
   final String? description;
@@ -9642,7 +9697,9 @@ class CustomerTransaction extends DataClass
   const CustomerTransaction({
     required this.id,
     required this.customerId,
+    this.transactionNumber,
     required this.transactionType,
+    this.discountType,
     required this.amountCents,
     required this.currencyId,
     this.description,
@@ -9656,7 +9713,13 @@ class CustomerTransaction extends DataClass
     final map = <String, Expression>{};
     map['id'] = Variable<int>(id);
     map['customer_id'] = Variable<int>(customerId);
+    if (!nullToAbsent || transactionNumber != null) {
+      map['transaction_number'] = Variable<String>(transactionNumber);
+    }
     map['transaction_type'] = Variable<String>(transactionType);
+    if (!nullToAbsent || discountType != null) {
+      map['discount_type'] = Variable<String>(discountType);
+    }
     {
       map['amount_cents'] = Variable<int>(
         $CustomerTransactionsTable.$converteramountCents.toSql(amountCents),
@@ -9681,7 +9744,13 @@ class CustomerTransaction extends DataClass
     return CustomerTransactionsCompanion(
       id: Value(id),
       customerId: Value(customerId),
+      transactionNumber: transactionNumber == null && nullToAbsent
+          ? const Value.absent()
+          : Value(transactionNumber),
       transactionType: Value(transactionType),
+      discountType: discountType == null && nullToAbsent
+          ? const Value.absent()
+          : Value(discountType),
       amountCents: Value(amountCents),
       currencyId: Value(currencyId),
       description: description == null && nullToAbsent
@@ -9706,7 +9775,11 @@ class CustomerTransaction extends DataClass
     return CustomerTransaction(
       id: serializer.fromJson<int>(json['id']),
       customerId: serializer.fromJson<int>(json['customerId']),
+      transactionNumber: serializer.fromJson<String?>(
+        json['transactionNumber'],
+      ),
       transactionType: serializer.fromJson<String>(json['transactionType']),
+      discountType: serializer.fromJson<String?>(json['discountType']),
       amountCents: serializer.fromJson<Decimal>(json['amountCents']),
       currencyId: serializer.fromJson<int>(json['currencyId']),
       description: serializer.fromJson<String?>(json['description']),
@@ -9722,7 +9795,9 @@ class CustomerTransaction extends DataClass
     return <String, dynamic>{
       'id': serializer.toJson<int>(id),
       'customerId': serializer.toJson<int>(customerId),
+      'transactionNumber': serializer.toJson<String?>(transactionNumber),
       'transactionType': serializer.toJson<String>(transactionType),
+      'discountType': serializer.toJson<String?>(discountType),
       'amountCents': serializer.toJson<Decimal>(amountCents),
       'currencyId': serializer.toJson<int>(currencyId),
       'description': serializer.toJson<String?>(description),
@@ -9736,7 +9811,9 @@ class CustomerTransaction extends DataClass
   CustomerTransaction copyWith({
     int? id,
     int? customerId,
+    Value<String?> transactionNumber = const Value.absent(),
     String? transactionType,
+    Value<String?> discountType = const Value.absent(),
     Decimal? amountCents,
     int? currencyId,
     Value<String?> description = const Value.absent(),
@@ -9747,7 +9824,11 @@ class CustomerTransaction extends DataClass
   }) => CustomerTransaction(
     id: id ?? this.id,
     customerId: customerId ?? this.customerId,
+    transactionNumber: transactionNumber.present
+        ? transactionNumber.value
+        : this.transactionNumber,
     transactionType: transactionType ?? this.transactionType,
+    discountType: discountType.present ? discountType.value : this.discountType,
     amountCents: amountCents ?? this.amountCents,
     currencyId: currencyId ?? this.currencyId,
     description: description.present ? description.value : this.description,
@@ -9764,9 +9845,15 @@ class CustomerTransaction extends DataClass
       customerId: data.customerId.present
           ? data.customerId.value
           : this.customerId,
+      transactionNumber: data.transactionNumber.present
+          ? data.transactionNumber.value
+          : this.transactionNumber,
       transactionType: data.transactionType.present
           ? data.transactionType.value
           : this.transactionType,
+      discountType: data.discountType.present
+          ? data.discountType.value
+          : this.discountType,
       amountCents: data.amountCents.present
           ? data.amountCents.value
           : this.amountCents,
@@ -9794,7 +9881,9 @@ class CustomerTransaction extends DataClass
     return (StringBuffer('CustomerTransaction(')
           ..write('id: $id, ')
           ..write('customerId: $customerId, ')
+          ..write('transactionNumber: $transactionNumber, ')
           ..write('transactionType: $transactionType, ')
+          ..write('discountType: $discountType, ')
           ..write('amountCents: $amountCents, ')
           ..write('currencyId: $currencyId, ')
           ..write('description: $description, ')
@@ -9810,7 +9899,9 @@ class CustomerTransaction extends DataClass
   int get hashCode => Object.hash(
     id,
     customerId,
+    transactionNumber,
     transactionType,
+    discountType,
     amountCents,
     currencyId,
     description,
@@ -9825,7 +9916,9 @@ class CustomerTransaction extends DataClass
       (other is CustomerTransaction &&
           other.id == this.id &&
           other.customerId == this.customerId &&
+          other.transactionNumber == this.transactionNumber &&
           other.transactionType == this.transactionType &&
+          other.discountType == this.discountType &&
           other.amountCents == this.amountCents &&
           other.currencyId == this.currencyId &&
           other.description == this.description &&
@@ -9839,7 +9932,9 @@ class CustomerTransactionsCompanion
     extends UpdateCompanion<CustomerTransaction> {
   final Value<int> id;
   final Value<int> customerId;
+  final Value<String?> transactionNumber;
   final Value<String> transactionType;
+  final Value<String?> discountType;
   final Value<Decimal> amountCents;
   final Value<int> currencyId;
   final Value<String?> description;
@@ -9850,7 +9945,9 @@ class CustomerTransactionsCompanion
   const CustomerTransactionsCompanion({
     this.id = const Value.absent(),
     this.customerId = const Value.absent(),
+    this.transactionNumber = const Value.absent(),
     this.transactionType = const Value.absent(),
+    this.discountType = const Value.absent(),
     this.amountCents = const Value.absent(),
     this.currencyId = const Value.absent(),
     this.description = const Value.absent(),
@@ -9862,7 +9959,9 @@ class CustomerTransactionsCompanion
   CustomerTransactionsCompanion.insert({
     this.id = const Value.absent(),
     required int customerId,
+    this.transactionNumber = const Value.absent(),
     required String transactionType,
+    this.discountType = const Value.absent(),
     required Decimal amountCents,
     required int currencyId,
     this.description = const Value.absent(),
@@ -9877,7 +9976,9 @@ class CustomerTransactionsCompanion
   static Insertable<CustomerTransaction> custom({
     Expression<int>? id,
     Expression<int>? customerId,
+    Expression<String>? transactionNumber,
     Expression<String>? transactionType,
+    Expression<String>? discountType,
     Expression<int>? amountCents,
     Expression<int>? currencyId,
     Expression<String>? description,
@@ -9889,7 +9990,9 @@ class CustomerTransactionsCompanion
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (customerId != null) 'customer_id': customerId,
+      if (transactionNumber != null) 'transaction_number': transactionNumber,
       if (transactionType != null) 'transaction_type': transactionType,
+      if (discountType != null) 'discount_type': discountType,
       if (amountCents != null) 'amount_cents': amountCents,
       if (currencyId != null) 'currency_id': currencyId,
       if (description != null) 'description': description,
@@ -9903,7 +10006,9 @@ class CustomerTransactionsCompanion
   CustomerTransactionsCompanion copyWith({
     Value<int>? id,
     Value<int>? customerId,
+    Value<String?>? transactionNumber,
     Value<String>? transactionType,
+    Value<String?>? discountType,
     Value<Decimal>? amountCents,
     Value<int>? currencyId,
     Value<String?>? description,
@@ -9915,7 +10020,9 @@ class CustomerTransactionsCompanion
     return CustomerTransactionsCompanion(
       id: id ?? this.id,
       customerId: customerId ?? this.customerId,
+      transactionNumber: transactionNumber ?? this.transactionNumber,
       transactionType: transactionType ?? this.transactionType,
+      discountType: discountType ?? this.discountType,
       amountCents: amountCents ?? this.amountCents,
       currencyId: currencyId ?? this.currencyId,
       description: description ?? this.description,
@@ -9935,8 +10042,14 @@ class CustomerTransactionsCompanion
     if (customerId.present) {
       map['customer_id'] = Variable<int>(customerId.value);
     }
+    if (transactionNumber.present) {
+      map['transaction_number'] = Variable<String>(transactionNumber.value);
+    }
     if (transactionType.present) {
       map['transaction_type'] = Variable<String>(transactionType.value);
+    }
+    if (discountType.present) {
+      map['discount_type'] = Variable<String>(discountType.value);
     }
     if (amountCents.present) {
       map['amount_cents'] = Variable<int>(
@@ -9971,7 +10084,9 @@ class CustomerTransactionsCompanion
     return (StringBuffer('CustomerTransactionsCompanion(')
           ..write('id: $id, ')
           ..write('customerId: $customerId, ')
+          ..write('transactionNumber: $transactionNumber, ')
           ..write('transactionType: $transactionType, ')
+          ..write('discountType: $discountType, ')
           ..write('amountCents: $amountCents, ')
           ..write('currencyId: $currencyId, ')
           ..write('description: $description, ')
@@ -12617,6 +12732,56 @@ class $LoyaltySettingsTableTable extends LoyaltySettingsTable
     ),
     defaultValue: const Constant(true),
   );
+  static const VerificationMeta _pointValueCentsMeta = const VerificationMeta(
+    'pointValueCents',
+  );
+  @override
+  late final GeneratedColumn<int> pointValueCents = GeneratedColumn<int>(
+    'point_value_cents',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
+  static const VerificationMeta _minRedemptionPointsMeta =
+      const VerificationMeta('minRedemptionPoints');
+  @override
+  late final GeneratedColumn<int> minRedemptionPoints = GeneratedColumn<int>(
+    'min_redemption_points',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(100),
+  );
+  static const VerificationMeta _maxRedemptionPercentBpsMeta =
+      const VerificationMeta('maxRedemptionPercentBps');
+  @override
+  late final GeneratedColumn<int> maxRedemptionPercentBps =
+      GeneratedColumn<int>(
+        'max_redemption_percent_bps',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(5000),
+      );
+  static const VerificationMeta _allowPointsRedemptionMeta =
+      const VerificationMeta('allowPointsRedemption');
+  @override
+  late final GeneratedColumn<bool> allowPointsRedemption =
+      GeneratedColumn<bool>(
+        'allow_points_redemption',
+        aliasedName,
+        false,
+        type: DriftSqlType.bool,
+        requiredDuringInsert: false,
+        defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("allow_points_redemption" IN (0, 1))',
+        ),
+        defaultValue: const Constant(true),
+      );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -12651,6 +12816,10 @@ class $LoyaltySettingsTableTable extends LoyaltySettingsTable
     signupBonusPoints,
     reviewBonusPoints,
     isEnabled,
+    pointValueCents,
+    minRedemptionPoints,
+    maxRedemptionPercentBps,
+    allowPointsRedemption,
     createdAt,
     updatedAt,
   ];
@@ -12729,6 +12898,42 @@ class $LoyaltySettingsTableTable extends LoyaltySettingsTable
         isEnabled.isAcceptableOrUnknown(data['is_enabled']!, _isEnabledMeta),
       );
     }
+    if (data.containsKey('point_value_cents')) {
+      context.handle(
+        _pointValueCentsMeta,
+        pointValueCents.isAcceptableOrUnknown(
+          data['point_value_cents']!,
+          _pointValueCentsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('min_redemption_points')) {
+      context.handle(
+        _minRedemptionPointsMeta,
+        minRedemptionPoints.isAcceptableOrUnknown(
+          data['min_redemption_points']!,
+          _minRedemptionPointsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('max_redemption_percent_bps')) {
+      context.handle(
+        _maxRedemptionPercentBpsMeta,
+        maxRedemptionPercentBps.isAcceptableOrUnknown(
+          data['max_redemption_percent_bps']!,
+          _maxRedemptionPercentBpsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('allow_points_redemption')) {
+      context.handle(
+        _allowPointsRedemptionMeta,
+        allowPointsRedemption.isAcceptableOrUnknown(
+          data['allow_points_redemption']!,
+          _allowPointsRedemptionMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -12782,6 +12987,22 @@ class $LoyaltySettingsTableTable extends LoyaltySettingsTable
         DriftSqlType.bool,
         data['${effectivePrefix}is_enabled'],
       )!,
+      pointValueCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}point_value_cents'],
+      )!,
+      minRedemptionPoints: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}min_redemption_points'],
+      )!,
+      maxRedemptionPercentBps: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}max_redemption_percent_bps'],
+      )!,
+      allowPointsRedemption: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}allow_points_redemption'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -12808,6 +13029,18 @@ class LoyaltySettings extends DataClass implements Insertable<LoyaltySettings> {
   final int signupBonusPoints;
   final int reviewBonusPoints;
   final bool isEnabled;
+
+  /// How much 1 point is worth in cents (e.g., 1 = 1 cent, 10 = 10 cents)
+  final int pointValueCents;
+
+  /// Minimum points required before a customer can redeem at checkout
+  final int minRedemptionPoints;
+
+  /// Maximum percentage of invoice total that can be paid with points (basis points: 5000 = 50%)
+  final int maxRedemptionPercentBps;
+
+  /// Whether points redemption at checkout is enabled
+  final bool allowPointsRedemption;
   final DateTime createdAt;
   final DateTime updatedAt;
   const LoyaltySettings({
@@ -12819,6 +13052,10 @@ class LoyaltySettings extends DataClass implements Insertable<LoyaltySettings> {
     required this.signupBonusPoints,
     required this.reviewBonusPoints,
     required this.isEnabled,
+    required this.pointValueCents,
+    required this.minRedemptionPoints,
+    required this.maxRedemptionPercentBps,
+    required this.allowPointsRedemption,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -12835,6 +13072,10 @@ class LoyaltySettings extends DataClass implements Insertable<LoyaltySettings> {
     map['signup_bonus_points'] = Variable<int>(signupBonusPoints);
     map['review_bonus_points'] = Variable<int>(reviewBonusPoints);
     map['is_enabled'] = Variable<bool>(isEnabled);
+    map['point_value_cents'] = Variable<int>(pointValueCents);
+    map['min_redemption_points'] = Variable<int>(minRedemptionPoints);
+    map['max_redemption_percent_bps'] = Variable<int>(maxRedemptionPercentBps);
+    map['allow_points_redemption'] = Variable<bool>(allowPointsRedemption);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
@@ -12852,6 +13093,10 @@ class LoyaltySettings extends DataClass implements Insertable<LoyaltySettings> {
       signupBonusPoints: Value(signupBonusPoints),
       reviewBonusPoints: Value(reviewBonusPoints),
       isEnabled: Value(isEnabled),
+      pointValueCents: Value(pointValueCents),
+      minRedemptionPoints: Value(minRedemptionPoints),
+      maxRedemptionPercentBps: Value(maxRedemptionPercentBps),
+      allowPointsRedemption: Value(allowPointsRedemption),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
     );
@@ -12875,6 +13120,16 @@ class LoyaltySettings extends DataClass implements Insertable<LoyaltySettings> {
       signupBonusPoints: serializer.fromJson<int>(json['signupBonusPoints']),
       reviewBonusPoints: serializer.fromJson<int>(json['reviewBonusPoints']),
       isEnabled: serializer.fromJson<bool>(json['isEnabled']),
+      pointValueCents: serializer.fromJson<int>(json['pointValueCents']),
+      minRedemptionPoints: serializer.fromJson<int>(
+        json['minRedemptionPoints'],
+      ),
+      maxRedemptionPercentBps: serializer.fromJson<int>(
+        json['maxRedemptionPercentBps'],
+      ),
+      allowPointsRedemption: serializer.fromJson<bool>(
+        json['allowPointsRedemption'],
+      ),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
@@ -12891,6 +13146,12 @@ class LoyaltySettings extends DataClass implements Insertable<LoyaltySettings> {
       'signupBonusPoints': serializer.toJson<int>(signupBonusPoints),
       'reviewBonusPoints': serializer.toJson<int>(reviewBonusPoints),
       'isEnabled': serializer.toJson<bool>(isEnabled),
+      'pointValueCents': serializer.toJson<int>(pointValueCents),
+      'minRedemptionPoints': serializer.toJson<int>(minRedemptionPoints),
+      'maxRedemptionPercentBps': serializer.toJson<int>(
+        maxRedemptionPercentBps,
+      ),
+      'allowPointsRedemption': serializer.toJson<bool>(allowPointsRedemption),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
@@ -12905,6 +13166,10 @@ class LoyaltySettings extends DataClass implements Insertable<LoyaltySettings> {
     int? signupBonusPoints,
     int? reviewBonusPoints,
     bool? isEnabled,
+    int? pointValueCents,
+    int? minRedemptionPoints,
+    int? maxRedemptionPercentBps,
+    bool? allowPointsRedemption,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) => LoyaltySettings(
@@ -12918,6 +13183,11 @@ class LoyaltySettings extends DataClass implements Insertable<LoyaltySettings> {
     signupBonusPoints: signupBonusPoints ?? this.signupBonusPoints,
     reviewBonusPoints: reviewBonusPoints ?? this.reviewBonusPoints,
     isEnabled: isEnabled ?? this.isEnabled,
+    pointValueCents: pointValueCents ?? this.pointValueCents,
+    minRedemptionPoints: minRedemptionPoints ?? this.minRedemptionPoints,
+    maxRedemptionPercentBps:
+        maxRedemptionPercentBps ?? this.maxRedemptionPercentBps,
+    allowPointsRedemption: allowPointsRedemption ?? this.allowPointsRedemption,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
@@ -12943,6 +13213,18 @@ class LoyaltySettings extends DataClass implements Insertable<LoyaltySettings> {
           ? data.reviewBonusPoints.value
           : this.reviewBonusPoints,
       isEnabled: data.isEnabled.present ? data.isEnabled.value : this.isEnabled,
+      pointValueCents: data.pointValueCents.present
+          ? data.pointValueCents.value
+          : this.pointValueCents,
+      minRedemptionPoints: data.minRedemptionPoints.present
+          ? data.minRedemptionPoints.value
+          : this.minRedemptionPoints,
+      maxRedemptionPercentBps: data.maxRedemptionPercentBps.present
+          ? data.maxRedemptionPercentBps.value
+          : this.maxRedemptionPercentBps,
+      allowPointsRedemption: data.allowPointsRedemption.present
+          ? data.allowPointsRedemption.value
+          : this.allowPointsRedemption,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -12959,6 +13241,10 @@ class LoyaltySettings extends DataClass implements Insertable<LoyaltySettings> {
           ..write('signupBonusPoints: $signupBonusPoints, ')
           ..write('reviewBonusPoints: $reviewBonusPoints, ')
           ..write('isEnabled: $isEnabled, ')
+          ..write('pointValueCents: $pointValueCents, ')
+          ..write('minRedemptionPoints: $minRedemptionPoints, ')
+          ..write('maxRedemptionPercentBps: $maxRedemptionPercentBps, ')
+          ..write('allowPointsRedemption: $allowPointsRedemption, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -12975,6 +13261,10 @@ class LoyaltySettings extends DataClass implements Insertable<LoyaltySettings> {
     signupBonusPoints,
     reviewBonusPoints,
     isEnabled,
+    pointValueCents,
+    minRedemptionPoints,
+    maxRedemptionPercentBps,
+    allowPointsRedemption,
     createdAt,
     updatedAt,
   );
@@ -12990,6 +13280,10 @@ class LoyaltySettings extends DataClass implements Insertable<LoyaltySettings> {
           other.signupBonusPoints == this.signupBonusPoints &&
           other.reviewBonusPoints == this.reviewBonusPoints &&
           other.isEnabled == this.isEnabled &&
+          other.pointValueCents == this.pointValueCents &&
+          other.minRedemptionPoints == this.minRedemptionPoints &&
+          other.maxRedemptionPercentBps == this.maxRedemptionPercentBps &&
+          other.allowPointsRedemption == this.allowPointsRedemption &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
 }
@@ -13003,6 +13297,10 @@ class LoyaltySettingsTableCompanion extends UpdateCompanion<LoyaltySettings> {
   final Value<int> signupBonusPoints;
   final Value<int> reviewBonusPoints;
   final Value<bool> isEnabled;
+  final Value<int> pointValueCents;
+  final Value<int> minRedemptionPoints;
+  final Value<int> maxRedemptionPercentBps;
+  final Value<bool> allowPointsRedemption;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   const LoyaltySettingsTableCompanion({
@@ -13014,6 +13312,10 @@ class LoyaltySettingsTableCompanion extends UpdateCompanion<LoyaltySettings> {
     this.signupBonusPoints = const Value.absent(),
     this.reviewBonusPoints = const Value.absent(),
     this.isEnabled = const Value.absent(),
+    this.pointValueCents = const Value.absent(),
+    this.minRedemptionPoints = const Value.absent(),
+    this.maxRedemptionPercentBps = const Value.absent(),
+    this.allowPointsRedemption = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
   });
@@ -13026,6 +13328,10 @@ class LoyaltySettingsTableCompanion extends UpdateCompanion<LoyaltySettings> {
     this.signupBonusPoints = const Value.absent(),
     this.reviewBonusPoints = const Value.absent(),
     this.isEnabled = const Value.absent(),
+    this.pointValueCents = const Value.absent(),
+    this.minRedemptionPoints = const Value.absent(),
+    this.maxRedemptionPercentBps = const Value.absent(),
+    this.allowPointsRedemption = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
   });
@@ -13038,6 +13344,10 @@ class LoyaltySettingsTableCompanion extends UpdateCompanion<LoyaltySettings> {
     Expression<int>? signupBonusPoints,
     Expression<int>? reviewBonusPoints,
     Expression<bool>? isEnabled,
+    Expression<int>? pointValueCents,
+    Expression<int>? minRedemptionPoints,
+    Expression<int>? maxRedemptionPercentBps,
+    Expression<bool>? allowPointsRedemption,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
   }) {
@@ -13052,6 +13362,13 @@ class LoyaltySettingsTableCompanion extends UpdateCompanion<LoyaltySettings> {
       if (signupBonusPoints != null) 'signup_bonus_points': signupBonusPoints,
       if (reviewBonusPoints != null) 'review_bonus_points': reviewBonusPoints,
       if (isEnabled != null) 'is_enabled': isEnabled,
+      if (pointValueCents != null) 'point_value_cents': pointValueCents,
+      if (minRedemptionPoints != null)
+        'min_redemption_points': minRedemptionPoints,
+      if (maxRedemptionPercentBps != null)
+        'max_redemption_percent_bps': maxRedemptionPercentBps,
+      if (allowPointsRedemption != null)
+        'allow_points_redemption': allowPointsRedemption,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
     });
@@ -13066,6 +13383,10 @@ class LoyaltySettingsTableCompanion extends UpdateCompanion<LoyaltySettings> {
     Value<int>? signupBonusPoints,
     Value<int>? reviewBonusPoints,
     Value<bool>? isEnabled,
+    Value<int>? pointValueCents,
+    Value<int>? minRedemptionPoints,
+    Value<int>? maxRedemptionPercentBps,
+    Value<bool>? allowPointsRedemption,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
   }) {
@@ -13079,6 +13400,12 @@ class LoyaltySettingsTableCompanion extends UpdateCompanion<LoyaltySettings> {
       signupBonusPoints: signupBonusPoints ?? this.signupBonusPoints,
       reviewBonusPoints: reviewBonusPoints ?? this.reviewBonusPoints,
       isEnabled: isEnabled ?? this.isEnabled,
+      pointValueCents: pointValueCents ?? this.pointValueCents,
+      minRedemptionPoints: minRedemptionPoints ?? this.minRedemptionPoints,
+      maxRedemptionPercentBps:
+          maxRedemptionPercentBps ?? this.maxRedemptionPercentBps,
+      allowPointsRedemption:
+          allowPointsRedemption ?? this.allowPointsRedemption,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -13113,6 +13440,22 @@ class LoyaltySettingsTableCompanion extends UpdateCompanion<LoyaltySettings> {
     if (isEnabled.present) {
       map['is_enabled'] = Variable<bool>(isEnabled.value);
     }
+    if (pointValueCents.present) {
+      map['point_value_cents'] = Variable<int>(pointValueCents.value);
+    }
+    if (minRedemptionPoints.present) {
+      map['min_redemption_points'] = Variable<int>(minRedemptionPoints.value);
+    }
+    if (maxRedemptionPercentBps.present) {
+      map['max_redemption_percent_bps'] = Variable<int>(
+        maxRedemptionPercentBps.value,
+      );
+    }
+    if (allowPointsRedemption.present) {
+      map['allow_points_redemption'] = Variable<bool>(
+        allowPointsRedemption.value,
+      );
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -13133,6 +13476,10 @@ class LoyaltySettingsTableCompanion extends UpdateCompanion<LoyaltySettings> {
           ..write('signupBonusPoints: $signupBonusPoints, ')
           ..write('reviewBonusPoints: $reviewBonusPoints, ')
           ..write('isEnabled: $isEnabled, ')
+          ..write('pointValueCents: $pointValueCents, ')
+          ..write('minRedemptionPoints: $minRedemptionPoints, ')
+          ..write('maxRedemptionPercentBps: $maxRedemptionPercentBps, ')
+          ..write('allowPointsRedemption: $allowPointsRedemption, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -14661,6 +15008,57 @@ class $EmployeesTable extends Employees
         requiredDuringInsert: false,
         defaultValue: const Constant(0),
       );
+  @override
+  late final GeneratedColumnWithTypeConverter<Decimal?, int>
+  fixedCommissionCents = GeneratedColumn<int>(
+    'fixed_commission_cents',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  ).withConverter<Decimal?>($EmployeesTable.$converterfixedCommissionCentsn);
+  static const VerificationMeta _commissionTypeMeta = const VerificationMeta(
+    'commissionType',
+  );
+  @override
+  late final GeneratedColumn<String> commissionType = GeneratedColumn<String>(
+    'commission_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('percentage'),
+  );
+  @override
+  late final GeneratedColumnWithTypeConverter<Decimal?, int> salesTargetCents =
+      GeneratedColumn<int>(
+        'sales_target_cents',
+        aliasedName,
+        true,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+      ).withConverter<Decimal?>($EmployeesTable.$convertersalesTargetCentsn);
+  @override
+  late final GeneratedColumnWithTypeConverter<Decimal?, int> targetBonusCents =
+      GeneratedColumn<int>(
+        'target_bonus_cents',
+        aliasedName,
+        true,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+      ).withConverter<Decimal?>($EmployeesTable.$convertertargetBonusCentsn);
+  static const VerificationMeta _targetPeriodMeta = const VerificationMeta(
+    'targetPeriod',
+  );
+  @override
+  late final GeneratedColumn<String> targetPeriod = GeneratedColumn<String>(
+    'target_period',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('monthly'),
+  );
   static const VerificationMeta _payPeriodTypeMeta = const VerificationMeta(
     'payPeriodType',
   );
@@ -14770,6 +15168,30 @@ class $EmployeesTable extends Employees
         type: DriftSqlType.dateTime,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _weeklyOffDaysMeta = const VerificationMeta(
+    'weeklyOffDays',
+  );
+  @override
+  late final GeneratedColumn<String> weeklyOffDays = GeneratedColumn<String>(
+    'weekly_off_days',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('[5,6]'),
+  );
+  static const VerificationMeta _annualLeaveDaysMeta = const VerificationMeta(
+    'annualLeaveDays',
+  );
+  @override
+  late final GeneratedColumn<int> annualLeaveDays = GeneratedColumn<int>(
+    'annual_leave_days',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(21),
+  );
   static const VerificationMeta _notesMeta = const VerificationMeta('notes');
   @override
   late final GeneratedColumn<String> notes = GeneratedColumn<String>(
@@ -14819,6 +15241,11 @@ class $EmployeesTable extends Employees
     managerId,
     salaryCents,
     defaultCommissionRateBps,
+    fixedCommissionCents,
+    commissionType,
+    salesTargetCents,
+    targetBonusCents,
+    targetPeriod,
     payPeriodType,
     workingDaysPerPeriod,
     workingHoursPerDay,
@@ -14828,6 +15255,8 @@ class $EmployeesTable extends Employees
     isActive,
     hireDate,
     terminationDate,
+    weeklyOffDays,
+    annualLeaveDays,
     notes,
     createdAt,
     updatedAt,
@@ -14927,6 +15356,24 @@ class $EmployeesTable extends Employees
         ),
       );
     }
+    if (data.containsKey('commission_type')) {
+      context.handle(
+        _commissionTypeMeta,
+        commissionType.isAcceptableOrUnknown(
+          data['commission_type']!,
+          _commissionTypeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('target_period')) {
+      context.handle(
+        _targetPeriodMeta,
+        targetPeriod.isAcceptableOrUnknown(
+          data['target_period']!,
+          _targetPeriodMeta,
+        ),
+      );
+    }
     if (data.containsKey('pay_period_type')) {
       context.handle(
         _payPeriodTypeMeta,
@@ -14998,6 +15445,24 @@ class $EmployeesTable extends Employees
         terminationDate.isAcceptableOrUnknown(
           data['termination_date']!,
           _terminationDateMeta,
+        ),
+      );
+    }
+    if (data.containsKey('weekly_off_days')) {
+      context.handle(
+        _weeklyOffDaysMeta,
+        weeklyOffDays.isAcceptableOrUnknown(
+          data['weekly_off_days']!,
+          _weeklyOffDaysMeta,
+        ),
+      );
+    }
+    if (data.containsKey('annual_leave_days')) {
+      context.handle(
+        _annualLeaveDaysMeta,
+        annualLeaveDays.isAcceptableOrUnknown(
+          data['annual_leave_days']!,
+          _annualLeaveDaysMeta,
         ),
       );
     }
@@ -15086,6 +15551,33 @@ class $EmployeesTable extends Employees
         DriftSqlType.int,
         data['${effectivePrefix}default_commission_rate_bps'],
       )!,
+      fixedCommissionCents: $EmployeesTable.$converterfixedCommissionCentsn
+          .fromSql(
+            attachedDatabase.typeMapping.read(
+              DriftSqlType.int,
+              data['${effectivePrefix}fixed_commission_cents'],
+            ),
+          ),
+      commissionType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}commission_type'],
+      )!,
+      salesTargetCents: $EmployeesTable.$convertersalesTargetCentsn.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}sales_target_cents'],
+        ),
+      ),
+      targetBonusCents: $EmployeesTable.$convertertargetBonusCentsn.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}target_bonus_cents'],
+        ),
+      ),
+      targetPeriod: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}target_period'],
+      )!,
       payPeriodType: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}pay_period_type'],
@@ -15122,6 +15614,14 @@ class $EmployeesTable extends Employees
         DriftSqlType.dateTime,
         data['${effectivePrefix}termination_date'],
       ),
+      weeklyOffDays: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}weekly_off_days'],
+      )!,
+      annualLeaveDays: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}annual_leave_days'],
+      )!,
       notes: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}notes'],
@@ -15146,6 +15646,18 @@ class $EmployeesTable extends Employees
       const MoneyConverter();
   static TypeConverter<Decimal?, int?> $convertersalaryCentsn =
       NullAwareTypeConverter.wrap($convertersalaryCents);
+  static TypeConverter<Decimal, int> $converterfixedCommissionCents =
+      const MoneyConverter();
+  static TypeConverter<Decimal?, int?> $converterfixedCommissionCentsn =
+      NullAwareTypeConverter.wrap($converterfixedCommissionCents);
+  static TypeConverter<Decimal, int> $convertersalesTargetCents =
+      const MoneyConverter();
+  static TypeConverter<Decimal?, int?> $convertersalesTargetCentsn =
+      NullAwareTypeConverter.wrap($convertersalesTargetCents);
+  static TypeConverter<Decimal, int> $convertertargetBonusCents =
+      const MoneyConverter();
+  static TypeConverter<Decimal?, int?> $convertertargetBonusCentsn =
+      NullAwareTypeConverter.wrap($convertertargetBonusCents);
 }
 
 class Employee extends DataClass implements Insertable<Employee> {
@@ -15174,6 +15686,21 @@ class Employee extends DataClass implements Insertable<Employee> {
   /// Default commission rate in basis points (e.g., 500 = 5%)
   final int defaultCommissionRateBps;
 
+  /// Fixed commission amount in cents (used when commission type is 'fixed')
+  final Decimal? fixedCommissionCents;
+
+  /// Commission type: 'percentage' or 'fixed'
+  final String commissionType;
+
+  /// Monthly sales target in cents
+  final Decimal? salesTargetCents;
+
+  /// Bonus amount in cents when sales target is achieved
+  final Decimal? targetBonusCents;
+
+  /// Target period: monthly, quarterly, yearly
+  final String targetPeriod;
+
   /// Pay period type: monthly, weekly, daily
   final String payPeriodType;
 
@@ -15192,6 +15719,12 @@ class Employee extends DataClass implements Insertable<Employee> {
   final bool isActive;
   final DateTime? hireDate;
   final DateTime? terminationDate;
+
+  /// JSON array of weekly off-day numbers (1=Mon..7=Sun), e.g. "[5,6]" for Fri+Sat
+  final String weeklyOffDays;
+
+  /// Annual leave allowance in days
+  final int annualLeaveDays;
   final String? notes;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -15210,6 +15743,11 @@ class Employee extends DataClass implements Insertable<Employee> {
     this.managerId,
     this.salaryCents,
     required this.defaultCommissionRateBps,
+    this.fixedCommissionCents,
+    required this.commissionType,
+    this.salesTargetCents,
+    this.targetBonusCents,
+    required this.targetPeriod,
     required this.payPeriodType,
     required this.workingDaysPerPeriod,
     required this.workingHoursPerDay,
@@ -15219,6 +15757,8 @@ class Employee extends DataClass implements Insertable<Employee> {
     required this.isActive,
     this.hireDate,
     this.terminationDate,
+    required this.weeklyOffDays,
+    required this.annualLeaveDays,
     this.notes,
     required this.createdAt,
     required this.updatedAt,
@@ -15266,6 +15806,25 @@ class Employee extends DataClass implements Insertable<Employee> {
     map['default_commission_rate_bps'] = Variable<int>(
       defaultCommissionRateBps,
     );
+    if (!nullToAbsent || fixedCommissionCents != null) {
+      map['fixed_commission_cents'] = Variable<int>(
+        $EmployeesTable.$converterfixedCommissionCentsn.toSql(
+          fixedCommissionCents,
+        ),
+      );
+    }
+    map['commission_type'] = Variable<String>(commissionType);
+    if (!nullToAbsent || salesTargetCents != null) {
+      map['sales_target_cents'] = Variable<int>(
+        $EmployeesTable.$convertersalesTargetCentsn.toSql(salesTargetCents),
+      );
+    }
+    if (!nullToAbsent || targetBonusCents != null) {
+      map['target_bonus_cents'] = Variable<int>(
+        $EmployeesTable.$convertertargetBonusCentsn.toSql(targetBonusCents),
+      );
+    }
+    map['target_period'] = Variable<String>(targetPeriod);
     map['pay_period_type'] = Variable<String>(payPeriodType);
     map['working_days_per_period'] = Variable<int>(workingDaysPerPeriod);
     map['working_hours_per_day'] = Variable<int>(workingHoursPerDay);
@@ -15279,6 +15838,8 @@ class Employee extends DataClass implements Insertable<Employee> {
     if (!nullToAbsent || terminationDate != null) {
       map['termination_date'] = Variable<DateTime>(terminationDate);
     }
+    map['weekly_off_days'] = Variable<String>(weeklyOffDays);
+    map['annual_leave_days'] = Variable<int>(annualLeaveDays);
     if (!nullToAbsent || notes != null) {
       map['notes'] = Variable<String>(notes);
     }
@@ -15325,6 +15886,17 @@ class Employee extends DataClass implements Insertable<Employee> {
           ? const Value.absent()
           : Value(salaryCents),
       defaultCommissionRateBps: Value(defaultCommissionRateBps),
+      fixedCommissionCents: fixedCommissionCents == null && nullToAbsent
+          ? const Value.absent()
+          : Value(fixedCommissionCents),
+      commissionType: Value(commissionType),
+      salesTargetCents: salesTargetCents == null && nullToAbsent
+          ? const Value.absent()
+          : Value(salesTargetCents),
+      targetBonusCents: targetBonusCents == null && nullToAbsent
+          ? const Value.absent()
+          : Value(targetBonusCents),
+      targetPeriod: Value(targetPeriod),
       payPeriodType: Value(payPeriodType),
       workingDaysPerPeriod: Value(workingDaysPerPeriod),
       workingHoursPerDay: Value(workingHoursPerDay),
@@ -15338,6 +15910,8 @@ class Employee extends DataClass implements Insertable<Employee> {
       terminationDate: terminationDate == null && nullToAbsent
           ? const Value.absent()
           : Value(terminationDate),
+      weeklyOffDays: Value(weeklyOffDays),
+      annualLeaveDays: Value(annualLeaveDays),
       notes: notes == null && nullToAbsent
           ? const Value.absent()
           : Value(notes),
@@ -15368,6 +15942,13 @@ class Employee extends DataClass implements Insertable<Employee> {
       defaultCommissionRateBps: serializer.fromJson<int>(
         json['defaultCommissionRateBps'],
       ),
+      fixedCommissionCents: serializer.fromJson<Decimal?>(
+        json['fixedCommissionCents'],
+      ),
+      commissionType: serializer.fromJson<String>(json['commissionType']),
+      salesTargetCents: serializer.fromJson<Decimal?>(json['salesTargetCents']),
+      targetBonusCents: serializer.fromJson<Decimal?>(json['targetBonusCents']),
+      targetPeriod: serializer.fromJson<String>(json['targetPeriod']),
       payPeriodType: serializer.fromJson<String>(json['payPeriodType']),
       workingDaysPerPeriod: serializer.fromJson<int>(
         json['workingDaysPerPeriod'],
@@ -15383,6 +15964,8 @@ class Employee extends DataClass implements Insertable<Employee> {
       isActive: serializer.fromJson<bool>(json['isActive']),
       hireDate: serializer.fromJson<DateTime?>(json['hireDate']),
       terminationDate: serializer.fromJson<DateTime?>(json['terminationDate']),
+      weeklyOffDays: serializer.fromJson<String>(json['weeklyOffDays']),
+      annualLeaveDays: serializer.fromJson<int>(json['annualLeaveDays']),
       notes: serializer.fromJson<String?>(json['notes']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
@@ -15408,6 +15991,11 @@ class Employee extends DataClass implements Insertable<Employee> {
       'defaultCommissionRateBps': serializer.toJson<int>(
         defaultCommissionRateBps,
       ),
+      'fixedCommissionCents': serializer.toJson<Decimal?>(fixedCommissionCents),
+      'commissionType': serializer.toJson<String>(commissionType),
+      'salesTargetCents': serializer.toJson<Decimal?>(salesTargetCents),
+      'targetBonusCents': serializer.toJson<Decimal?>(targetBonusCents),
+      'targetPeriod': serializer.toJson<String>(targetPeriod),
       'payPeriodType': serializer.toJson<String>(payPeriodType),
       'workingDaysPerPeriod': serializer.toJson<int>(workingDaysPerPeriod),
       'workingHoursPerDay': serializer.toJson<int>(workingHoursPerDay),
@@ -15419,6 +16007,8 @@ class Employee extends DataClass implements Insertable<Employee> {
       'isActive': serializer.toJson<bool>(isActive),
       'hireDate': serializer.toJson<DateTime?>(hireDate),
       'terminationDate': serializer.toJson<DateTime?>(terminationDate),
+      'weeklyOffDays': serializer.toJson<String>(weeklyOffDays),
+      'annualLeaveDays': serializer.toJson<int>(annualLeaveDays),
       'notes': serializer.toJson<String?>(notes),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
@@ -15440,6 +16030,11 @@ class Employee extends DataClass implements Insertable<Employee> {
     Value<int?> managerId = const Value.absent(),
     Value<Decimal?> salaryCents = const Value.absent(),
     int? defaultCommissionRateBps,
+    Value<Decimal?> fixedCommissionCents = const Value.absent(),
+    String? commissionType,
+    Value<Decimal?> salesTargetCents = const Value.absent(),
+    Value<Decimal?> targetBonusCents = const Value.absent(),
+    String? targetPeriod,
     String? payPeriodType,
     int? workingDaysPerPeriod,
     int? workingHoursPerDay,
@@ -15449,6 +16044,8 @@ class Employee extends DataClass implements Insertable<Employee> {
     bool? isActive,
     Value<DateTime?> hireDate = const Value.absent(),
     Value<DateTime?> terminationDate = const Value.absent(),
+    String? weeklyOffDays,
+    int? annualLeaveDays,
     Value<String?> notes = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -15468,6 +16065,17 @@ class Employee extends DataClass implements Insertable<Employee> {
     salaryCents: salaryCents.present ? salaryCents.value : this.salaryCents,
     defaultCommissionRateBps:
         defaultCommissionRateBps ?? this.defaultCommissionRateBps,
+    fixedCommissionCents: fixedCommissionCents.present
+        ? fixedCommissionCents.value
+        : this.fixedCommissionCents,
+    commissionType: commissionType ?? this.commissionType,
+    salesTargetCents: salesTargetCents.present
+        ? salesTargetCents.value
+        : this.salesTargetCents,
+    targetBonusCents: targetBonusCents.present
+        ? targetBonusCents.value
+        : this.targetBonusCents,
+    targetPeriod: targetPeriod ?? this.targetPeriod,
     payPeriodType: payPeriodType ?? this.payPeriodType,
     workingDaysPerPeriod: workingDaysPerPeriod ?? this.workingDaysPerPeriod,
     workingHoursPerDay: workingHoursPerDay ?? this.workingHoursPerDay,
@@ -15480,6 +16088,8 @@ class Employee extends DataClass implements Insertable<Employee> {
     terminationDate: terminationDate.present
         ? terminationDate.value
         : this.terminationDate,
+    weeklyOffDays: weeklyOffDays ?? this.weeklyOffDays,
+    annualLeaveDays: annualLeaveDays ?? this.annualLeaveDays,
     notes: notes.present ? notes.value : this.notes,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
@@ -15508,6 +16118,21 @@ class Employee extends DataClass implements Insertable<Employee> {
       defaultCommissionRateBps: data.defaultCommissionRateBps.present
           ? data.defaultCommissionRateBps.value
           : this.defaultCommissionRateBps,
+      fixedCommissionCents: data.fixedCommissionCents.present
+          ? data.fixedCommissionCents.value
+          : this.fixedCommissionCents,
+      commissionType: data.commissionType.present
+          ? data.commissionType.value
+          : this.commissionType,
+      salesTargetCents: data.salesTargetCents.present
+          ? data.salesTargetCents.value
+          : this.salesTargetCents,
+      targetBonusCents: data.targetBonusCents.present
+          ? data.targetBonusCents.value
+          : this.targetBonusCents,
+      targetPeriod: data.targetPeriod.present
+          ? data.targetPeriod.value
+          : this.targetPeriod,
       payPeriodType: data.payPeriodType.present
           ? data.payPeriodType.value
           : this.payPeriodType,
@@ -15531,6 +16156,12 @@ class Employee extends DataClass implements Insertable<Employee> {
       terminationDate: data.terminationDate.present
           ? data.terminationDate.value
           : this.terminationDate,
+      weeklyOffDays: data.weeklyOffDays.present
+          ? data.weeklyOffDays.value
+          : this.weeklyOffDays,
+      annualLeaveDays: data.annualLeaveDays.present
+          ? data.annualLeaveDays.value
+          : this.annualLeaveDays,
       notes: data.notes.present ? data.notes.value : this.notes,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
@@ -15554,6 +16185,11 @@ class Employee extends DataClass implements Insertable<Employee> {
           ..write('managerId: $managerId, ')
           ..write('salaryCents: $salaryCents, ')
           ..write('defaultCommissionRateBps: $defaultCommissionRateBps, ')
+          ..write('fixedCommissionCents: $fixedCommissionCents, ')
+          ..write('commissionType: $commissionType, ')
+          ..write('salesTargetCents: $salesTargetCents, ')
+          ..write('targetBonusCents: $targetBonusCents, ')
+          ..write('targetPeriod: $targetPeriod, ')
           ..write('payPeriodType: $payPeriodType, ')
           ..write('workingDaysPerPeriod: $workingDaysPerPeriod, ')
           ..write('workingHoursPerDay: $workingHoursPerDay, ')
@@ -15563,6 +16199,8 @@ class Employee extends DataClass implements Insertable<Employee> {
           ..write('isActive: $isActive, ')
           ..write('hireDate: $hireDate, ')
           ..write('terminationDate: $terminationDate, ')
+          ..write('weeklyOffDays: $weeklyOffDays, ')
+          ..write('annualLeaveDays: $annualLeaveDays, ')
           ..write('notes: $notes, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
@@ -15586,6 +16224,11 @@ class Employee extends DataClass implements Insertable<Employee> {
     managerId,
     salaryCents,
     defaultCommissionRateBps,
+    fixedCommissionCents,
+    commissionType,
+    salesTargetCents,
+    targetBonusCents,
+    targetPeriod,
     payPeriodType,
     workingDaysPerPeriod,
     workingHoursPerDay,
@@ -15595,6 +16238,8 @@ class Employee extends DataClass implements Insertable<Employee> {
     isActive,
     hireDate,
     terminationDate,
+    weeklyOffDays,
+    annualLeaveDays,
     notes,
     createdAt,
     updatedAt,
@@ -15617,6 +16262,11 @@ class Employee extends DataClass implements Insertable<Employee> {
           other.managerId == this.managerId &&
           other.salaryCents == this.salaryCents &&
           other.defaultCommissionRateBps == this.defaultCommissionRateBps &&
+          other.fixedCommissionCents == this.fixedCommissionCents &&
+          other.commissionType == this.commissionType &&
+          other.salesTargetCents == this.salesTargetCents &&
+          other.targetBonusCents == this.targetBonusCents &&
+          other.targetPeriod == this.targetPeriod &&
           other.payPeriodType == this.payPeriodType &&
           other.workingDaysPerPeriod == this.workingDaysPerPeriod &&
           other.workingHoursPerDay == this.workingHoursPerDay &&
@@ -15626,6 +16276,8 @@ class Employee extends DataClass implements Insertable<Employee> {
           other.isActive == this.isActive &&
           other.hireDate == this.hireDate &&
           other.terminationDate == this.terminationDate &&
+          other.weeklyOffDays == this.weeklyOffDays &&
+          other.annualLeaveDays == this.annualLeaveDays &&
           other.notes == this.notes &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
@@ -15646,6 +16298,11 @@ class EmployeesCompanion extends UpdateCompanion<Employee> {
   final Value<int?> managerId;
   final Value<Decimal?> salaryCents;
   final Value<int> defaultCommissionRateBps;
+  final Value<Decimal?> fixedCommissionCents;
+  final Value<String> commissionType;
+  final Value<Decimal?> salesTargetCents;
+  final Value<Decimal?> targetBonusCents;
+  final Value<String> targetPeriod;
   final Value<String> payPeriodType;
   final Value<int> workingDaysPerPeriod;
   final Value<int> workingHoursPerDay;
@@ -15655,6 +16312,8 @@ class EmployeesCompanion extends UpdateCompanion<Employee> {
   final Value<bool> isActive;
   final Value<DateTime?> hireDate;
   final Value<DateTime?> terminationDate;
+  final Value<String> weeklyOffDays;
+  final Value<int> annualLeaveDays;
   final Value<String?> notes;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
@@ -15673,6 +16332,11 @@ class EmployeesCompanion extends UpdateCompanion<Employee> {
     this.managerId = const Value.absent(),
     this.salaryCents = const Value.absent(),
     this.defaultCommissionRateBps = const Value.absent(),
+    this.fixedCommissionCents = const Value.absent(),
+    this.commissionType = const Value.absent(),
+    this.salesTargetCents = const Value.absent(),
+    this.targetBonusCents = const Value.absent(),
+    this.targetPeriod = const Value.absent(),
     this.payPeriodType = const Value.absent(),
     this.workingDaysPerPeriod = const Value.absent(),
     this.workingHoursPerDay = const Value.absent(),
@@ -15682,6 +16346,8 @@ class EmployeesCompanion extends UpdateCompanion<Employee> {
     this.isActive = const Value.absent(),
     this.hireDate = const Value.absent(),
     this.terminationDate = const Value.absent(),
+    this.weeklyOffDays = const Value.absent(),
+    this.annualLeaveDays = const Value.absent(),
     this.notes = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -15701,6 +16367,11 @@ class EmployeesCompanion extends UpdateCompanion<Employee> {
     this.managerId = const Value.absent(),
     this.salaryCents = const Value.absent(),
     this.defaultCommissionRateBps = const Value.absent(),
+    this.fixedCommissionCents = const Value.absent(),
+    this.commissionType = const Value.absent(),
+    this.salesTargetCents = const Value.absent(),
+    this.targetBonusCents = const Value.absent(),
+    this.targetPeriod = const Value.absent(),
     this.payPeriodType = const Value.absent(),
     this.workingDaysPerPeriod = const Value.absent(),
     this.workingHoursPerDay = const Value.absent(),
@@ -15710,6 +16381,8 @@ class EmployeesCompanion extends UpdateCompanion<Employee> {
     this.isActive = const Value.absent(),
     this.hireDate = const Value.absent(),
     this.terminationDate = const Value.absent(),
+    this.weeklyOffDays = const Value.absent(),
+    this.annualLeaveDays = const Value.absent(),
     this.notes = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -15730,6 +16403,11 @@ class EmployeesCompanion extends UpdateCompanion<Employee> {
     Expression<int>? managerId,
     Expression<int>? salaryCents,
     Expression<int>? defaultCommissionRateBps,
+    Expression<int>? fixedCommissionCents,
+    Expression<String>? commissionType,
+    Expression<int>? salesTargetCents,
+    Expression<int>? targetBonusCents,
+    Expression<String>? targetPeriod,
     Expression<String>? payPeriodType,
     Expression<int>? workingDaysPerPeriod,
     Expression<int>? workingHoursPerDay,
@@ -15739,6 +16417,8 @@ class EmployeesCompanion extends UpdateCompanion<Employee> {
     Expression<bool>? isActive,
     Expression<DateTime>? hireDate,
     Expression<DateTime>? terminationDate,
+    Expression<String>? weeklyOffDays,
+    Expression<int>? annualLeaveDays,
     Expression<String>? notes,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
@@ -15759,6 +16439,12 @@ class EmployeesCompanion extends UpdateCompanion<Employee> {
       if (salaryCents != null) 'salary_cents': salaryCents,
       if (defaultCommissionRateBps != null)
         'default_commission_rate_bps': defaultCommissionRateBps,
+      if (fixedCommissionCents != null)
+        'fixed_commission_cents': fixedCommissionCents,
+      if (commissionType != null) 'commission_type': commissionType,
+      if (salesTargetCents != null) 'sales_target_cents': salesTargetCents,
+      if (targetBonusCents != null) 'target_bonus_cents': targetBonusCents,
+      if (targetPeriod != null) 'target_period': targetPeriod,
       if (payPeriodType != null) 'pay_period_type': payPeriodType,
       if (workingDaysPerPeriod != null)
         'working_days_per_period': workingDaysPerPeriod,
@@ -15772,6 +16458,8 @@ class EmployeesCompanion extends UpdateCompanion<Employee> {
       if (isActive != null) 'is_active': isActive,
       if (hireDate != null) 'hire_date': hireDate,
       if (terminationDate != null) 'termination_date': terminationDate,
+      if (weeklyOffDays != null) 'weekly_off_days': weeklyOffDays,
+      if (annualLeaveDays != null) 'annual_leave_days': annualLeaveDays,
       if (notes != null) 'notes': notes,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
@@ -15793,6 +16481,11 @@ class EmployeesCompanion extends UpdateCompanion<Employee> {
     Value<int?>? managerId,
     Value<Decimal?>? salaryCents,
     Value<int>? defaultCommissionRateBps,
+    Value<Decimal?>? fixedCommissionCents,
+    Value<String>? commissionType,
+    Value<Decimal?>? salesTargetCents,
+    Value<Decimal?>? targetBonusCents,
+    Value<String>? targetPeriod,
     Value<String>? payPeriodType,
     Value<int>? workingDaysPerPeriod,
     Value<int>? workingHoursPerDay,
@@ -15802,6 +16495,8 @@ class EmployeesCompanion extends UpdateCompanion<Employee> {
     Value<bool>? isActive,
     Value<DateTime?>? hireDate,
     Value<DateTime?>? terminationDate,
+    Value<String>? weeklyOffDays,
+    Value<int>? annualLeaveDays,
     Value<String?>? notes,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
@@ -15822,6 +16517,11 @@ class EmployeesCompanion extends UpdateCompanion<Employee> {
       salaryCents: salaryCents ?? this.salaryCents,
       defaultCommissionRateBps:
           defaultCommissionRateBps ?? this.defaultCommissionRateBps,
+      fixedCommissionCents: fixedCommissionCents ?? this.fixedCommissionCents,
+      commissionType: commissionType ?? this.commissionType,
+      salesTargetCents: salesTargetCents ?? this.salesTargetCents,
+      targetBonusCents: targetBonusCents ?? this.targetBonusCents,
+      targetPeriod: targetPeriod ?? this.targetPeriod,
       payPeriodType: payPeriodType ?? this.payPeriodType,
       workingDaysPerPeriod: workingDaysPerPeriod ?? this.workingDaysPerPeriod,
       workingHoursPerDay: workingHoursPerDay ?? this.workingHoursPerDay,
@@ -15832,6 +16532,8 @@ class EmployeesCompanion extends UpdateCompanion<Employee> {
       isActive: isActive ?? this.isActive,
       hireDate: hireDate ?? this.hireDate,
       terminationDate: terminationDate ?? this.terminationDate,
+      weeklyOffDays: weeklyOffDays ?? this.weeklyOffDays,
+      annualLeaveDays: annualLeaveDays ?? this.annualLeaveDays,
       notes: notes ?? this.notes,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -15887,6 +16589,33 @@ class EmployeesCompanion extends UpdateCompanion<Employee> {
         defaultCommissionRateBps.value,
       );
     }
+    if (fixedCommissionCents.present) {
+      map['fixed_commission_cents'] = Variable<int>(
+        $EmployeesTable.$converterfixedCommissionCentsn.toSql(
+          fixedCommissionCents.value,
+        ),
+      );
+    }
+    if (commissionType.present) {
+      map['commission_type'] = Variable<String>(commissionType.value);
+    }
+    if (salesTargetCents.present) {
+      map['sales_target_cents'] = Variable<int>(
+        $EmployeesTable.$convertersalesTargetCentsn.toSql(
+          salesTargetCents.value,
+        ),
+      );
+    }
+    if (targetBonusCents.present) {
+      map['target_bonus_cents'] = Variable<int>(
+        $EmployeesTable.$convertertargetBonusCentsn.toSql(
+          targetBonusCents.value,
+        ),
+      );
+    }
+    if (targetPeriod.present) {
+      map['target_period'] = Variable<String>(targetPeriod.value);
+    }
     if (payPeriodType.present) {
       map['pay_period_type'] = Variable<String>(payPeriodType.value);
     }
@@ -15920,6 +16649,12 @@ class EmployeesCompanion extends UpdateCompanion<Employee> {
     if (terminationDate.present) {
       map['termination_date'] = Variable<DateTime>(terminationDate.value);
     }
+    if (weeklyOffDays.present) {
+      map['weekly_off_days'] = Variable<String>(weeklyOffDays.value);
+    }
+    if (annualLeaveDays.present) {
+      map['annual_leave_days'] = Variable<int>(annualLeaveDays.value);
+    }
     if (notes.present) {
       map['notes'] = Variable<String>(notes.value);
     }
@@ -15949,6 +16684,11 @@ class EmployeesCompanion extends UpdateCompanion<Employee> {
           ..write('managerId: $managerId, ')
           ..write('salaryCents: $salaryCents, ')
           ..write('defaultCommissionRateBps: $defaultCommissionRateBps, ')
+          ..write('fixedCommissionCents: $fixedCommissionCents, ')
+          ..write('commissionType: $commissionType, ')
+          ..write('salesTargetCents: $salesTargetCents, ')
+          ..write('targetBonusCents: $targetBonusCents, ')
+          ..write('targetPeriod: $targetPeriod, ')
           ..write('payPeriodType: $payPeriodType, ')
           ..write('workingDaysPerPeriod: $workingDaysPerPeriod, ')
           ..write('workingHoursPerDay: $workingHoursPerDay, ')
@@ -15958,6 +16698,8 @@ class EmployeesCompanion extends UpdateCompanion<Employee> {
           ..write('isActive: $isActive, ')
           ..write('hireDate: $hireDate, ')
           ..write('terminationDate: $terminationDate, ')
+          ..write('weeklyOffDays: $weeklyOffDays, ')
+          ..write('annualLeaveDays: $annualLeaveDays, ')
           ..write('notes: $notes, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
@@ -23216,6 +23958,20 @@ class $SaleItemsTable extends SaleItems
       'REFERENCES product_variants (id) ON DELETE RESTRICT',
     ),
   );
+  static const VerificationMeta _employeeIdMeta = const VerificationMeta(
+    'employeeId',
+  );
+  @override
+  late final GeneratedColumn<int> employeeId = GeneratedColumn<int>(
+    'employee_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES employees (id) ON DELETE SET NULL',
+    ),
+  );
   static const VerificationMeta _quantityMeta = const VerificationMeta(
     'quantity',
   );
@@ -23292,6 +24048,7 @@ class $SaleItemsTable extends SaleItems
     saleId,
     productId,
     variantId,
+    employeeId,
     quantity,
     unitPriceCents,
     subtotalCents,
@@ -23337,6 +24094,12 @@ class $SaleItemsTable extends SaleItems
         variantId.isAcceptableOrUnknown(data['variant_id']!, _variantIdMeta),
       );
     }
+    if (data.containsKey('employee_id')) {
+      context.handle(
+        _employeeIdMeta,
+        employeeId.isAcceptableOrUnknown(data['employee_id']!, _employeeIdMeta),
+      );
+    }
     if (data.containsKey('quantity')) {
       context.handle(
         _quantityMeta,
@@ -23375,6 +24138,10 @@ class $SaleItemsTable extends SaleItems
       variantId: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}variant_id'],
+      ),
+      employeeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}employee_id'],
       ),
       quantity: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
@@ -23439,6 +24206,7 @@ class SaleItem extends DataClass implements Insertable<SaleItem> {
   final int saleId;
   final int productId;
   final int? variantId;
+  final int? employeeId;
   final int quantity;
   final Decimal unitPriceCents;
   final Decimal subtotalCents;
@@ -23451,6 +24219,7 @@ class SaleItem extends DataClass implements Insertable<SaleItem> {
     required this.saleId,
     required this.productId,
     this.variantId,
+    this.employeeId,
     required this.quantity,
     required this.unitPriceCents,
     required this.subtotalCents,
@@ -23467,6 +24236,9 @@ class SaleItem extends DataClass implements Insertable<SaleItem> {
     map['product_id'] = Variable<int>(productId);
     if (!nullToAbsent || variantId != null) {
       map['variant_id'] = Variable<int>(variantId);
+    }
+    if (!nullToAbsent || employeeId != null) {
+      map['employee_id'] = Variable<int>(employeeId);
     }
     map['quantity'] = Variable<int>(quantity);
     {
@@ -23506,6 +24278,9 @@ class SaleItem extends DataClass implements Insertable<SaleItem> {
       variantId: variantId == null && nullToAbsent
           ? const Value.absent()
           : Value(variantId),
+      employeeId: employeeId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(employeeId),
       quantity: Value(quantity),
       unitPriceCents: Value(unitPriceCents),
       subtotalCents: Value(subtotalCents),
@@ -23526,6 +24301,7 @@ class SaleItem extends DataClass implements Insertable<SaleItem> {
       saleId: serializer.fromJson<int>(json['saleId']),
       productId: serializer.fromJson<int>(json['productId']),
       variantId: serializer.fromJson<int?>(json['variantId']),
+      employeeId: serializer.fromJson<int?>(json['employeeId']),
       quantity: serializer.fromJson<int>(json['quantity']),
       unitPriceCents: serializer.fromJson<Decimal>(json['unitPriceCents']),
       subtotalCents: serializer.fromJson<Decimal>(json['subtotalCents']),
@@ -23543,6 +24319,7 @@ class SaleItem extends DataClass implements Insertable<SaleItem> {
       'saleId': serializer.toJson<int>(saleId),
       'productId': serializer.toJson<int>(productId),
       'variantId': serializer.toJson<int?>(variantId),
+      'employeeId': serializer.toJson<int?>(employeeId),
       'quantity': serializer.toJson<int>(quantity),
       'unitPriceCents': serializer.toJson<Decimal>(unitPriceCents),
       'subtotalCents': serializer.toJson<Decimal>(subtotalCents),
@@ -23558,6 +24335,7 @@ class SaleItem extends DataClass implements Insertable<SaleItem> {
     int? saleId,
     int? productId,
     Value<int?> variantId = const Value.absent(),
+    Value<int?> employeeId = const Value.absent(),
     int? quantity,
     Decimal? unitPriceCents,
     Decimal? subtotalCents,
@@ -23570,6 +24348,7 @@ class SaleItem extends DataClass implements Insertable<SaleItem> {
     saleId: saleId ?? this.saleId,
     productId: productId ?? this.productId,
     variantId: variantId.present ? variantId.value : this.variantId,
+    employeeId: employeeId.present ? employeeId.value : this.employeeId,
     quantity: quantity ?? this.quantity,
     unitPriceCents: unitPriceCents ?? this.unitPriceCents,
     subtotalCents: subtotalCents ?? this.subtotalCents,
@@ -23584,6 +24363,9 @@ class SaleItem extends DataClass implements Insertable<SaleItem> {
       saleId: data.saleId.present ? data.saleId.value : this.saleId,
       productId: data.productId.present ? data.productId.value : this.productId,
       variantId: data.variantId.present ? data.variantId.value : this.variantId,
+      employeeId: data.employeeId.present
+          ? data.employeeId.value
+          : this.employeeId,
       quantity: data.quantity.present ? data.quantity.value : this.quantity,
       unitPriceCents: data.unitPriceCents.present
           ? data.unitPriceCents.value
@@ -23609,6 +24391,7 @@ class SaleItem extends DataClass implements Insertable<SaleItem> {
           ..write('saleId: $saleId, ')
           ..write('productId: $productId, ')
           ..write('variantId: $variantId, ')
+          ..write('employeeId: $employeeId, ')
           ..write('quantity: $quantity, ')
           ..write('unitPriceCents: $unitPriceCents, ')
           ..write('subtotalCents: $subtotalCents, ')
@@ -23626,6 +24409,7 @@ class SaleItem extends DataClass implements Insertable<SaleItem> {
     saleId,
     productId,
     variantId,
+    employeeId,
     quantity,
     unitPriceCents,
     subtotalCents,
@@ -23642,6 +24426,7 @@ class SaleItem extends DataClass implements Insertable<SaleItem> {
           other.saleId == this.saleId &&
           other.productId == this.productId &&
           other.variantId == this.variantId &&
+          other.employeeId == this.employeeId &&
           other.quantity == this.quantity &&
           other.unitPriceCents == this.unitPriceCents &&
           other.subtotalCents == this.subtotalCents &&
@@ -23656,6 +24441,7 @@ class SaleItemsCompanion extends UpdateCompanion<SaleItem> {
   final Value<int> saleId;
   final Value<int> productId;
   final Value<int?> variantId;
+  final Value<int?> employeeId;
   final Value<int> quantity;
   final Value<Decimal> unitPriceCents;
   final Value<Decimal> subtotalCents;
@@ -23668,6 +24454,7 @@ class SaleItemsCompanion extends UpdateCompanion<SaleItem> {
     this.saleId = const Value.absent(),
     this.productId = const Value.absent(),
     this.variantId = const Value.absent(),
+    this.employeeId = const Value.absent(),
     this.quantity = const Value.absent(),
     this.unitPriceCents = const Value.absent(),
     this.subtotalCents = const Value.absent(),
@@ -23681,6 +24468,7 @@ class SaleItemsCompanion extends UpdateCompanion<SaleItem> {
     required int saleId,
     required int productId,
     this.variantId = const Value.absent(),
+    this.employeeId = const Value.absent(),
     required int quantity,
     required Decimal unitPriceCents,
     required Decimal subtotalCents,
@@ -23699,6 +24487,7 @@ class SaleItemsCompanion extends UpdateCompanion<SaleItem> {
     Expression<int>? saleId,
     Expression<int>? productId,
     Expression<int>? variantId,
+    Expression<int>? employeeId,
     Expression<int>? quantity,
     Expression<int>? unitPriceCents,
     Expression<int>? subtotalCents,
@@ -23712,6 +24501,7 @@ class SaleItemsCompanion extends UpdateCompanion<SaleItem> {
       if (saleId != null) 'sale_id': saleId,
       if (productId != null) 'product_id': productId,
       if (variantId != null) 'variant_id': variantId,
+      if (employeeId != null) 'employee_id': employeeId,
       if (quantity != null) 'quantity': quantity,
       if (unitPriceCents != null) 'unit_price_cents': unitPriceCents,
       if (subtotalCents != null) 'subtotal_cents': subtotalCents,
@@ -23727,6 +24517,7 @@ class SaleItemsCompanion extends UpdateCompanion<SaleItem> {
     Value<int>? saleId,
     Value<int>? productId,
     Value<int?>? variantId,
+    Value<int?>? employeeId,
     Value<int>? quantity,
     Value<Decimal>? unitPriceCents,
     Value<Decimal>? subtotalCents,
@@ -23740,6 +24531,7 @@ class SaleItemsCompanion extends UpdateCompanion<SaleItem> {
       saleId: saleId ?? this.saleId,
       productId: productId ?? this.productId,
       variantId: variantId ?? this.variantId,
+      employeeId: employeeId ?? this.employeeId,
       quantity: quantity ?? this.quantity,
       unitPriceCents: unitPriceCents ?? this.unitPriceCents,
       subtotalCents: subtotalCents ?? this.subtotalCents,
@@ -23764,6 +24556,9 @@ class SaleItemsCompanion extends UpdateCompanion<SaleItem> {
     }
     if (variantId.present) {
       map['variant_id'] = Variable<int>(variantId.value);
+    }
+    if (employeeId.present) {
+      map['employee_id'] = Variable<int>(employeeId.value);
     }
     if (quantity.present) {
       map['quantity'] = Variable<int>(quantity.value);
@@ -23806,6 +24601,7 @@ class SaleItemsCompanion extends UpdateCompanion<SaleItem> {
           ..write('saleId: $saleId, ')
           ..write('productId: $productId, ')
           ..write('variantId: $variantId, ')
+          ..write('employeeId: $employeeId, ')
           ..write('quantity: $quantity, ')
           ..write('unitPriceCents: $unitPriceCents, ')
           ..write('subtotalCents: $subtotalCents, ')
@@ -37052,6 +37848,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     ),
     WritePropagation(
       on: TableUpdateQuery.onTableName(
+        'employees',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('sale_items', kind: UpdateKind.update)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
         'sales',
         limitUpdateKind: UpdateKind.delete,
       ),
@@ -47118,7 +47921,9 @@ typedef $$CustomerTransactionsTableCreateCompanionBuilder =
     CustomerTransactionsCompanion Function({
       Value<int> id,
       required int customerId,
+      Value<String?> transactionNumber,
       required String transactionType,
+      Value<String?> discountType,
       required Decimal amountCents,
       required int currencyId,
       Value<String?> description,
@@ -47131,7 +47936,9 @@ typedef $$CustomerTransactionsTableUpdateCompanionBuilder =
     CustomerTransactionsCompanion Function({
       Value<int> id,
       Value<int> customerId,
+      Value<String?> transactionNumber,
       Value<String> transactionType,
+      Value<String?> discountType,
       Value<Decimal> amountCents,
       Value<int> currencyId,
       Value<String?> description,
@@ -47213,8 +48020,18 @@ class $$CustomerTransactionsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get transactionNumber => $composableBuilder(
+    column: $table.transactionNumber,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<String> get transactionType => $composableBuilder(
     column: $table.transactionType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get discountType => $composableBuilder(
+    column: $table.discountType,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -47310,8 +48127,18 @@ class $$CustomerTransactionsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get transactionNumber => $composableBuilder(
+    column: $table.transactionNumber,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get transactionType => $composableBuilder(
     column: $table.transactionType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get discountType => $composableBuilder(
+    column: $table.discountType,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -47404,8 +48231,18 @@ class $$CustomerTransactionsTableAnnotationComposer
   GeneratedColumn<int> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
 
+  GeneratedColumn<String> get transactionNumber => $composableBuilder(
+    column: $table.transactionNumber,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get transactionType => $composableBuilder(
     column: $table.transactionType,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get discountType => $composableBuilder(
+    column: $table.discountType,
     builder: (column) => column,
   );
 
@@ -47523,7 +48360,9 @@ class $$CustomerTransactionsTableTableManager
               ({
                 Value<int> id = const Value.absent(),
                 Value<int> customerId = const Value.absent(),
+                Value<String?> transactionNumber = const Value.absent(),
                 Value<String> transactionType = const Value.absent(),
+                Value<String?> discountType = const Value.absent(),
                 Value<Decimal> amountCents = const Value.absent(),
                 Value<int> currencyId = const Value.absent(),
                 Value<String?> description = const Value.absent(),
@@ -47534,7 +48373,9 @@ class $$CustomerTransactionsTableTableManager
               }) => CustomerTransactionsCompanion(
                 id: id,
                 customerId: customerId,
+                transactionNumber: transactionNumber,
                 transactionType: transactionType,
+                discountType: discountType,
                 amountCents: amountCents,
                 currencyId: currencyId,
                 description: description,
@@ -47547,7 +48388,9 @@ class $$CustomerTransactionsTableTableManager
               ({
                 Value<int> id = const Value.absent(),
                 required int customerId,
+                Value<String?> transactionNumber = const Value.absent(),
                 required String transactionType,
+                Value<String?> discountType = const Value.absent(),
                 required Decimal amountCents,
                 required int currencyId,
                 Value<String?> description = const Value.absent(),
@@ -47558,7 +48401,9 @@ class $$CustomerTransactionsTableTableManager
               }) => CustomerTransactionsCompanion.insert(
                 id: id,
                 customerId: customerId,
+                transactionNumber: transactionNumber,
                 transactionType: transactionType,
+                discountType: discountType,
                 amountCents: amountCents,
                 currencyId: currencyId,
                 description: description,
@@ -48857,6 +49702,10 @@ typedef $$LoyaltySettingsTableTableCreateCompanionBuilder =
       Value<int> signupBonusPoints,
       Value<int> reviewBonusPoints,
       Value<bool> isEnabled,
+      Value<int> pointValueCents,
+      Value<int> minRedemptionPoints,
+      Value<int> maxRedemptionPercentBps,
+      Value<bool> allowPointsRedemption,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
     });
@@ -48870,6 +49719,10 @@ typedef $$LoyaltySettingsTableTableUpdateCompanionBuilder =
       Value<int> signupBonusPoints,
       Value<int> reviewBonusPoints,
       Value<bool> isEnabled,
+      Value<int> pointValueCents,
+      Value<int> minRedemptionPoints,
+      Value<int> maxRedemptionPercentBps,
+      Value<bool> allowPointsRedemption,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
     });
@@ -48920,6 +49773,26 @@ class $$LoyaltySettingsTableTableFilterComposer
 
   ColumnFilters<bool> get isEnabled => $composableBuilder(
     column: $table.isEnabled,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get pointValueCents => $composableBuilder(
+    column: $table.pointValueCents,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get minRedemptionPoints => $composableBuilder(
+    column: $table.minRedemptionPoints,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get maxRedemptionPercentBps => $composableBuilder(
+    column: $table.maxRedemptionPercentBps,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get allowPointsRedemption => $composableBuilder(
+    column: $table.allowPointsRedemption,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -48983,6 +49856,26 @@ class $$LoyaltySettingsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get pointValueCents => $composableBuilder(
+    column: $table.pointValueCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get minRedemptionPoints => $composableBuilder(
+    column: $table.minRedemptionPoints,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get maxRedemptionPercentBps => $composableBuilder(
+    column: $table.maxRedemptionPercentBps,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get allowPointsRedemption => $composableBuilder(
+    column: $table.allowPointsRedemption,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -49038,6 +49931,26 @@ class $$LoyaltySettingsTableTableAnnotationComposer
 
   GeneratedColumn<bool> get isEnabled =>
       $composableBuilder(column: $table.isEnabled, builder: (column) => column);
+
+  GeneratedColumn<int> get pointValueCents => $composableBuilder(
+    column: $table.pointValueCents,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get minRedemptionPoints => $composableBuilder(
+    column: $table.minRedemptionPoints,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get maxRedemptionPercentBps => $composableBuilder(
+    column: $table.maxRedemptionPercentBps,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get allowPointsRedemption => $composableBuilder(
+    column: $table.allowPointsRedemption,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -49097,6 +50010,10 @@ class $$LoyaltySettingsTableTableTableManager
                 Value<int> signupBonusPoints = const Value.absent(),
                 Value<int> reviewBonusPoints = const Value.absent(),
                 Value<bool> isEnabled = const Value.absent(),
+                Value<int> pointValueCents = const Value.absent(),
+                Value<int> minRedemptionPoints = const Value.absent(),
+                Value<int> maxRedemptionPercentBps = const Value.absent(),
+                Value<bool> allowPointsRedemption = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
               }) => LoyaltySettingsTableCompanion(
@@ -49108,6 +50025,10 @@ class $$LoyaltySettingsTableTableTableManager
                 signupBonusPoints: signupBonusPoints,
                 reviewBonusPoints: reviewBonusPoints,
                 isEnabled: isEnabled,
+                pointValueCents: pointValueCents,
+                minRedemptionPoints: minRedemptionPoints,
+                maxRedemptionPercentBps: maxRedemptionPercentBps,
+                allowPointsRedemption: allowPointsRedemption,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
               ),
@@ -49121,6 +50042,10 @@ class $$LoyaltySettingsTableTableTableManager
                 Value<int> signupBonusPoints = const Value.absent(),
                 Value<int> reviewBonusPoints = const Value.absent(),
                 Value<bool> isEnabled = const Value.absent(),
+                Value<int> pointValueCents = const Value.absent(),
+                Value<int> minRedemptionPoints = const Value.absent(),
+                Value<int> maxRedemptionPercentBps = const Value.absent(),
+                Value<bool> allowPointsRedemption = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
               }) => LoyaltySettingsTableCompanion.insert(
@@ -49132,6 +50057,10 @@ class $$LoyaltySettingsTableTableTableManager
                 signupBonusPoints: signupBonusPoints,
                 reviewBonusPoints: reviewBonusPoints,
                 isEnabled: isEnabled,
+                pointValueCents: pointValueCents,
+                minRedemptionPoints: minRedemptionPoints,
+                maxRedemptionPercentBps: maxRedemptionPercentBps,
+                allowPointsRedemption: allowPointsRedemption,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
               ),
@@ -50144,6 +51073,11 @@ typedef $$EmployeesTableCreateCompanionBuilder =
       Value<int?> managerId,
       Value<Decimal?> salaryCents,
       Value<int> defaultCommissionRateBps,
+      Value<Decimal?> fixedCommissionCents,
+      Value<String> commissionType,
+      Value<Decimal?> salesTargetCents,
+      Value<Decimal?> targetBonusCents,
+      Value<String> targetPeriod,
       Value<String> payPeriodType,
       Value<int> workingDaysPerPeriod,
       Value<int> workingHoursPerDay,
@@ -50153,6 +51087,8 @@ typedef $$EmployeesTableCreateCompanionBuilder =
       Value<bool> isActive,
       Value<DateTime?> hireDate,
       Value<DateTime?> terminationDate,
+      Value<String> weeklyOffDays,
+      Value<int> annualLeaveDays,
       Value<String?> notes,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
@@ -50173,6 +51109,11 @@ typedef $$EmployeesTableUpdateCompanionBuilder =
       Value<int?> managerId,
       Value<Decimal?> salaryCents,
       Value<int> defaultCommissionRateBps,
+      Value<Decimal?> fixedCommissionCents,
+      Value<String> commissionType,
+      Value<Decimal?> salesTargetCents,
+      Value<Decimal?> targetBonusCents,
+      Value<String> targetPeriod,
       Value<String> payPeriodType,
       Value<int> workingDaysPerPeriod,
       Value<int> workingHoursPerDay,
@@ -50182,6 +51123,8 @@ typedef $$EmployeesTableUpdateCompanionBuilder =
       Value<bool> isActive,
       Value<DateTime?> hireDate,
       Value<DateTime?> terminationDate,
+      Value<String> weeklyOffDays,
+      Value<int> annualLeaveDays,
       Value<String?> notes,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
@@ -50370,6 +51313,24 @@ final class $$EmployeesTableReferences
       manager.$state.copyWith(prefetchedData: cache),
     );
   }
+
+  static MultiTypedResultKey<$SaleItemsTable, List<SaleItem>>
+  _saleItemsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.saleItems,
+    aliasName: $_aliasNameGenerator(db.employees.id, db.saleItems.employeeId),
+  );
+
+  $$SaleItemsTableProcessedTableManager get saleItemsRefs {
+    final manager = $$SaleItemsTableTableManager(
+      $_db,
+      $_db.saleItems,
+    ).filter((f) => f.employeeId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_saleItemsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
 }
 
 class $$EmployeesTableFilterComposer
@@ -50442,6 +51403,34 @@ class $$EmployeesTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnWithTypeConverterFilters<Decimal?, Decimal, int>
+  get fixedCommissionCents => $composableBuilder(
+    column: $table.fixedCommissionCents,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
+  );
+
+  ColumnFilters<String> get commissionType => $composableBuilder(
+    column: $table.commissionType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<Decimal?, Decimal, int> get salesTargetCents =>
+      $composableBuilder(
+        column: $table.salesTargetCents,
+        builder: (column) => ColumnWithTypeConverterFilters(column),
+      );
+
+  ColumnWithTypeConverterFilters<Decimal?, Decimal, int> get targetBonusCents =>
+      $composableBuilder(
+        column: $table.targetBonusCents,
+        builder: (column) => ColumnWithTypeConverterFilters(column),
+      );
+
+  ColumnFilters<String> get targetPeriod => $composableBuilder(
+    column: $table.targetPeriod,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<String> get payPeriodType => $composableBuilder(
     column: $table.payPeriodType,
     builder: (column) => ColumnFilters(column),
@@ -50479,6 +51468,16 @@ class $$EmployeesTableFilterComposer
 
   ColumnFilters<DateTime> get terminationDate => $composableBuilder(
     column: $table.terminationDate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get weeklyOffDays => $composableBuilder(
+    column: $table.weeklyOffDays,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get annualLeaveDays => $composableBuilder(
+    column: $table.annualLeaveDays,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -50715,6 +51714,31 @@ class $$EmployeesTableFilterComposer
     );
     return f(composer);
   }
+
+  Expression<bool> saleItemsRefs(
+    Expression<bool> Function($$SaleItemsTableFilterComposer f) f,
+  ) {
+    final $$SaleItemsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.saleItems,
+      getReferencedColumn: (t) => t.employeeId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SaleItemsTableFilterComposer(
+            $db: $db,
+            $table: $db.saleItems,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$EmployeesTableOrderingComposer
@@ -50786,6 +51810,31 @@ class $$EmployeesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get fixedCommissionCents => $composableBuilder(
+    column: $table.fixedCommissionCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get commissionType => $composableBuilder(
+    column: $table.commissionType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get salesTargetCents => $composableBuilder(
+    column: $table.salesTargetCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get targetBonusCents => $composableBuilder(
+    column: $table.targetBonusCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get targetPeriod => $composableBuilder(
+    column: $table.targetPeriod,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get payPeriodType => $composableBuilder(
     column: $table.payPeriodType,
     builder: (column) => ColumnOrderings(column),
@@ -50823,6 +51872,16 @@ class $$EmployeesTableOrderingComposer
 
   ColumnOrderings<DateTime> get terminationDate => $composableBuilder(
     column: $table.terminationDate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get weeklyOffDays => $composableBuilder(
+    column: $table.weeklyOffDays,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get annualLeaveDays => $composableBuilder(
+    column: $table.annualLeaveDays,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -50965,6 +52024,34 @@ class $$EmployeesTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumnWithTypeConverter<Decimal?, int> get fixedCommissionCents =>
+      $composableBuilder(
+        column: $table.fixedCommissionCents,
+        builder: (column) => column,
+      );
+
+  GeneratedColumn<String> get commissionType => $composableBuilder(
+    column: $table.commissionType,
+    builder: (column) => column,
+  );
+
+  GeneratedColumnWithTypeConverter<Decimal?, int> get salesTargetCents =>
+      $composableBuilder(
+        column: $table.salesTargetCents,
+        builder: (column) => column,
+      );
+
+  GeneratedColumnWithTypeConverter<Decimal?, int> get targetBonusCents =>
+      $composableBuilder(
+        column: $table.targetBonusCents,
+        builder: (column) => column,
+      );
+
+  GeneratedColumn<String> get targetPeriod => $composableBuilder(
+    column: $table.targetPeriod,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get payPeriodType => $composableBuilder(
     column: $table.payPeriodType,
     builder: (column) => column,
@@ -50998,6 +52085,16 @@ class $$EmployeesTableAnnotationComposer
 
   GeneratedColumn<DateTime> get terminationDate => $composableBuilder(
     column: $table.terminationDate,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get weeklyOffDays => $composableBuilder(
+    column: $table.weeklyOffDays,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get annualLeaveDays => $composableBuilder(
+    column: $table.annualLeaveDays,
     builder: (column) => column,
   );
 
@@ -51230,6 +52327,31 @@ class $$EmployeesTableAnnotationComposer
         );
     return f(composer);
   }
+
+  Expression<T> saleItemsRefs<T extends Object>(
+    Expression<T> Function($$SaleItemsTableAnnotationComposer a) f,
+  ) {
+    final $$SaleItemsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.saleItems,
+      getReferencedColumn: (t) => t.employeeId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SaleItemsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.saleItems,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$EmployeesTableTableManager
@@ -51255,6 +52377,7 @@ class $$EmployeesTableTableManager
             bool shiftSchedulesRefs,
             bool employeeDocumentsRefs,
             bool performanceMetricsRefs,
+            bool saleItemsRefs,
           })
         > {
   $$EmployeesTableTableManager(_$AppDatabase db, $EmployeesTable table)
@@ -51284,6 +52407,11 @@ class $$EmployeesTableTableManager
                 Value<int?> managerId = const Value.absent(),
                 Value<Decimal?> salaryCents = const Value.absent(),
                 Value<int> defaultCommissionRateBps = const Value.absent(),
+                Value<Decimal?> fixedCommissionCents = const Value.absent(),
+                Value<String> commissionType = const Value.absent(),
+                Value<Decimal?> salesTargetCents = const Value.absent(),
+                Value<Decimal?> targetBonusCents = const Value.absent(),
+                Value<String> targetPeriod = const Value.absent(),
                 Value<String> payPeriodType = const Value.absent(),
                 Value<int> workingDaysPerPeriod = const Value.absent(),
                 Value<int> workingHoursPerDay = const Value.absent(),
@@ -51293,6 +52421,8 @@ class $$EmployeesTableTableManager
                 Value<bool> isActive = const Value.absent(),
                 Value<DateTime?> hireDate = const Value.absent(),
                 Value<DateTime?> terminationDate = const Value.absent(),
+                Value<String> weeklyOffDays = const Value.absent(),
+                Value<int> annualLeaveDays = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
@@ -51311,6 +52441,11 @@ class $$EmployeesTableTableManager
                 managerId: managerId,
                 salaryCents: salaryCents,
                 defaultCommissionRateBps: defaultCommissionRateBps,
+                fixedCommissionCents: fixedCommissionCents,
+                commissionType: commissionType,
+                salesTargetCents: salesTargetCents,
+                targetBonusCents: targetBonusCents,
+                targetPeriod: targetPeriod,
                 payPeriodType: payPeriodType,
                 workingDaysPerPeriod: workingDaysPerPeriod,
                 workingHoursPerDay: workingHoursPerDay,
@@ -51320,6 +52455,8 @@ class $$EmployeesTableTableManager
                 isActive: isActive,
                 hireDate: hireDate,
                 terminationDate: terminationDate,
+                weeklyOffDays: weeklyOffDays,
+                annualLeaveDays: annualLeaveDays,
                 notes: notes,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
@@ -51340,6 +52477,11 @@ class $$EmployeesTableTableManager
                 Value<int?> managerId = const Value.absent(),
                 Value<Decimal?> salaryCents = const Value.absent(),
                 Value<int> defaultCommissionRateBps = const Value.absent(),
+                Value<Decimal?> fixedCommissionCents = const Value.absent(),
+                Value<String> commissionType = const Value.absent(),
+                Value<Decimal?> salesTargetCents = const Value.absent(),
+                Value<Decimal?> targetBonusCents = const Value.absent(),
+                Value<String> targetPeriod = const Value.absent(),
                 Value<String> payPeriodType = const Value.absent(),
                 Value<int> workingDaysPerPeriod = const Value.absent(),
                 Value<int> workingHoursPerDay = const Value.absent(),
@@ -51349,6 +52491,8 @@ class $$EmployeesTableTableManager
                 Value<bool> isActive = const Value.absent(),
                 Value<DateTime?> hireDate = const Value.absent(),
                 Value<DateTime?> terminationDate = const Value.absent(),
+                Value<String> weeklyOffDays = const Value.absent(),
+                Value<int> annualLeaveDays = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
@@ -51367,6 +52511,11 @@ class $$EmployeesTableTableManager
                 managerId: managerId,
                 salaryCents: salaryCents,
                 defaultCommissionRateBps: defaultCommissionRateBps,
+                fixedCommissionCents: fixedCommissionCents,
+                commissionType: commissionType,
+                salesTargetCents: salesTargetCents,
+                targetBonusCents: targetBonusCents,
+                targetPeriod: targetPeriod,
                 payPeriodType: payPeriodType,
                 workingDaysPerPeriod: workingDaysPerPeriod,
                 workingHoursPerDay: workingHoursPerDay,
@@ -51376,6 +52525,8 @@ class $$EmployeesTableTableManager
                 isActive: isActive,
                 hireDate: hireDate,
                 terminationDate: terminationDate,
+                weeklyOffDays: weeklyOffDays,
+                annualLeaveDays: annualLeaveDays,
                 notes: notes,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
@@ -51399,6 +52550,7 @@ class $$EmployeesTableTableManager
                 shiftSchedulesRefs = false,
                 employeeDocumentsRefs = false,
                 performanceMetricsRefs = false,
+                saleItemsRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
@@ -51409,6 +52561,7 @@ class $$EmployeesTableTableManager
                     if (shiftSchedulesRefs) db.shiftSchedules,
                     if (employeeDocumentsRefs) db.employeeDocuments,
                     if (performanceMetricsRefs) db.performanceMetrics,
+                    if (saleItemsRefs) db.saleItems,
                   ],
                   addJoins:
                       <
@@ -51596,6 +52749,27 @@ class $$EmployeesTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (saleItemsRefs)
+                        await $_getPrefetchedData<
+                          Employee,
+                          $EmployeesTable,
+                          SaleItem
+                        >(
+                          currentTable: table,
+                          referencedTable: $$EmployeesTableReferences
+                              ._saleItemsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$EmployeesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).saleItemsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.employeeId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -51626,6 +52800,7 @@ typedef $$EmployeesTableProcessedTableManager =
         bool shiftSchedulesRefs,
         bool employeeDocumentsRefs,
         bool performanceMetricsRefs,
+        bool saleItemsRefs,
       })
     >;
 typedef $$SalesTableCreateCompanionBuilder =
@@ -57509,6 +58684,7 @@ typedef $$SaleItemsTableCreateCompanionBuilder =
       required int saleId,
       required int productId,
       Value<int?> variantId,
+      Value<int?> employeeId,
       required int quantity,
       required Decimal unitPriceCents,
       required Decimal subtotalCents,
@@ -57523,6 +58699,7 @@ typedef $$SaleItemsTableUpdateCompanionBuilder =
       Value<int> saleId,
       Value<int> productId,
       Value<int?> variantId,
+      Value<int?> employeeId,
       Value<int> quantity,
       Value<Decimal> unitPriceCents,
       Value<Decimal> subtotalCents,
@@ -57586,6 +58763,25 @@ final class $$SaleItemsTableReferences
       $_db.productVariants,
     ).filter((f) => f.id.sqlEquals($_column));
     final item = $_typedResult.readTableOrNull(_variantIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $EmployeesTable _employeeIdTable(_$AppDatabase db) =>
+      db.employees.createAlias(
+        $_aliasNameGenerator(db.saleItems.employeeId, db.employees.id),
+      );
+
+  $$EmployeesTableProcessedTableManager? get employeeId {
+    final $_column = $_itemColumn<int>('employee_id');
+    if ($_column == null) return null;
+    final manager = $$EmployeesTableTableManager(
+      $_db,
+      $_db.employees,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_employeeIdTable($_db));
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
@@ -57739,6 +58935,29 @@ class $$SaleItemsTableFilterComposer
     return composer;
   }
 
+  $$EmployeesTableFilterComposer get employeeId {
+    final $$EmployeesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.employeeId,
+      referencedTable: $db.employees,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$EmployeesTableFilterComposer(
+            $db: $db,
+            $table: $db.employees,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
   Expression<bool> saleReturnItemsRefs(
     Expression<bool> Function($$SaleReturnItemsTableFilterComposer f) f,
   ) {
@@ -57882,6 +59101,29 @@ class $$SaleItemsTableOrderingComposer
     );
     return composer;
   }
+
+  $$EmployeesTableOrderingComposer get employeeId {
+    final $$EmployeesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.employeeId,
+      referencedTable: $db.employees,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$EmployeesTableOrderingComposer(
+            $db: $db,
+            $table: $db.employees,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$SaleItemsTableAnnotationComposer
@@ -57998,6 +59240,29 @@ class $$SaleItemsTableAnnotationComposer
     return composer;
   }
 
+  $$EmployeesTableAnnotationComposer get employeeId {
+    final $$EmployeesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.employeeId,
+      referencedTable: $db.employees,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$EmployeesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.employees,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
   Expression<T> saleReturnItemsRefs<T extends Object>(
     Expression<T> Function($$SaleReturnItemsTableAnnotationComposer a) f,
   ) {
@@ -58041,6 +59306,7 @@ class $$SaleItemsTableTableManager
             bool saleId,
             bool productId,
             bool variantId,
+            bool employeeId,
             bool saleReturnItemsRefs,
           })
         > {
@@ -58061,6 +59327,7 @@ class $$SaleItemsTableTableManager
                 Value<int> saleId = const Value.absent(),
                 Value<int> productId = const Value.absent(),
                 Value<int?> variantId = const Value.absent(),
+                Value<int?> employeeId = const Value.absent(),
                 Value<int> quantity = const Value.absent(),
                 Value<Decimal> unitPriceCents = const Value.absent(),
                 Value<Decimal> subtotalCents = const Value.absent(),
@@ -58073,6 +59340,7 @@ class $$SaleItemsTableTableManager
                 saleId: saleId,
                 productId: productId,
                 variantId: variantId,
+                employeeId: employeeId,
                 quantity: quantity,
                 unitPriceCents: unitPriceCents,
                 subtotalCents: subtotalCents,
@@ -58087,6 +59355,7 @@ class $$SaleItemsTableTableManager
                 required int saleId,
                 required int productId,
                 Value<int?> variantId = const Value.absent(),
+                Value<int?> employeeId = const Value.absent(),
                 required int quantity,
                 required Decimal unitPriceCents,
                 required Decimal subtotalCents,
@@ -58099,6 +59368,7 @@ class $$SaleItemsTableTableManager
                 saleId: saleId,
                 productId: productId,
                 variantId: variantId,
+                employeeId: employeeId,
                 quantity: quantity,
                 unitPriceCents: unitPriceCents,
                 subtotalCents: subtotalCents,
@@ -58120,6 +59390,7 @@ class $$SaleItemsTableTableManager
                 saleId = false,
                 productId = false,
                 variantId = false,
+                employeeId = false,
                 saleReturnItemsRefs = false,
               }) {
                 return PrefetchHooks(
@@ -58182,6 +59453,19 @@ class $$SaleItemsTableTableManager
                                   )
                                   as T;
                         }
+                        if (employeeId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.employeeId,
+                                    referencedTable: $$SaleItemsTableReferences
+                                        ._employeeIdTable(db),
+                                    referencedColumn: $$SaleItemsTableReferences
+                                        ._employeeIdTable(db)
+                                        .id,
+                                  )
+                                  as T;
+                        }
 
                         return state;
                       },
@@ -58232,6 +59516,7 @@ typedef $$SaleItemsTableProcessedTableManager =
         bool saleId,
         bool productId,
         bool variantId,
+        bool employeeId,
         bool saleReturnItemsRefs,
       })
     >;

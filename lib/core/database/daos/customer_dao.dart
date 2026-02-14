@@ -47,14 +47,80 @@ class CustomerDao extends DatabaseAccessor<AppDatabase> with _$CustomerDaoMixin 
     return (delete(customers)..where((c) => c.id.equals(id))).go();
   }
 
+  /// Generate the next sequential transaction number for a given prefix.
+  /// e.g. PAY-0001, DSC-0001, SAL-0001, RET-0001
+  Future<String> _nextTransactionNumber(String prefix) async {
+    final result = await customSelect(
+      'SELECT COUNT(*) AS cnt FROM customer_transactions WHERE transaction_number LIKE ?',
+      variables: [Variable<String>('$prefix-%')],
+    ).getSingle();
+    final count = result.read<int>('cnt');
+    return '$prefix-${(count + 1).toString().padLeft(4, '0')}';
+  }
+
+  /// Transaction types that are managed by SaleDao and must NOT be routed
+  /// through this method. SaleDao updates customer balance directly, so
+  /// routing these here would cause double balance updates.
+  static const _saleOwnedTypes = {
+    'sale',
+    'sale_void',
+    'sale_return',
+    'refund',
+    'refund_reversal',
+  };
+
   Future<int> createTransaction(CustomerTransactionsCompanion tx) {
     return transaction(() async {
-      final txId = await into(customerTransactions).insert(tx);
+      // Guard: reject types owned by SaleDao to prevent double balance updates
+      final type = tx.transactionType.value;
+      if (_saleOwnedTypes.contains(type)) {
+        throw StateError(
+          'CustomerDao.createTransaction() must not be used for "$type" transactions. '
+          'These are managed by SaleDao which updates balance directly.',
+        );
+      }
+
+      // Auto-generate transaction number if not provided
+      var companion = tx;
+      if (!tx.transactionNumber.present || tx.transactionNumber.value == null) {
+        String prefix;
+        switch (type) {
+          case 'payment':
+            prefix = 'CPAY';
+            break;
+          case 'discount':
+            prefix = 'CDSC';
+            break;
+          case 'sale':
+            prefix = 'SAL';
+            break;
+          case 'sale_return':
+            prefix = 'SRET';
+            break;
+          case 'payment_reversal':
+            prefix = 'CPRV';
+            break;
+          case 'credit_note':
+            prefix = 'CCRN';
+            break;
+          case 'credit_note_reversal':
+            prefix = 'CCRV';
+            break;
+          case 'adjustment':
+            prefix = 'CADJ';
+            break;
+          default:
+            prefix = 'CTXN';
+        }
+        final txNumber = await _nextTransactionNumber(prefix);
+        companion = companion.copyWith(transactionNumber: Value(txNumber));
+      }
+
+      final txId = await into(customerTransactions).insert(companion);
 
       final customerId = tx.customerId.value;
       final deltaCents = tx.amountCents.value.toBigInt().toInt();
 
-      final type = tx.transactionType.value;
       final affectsBalance = type == 'payment' ||
           type == 'payment_reversal' ||
           type == 'discount' ||
@@ -83,6 +149,11 @@ class CustomerDao extends DatabaseAccessor<AppDatabase> with _$CustomerDaoMixin 
 
       return txId;
     });
+  }
+
+  Future<CustomerTransaction?> getTransaction(int transactionId) {
+    return (select(customerTransactions)..where((t) => t.id.equals(transactionId)))
+        .getSingleOrNull();
   }
 
   Stream<List<CustomerTransaction>> watchCustomerTransactions(int customerId) {

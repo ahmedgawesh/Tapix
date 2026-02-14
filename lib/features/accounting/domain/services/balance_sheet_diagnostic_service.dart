@@ -69,8 +69,8 @@ class BalanceSheetDiagnosticService {
   ///
   /// [totalAssets] - Sum of all asset accounts (debit natural)
   /// [totalLiabilities] - Sum of all liability accounts (credit natural)
-  /// [ownerCapital] - Sum of equity accounts only (no retained earnings)
-  /// [netIncome] - Revenue minus Expenses (retained earnings for period)
+  /// [ownerCapital] - Sum of equity accounts
+  /// [netIncome] - Revenue minus Expenses
   /// [totalEquity] - ownerCapital + netIncome
   /// [differenceCents] - totalAssets - (totalLiabilities + totalEquity)
   BalanceSheetDiagnosticResult analyze({
@@ -104,8 +104,7 @@ class BalanceSheetDiagnosticService {
         hintTitleKey: 'reports.diag_missing_capital_title',
         hintDescriptionKey: 'reports.diag_missing_capital_desc',
         suggestedActionKey: 'reports.diag_missing_capital_action',
-        canAutoFix: true,
-        autoFixType: 'inject_capital',
+        canAutoFix: false,
       ));
     }
 
@@ -141,8 +140,7 @@ class BalanceSheetDiagnosticService {
     }
 
     // ── Rule 4: Period Not Closed ──
-    // If there's an open period and net income is non-zero,
-    // the retained earnings haven't been formally transferred yet
+    // If there's an open period and net income is non-zero
     if (hasOpenPeriod && netIncome != 0) {
       diagnostics.add(const BalanceSheetDiagnostic(
         cause: ImbalanceCause.periodNotClosed,

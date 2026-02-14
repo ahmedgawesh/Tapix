@@ -9,24 +9,24 @@ class Currency {
   final String symbol;
   final String name;
   final SymbolPosition symbolPosition;
-  final String locale; // For NumberFormat
+  final int decimalDigits;
 
   const Currency({
     required this.code,
     required this.symbol,
     required this.name,
     this.symbolPosition = SymbolPosition.before,
-    this.locale = 'en_US',
+    this.decimalDigits = 2,
   });
 
   static const List<Currency> supportedCurrencies = [
-    Currency(code: 'USD', symbol: '\$', name: 'US Dollar', locale: 'en_US'),
-    Currency(code: 'EUR', symbol: '€', name: 'Euro', locale: 'de_DE'), // Euro generally uses comma decimal
-    Currency(code: 'GBP', symbol: '£', name: 'British Pound', locale: 'en_GB'),
-    Currency(code: 'JPY', symbol: '¥', name: 'Japanese Yen', locale: 'ja_JP'),
-    Currency(code: 'SAR', symbol: '﷼', name: 'Saudi Riyal', symbolPosition: SymbolPosition.after, locale: 'ar_SA'),
-    Currency(code: 'AED', symbol: 'د.إ', name: 'UAE Dirham', symbolPosition: SymbolPosition.after, locale: 'ar_AE'),
-    Currency(code: 'EGP', symbol: 'E£', name: 'Egyptian Pound', locale: 'ar_EG'),
+    Currency(code: 'USD', symbol: '\$', name: 'US Dollar'),
+    Currency(code: 'EUR', symbol: '€', name: 'Euro', symbolPosition: SymbolPosition.after),
+    Currency(code: 'GBP', symbol: '£', name: 'British Pound'),
+    Currency(code: 'JPY', symbol: '¥', name: 'Japanese Yen', decimalDigits: 0),
+    Currency(code: 'SAR', symbol: '﷼', name: 'Saudi Riyal', symbolPosition: SymbolPosition.after),
+    Currency(code: 'AED', symbol: 'د.إ', name: 'UAE Dirham', symbolPosition: SymbolPosition.after),
+    Currency(code: 'EGP', symbol: 'E£', name: 'Egyptian Pound'),
   ];
 
   static Currency fromCode(String code) {
@@ -59,21 +59,24 @@ class CurrencyService {
   String format(int cents, {bool showSymbol = true}) {
     final currency = getCurrency();
     final value = cents / 100.0;
-    
-    // We can use NumberFormat for locale-aware formatting
-    // But we want to strictly follow the symbol and position defined in Currency
-    final formatter = NumberFormat.currency(
-      locale: currency.locale,
-      symbol: showSymbol ? currency.symbol : '',
-      decimalDigits: 2,
-    );
 
-    // Some locales put symbol at end automatically, but we want control if needed
-    // For now, let NumberFormat handle it based on locale which usually is correct
-    // But if we want to enforce our SymbolPosition:
-    
-    // Simple approach using NumberFormat.currency which handles mostly correctly
-    return formatter.format(value);
+    // Always use the app's current locale for digit rendering so that
+    // selecting EGP (or SAR/AED) does not switch digits to Arabic-Indic
+    // when the UI language is English or French.
+    final appLocale = Intl.getCurrentLocale();
+    final numberFormatter = NumberFormat.decimalPatternDigits(
+      locale: appLocale,
+      decimalDigits: currency.decimalDigits,
+    );
+    final formatted = numberFormatter.format(value);
+
+    if (!showSymbol) return formatted;
+
+    // Place symbol according to the currency's defined position
+    if (currency.symbolPosition == SymbolPosition.after) {
+      return '$formatted ${currency.symbol}';
+    }
+    return '${currency.symbol}$formatted';
   }
   
   /// Format cents as a display string with currency symbol

@@ -260,6 +260,7 @@ class EmployeeDao extends DatabaseAccessor<AppDatabase>
   }
 
   /// Get employee attendance counts for a period
+  /// Returns: {present, late, absent, leave, overtimeMinutes}
   Future<Map<String, int>> getEmployeeAttendanceCounts(
     int employeeId,
     DateTime startDate,
@@ -277,11 +278,30 @@ class EmployeeDao extends DatabaseAccessor<AppDatabase>
       'late': 0,
       'absent': 0,
       'leave': 0,
+      'overtimeMinutes': 0,
     };
     for (final a in result) {
       counts[a.status] = (counts[a.status] ?? 0) + 1;
+      counts['overtimeMinutes'] = (counts['overtimeMinutes'] ?? 0) + a.overtimeMinutes;
     }
     return counts;
+  }
+
+  /// Get all active employees
+  Future<List<Employee>> getAllActiveEmployees() {
+    return (select(employees)
+          ..where((e) => e.isActive.equals(true))
+          ..orderBy([(e) => OrderingTerm.asc(e.name)]))
+        .get();
+  }
+
+  /// Get attendance records for a date range
+  Future<List<Attendance>> getAttendanceByDateRange(DateTime startDate, DateTime endDate) {
+    return (select(attendances)
+          ..where((a) =>
+              a.attendanceDate.isBiggerOrEqualValue(startDate) &
+              a.attendanceDate.isSmallerOrEqualValue(endDate)))
+        .get();
   }
 
   // ==================== LEAVE REQUESTS ====================
@@ -424,6 +444,11 @@ class EmployeeDao extends DatabaseAccessor<AppDatabase>
 
   // ==================== COMMISSIONS ====================
 
+  /// Get a single commission by ID
+  Future<Commission?> getCommissionById(int id) {
+    return (select(commissions)..where((c) => c.id.equals(id))).getSingleOrNull();
+  }
+
   /// Watch commissions for an employee
   Stream<List<Commission>> watchEmployeeCommissions(
     int employeeId, {
@@ -461,6 +486,68 @@ class EmployeeDao extends DatabaseAccessor<AppDatabase>
   /// Update a commission
   Future<bool> updateCommission(Commission commission) {
     return update(commissions).replace(commission);
+  }
+
+  /// Get sales statistics for an employee within a date range.
+  /// Returns: {salesCount, salesTotalCents, returnsCount, returnsTotalCents}
+  Future<Map<String, int>> getEmployeeSalesStats(
+    int employeeId,
+    DateTime periodStart,
+    DateTime periodEnd,
+  ) async {
+    final salesResult = await customSelect(
+      '''
+      SELECT 
+        COUNT(s.id) AS sales_count,
+        COALESCE(SUM(s.total_cents), 0) AS sales_total
+      FROM sales s
+      WHERE s.employee_id = ?
+        AND s.sale_date >= ?
+        AND s.sale_date <= ?
+        AND s.status != 'voided'
+      ''',
+      variables: [
+        Variable.withInt(employeeId),
+        Variable.withDateTime(periodStart),
+        Variable.withDateTime(periodEnd),
+      ],
+    ).getSingleOrNull();
+
+    final returnsResult = await customSelect(
+      '''
+      SELECT 
+        COUNT(sr.id) AS returns_count,
+        COALESCE(SUM(sr.total_cents), 0) AS returns_total
+      FROM sale_returns sr
+      INNER JOIN sales s ON s.id = sr.sale_id
+      WHERE s.employee_id = ?
+        AND sr.return_date >= ?
+        AND sr.return_date <= ?
+        AND sr.status != 'voided'
+      ''',
+      variables: [
+        Variable.withInt(employeeId),
+        Variable.withDateTime(periodStart),
+        Variable.withDateTime(periodEnd),
+      ],
+    ).getSingleOrNull();
+
+    return {
+      'salesCount': salesResult?.read<int>('sales_count') ?? 0,
+      'salesTotalCents': salesResult?.read<int>('sales_total') ?? 0,
+      'returnsCount': returnsResult?.read<int>('returns_count') ?? 0,
+      'returnsTotalCents': returnsResult?.read<int>('returns_total') ?? 0,
+    };
+  }
+
+  /// Get all commissions linked to a specific sale
+  Future<List<Commission>> getCommissionsBySaleId(int saleId) {
+    return (select(commissions)..where((c) => c.saleId.equals(saleId))).get();
+  }
+
+  /// Delete all commissions linked to a specific sale
+  Future<int> deleteCommissionsBySaleId(int saleId) {
+    return (delete(commissions)..where((c) => c.saleId.equals(saleId))).go();
   }
 
   /// Get total commission for an employee in a period

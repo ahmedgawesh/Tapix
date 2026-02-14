@@ -36,6 +36,11 @@ abstract class EmployeeRepository {
     int? managerId,
     int? salaryCents,
     int defaultCommissionRateBps = 0,
+    int? fixedCommissionCents,
+    String commissionType = 'percentage',
+    int? salesTargetCents,
+    int? targetBonusCents,
+    String targetPeriod = 'monthly',
     String payPeriodType = 'monthly',
     int workingDaysPerPeriod = 26,
     int workingHoursPerDay = 8,
@@ -43,6 +48,8 @@ abstract class EmployeeRepository {
     int lateDeductionRateBps = 2500,
     required int currencyId,
     DateTime? hireDate,
+    String weeklyOffDays = '[5,6]',
+    int annualLeaveDays = 21,
     String? notes,
   });
 
@@ -279,6 +286,14 @@ abstract class EmployeeRepository {
 
   /// Get total commission for an employee in a period
   Future<int> getTotalCommissionCents(int employeeId, String period);
+
+  /// Get sales statistics for an employee within a date range.
+  /// Returns: {salesCount, salesTotalCents, returnsCount, returnsTotalCents}
+  Future<Map<String, int>> getEmployeeSalesStats(
+    int employeeId,
+    DateTime periodStart,
+    DateTime periodEnd,
+  );
 
   // ==================== PERFORMANCE ====================
 

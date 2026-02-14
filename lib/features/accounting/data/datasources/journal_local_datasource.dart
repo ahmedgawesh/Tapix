@@ -45,6 +45,9 @@ abstract class JournalLocalDatasource {
   // Trial Balance & Reconciliation
   Future<List<Account>> getAllActiveAccounts();
   Future<List<JournalEntry>> getPostedJournalEntries();
+  Future<bool> isDateInClosedPeriod(DateTime date);
+  Future<int> getCustomerBalanceTotal();
+  Future<int> getSupplierBalanceTotal();
 
   // Date-Range Queries
   Stream<List<JournalEntryLine>> watchPostedLinesByDateRange(
@@ -195,6 +198,30 @@ class JournalLocalDatasourceImpl implements JournalLocalDatasource {
   @override
   Future<List<JournalEntry>> getPostedJournalEntries() =>
       _accountingDao.getPostedJournalEntries();
+
+  @override
+  Future<bool> isDateInClosedPeriod(DateTime date) =>
+      _accountingDao.isDateInClosedPeriod(date);
+
+  @override
+  Future<int> getCustomerBalanceTotal() async {
+    final db = _accountingDao.attachedDatabase;
+    final row = await _accountingDao.customSelect(
+      'SELECT COALESCE(SUM(balance_cents), 0) AS total FROM customers',
+      readsFrom: {db.customers},
+    ).getSingle();
+    return row.read<int>('total');
+  }
+
+  @override
+  Future<int> getSupplierBalanceTotal() async {
+    final db = _accountingDao.attachedDatabase;
+    final row = await _accountingDao.customSelect(
+      'SELECT COALESCE(SUM(balance_cents), 0) AS total FROM suppliers',
+      readsFrom: {db.suppliers},
+    ).getSingle();
+    return row.read<int>('total');
+  }
 
   // ── Date-Range Queries ──────────────────────────────────
 
