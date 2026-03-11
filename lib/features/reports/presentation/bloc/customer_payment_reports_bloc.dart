@@ -108,10 +108,12 @@ class CustomerPaymentReportsData {
 class CustomerPaymentReportsBloc extends RealtimeBloc<
     CustomerPaymentReportsData, CustomerPaymentReportsEvent> {
   final AppDatabase _db;
-  ReportDateRange _dateRange = ReportDateRange.thisMonth();
+  ReportDateRange _dateRange;
   String? _methodFilter;
 
-  CustomerPaymentReportsBloc(this._db) : super(const RealtimeLoading());
+  CustomerPaymentReportsBloc(this._db, {String defaultDateRange = 'month'})
+      : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+        super(const RealtimeLoading());
 
   ReportDateRange get dateRange => _dateRange;
 

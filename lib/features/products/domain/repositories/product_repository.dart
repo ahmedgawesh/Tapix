@@ -8,6 +8,7 @@ abstract class ProductRepository {
   Future<List<Product>> searchProducts(String query, {bool? isActive = true});
   Future<Product?> findBySku(String sku);
   Future<Product?> findByBarcode(String barcode);
+  Future<Product?> findByName(String name);
   
   Future<List<Product>> filterProducts({
     int? categoryId,
@@ -15,12 +16,14 @@ abstract class ProductRepository {
     int limit = 50,
     int offset = 0,
     bool? isActive = true,
+    int lowStockThreshold = 5,
   });
 
   Stream<List<Product>> watchFilteredProducts({
     int? categoryId,
     String? stockStatus,
     bool? isActive = true,
+    int lowStockThreshold = 5,
   });
 
   Stream<List<Product>> watchProductsForExport({

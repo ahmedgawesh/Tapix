@@ -116,11 +116,13 @@ class TopCustomersData {
 class TopCustomersBloc
     extends RealtimeBloc<TopCustomersData, TopCustomersEvent> {
   final AppDatabase _db;
-  ReportDateRange _dateRange = ReportDateRange.thisMonth();
+  ReportDateRange _dateRange;
   TopCustomersSortType _sort = TopCustomersSortType.revenueDesc;
   TopCustomersViewType _view = TopCustomersViewType.byRevenue;
 
-  TopCustomersBloc(this._db) : super(const RealtimeLoading());
+  TopCustomersBloc(this._db, {String defaultDateRange = 'month'})
+      : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+        super(const RealtimeLoading());
 
   ReportDateRange get dateRange => _dateRange;
 

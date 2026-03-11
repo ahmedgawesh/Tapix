@@ -94,8 +94,8 @@ class SupplierDao extends DatabaseAccessor<AppDatabase> with _$SupplierDaoMixin 
           case 'purchase':
             prefix = 'PUR';
             break;
-          case 'return':
-            prefix = 'PRET';
+          case 'refund':
+            prefix = 'SRFN';
             break;
           case 'payment_reversal':
             prefix = 'SPRV';
@@ -144,6 +144,66 @@ class SupplierDao extends DatabaseAccessor<AppDatabase> with _$SupplierDaoMixin 
       }
 
       return txId;
+    });
+  }
+
+  /// Only 'payment' and 'discount' transactions may be edited.
+  static const _editableTypes = {'payment', 'discount'};
+
+  /// Update a payment or discount transaction amount.
+  /// Returns the old transaction for audit purposes.
+  /// Adjusts the supplier balance by the delta (newAmount - oldAmount).
+  Future<SupplierTransaction> updateTransactionAmount(
+    int transactionId, {
+    required int newAmountCents,
+    String? newDescription,
+  }) {
+    return transaction(() async {
+      final existing = await (select(supplierTransactions)
+            ..where((t) => t.id.equals(transactionId)))
+          .getSingleOrNull();
+      if (existing == null) {
+        throw StateError('Transaction #$transactionId not found');
+      }
+      if (!_editableTypes.contains(existing.transactionType)) {
+        throw StateError(
+          'Only payment and discount transactions can be edited. '
+          'Got: "${existing.transactionType}"',
+        );
+      }
+
+      final oldCents = existing.amountCents.toBigInt().toInt();
+      // For payments/discounts the stored amount is negative (reduces balance).
+      // The caller passes the absolute new amount; we preserve the sign.
+      final signedNewAmount = oldCents < 0 ? -newAmountCents.abs() : newAmountCents.abs();
+      final deltaCents = signedNewAmount - oldCents;
+
+      // Update the transaction row
+      await (update(supplierTransactions)
+            ..where((t) => t.id.equals(transactionId)))
+          .write(SupplierTransactionsCompanion(
+        amountCents: Value(Decimal.fromInt(signedNewAmount)),
+        description: newDescription != null ? Value(newDescription) : const Value.absent(),
+      ));
+
+      // Adjust supplier balance by the delta
+      if (deltaCents != 0) {
+        final supplier = await (select(suppliers)
+              ..where((s) => s.id.equals(existing.supplierId)))
+            .getSingleOrNull();
+        if (supplier != null) {
+          final oldBalance = supplier.balanceCents.toBigInt().toInt();
+          final newBalance = oldBalance + deltaCents;
+          await (update(suppliers)..where((s) => s.id.equals(existing.supplierId))).write(
+            SuppliersCompanion(
+              balanceCents: Value(Decimal.fromInt(newBalance)),
+              updatedAt: Value(DateTime.now()),
+            ),
+          );
+        }
+      }
+
+      return existing;
     });
   }
 

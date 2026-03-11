@@ -2,9 +2,11 @@ import 'package:decimal/decimal.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 
+import '../../../../core/services/crashlytics_service.dart';
 import '../../domain/repositories/purchase_repository.dart';
 import '../../../products/domain/entities/product_entity.dart';
 import '../../../products/domain/entities/product_variant_entity.dart';
+import '../../../products/domain/repositories/product_repository.dart';
 import '../../../products/domain/repositories/product_variant_repository.dart';
 
 // ==================== ENUMS ====================
@@ -14,6 +16,14 @@ enum DiscountMode { perItem, invoice }
 
 /// Payment method for purchase invoice
 enum PurchasePaymentMethod { cash, credit, card, cheque, purchaseOrder }
+
+/// How to handle overpayment when paid amount exceeds invoice total
+enum OverpaymentHandling { 
+  /// Return the excess as change to the party
+  returnChange,
+  /// Add the excess to the party's credit balance
+  addToBalance,
+}
 
 // ==================== STATE ====================
 
@@ -34,10 +44,16 @@ class PurchaseFormState extends Equatable {
   final PurchasePaymentMethod paymentMethod;
   final Decimal taxRatePercent;
   final Decimal paidAmountCents;
+  final OverpaymentHandling overpaymentHandling;
   final bool isSubmitting;
   final String? error;
   final bool isSuccess;
   final bool hasUnsavedChanges;
+  // Global tax settings
+  final bool enableTaxCalculations;
+  final int defaultPurchaseTaxRateBps;
+  // Editing posted purchase flag
+  final bool isEditingPosted;
 
   PurchaseFormState({
     this.purchaseId,
@@ -56,10 +72,14 @@ class PurchaseFormState extends Equatable {
     this.paymentMethod = PurchasePaymentMethod.cash,
     Decimal? taxRatePercent,
     Decimal? paidAmountCents,
+    this.overpaymentHandling = OverpaymentHandling.returnChange,
     this.isSubmitting = false,
     this.error,
     this.isSuccess = false,
     this.hasUnsavedChanges = false,
+    this.enableTaxCalculations = true,
+    this.defaultPurchaseTaxRateBps = 0,
+    this.isEditingPosted = false,
   }) : invoiceDiscountCents = invoiceDiscountCents ?? Decimal.zero,
        invoiceDiscountPercent = invoiceDiscountPercent ?? Decimal.zero,
        taxRatePercent = taxRatePercent ?? Decimal.zero,
@@ -93,7 +113,10 @@ class PurchaseFormState extends Equatable {
 
   Decimal get itemTaxCents => items.fold(
         Decimal.zero,
-        (sum, item) => sum + item.taxCents,
+        (sum, item) => sum + item.taxCentsWithSettings(
+          enableTaxCalculations: enableTaxCalculations,
+          defaultTaxRateBps: defaultPurchaseTaxRateBps,
+        ),
       );
 
   Decimal get taxCents => itemTaxCents;
@@ -134,11 +157,15 @@ class PurchaseFormState extends Equatable {
     PurchasePaymentMethod? paymentMethod,
     Decimal? taxRatePercent,
     Decimal? paidAmountCents,
+    OverpaymentHandling? overpaymentHandling,
     bool? isSubmitting,
     String? error,
     bool? isSuccess,
     bool clearDueDate = false,
     bool? hasUnsavedChanges,
+    bool? enableTaxCalculations,
+    int? defaultPurchaseTaxRateBps,
+    bool? isEditingPosted,
   }) {
     return PurchaseFormState(
       purchaseId: purchaseId ?? this.purchaseId,
@@ -157,10 +184,14 @@ class PurchaseFormState extends Equatable {
       paymentMethod: paymentMethod ?? this.paymentMethod,
       taxRatePercent: taxRatePercent ?? this.taxRatePercent,
       paidAmountCents: paidAmountCents ?? this.paidAmountCents,
+      overpaymentHandling: overpaymentHandling ?? this.overpaymentHandling,
       isSubmitting: isSubmitting ?? this.isSubmitting,
       error: error,
       isSuccess: isSuccess ?? this.isSuccess,
       hasUnsavedChanges: hasUnsavedChanges ?? this.hasUnsavedChanges,
+      enableTaxCalculations: enableTaxCalculations ?? this.enableTaxCalculations,
+      defaultPurchaseTaxRateBps: defaultPurchaseTaxRateBps ?? this.defaultPurchaseTaxRateBps,
+      isEditingPosted: isEditingPosted ?? this.isEditingPosted,
     );
   }
 
@@ -169,8 +200,9 @@ class PurchaseFormState extends Equatable {
         purchaseId, purchaseNumber, supplierId, supplierName, currencyId, items,
         discountMode, invoiceDiscountCents, invoiceDiscountPercent, supplierInvoiceRef,
         notes, purchaseDate, dueDate,
-        paymentMethod, taxRatePercent, paidAmountCents,
+        paymentMethod, taxRatePercent, paidAmountCents, overpaymentHandling,
         isSubmitting, error, isSuccess, hasUnsavedChanges,
+        enableTaxCalculations, defaultPurchaseTaxRateBps, isEditingPosted,
       ];
 }
 
@@ -213,13 +245,37 @@ class PurchaseLineItem extends Equatable {
   Decimal get subtotalCents => unitCostCents * Decimal.fromInt(quantity);
   Decimal get netCents => subtotalCents - discountCents;
 
-  /// Tax is always computed from the product's purchase tax rate.
+  /// Tax is computed from the product's purchase tax rate.
   /// Uses proper rounding (round half-up) instead of truncation.
-  Decimal get taxCents {
-    if (!product.isTaxable || product.purchaseTaxRateBps <= 0) return Decimal.zero;
+  /// This getter uses product settings - use taxCentsWithSettings for global settings support.
+  Decimal get taxCents => taxCentsWithSettings(enableTaxCalculations: true, defaultTaxRateBps: 0);
+
+  /// Calculate tax respecting global settings.
+  /// If enableTaxCalculations is false, returns zero.
+  /// If product has its own tax rate (isTaxable && purchaseTaxRateBps > 0), uses that.
+  /// Otherwise, uses the defaultTaxRateBps from global settings.
+  Decimal taxCentsWithSettings({
+    required bool enableTaxCalculations,
+    required int defaultTaxRateBps,
+  }) {
+    if (!enableTaxCalculations) return Decimal.zero;
+    
     final taxable = netCents;
     if (taxable <= Decimal.zero) return Decimal.zero;
-    final raw = taxable * Decimal.fromInt(product.purchaseTaxRateBps) / Decimal.fromInt(10000);
+    
+    // Determine which tax rate to use
+    int taxRateBps;
+    if (product.isTaxable && product.purchaseTaxRateBps > 0) {
+      // Product has its own tax rate - use it
+      taxRateBps = product.purchaseTaxRateBps;
+    } else if (defaultTaxRateBps > 0) {
+      // Use global default tax rate
+      taxRateBps = defaultTaxRateBps;
+    } else {
+      return Decimal.zero;
+    }
+    
+    final raw = taxable * Decimal.fromInt(taxRateBps) / Decimal.fromInt(10000);
     return Decimal.fromBigInt(raw.round());
   }
 
@@ -299,11 +355,32 @@ abstract class PurchaseFormEvent extends Equatable {
 class PurchaseFormInitialized extends PurchaseFormEvent {
   final int? purchaseId;
   final int currencyId;
+  final bool enableTaxCalculations;
+  final int defaultPurchaseTaxRateBps;
+  final bool isEditingPosted;
 
-  const PurchaseFormInitialized({this.purchaseId, required this.currencyId});
+  const PurchaseFormInitialized({
+    this.purchaseId,
+    required this.currencyId,
+    this.enableTaxCalculations = true,
+    this.defaultPurchaseTaxRateBps = 0,
+    this.isEditingPosted = false,
+  });
 
   @override
-  List<Object?> get props => [purchaseId, currencyId];
+  List<Object?> get props => [purchaseId, currencyId, enableTaxCalculations, defaultPurchaseTaxRateBps, isEditingPosted];
+}
+
+class PurchaseTaxSettingsChanged extends PurchaseFormEvent {
+  final bool enableTaxCalculations;
+  final int defaultPurchaseTaxRateBps;
+  const PurchaseTaxSettingsChanged({
+    required this.enableTaxCalculations,
+    required this.defaultPurchaseTaxRateBps,
+  });
+
+  @override
+  List<Object?> get props => [enableTaxCalculations, defaultPurchaseTaxRateBps];
 }
 
 class PurchaseSupplierChanged extends PurchaseFormEvent {
@@ -451,11 +528,20 @@ class PurchasePaidAmountChanged extends PurchaseFormEvent {
   List<Object?> get props => [paidAmountCents];
 }
 
+class PurchaseOverpaymentHandlingChanged extends PurchaseFormEvent {
+  final OverpaymentHandling handling;
+  const PurchaseOverpaymentHandlingChanged(this.handling);
+
+  @override
+  List<Object?> get props => [handling];
+}
+
 // ==================== BLOC ====================
 
 class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
   final PurchaseRepository _repository;
   final ProductVariantRepository _variantRepository;
+  final ProductRepository _productRepository;
   int _lineCounter = 0;
 
   // Cached color/size lookup maps
@@ -463,7 +549,7 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
   Map<int, String?> _colorHexes = {};
   Map<int, String> _sizeNames = {};
 
-  PurchaseFormBloc(this._repository, this._variantRepository)
+  PurchaseFormBloc(this._repository, this._variantRepository, this._productRepository)
       : super(PurchaseFormState(
           currencyId: 1,
           purchaseDate: DateTime.now(),
@@ -484,6 +570,8 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
     on<PurchasePaymentMethodChanged>(_onPaymentMethodChanged);
     on<PurchaseTaxRateChanged>(_onTaxRateChanged);
     on<PurchasePaidAmountChanged>(_onPaidAmountChanged);
+    on<PurchaseOverpaymentHandlingChanged>(_onOverpaymentHandlingChanged);
+    on<PurchaseTaxSettingsChanged>(_onTaxSettingsChanged);
   }
 
   Future<void> _loadColorSizeLookups() async {
@@ -536,9 +624,15 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
         emit(state.copyWith(
           currencyId: event.currencyId,
           purchaseNumber: nextNumber,
+          enableTaxCalculations: event.enableTaxCalculations,
+          defaultPurchaseTaxRateBps: event.defaultPurchaseTaxRateBps,
         ));
       } catch (_) {
-        emit(state.copyWith(currencyId: event.currencyId));
+        emit(state.copyWith(
+          currencyId: event.currencyId,
+          enableTaxCalculations: event.enableTaxCalculations,
+          defaultPurchaseTaxRateBps: event.defaultPurchaseTaxRateBps,
+        ));
       }
       return;
     }
@@ -546,6 +640,9 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
     emit(state.copyWith(
       purchaseId: event.purchaseId,
       currencyId: event.currencyId,
+      enableTaxCalculations: event.enableTaxCalculations,
+      defaultPurchaseTaxRateBps: event.defaultPurchaseTaxRateBps,
+      isEditingPosted: event.isEditingPosted,
     ));
 
     try {
@@ -561,7 +658,9 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
       // Fetch real variant data for color/size resolution
       final variantFutures = <int, Future<ProductVariant?>>{};
       final defaultVariantFutures = <int, Future<ProductVariant?>>{};
+      final productIds = <int>{};
       for (final i in items) {
+        productIds.add(i.productId);
         if (i.variantId != null && !variantFutures.containsKey(i.variantId)) {
           variantFutures[i.variantId!] = _variantRepository.getVariantById(i.variantId!);
         }
@@ -580,20 +679,29 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
         resolvedDefaultVariants[entry.key] = await entry.value;
       }
 
+      // Fetch real product data for tax info
+      final resolvedProducts = <int, Product?>{};
+      for (final pid in productIds) {
+        final stream = _productRepository.watchProduct(pid);
+        resolvedProducts[pid] = await stream.first;
+      }
+
       final mappedItems = items.map((i) {
+        final realProduct = resolvedProducts[i.productId];
         final product = Product(
           id: i.productId,
-          name: i.productName ?? 'Product #${i.productId}',
+          name: i.productName ?? realProduct?.name ?? 'Product #${i.productId}',
           costCents: i.unitCostCents,
-          priceCents: Decimal.zero,
-          stockQuantity: 0,
-          minQuantity: 0,
+          priceCents: realProduct?.priceCents ?? Decimal.zero,
+          wholesalePriceCents: realProduct?.wholesalePriceCents,
+          stockQuantity: realProduct?.stockQuantity ?? 0,
+          minQuantity: realProduct?.minQuantity ?? 0,
           hasVariants: i.variantId != null,
-          isTaxable: false,
-          purchaseTaxRateBps: 0,
-          salesTaxRateBps: 0,
-          isActive: true,
-          trackInventory: true,
+          isTaxable: realProduct?.isTaxable ?? false,
+          purchaseTaxRateBps: realProduct?.purchaseTaxRateBps ?? 0,
+          salesTaxRateBps: realProduct?.salesTaxRateBps ?? 0,
+          isActive: realProduct?.isActive ?? true,
+          trackInventory: realProduct?.trackInventory ?? true,
         );
 
         final realVariant = i.variantId != null ? resolvedVariants[i.variantId!] : null;
@@ -902,12 +1010,20 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
       }
 
       // Determine effective paid amount:
-      // - cash: user-entered paid amount
+      // - cash: depends on overpayment handling
+      //   - returnChange: cap at totalCents (excess is returned as cash change)
+      //   - addToBalance: use full paidAmountCents (excess goes to supplier credit)
       // - card: auto-set to total (fully settled)
       // - credit/cheque: 0 (full amount goes to supplier balance)
       // - purchaseOrder: auto-set to total (no balance impact, just a reminder)
       final effectivePaidCents = switch (state.paymentMethod) {
-        PurchasePaymentMethod.cash => state.paidAmountCents,
+        PurchasePaymentMethod.cash => () {
+          if (state.paidAmountCents > state.totalCents &&
+              state.overpaymentHandling == OverpaymentHandling.returnChange) {
+            return state.totalCents;
+          }
+          return state.paidAmountCents;
+        }(),
         PurchasePaymentMethod.card => state.totalCents,
         PurchasePaymentMethod.credit => Decimal.zero,
         PurchasePaymentMethod.cheque => Decimal.zero,
@@ -931,8 +1047,42 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
           dueDate: state.dueDate,
         );
 
+        CrashlyticsService.instance.logAction('purchase_created', {
+          'purchase_id': purchaseId.toString(),
+          'total_cents': state.totalCents.toString(),
+          'items_count': state.items.length.toString(),
+        });
         emit(state.copyWith(
           purchaseId: purchaseId,
+          isSubmitting: false,
+          isSuccess: true,
+          hasUnsavedChanges: false,
+        ));
+      } else if (state.isEditingPosted) {
+        // Editing a posted purchase: void original and create new
+        final newPurchaseId = await _repository.editPostedPurchase(
+          originalPurchaseId: state.purchaseId!,
+          supplierId: state.supplierId!,
+          currencyId: state.currencyId,
+          subtotalCents: state.subtotalCents,
+          discountCents: state.totalDiscountCents,
+          taxCents: state.taxCents,
+          totalCents: state.totalCents,
+          paidAmountCents: effectivePaidCents,
+          items: items,
+          paymentMethod: state.paymentMethod.name,
+          supplierInvoiceRef: state.supplierInvoiceRef,
+          notes: state.notes,
+          purchaseDate: state.purchaseDate,
+          dueDate: state.dueDate,
+        );
+
+        CrashlyticsService.instance.logAction('purchase_edited_posted', {
+          'purchase_id': newPurchaseId.toString(),
+          'original_purchase_id': state.purchaseId.toString(),
+        });
+        emit(state.copyWith(
+          purchaseId: newPurchaseId,
           isSubmitting: false,
           isSuccess: true,
           hasUnsavedChanges: false,
@@ -959,13 +1109,21 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
           throw Exception('Failed to update purchase');
         }
 
+        CrashlyticsService.instance.logAction('purchase_updated', {
+          'purchase_id': state.purchaseId.toString(),
+        });
         emit(state.copyWith(
           isSubmitting: false,
           isSuccess: true,
           hasUnsavedChanges: false,
         ));
       }
-    } catch (e) {
+    } catch (e, st) {
+      CrashlyticsService.instance.recordError(
+        e,
+        stackTrace: st,
+        reason: 'PurchaseFormBloc._onSubmitted failed',
+      );
       emit(state.copyWith(
         isSubmitting: false,
         error: e.toString(),
@@ -996,6 +1154,13 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
     Emitter<PurchaseFormState> emit,
   ) {
     emit(state.copyWith(paidAmountCents: event.paidAmountCents));
+  }
+
+  void _onOverpaymentHandlingChanged(
+    PurchaseOverpaymentHandlingChanged event,
+    Emitter<PurchaseFormState> emit,
+  ) {
+    emit(state.copyWith(overpaymentHandling: event.handling));
   }
 
   /// Distribute [total] proportionally across items based on [weights].
@@ -1044,5 +1209,15 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
         error: e.toString(),
       ));
     }
+  }
+
+  void _onTaxSettingsChanged(
+    PurchaseTaxSettingsChanged event,
+    Emitter<PurchaseFormState> emit,
+  ) {
+    emit(state.copyWith(
+      enableTaxCalculations: event.enableTaxCalculations,
+      defaultPurchaseTaxRateBps: event.defaultPurchaseTaxRateBps,
+    ));
   }
 }

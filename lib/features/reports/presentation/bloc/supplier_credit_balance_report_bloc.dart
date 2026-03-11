@@ -119,11 +119,13 @@ class SupplierCreditBalanceReportData {
 class SupplierCreditBalanceReportBloc extends RealtimeBloc<
     SupplierCreditBalanceReportData, SupplierCreditBalanceReportEvent> {
   final AppDatabase _db;
-  ReportDateRange _dateRange = ReportDateRange.thisMonth();
+  ReportDateRange _dateRange;
   SupplierCreditBalanceSortType _sort =
       SupplierCreditBalanceSortType.balanceDesc;
 
-  SupplierCreditBalanceReportBloc(this._db) : super(const RealtimeLoading());
+  SupplierCreditBalanceReportBloc(this._db, {String defaultDateRange = 'month'})
+      : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+        super(const RealtimeLoading());
 
   ReportDateRange get dateRange => _dateRange;
 
@@ -223,13 +225,15 @@ class SupplierCreditBalanceReportBloc extends RealtimeBloc<
     return list;
   }
 
-  /// Loads supplier credit balances from supplier_transactions within the date range.
+  /// Loads supplier credit balances from supplier_transactions AND opening_balance_cents
+  /// from the suppliers table within the date range.
   ///
   /// Balance logic (credit = what suppliers owe us):
   /// - Purchases (positive amount_cents) → decrease credit (we owe them)
   /// - Returns (negative amount_cents, type credit_note) → increase credit (they owe us)
   /// - Payments (negative amount_cents, type payment) → increase credit (we overpaid)
   /// - Discounts (negative amount_cents, type discount) → increase credit
+  /// - Opening balance from suppliers.opening_balance_cents is also included
   ///
   /// Only suppliers with negative net balance (SUM < 0) are included.
   /// Credit balance is stored as ABS value for display purposes.
@@ -243,22 +247,31 @@ class SupplierCreditBalanceReportBloc extends RealtimeBloc<
         s.id AS supplier_id,
         s.name AS supplier_name,
         s.phone AS phone,
-        COALESCE(SUM(CASE WHEN st.amount_cents > 0 THEN st.amount_cents ELSE 0 END), 0) AS total_purchases_cents,
-        COALESCE(SUM(CASE WHEN st.amount_cents < 0 AND st.transaction_type = 'credit_note' THEN ABS(st.amount_cents) ELSE 0 END), 0) AS total_returns_cents,
-        COALESCE(SUM(CASE WHEN st.amount_cents < 0 AND st.transaction_type = 'payment' THEN ABS(st.amount_cents) ELSE 0 END), 0) AS total_payments_cents,
-        COALESCE(SUM(CASE WHEN st.amount_cents < 0 AND st.transaction_type = 'discount' THEN ABS(st.amount_cents) ELSE 0 END), 0) AS total_discounts_cents,
-        COALESCE(SUM(st.amount_cents), 0) AS net_balance_cents,
-        COUNT(st.id) AS transaction_count,
-        MAX(st.transaction_date) AS last_transaction_at
+        COALESCE(tx.total_purchases_cents, 0) AS total_purchases_cents,
+        COALESCE(tx.total_returns_cents, 0) AS total_returns_cents,
+        COALESCE(tx.total_payments_cents, 0) AS total_payments_cents,
+        COALESCE(tx.total_discounts_cents, 0) AS total_discounts_cents,
+        COALESCE(tx.net_balance_cents, 0) + s.opening_balance_cents AS net_balance_cents,
+        COALESCE(tx.transaction_count, 0) + CASE WHEN s.opening_balance_cents != 0 THEN 1 ELSE 0 END AS transaction_count,
+        tx.last_transaction_at
       FROM suppliers s
-      LEFT JOIN supplier_transactions st 
-        ON st.supplier_id = s.id
-        AND st.transaction_date >= ?
-        AND st.transaction_date <= ?
+      LEFT JOIN (
+        SELECT 
+          st.supplier_id,
+          SUM(CASE WHEN st.transaction_type = 'purchase' THEN st.amount_cents ELSE 0 END) AS total_purchases_cents,
+          SUM(CASE WHEN st.transaction_type IN ('credit_note', 'refund') THEN ABS(st.amount_cents) ELSE 0 END) AS total_returns_cents,
+          SUM(CASE WHEN st.transaction_type = 'payment' THEN ABS(st.amount_cents) ELSE 0 END) AS total_payments_cents,
+          SUM(CASE WHEN st.transaction_type = 'discount' THEN ABS(st.amount_cents) ELSE 0 END) AS total_discounts_cents,
+          SUM(st.amount_cents) AS net_balance_cents,
+          COUNT(st.id) AS transaction_count,
+          MAX(st.transaction_date) AS last_transaction_at
+        FROM supplier_transactions st
+        WHERE st.transaction_date >= ? AND st.transaction_date <= ?
+        GROUP BY st.supplier_id
+      ) tx ON tx.supplier_id = s.id
       WHERE s.is_active = 1
-      GROUP BY s.id
-      HAVING net_balance_cents < 0
-      ORDER BY net_balance_cents ASC
+        AND (COALESCE(tx.net_balance_cents, 0) + s.opening_balance_cents) < 0
+      ORDER BY (COALESCE(tx.net_balance_cents, 0) + s.opening_balance_cents) ASC
       ''',
       variables: [
         Variable.withString(startIso),

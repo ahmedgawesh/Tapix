@@ -129,10 +129,12 @@ class CustomerOption {
 class CustomerStatementReportBloc extends RealtimeBloc<CustomerStatementData,
     CustomerStatementReportEvent> {
   final AppDatabase _db;
-  ReportDateRange _dateRange = ReportDateRange.thisMonth();
+  ReportDateRange _dateRange;
   int? _customerId;
 
-  CustomerStatementReportBloc(this._db) : super(const RealtimeLoading());
+  CustomerStatementReportBloc(this._db, {String defaultDateRange = 'month'})
+      : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+        super(const RealtimeLoading());
 
   ReportDateRange get dateRange => _dateRange;
   int? get customerId => _customerId;

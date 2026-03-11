@@ -80,10 +80,11 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
     DateTime? purchaseDate,
     DateTime? dueDate,
   }) async {
-    final purchaseNumber = await generatePurchaseNumber();
+    // Purchase number is generated INSIDE the transaction (see below)
+    // to prevent race conditions when two purchases are created concurrently.
 
     final purchase = db.PurchasesCompanion(
-      purchaseNumber: Value(purchaseNumber),
+      purchaseNumber: const Value.absent(), // placeholder, set inside tx
       supplierId: Value(supplierId),
       currencyId: Value(currencyId),
       subtotalCents: Value(subtotalCents),
@@ -116,25 +117,37 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
           expiryDate: Value(item.expiryDate),
         )).toList();
 
-    // ATOMIC: Wrap purchase creation and journal entries in a single transaction.
-    // If any step fails, everything rolls back — preventing GL ↔ sub-ledger drift.
+    // Create purchase as draft — journal entries are deferred until postPurchase()
+    // to keep GL and supplier sub-ledger in sync.
     final userId = await _currentUserId();
 
-    final purchaseId = await _db.transaction(() async {
-      final id = await _datasource.createPurchase(purchase, itemCompanions);
-
-      // Create journal entries — MANDATORY, errors propagate
-      await _journalService.recordPurchaseJournalEntry(
-        purchaseId: id,
-        totalCents: totalCents.toBigInt().toInt(),
-        paidAmountCents: paidAmountCents.toBigInt().toInt(),
-        currencyId: currencyId,
-        paymentMethod: paymentMethod,
-        userId: userId,
-      );
-
-      return id;
-    });
+    const maxRetries = 3;
+    late int purchaseId;
+    for (int attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        purchaseId = await _db.transaction(() async {
+          // Generate purchase number INSIDE the transaction for atomicity
+          final purchaseNumber = await _datasource.generatePurchaseNumber();
+          final companionWithNumber = purchase.copyWith(
+            purchaseNumber: Value(purchaseNumber),
+          );
+          final id = await _datasource.createPurchase(companionWithNumber, itemCompanions);
+          return id;
+        });
+        break; // success
+      } catch (e) {
+        // Retry on UNIQUE constraint violation (concurrent purchase number)
+        final isUniqueViolation = e.toString().contains('UNIQUE constraint failed');
+        if (isUniqueViolation && attempt < maxRetries) {
+          developer.log(
+            'Purchase number collision on attempt $attempt, retrying...',
+            name: 'PurchaseRepository',
+          );
+          continue;
+        }
+        rethrow;
+      }
+    }
 
     // Audit log outside transaction (non-critical, fire-and-forget)
     _auditService.log(
@@ -142,7 +155,7 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
       entityId: purchaseId,
       action: 'create',
       newValue: {
-        'purchaseNumber': purchaseNumber,
+        'purchaseId': purchaseId,
         'supplierId': supplierId,
         'totalCents': totalCents.toString(),
         'itemCount': items.length,
@@ -211,26 +224,19 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
           expiryDate: Value(item.expiryDate),
         )).toList();
 
-    // Void old journal entries BEFORE updating the purchase record
+    // Void any legacy journal entries that may exist from old code flow
     await _journalService.voidJournalEntriesForSource(
       sourceTable: 'purchases',
       sourceId: purchaseId,
-      reason: 'Purchase updated',
+      reason: 'Purchase updated (draft)',
       userId: await _currentUserId(),
     );
 
     final ok = await _datasource.updatePurchase(purchaseId, purchase, itemCompanions);
 
     if (ok) {
-      // Re-create journal entries with new amounts
-      await _journalService.recordPurchaseJournalEntry(
-        purchaseId: purchaseId,
-        totalCents: totalCents.toBigInt().toInt(),
-        paidAmountCents: paidAmountCents.toBigInt().toInt(),
-        currencyId: currencyId,
-        paymentMethod: paymentMethod,
-        userId: await _currentUserId(),
-      );
+      // Journal entries are NOT created here — they are deferred to postPurchase()
+      // to keep GL and supplier sub-ledger in sync.
 
       // Audit: log purchase update
       await _auditService.log(
@@ -251,7 +257,33 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
 
   @override
   Future<void> postPurchase(int purchaseId) async {
+    final userId = await _currentUserId();
+
+    // Read purchase data BEFORE posting (need totalCents, paidAmountCents, etc.)
+    final purchase = await _datasource.getPurchaseById(purchaseId);
+    if (purchase == null) throw Exception('Purchase not found');
+
+    // Post purchase (updates stock, supplier balance, supplier transactions)
     await _datasource.postPurchase(purchaseId);
+
+    // Create journal entries AFTER posting so GL and sub-ledger stay in sync.
+    // Void any legacy journal entries that may have been created at draft time.
+    await _journalService.voidJournalEntriesForSource(
+      sourceTable: 'purchases',
+      sourceId: purchaseId,
+      reason: 'Re-creating journal entries on post',
+      userId: userId,
+    );
+
+    await _journalService.recordPurchaseJournalEntry(
+      purchaseId: purchaseId,
+      totalCents: purchase.totalCents.toBigInt().toInt(),
+      paidAmountCents: purchase.paidAmountCents.toBigInt().toInt(),
+      currencyId: purchase.currencyId,
+      taxCents: purchase.taxCents.toBigInt().toInt(),
+      paymentMethod: purchase.paymentMethod,
+      userId: userId,
+    );
 
     // Audit: log purchase posting (stock was updated)
     await _auditService.log(
@@ -259,24 +291,20 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
       entityId: purchaseId,
       action: 'post',
       newValue: {'status': 'posted'},
-      userId: await _currentUserId(),
+      userId: userId,
     );
   }
 
   @override
   Future<void> voidPurchase(int purchaseId) async {
-    // Void journal entries BEFORE voiding the purchase
-    try {
-      await _journalService.voidJournalEntriesForSource(
-        sourceTable: 'purchases',
-        sourceId: purchaseId,
-        reason: 'Purchase voided',
-        userId: await _currentUserId(),
-      );
-    } catch (e) {
-      developer.log('Warning: Failed to void journal entries for purchase #$purchaseId: $e',
-          name: 'PurchaseRepository');
-    }
+    // Void journal entries BEFORE voiding the purchase.
+    // This MUST succeed — if it fails the entire void is aborted to prevent GL drift.
+    await _journalService.voidJournalEntriesForSource(
+      sourceTable: 'purchases',
+      sourceId: purchaseId,
+      reason: 'Purchase voided',
+      userId: await _currentUserId(),
+    );
 
     await _datasource.voidPurchase(purchaseId);
 
@@ -290,7 +318,122 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
   }
 
   @override
+  Future<int> editPostedPurchase({
+    required int originalPurchaseId,
+    required int supplierId,
+    required int currencyId,
+    required Decimal subtotalCents,
+    required Decimal discountCents,
+    required Decimal taxCents,
+    required Decimal totalCents,
+    required Decimal paidAmountCents,
+    required List<PurchaseItemInput> items,
+    String? paymentMethod,
+    String? supplierInvoiceRef,
+    String? notes,
+    DateTime? purchaseDate,
+    DateTime? dueDate,
+  }) async {
+    // 1. Fetch original purchase to validate
+    final originalPurchase = await getPurchaseById(originalPurchaseId);
+    if (originalPurchase == null) {
+      throw StateError('Purchase #$originalPurchaseId not found');
+    }
+
+    // 2. Check accounting period is open for the original purchase date
+    final txDate = originalPurchase.purchaseDate;
+    final periodRows = await _db.customSelect(
+      '''SELECT id, is_closed FROM accounting_periods
+         WHERE start_date <= ? AND end_date >= ?
+         ORDER BY start_date DESC LIMIT 1''',
+      variables: [
+        Variable.withDateTime(txDate),
+        Variable.withDateTime(txDate),
+      ],
+      readsFrom: {_db.accountingPeriods},
+    ).get();
+    if (periodRows.isNotEmpty && periodRows.first.read<bool>('is_closed')) {
+      throw StateError(
+        'Cannot edit purchase: the accounting period containing this '
+        'purchase has been closed.',
+      );
+    }
+
+    // 3. Check if purchase has any non-voided returns - cannot edit if returns exist
+    final returns = await _db.customSelect(
+      'SELECT COUNT(*) as cnt FROM purchase_returns WHERE purchase_id = ? AND status != ?',
+      variables: [
+        Variable.withInt(originalPurchaseId),
+        Variable.withString('voided'),
+      ],
+      readsFrom: {_db.purchaseReturns},
+    ).getSingle();
+    if (returns.read<int>('cnt') > 0) {
+      throw StateError(
+        'Cannot edit purchase: it has associated returns. '
+        'Void the returns first or create a new purchase.',
+      );
+    }
+
+    final userId = await _currentUserId();
+
+    // 4. Void the original purchase (this restores stock and reverses accounting)
+    await voidPurchase(originalPurchaseId);
+
+    // 5. Create new purchase with the edited data
+    final newPurchaseId = await createPurchase(
+      supplierId: supplierId,
+      currencyId: currencyId,
+      subtotalCents: subtotalCents,
+      discountCents: discountCents,
+      taxCents: taxCents,
+      totalCents: totalCents,
+      paidAmountCents: paidAmountCents,
+      items: items,
+      paymentMethod: paymentMethod,
+      supplierInvoiceRef: supplierInvoiceRef,
+      notes: notes != null 
+          ? '$notes\n[Edited from ${originalPurchase.purchaseNumber}]'
+          : '[Edited from ${originalPurchase.purchaseNumber}]',
+      purchaseDate: purchaseDate ?? originalPurchase.purchaseDate,
+      dueDate: dueDate,
+    );
+
+    // 6. Post the new purchase to apply stock and accounting
+    await postPurchase(newPurchaseId);
+
+    // 7. Audit log
+    await _auditService.log(
+      entityType: 'purchase',
+      entityId: newPurchaseId,
+      action: 'edit_posted_purchase',
+      oldValue: {
+        'originalPurchaseId': originalPurchaseId,
+        'originalPurchaseNumber': originalPurchase.purchaseNumber,
+        'originalTotalCents': originalPurchase.totalCents.toString(),
+      },
+      newValue: {
+        'newPurchaseId': newPurchaseId,
+        'newTotalCents': totalCents.toString(),
+        'itemCount': items.length,
+      },
+      userId: userId,
+    );
+
+    return newPurchaseId;
+  }
+
+  @override
   Future<int> deletePurchase(int purchaseId) async {
+    // Void journal entries BEFORE deleting the purchase record.
+    // This MUST succeed — if it fails the entire delete is aborted to prevent GL drift.
+    await _journalService.voidJournalEntriesForSource(
+      sourceTable: 'purchases',
+      sourceId: purchaseId,
+      reason: 'Purchase deleted',
+      userId: await _currentUserId(),
+    );
+
     // Audit: log before deletion (data will be gone after)
     await _auditService.log(
       entityType: 'purchase',
@@ -446,18 +589,14 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
 
   @override
   Future<void> voidPurchaseReturn(int returnId) async {
-    // Void journal entries BEFORE voiding the return
-    try {
-      await _journalService.voidJournalEntriesForSource(
-        sourceTable: 'purchase_returns',
-        sourceId: returnId,
-        reason: 'Purchase return voided',
-        userId: await _currentUserId(),
-      );
-    } catch (e) {
-      developer.log('Warning: Failed to void journal entries for purchase return #$returnId: $e',
-          name: 'PurchaseRepository');
-    }
+    // Void journal entries BEFORE voiding the return.
+    // This MUST succeed — if it fails the entire void is aborted to prevent GL drift.
+    await _journalService.voidJournalEntriesForSource(
+      sourceTable: 'purchase_returns',
+      sourceId: returnId,
+      reason: 'Purchase return voided',
+      userId: await _currentUserId(),
+    );
 
     await _datasource.voidPurchaseReturn(returnId);
 

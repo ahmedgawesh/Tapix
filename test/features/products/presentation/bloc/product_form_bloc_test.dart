@@ -2,6 +2,7 @@ import 'package:decimal/decimal.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:tapix/features/products/domain/entities/product_entity.dart';
+import 'package:tapix/features/products/domain/entities/product_variant_entity.dart';
 import 'package:tapix/features/products/domain/repositories/product_repository.dart';
 import 'package:tapix/features/products/domain/repositories/product_variant_repository.dart';
 import 'package:tapix/features/products/presentation/bloc/product_form_bloc.dart';
@@ -14,10 +15,13 @@ class FakeProduct extends Fake implements Product {}
 
 class FakeDecimal extends Fake implements Decimal {}
 
+class FakeProductVariant extends Fake implements ProductVariant {}
+
 void main() {
   setUpAll(() {
     registerFallbackValue(FakeProduct());
     registerFallbackValue(FakeDecimal());
+    registerFallbackValue(FakeProductVariant());
   });
 
   group('ProductFormBloc', () {
@@ -28,6 +32,19 @@ void main() {
     setUp(() {
       repository = MockProductRepository();
       variantRepository = MockProductVariantRepository();
+      
+      // Default stubs for variant repository
+      when(() => variantRepository.getDefaultVariantByProduct(any()))
+          .thenAnswer((_) async => null);
+      when(() => variantRepository.ensureDefaultVariantForProduct(
+            productId: any(named: 'productId'),
+            costCents: any(named: 'costCents'),
+            priceCents: any(named: 'priceCents'),
+            stockQuantity: any(named: 'stockQuantity'),
+          )).thenAnswer((_) async => 1);
+      when(() => variantRepository.updateVariant(any()))
+          .thenAnswer((_) async => true);
+      
       bloc = ProductFormBloc(repository, variantRepository);
     });
 
@@ -66,6 +83,18 @@ void main() {
 
         when(() => repository.watchProduct(1))
             .thenAnswer((_) => Stream.value(product));
+        
+        // Stub getDefaultVariantByProduct for non-variant product
+        when(() => variantRepository.getDefaultVariantByProduct(1))
+            .thenAnswer((_) async => ProductVariant(
+              id: 1,
+              productId: 1,
+              costCents: Decimal.fromInt(1000),
+              priceCents: Decimal.fromInt(2000),
+              priceAdjustmentCents: Decimal.zero,
+              stockQuantity: 10,
+              isActive: true,
+            ));
 
         bloc.add(const ProductFormInitialized(productId: 1));
 

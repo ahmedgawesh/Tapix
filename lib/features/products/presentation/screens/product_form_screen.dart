@@ -30,6 +30,7 @@ import '../widgets/money_input_widget.dart';
 import '../widgets/variant_management_widget.dart';
 import '../../domain/entities/product_color_entity.dart';
 import '../../domain/entities/size_entity.dart';
+import '../../../settings/presentation/bloc/app_settings_bloc.dart';
 
 class ProductFormScreen extends StatelessWidget {
   final int? productId;
@@ -39,11 +40,20 @@ class ProductFormScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Get inventory settings from AppSettingsBloc for new products
+    final appSettingsState = context.read<AppSettingsBloc>().state;
+    final settings = appSettingsState.settings;
+    
     return MultiBlocProvider(
       providers: [
         BlocProvider(
           create: (context) => sl<ProductFormBloc>()
-            ..add(ProductFormInitialized(productId: productId, initialBarcode: initialBarcode)),
+            ..add(ProductFormInitialized(
+              productId: productId,
+              initialBarcode: initialBarcode,
+              defaultTrackInventory: settings.defaultTrackInventory,
+              defaultMinQuantity: settings.lowStockThreshold,
+            )),
         ),
         BlocProvider(
           create: (context) => sl<CategoriesBloc>()..add(const LoadCategories()),
@@ -120,6 +130,67 @@ class _ProductFormViewState extends State<_ProductFormView> {
     final checksum = (10 - (sum % 10)) % 10;
     
     return barcode12 + checksum.toString();
+  }
+
+  void _showPrintModeChoice(BuildContext context, Product product) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
+    showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: colorScheme.outlineVariant,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  'barcode.choose_print_mode'.tr(),
+                  style: textTheme.titleLarge,
+                ),
+                const SizedBox(height: 20),
+                _PrintModeOptionCard(
+                  icon: LucideIcons.tag,
+                  title: 'barcode.thermal_label_title'.tr(),
+                  subtitle: 'barcode.thermal_label_desc'.tr(),
+                  colorScheme: colorScheme,
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    context.push('/barcode-designer', extra: product);
+                  },
+                ),
+                const SizedBox(height: 12),
+                _PrintModeOptionCard(
+                  icon: LucideIcons.layoutGrid,
+                  title: 'barcode.a4_sheet_title'.tr(),
+                  subtitle: 'barcode.a4_sheet_desc'.tr(),
+                  colorScheme: colorScheme,
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    context.push('/products/barcode-design', extra: {
+                      'products': [product],
+                    });
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -270,7 +341,7 @@ class _ProductFormViewState extends State<_ProductFormView> {
                       isActive: state.isActive,
                       trackInventory: state.trackInventory,
                     );
-                    context.push('/barcode-designer', extra: product);
+                    _showPrintModeChoice(context, product);
                   },
                   tooltip: 'edit_prices.print_label'.tr(),
                 ),
@@ -508,7 +579,7 @@ class _ProductFormViewState extends State<_ProductFormView> {
           controller: _nameController,
           decoration: InputDecoration(
             labelText: 'product_form_name'.tr(),
-            errorText: state.fieldErrors['name'],
+            errorText: state.fieldErrors['name']?.tr(),
             border: const OutlineInputBorder(),
           ),
           onChanged: (value) {
@@ -745,7 +816,7 @@ class _ProductFormViewState extends State<_ProductFormView> {
               child: MoneyInputWidget(
                 value: state.costCents,
                 label: 'product_form_cost'.tr(),
-                errorText: state.fieldErrors['costCents'],
+                errorText: state.fieldErrors['costCents']?.tr(),
                 onChanged: (value) {
                   bloc.add(ProductFormFieldChanged(field: 'costCents', value: value));
                 },
@@ -756,7 +827,7 @@ class _ProductFormViewState extends State<_ProductFormView> {
               child: MoneyInputWidget(
                 value: state.priceCents,
                 label: 'product_form_price'.tr(),
-                errorText: state.fieldErrors['priceCents'],
+                errorText: state.fieldErrors['priceCents']?.tr(),
                 onChanged: (value) {
                   bloc.add(ProductFormFieldChanged(field: 'priceCents', value: value));
                 },
@@ -880,7 +951,7 @@ class _ProductFormViewState extends State<_ProductFormView> {
                       focusNode: _stockFocusNode,
                       decoration: InputDecoration(
                         labelText: 'product_form_quantity'.tr(),
-                        errorText: state.fieldErrors['stockQuantity'],
+                        errorText: state.fieldErrors['stockQuantity']?.tr(),
                         border: const OutlineInputBorder(),
                       ),
                       keyboardType: TextInputType.number,
@@ -900,7 +971,7 @@ class _ProductFormViewState extends State<_ProductFormView> {
                 focusNode: _minStockFocusNode,
                 decoration: InputDecoration(
                   labelText: 'product_form_minQuantity'.tr(),
-                  errorText: state.fieldErrors['minQuantity'],
+                  errorText: state.fieldErrors['minQuantity']?.tr(),
                   border: const OutlineInputBorder(),
                 ),
                 keyboardType: TextInputType.number,
@@ -951,7 +1022,7 @@ class _ProductFormViewState extends State<_ProductFormView> {
             controller: _purchaseTaxRateController,
             decoration: InputDecoration(
               labelText: 'product_form_purchaseTaxRate'.tr(),
-              errorText: state.fieldErrors['purchaseTaxRateBps'],
+              errorText: state.fieldErrors['purchaseTaxRateBps']?.tr(),
               border: const OutlineInputBorder(),
               suffixText: '%',
             ),
@@ -969,7 +1040,7 @@ class _ProductFormViewState extends State<_ProductFormView> {
             controller: _salesTaxRateController,
             decoration: InputDecoration(
               labelText: 'product_form_salesTaxRate'.tr(),
-              errorText: state.fieldErrors['salesTaxRateBps'],
+              errorText: state.fieldErrors['salesTaxRateBps']?.tr(),
               border: const OutlineInputBorder(),
               suffixText: '%',
             ),
@@ -1449,6 +1520,79 @@ class _ExpiryInfoWidget extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+}
+
+class _PrintModeOptionCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final ColorScheme colorScheme;
+  final VoidCallback onTap;
+
+  const _PrintModeOptionCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.colorScheme,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: colorScheme.surfaceContainerLow,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: colorScheme.primaryContainer,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  icon,
+                  color: colorScheme.onPrimaryContainer,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.chevron_right,
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

@@ -8,6 +8,8 @@ abstract class UserRepositoryInterface {
     required String password,
     required UserRole role,
     int? employeeId,
+    String? securityQuestion,
+    String? securityAnswer,
   });
   Future<void> updateUser({
     required int id,
@@ -16,6 +18,8 @@ abstract class UserRepositoryInterface {
     UserRole? role,
     int? employeeId,
     bool clearEmployeeLink = false,
+    String? securityQuestion,
+    String? securityAnswer,
   });
   Future<void> toggleUserActive(int id, bool isActive);
   Future<bool> isUsernameTaken(String username, {int? excludeUserId});

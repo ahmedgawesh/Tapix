@@ -1,12 +1,14 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:easy_localization/easy_localization.dart';
 
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../../auth/auth.dart';
 import '../../domain/entities/purchase_entity.dart';
 import '../../domain/repositories/purchase_repository.dart';
 import '../services/purchase_pdf_service.dart';
@@ -116,16 +118,29 @@ class _PurchaseReturnDetailScreenState
         ),
         title: Text('purchases.return_detail'.tr()),
         actions: [
-          IconButton(
-            icon: const Icon(LucideIcons.printer),
-            tooltip: 'purchases.print_invoice'.tr(),
-            onPressed: () => _printOrShare(share: false),
-          ),
-          IconButton(
-            icon: const Icon(LucideIcons.share2),
-            tooltip: 'purchases.share_pdf'.tr(),
-            onPressed: () => _printOrShare(share: true),
-          ),
+          if (!ret.isVoided) ...[
+            IconButton(
+              icon: const Icon(LucideIcons.printer),
+              tooltip: 'purchases.print_invoice'.tr(),
+              onPressed: () => _printOrShare(share: false),
+            ),
+            IconButton(
+              icon: const Icon(LucideIcons.share2),
+              tooltip: 'purchases.share_pdf'.tr(),
+              onPressed: () => _printOrShare(share: true),
+            ),
+            Builder(builder: (context) {
+              final authState = context.read<AuthBloc>().state;
+              final canVoid = authState is AuthAuthenticated &&
+                  sl<PermissionService>().hasPermission(authState.user, Permissions.editTransactions);
+              if (!canVoid) return const SizedBox.shrink();
+              return IconButton(
+                icon: Icon(LucideIcons.ban, color: colorScheme.error),
+                tooltip: 'purchases.void_purchase'.tr(),
+                onPressed: () => _voidReturn(context),
+              );
+            }),
+          ],
         ],
       ),
       body: ListView(
@@ -145,6 +160,55 @@ class _PurchaseReturnDetailScreenState
         ],
       ),
     );
+  }
+
+  Future<void> _voidReturn(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final errorColor = Theme.of(context).colorScheme.error;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('purchases.void_confirm_title'.tr()),
+        content: Text('purchases.void_return_confirm_message'.tr()),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('common.cancel'.tr()),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: errorColor,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('purchases.void_purchase'.tr()),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      final repo = sl<PurchaseRepository>();
+      await repo.voidPurchaseReturn(widget.returnId);
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('purchases.void_success'.tr()),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        _loadData();
+      }
+    } catch (e) {
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(e.toString()),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: errorColor,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _printOrShare({required bool share}) async {

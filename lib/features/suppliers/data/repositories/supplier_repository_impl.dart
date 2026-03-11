@@ -10,12 +10,12 @@ import '../datasources/supplier_local_datasource.dart';
 /// Implementation of SupplierRepository
 class SupplierRepositoryImpl implements SupplierRepository {
   final SupplierLocalDatasource _datasource;
-  final AuditLogService _auditService;
   final SessionService _sessionService;
   final JournalEntryService _journalService;
   final AppDatabase _db;
+  final AuditLogService _auditService;
 
-  SupplierRepositoryImpl(this._datasource, this._auditService, this._sessionService, this._journalService, this._db);
+  SupplierRepositoryImpl(this._datasource, this._sessionService, this._journalService, this._db, this._auditService);
 
   Future<int?> _currentUserId() => _sessionService.getCurrentUserId();
 
@@ -47,19 +47,41 @@ class SupplierRepositoryImpl implements SupplierRepository {
     String? address,
     required int currencyId,
     Decimal? initialBalance,
-  }) {
+  }) async {
+    final balanceCents = initialBalance ?? Decimal.zero;
     final companion = SuppliersCompanion(
       name: Value(name),
       email: Value(email),
       phone: Value(phone),
       address: Value(address),
       currencyId: Value(currencyId),
-      balanceCents: Value(initialBalance ?? Decimal.zero),
+      balanceCents: Value(balanceCents),
+      openingBalanceCents: Value(balanceCents), // Store opening balance separately
       isActive: const Value(true),
       createdAt: Value(DateTime.now()),
       updatedAt: Value(DateTime.now()),
     );
-    return _datasource.createSupplier(companion);
+
+    final balanceInt = balanceCents.toBigInt().toInt();
+
+    // ATOMIC: create supplier + post opening balance journal entry together
+    final supplierId = await _db.transaction(() async {
+      final id = await _datasource.createSupplier(companion);
+
+      if (balanceInt != 0) {
+        final userId = await _currentUserId();
+        await _journalService.recordSupplierOpeningBalanceJournalEntry(
+          supplierId: id,
+          amountCents: balanceInt,
+          currencyId: currencyId,
+          userId: userId,
+        );
+      }
+
+      return id;
+    });
+
+    return supplierId;
   }
 
   @override
@@ -92,24 +114,19 @@ class SupplierRepositoryImpl implements SupplierRepository {
     return _datasource.watchTopSuppliersByBalance(limit: limit);
   }
 
+  /// DISABLED: Direct balance updates WITHOUT journal entries are forbidden.
+  /// Supplier balance must ONLY change through journal-entry-backed operations:
+  ///   - createSupplier() with initialBalance
+  ///   - recordTransaction('adjustment') for balance adjustments
+  ///   - PurchaseDao for purchase/payment/return operations
+  ///
+  /// This prevents GL ↔ Suppliers balance mismatch.
   @override
   Future<void> updateSupplierBalance(int supplierId, int newBalanceCents) async {
-    final existing = await _datasource.getSupplier(supplierId);
-    final oldBalance = existing?.balanceCents.toBigInt().toInt();
-
-    await _datasource.updateSupplierBalance(supplierId, newBalanceCents);
-
-    await _auditService.log(
-      entityType: 'supplier',
-      entityId: supplierId,
-      action: 'balance_change',
-      oldValue: oldBalance == null ? null : {'balanceCents': oldBalance},
-      newValue: {
-        'balanceCents': newBalanceCents,
-        'changeCents': oldBalance == null ? null : (newBalanceCents - oldBalance),
-        'reason': 'supplier_balance_update',
-      },
-      userId: await _currentUserId(),
+    throw StateError(
+      'Direct supplier balance updates are DISABLED. '
+      'Use recordTransaction(transactionType: "adjustment") instead, '
+      'which atomically updates both the supplier balance and the General Ledger.',
     );
   }
 
@@ -161,6 +178,16 @@ class SupplierRepositoryImpl implements SupplierRepository {
           currencyId: currencyId,
           userId: userId,
         );
+      } else if (transactionType == 'adjustment' && amountCents != 0) {
+        // Balance adjustment uses the opening balance equity account.
+        // amountCents carries the sign: positive = we owe supplier more,
+        // negative = we owe supplier less.
+        await _journalService.recordSupplierOpeningBalanceJournalEntry(
+          supplierId: supplierId,
+          amountCents: amountCents,
+          currencyId: currencyId,
+          userId: userId,
+        );
       }
 
       return id;
@@ -172,6 +199,97 @@ class SupplierRepositoryImpl implements SupplierRepository {
   @override
   Future<SupplierTransaction?> getTransaction(int transactionId) {
     return _datasource.getTransaction(transactionId);
+  }
+
+  @override
+  Future<SupplierTransaction> updateTransaction({
+    required int transactionId,
+    required int newAmountCents,
+    String? newDescription,
+  }) async {
+    // 1. Fetch existing transaction to validate and get date
+    final existing = await _datasource.getTransaction(transactionId);
+    if (existing == null) {
+      throw StateError('Transaction #$transactionId not found');
+    }
+
+    // 2. Check accounting period is open for the transaction date
+    final txDate = existing.transactionDate;
+    final periodRows = await _db.customSelect(
+      '''SELECT id, is_closed FROM accounting_periods
+         WHERE start_date <= ? AND end_date >= ?
+         ORDER BY start_date DESC LIMIT 1''',
+      variables: [
+        Variable.withDateTime(txDate),
+        Variable.withDateTime(txDate),
+      ],
+      readsFrom: {_db.accountingPeriods},
+    ).get();
+    if (periodRows.isNotEmpty && periodRows.first.read<bool>('is_closed')) {
+      throw StateError(
+        'Cannot edit transaction: the accounting period containing this '
+        'transaction has been closed.',
+      );
+    }
+
+    final userId = await _currentUserId();
+    final oldAmountCents = existing.amountCents.toBigInt().toInt().abs();
+    final absNewAmount = newAmountCents.abs();
+
+    // 3. ATOMIC: update transaction + void old journal + create new journal
+    final oldTx = await _db.transaction(() async {
+      final old = await _datasource.updateTransactionAmount(
+        transactionId,
+        newAmountCents: absNewAmount,
+        newDescription: newDescription,
+      );
+
+      // Void old journal entries for this transaction
+      await _journalService.voidJournalEntriesForSource(
+        sourceTable: 'supplier_transactions',
+        sourceId: transactionId,
+        reason: 'Transaction amount edited from $oldAmountCents to $absNewAmount cents',
+        userId: userId,
+      );
+
+      // Create new journal entries with updated amount
+      if (existing.transactionType == 'payment' && absNewAmount > 0) {
+        await _journalService.recordDirectSupplierPaymentJournalEntry(
+          transactionId: transactionId,
+          amountCents: absNewAmount,
+          currencyId: existing.currencyId,
+          userId: userId,
+        );
+      } else if (existing.transactionType == 'discount' && absNewAmount > 0) {
+        await _journalService.recordDirectSupplierDiscountJournalEntry(
+          transactionId: transactionId,
+          amountCents: absNewAmount,
+          currencyId: existing.currencyId,
+          userId: userId,
+        );
+      }
+
+      return old;
+    });
+
+    // 4. Audit log
+    await _auditService.log(
+      entityType: 'supplier_transaction',
+      entityId: transactionId,
+      action: 'edit_transaction',
+      oldValue: {
+        'amountCents': oldAmountCents,
+        'type': existing.transactionType,
+        'supplierId': existing.supplierId,
+      },
+      newValue: {
+        'amountCents': absNewAmount,
+        'description': newDescription,
+      },
+      userId: userId,
+    );
+
+    return oldTx;
   }
 
   @override

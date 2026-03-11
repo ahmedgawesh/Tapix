@@ -5,11 +5,13 @@ import 'package:equatable/equatable.dart';
 import '../../../../core/database/app_database.dart' show LoyaltySettings;
 import '../../../../core/services/audit_log_service.dart';
 import '../../../../core/services/below_cost_sale_service.dart';
+import '../../../../core/services/crashlytics_service.dart';
 import '../../domain/repositories/sale_repository.dart';
 import '../../../auth/domain/entities/user_entity.dart';
 import '../../../customers/domain/repositories/loyalty_repository.dart';
 import '../../../products/domain/entities/product_entity.dart';
 import '../../../products/domain/entities/product_variant_entity.dart';
+import '../../../products/domain/repositories/product_repository.dart';
 import '../../../products/domain/repositories/product_variant_repository.dart';
 
 // ==================== ENUMS ====================
@@ -22,6 +24,14 @@ enum SalePaymentMethod { cash, credit, card, cheque }
 
 /// Salesperson assignment mode: per-invoice or per-item
 enum SalespersonMode { perInvoice, perItem }
+
+/// How to handle overpayment when paid amount exceeds invoice total
+enum SaleOverpaymentHandling { 
+  /// Return the excess as change to the customer
+  returnChange,
+  /// Add the excess to the customer's credit balance
+  addToBalance,
+}
 
 // ==================== STATE ====================
 
@@ -43,6 +53,7 @@ class SaleFormState extends Equatable {
   final Decimal taxRatePercent;
   final SalespersonMode salespersonMode;
   final Decimal paidAmountCents;
+  final SaleOverpaymentHandling overpaymentHandling;
   final bool isSubmitting;
   final String? error;
   final bool isSuccess;
@@ -54,6 +65,13 @@ class SaleFormState extends Equatable {
   final int loyaltyDiscountCents;
   final LoyaltySettings? loyaltySettings;
   final bool loyaltyRedemptionEnabled;
+  // Global tax settings
+  final bool enableTaxCalculations;
+  final int defaultSalesTaxRateBps;
+  // Global inventory settings
+  final bool allowNegativeStock;
+  // Editing posted sale flag
+  final bool isEditingPosted;
 
   SaleFormState({
     this.saleId,
@@ -73,6 +91,7 @@ class SaleFormState extends Equatable {
     Decimal? taxRatePercent,
     this.salespersonMode = SalespersonMode.perInvoice,
     Decimal? paidAmountCents,
+    this.overpaymentHandling = SaleOverpaymentHandling.returnChange,
     this.isSubmitting = false,
     this.error,
     this.isSuccess = false,
@@ -83,6 +102,10 @@ class SaleFormState extends Equatable {
     this.loyaltyDiscountCents = 0,
     this.loyaltySettings,
     this.loyaltyRedemptionEnabled = false,
+    this.enableTaxCalculations = true,
+    this.defaultSalesTaxRateBps = 0,
+    this.allowNegativeStock = false,
+    this.isEditingPosted = false,
   }) : invoiceDiscountCents = invoiceDiscountCents ?? Decimal.zero,
        taxRatePercent = taxRatePercent ?? Decimal.zero,
        paidAmountCents = paidAmountCents ?? Decimal.zero;
@@ -106,7 +129,10 @@ class SaleFormState extends Equatable {
 
   Decimal get itemTaxCents => items.fold(
         Decimal.zero,
-        (sum, item) => sum + item.taxCents,
+        (sum, item) => sum + item.taxCentsWithSettings(
+          enableTaxCalculations: enableTaxCalculations,
+          defaultTaxRateBps: defaultSalesTaxRateBps,
+        ),
       );
 
   Decimal get taxCents => itemTaxCents;
@@ -151,6 +177,7 @@ class SaleFormState extends Equatable {
     Decimal? taxRatePercent,
     SalespersonMode? salespersonMode,
     Decimal? paidAmountCents,
+    SaleOverpaymentHandling? overpaymentHandling,
     bool? isSubmitting,
     String? error,
     bool? isSuccess,
@@ -164,6 +191,10 @@ class SaleFormState extends Equatable {
     LoyaltySettings? loyaltySettings,
     bool? loyaltyRedemptionEnabled,
     bool clearLoyalty = false,
+    bool? enableTaxCalculations,
+    int? defaultSalesTaxRateBps,
+    bool? allowNegativeStock,
+    bool? isEditingPosted,
   }) {
     return SaleFormState(
       saleId: saleId ?? this.saleId,
@@ -183,6 +214,7 @@ class SaleFormState extends Equatable {
       taxRatePercent: taxRatePercent ?? this.taxRatePercent,
       salespersonMode: salespersonMode ?? this.salespersonMode,
       paidAmountCents: paidAmountCents ?? this.paidAmountCents,
+      overpaymentHandling: overpaymentHandling ?? this.overpaymentHandling,
       isSubmitting: isSubmitting ?? this.isSubmitting,
       error: error,
       isSuccess: isSuccess ?? this.isSuccess,
@@ -193,6 +225,10 @@ class SaleFormState extends Equatable {
       loyaltyDiscountCents: clearLoyalty ? 0 : (loyaltyDiscountCents ?? this.loyaltyDiscountCents),
       loyaltySettings: clearLoyalty ? null : (loyaltySettings ?? this.loyaltySettings),
       loyaltyRedemptionEnabled: clearLoyalty ? false : (loyaltyRedemptionEnabled ?? this.loyaltyRedemptionEnabled),
+      enableTaxCalculations: enableTaxCalculations ?? this.enableTaxCalculations,
+      defaultSalesTaxRateBps: defaultSalesTaxRateBps ?? this.defaultSalesTaxRateBps,
+      allowNegativeStock: allowNegativeStock ?? this.allowNegativeStock,
+      isEditingPosted: isEditingPosted ?? this.isEditingPosted,
     );
   }
 
@@ -200,10 +236,11 @@ class SaleFormState extends Equatable {
   List<Object?> get props => [
         saleId, saleNumber, customerId, customerName, employeeId, employeeName, currencyId, items,
         discountMode, invoiceDiscountCents, notes, saleDate, dueDate,
-        paymentMethod, taxRatePercent, salespersonMode, paidAmountCents,
+        paymentMethod, taxRatePercent, salespersonMode, paidAmountCents, overpaymentHandling,
         isSubmitting, error, isSuccess, belowCostWarning, belowCostOverrides,
         loyaltyPointsBalance, loyaltyPointsToRedeem, loyaltyDiscountCents,
         loyaltySettings, loyaltyRedemptionEnabled,
+        enableTaxCalculations, defaultSalesTaxRateBps, allowNegativeStock, isEditingPosted,
       ];
 }
 
@@ -264,13 +301,37 @@ class SaleLineItem extends Equatable {
   Decimal get subtotalCents => unitPriceCents * Decimal.fromInt(quantity);
   Decimal get netCents => subtotalCents - discountCents;
 
-  /// Tax is always computed from the product's sales tax rate.
+  /// Tax is computed from the product's sales tax rate.
   /// Uses proper rounding (round half-up) instead of truncation.
-  Decimal get taxCents {
-    if (!product.isTaxable || product.salesTaxRateBps <= 0) return Decimal.zero;
+  /// This getter uses product settings - use taxCentsWithSettings for global settings support.
+  Decimal get taxCents => taxCentsWithSettings(enableTaxCalculations: true, defaultTaxRateBps: 0);
+
+  /// Calculate tax respecting global settings.
+  /// If enableTaxCalculations is false, returns zero.
+  /// If product has its own tax rate (isTaxable && salesTaxRateBps > 0), uses that.
+  /// Otherwise, uses the defaultTaxRateBps from global settings.
+  Decimal taxCentsWithSettings({
+    required bool enableTaxCalculations,
+    required int defaultTaxRateBps,
+  }) {
+    if (!enableTaxCalculations) return Decimal.zero;
+    
     final taxable = netCents;
     if (taxable <= Decimal.zero) return Decimal.zero;
-    final raw = taxable * Decimal.fromInt(product.salesTaxRateBps) / Decimal.fromInt(10000);
+    
+    // Determine which tax rate to use
+    int taxRateBps;
+    if (product.isTaxable && product.salesTaxRateBps > 0) {
+      // Product has its own tax rate - use it
+      taxRateBps = product.salesTaxRateBps;
+    } else if (defaultTaxRateBps > 0) {
+      // Use global default tax rate
+      taxRateBps = defaultTaxRateBps;
+    } else {
+      return Decimal.zero;
+    }
+    
+    final raw = taxable * Decimal.fromInt(taxRateBps) / Decimal.fromInt(10000);
     return Decimal.fromBigInt(raw.round());
   }
 
@@ -341,10 +402,33 @@ abstract class SaleFormEvent extends Equatable {
 class SaleFormInitialized extends SaleFormEvent {
   final int? saleId;
   final int currencyId;
-  const SaleFormInitialized({this.saleId, required this.currencyId});
+  final bool enableTaxCalculations;
+  final int defaultSalesTaxRateBps;
+  final bool allowNegativeStock;
+  final bool isEditingPosted;
+  const SaleFormInitialized({
+    this.saleId,
+    required this.currencyId,
+    this.enableTaxCalculations = true,
+    this.defaultSalesTaxRateBps = 0,
+    this.allowNegativeStock = false,
+    this.isEditingPosted = false,
+  });
 
   @override
-  List<Object?> get props => [saleId, currencyId];
+  List<Object?> get props => [saleId, currencyId, enableTaxCalculations, defaultSalesTaxRateBps, allowNegativeStock, isEditingPosted];
+}
+
+class SaleTaxSettingsChanged extends SaleFormEvent {
+  final bool enableTaxCalculations;
+  final int defaultSalesTaxRateBps;
+  const SaleTaxSettingsChanged({
+    required this.enableTaxCalculations,
+    required this.defaultSalesTaxRateBps,
+  });
+
+  @override
+  List<Object?> get props => [enableTaxCalculations, defaultSalesTaxRateBps];
 }
 
 class SaleCustomerChanged extends SaleFormEvent {
@@ -524,11 +608,20 @@ class SaleLoyaltyRedemptionChanged extends SaleFormEvent {
   List<Object?> get props => [enabled, pointsToRedeem];
 }
 
+class SaleOverpaymentHandlingChanged extends SaleFormEvent {
+  final SaleOverpaymentHandling handling;
+  const SaleOverpaymentHandlingChanged(this.handling);
+
+  @override
+  List<Object?> get props => [handling];
+}
+
 // ==================== BLOC ====================
 
 class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
   final SaleRepository _repository;
   final ProductVariantRepository _variantRepository;
+  final ProductRepository _productRepository;
   final BelowCostSaleService _belowCostService;
   final AuditLogService _auditService;
   final LoyaltyRepository? _loyaltyRepository;
@@ -540,7 +633,7 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
   Map<int, String?> _colorHexes = {};
   Map<int, String> _sizeNames = {};
 
-  SaleFormBloc(this._repository, this._variantRepository, this._auditService, {
+  SaleFormBloc(this._repository, this._variantRepository, this._productRepository, this._auditService, {
     BelowCostSaleService? belowCostService,
     LoyaltyRepository? loyaltyRepository,
     UserRole userRole = UserRole.cashier,
@@ -568,11 +661,13 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
     on<SaleTaxRateChanged>(_onTaxRateChanged);
     on<SaleSalespersonModeChanged>(_onSalespersonModeChanged);
     on<SalePaidAmountChanged>(_onPaidAmountChanged);
+    on<SaleOverpaymentHandlingChanged>(_onOverpaymentHandlingChanged);
     on<SaleDueDateChanged>(_onDueDateChanged);
     on<SaleBelowCostOverrideApproved>(_onBelowCostOverrideApproved);
     on<SaleBelowCostWarningDismissed>(_onBelowCostWarningDismissed);
     on<SaleLoyaltyDataRequested>(_onLoyaltyDataRequested);
     on<SaleLoyaltyRedemptionChanged>(_onLoyaltyRedemptionChanged);
+    on<SaleTaxSettingsChanged>(_onTaxSettingsChanged);
   }
 
   Future<void> _loadColorSizeLookups() async {
@@ -608,9 +703,17 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
         emit(state.copyWith(
           currencyId: event.currencyId,
           saleNumber: nextNumber,
+          enableTaxCalculations: event.enableTaxCalculations,
+          defaultSalesTaxRateBps: event.defaultSalesTaxRateBps,
+          allowNegativeStock: event.allowNegativeStock,
         ));
       } catch (_) {
-        emit(state.copyWith(currencyId: event.currencyId));
+        emit(state.copyWith(
+          currencyId: event.currencyId,
+          enableTaxCalculations: event.enableTaxCalculations,
+          defaultSalesTaxRateBps: event.defaultSalesTaxRateBps,
+          allowNegativeStock: event.allowNegativeStock,
+        ));
       }
       return;
     }
@@ -618,6 +721,10 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
     emit(state.copyWith(
       saleId: event.saleId,
       currencyId: event.currencyId,
+      enableTaxCalculations: event.enableTaxCalculations,
+      defaultSalesTaxRateBps: event.defaultSalesTaxRateBps,
+      allowNegativeStock: event.allowNegativeStock,
+      isEditingPosted: event.isEditingPosted,
     ));
 
     try {
@@ -632,7 +739,9 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
 
       final variantFutures = <int, Future<ProductVariant?>>{};
       final defaultVariantFutures = <int, Future<ProductVariant?>>{};
+      final productIds = <int>{};
       for (final i in items) {
+        productIds.add(i.productId);
         if (i.variantId != null && !variantFutures.containsKey(i.variantId)) {
           variantFutures[i.variantId!] = _variantRepository.getVariantById(i.variantId!);
         }
@@ -651,20 +760,29 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
         resolvedDefaultVariants[entry.key] = await entry.value;
       }
 
+      // Fetch real product data for tax info
+      final resolvedProducts = <int, Product?>{};
+      for (final pid in productIds) {
+        final stream = _productRepository.watchProduct(pid);
+        resolvedProducts[pid] = await stream.first;
+      }
+
       final mappedItems = items.map((i) {
+        final realProduct = resolvedProducts[i.productId];
         final product = Product(
           id: i.productId,
-          name: i.productName ?? 'Product #${i.productId}',
-          costCents: Decimal.zero,
+          name: i.productName ?? realProduct?.name ?? 'Product #${i.productId}',
+          costCents: realProduct?.costCents ?? Decimal.zero,
           priceCents: i.unitPriceCents,
-          stockQuantity: 0,
-          minQuantity: 0,
+          wholesalePriceCents: realProduct?.wholesalePriceCents,
+          stockQuantity: realProduct?.stockQuantity ?? 0,
+          minQuantity: realProduct?.minQuantity ?? 0,
           hasVariants: i.variantId != null,
-          isTaxable: false,
-          purchaseTaxRateBps: 0,
-          salesTaxRateBps: 0,
-          isActive: true,
-          trackInventory: true,
+          isTaxable: realProduct?.isTaxable ?? false,
+          purchaseTaxRateBps: realProduct?.purchaseTaxRateBps ?? 0,
+          salesTaxRateBps: realProduct?.salesTaxRateBps ?? 0,
+          isActive: realProduct?.isActive ?? true,
+          trackInventory: realProduct?.trackInventory ?? true,
         );
 
         final realVariant = i.variantId != null ? resolvedVariants[i.variantId!] : null;
@@ -704,6 +822,8 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
         saleNumber: sale.invoiceNumber,
         customerId: sale.customerId,
         customerName: sale.customerName,
+        employeeId: sale.employeeId,
+        employeeName: sale.employeeName,
         currencyId: sale.currencyId,
         saleDate: sale.saleDate,
         items: mappedItems,
@@ -968,11 +1088,21 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
       final paymentMethodStr = state.paymentMethod.name;
 
       // Determine effective paid amount:
-      // - cash: user-entered paid amount
+      // - cash: depends on overpayment handling
+      //   - returnChange: cap at totalCents (excess is returned as cash change)
+      //   - addToBalance: use full paidAmountCents (excess goes to customer credit)
       // - card: auto-set to total (fully settled)
       // - credit/cheque: 0 (full amount goes to balance)
       final effectivePaidCents = switch (state.paymentMethod) {
-        SalePaymentMethod.cash => state.paidAmountCents,
+        SalePaymentMethod.cash => () {
+          // If overpaying and user chose to return change, cap at total
+          if (state.paidAmountCents > state.totalCents &&
+              state.overpaymentHandling == SaleOverpaymentHandling.returnChange) {
+            return state.totalCents;
+          }
+          // Otherwise use full paid amount (either exact payment or add to balance)
+          return state.paidAmountCents;
+        }(),
         SalePaymentMethod.card => state.totalCents,
         SalePaymentMethod.credit => Decimal.zero,
         SalePaymentMethod.cheque => Decimal.zero,
@@ -993,6 +1123,7 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
           notes: state.notes,
           saleDate: state.saleDate,
           dueDate: state.dueDate,
+          allowNegativeStock: state.allowNegativeStock,
         );
 
         // Redeem loyalty points if applicable (non-critical, outside transaction)
@@ -1013,8 +1144,42 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
           }
         }
 
+        CrashlyticsService.instance.logAction('sale_created', {
+          'sale_id': saleId.toString(),
+          'total_cents': state.totalCents.toString(),
+          'items_count': state.items.length.toString(),
+        });
         emit(state.copyWith(
           saleId: saleId,
+          isSubmitting: false,
+          isSuccess: true,
+        ));
+      } else if (state.isEditingPosted) {
+        // Editing a posted sale: void original and create new
+        final newSaleId = await _repository.editPostedSale(
+          originalSaleId: state.saleId!,
+          customerId: state.customerId,
+          employeeId: state.employeeId,
+          currencyId: state.currencyId,
+          subtotalCents: state.subtotalCents,
+          discountCents: state.totalDiscountCents,
+          taxCents: state.taxCents,
+          totalCents: state.totalCents,
+          paidAmountCents: effectivePaidCents,
+          paymentMethod: paymentMethodStr,
+          items: items,
+          notes: state.notes,
+          saleDate: state.saleDate,
+          dueDate: state.dueDate,
+          allowNegativeStock: state.allowNegativeStock,
+        );
+
+        CrashlyticsService.instance.logAction('sale_edited_posted', {
+          'sale_id': newSaleId.toString(),
+          'original_sale_id': state.saleId.toString(),
+        });
+        emit(state.copyWith(
+          saleId: newSaleId,
           isSubmitting: false,
           isSuccess: true,
         ));
@@ -1038,12 +1203,20 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
 
         if (!ok) throw Exception('Failed to update sale');
 
+        CrashlyticsService.instance.logAction('sale_updated', {
+          'sale_id': state.saleId.toString(),
+        });
         emit(state.copyWith(
           isSubmitting: false,
           isSuccess: true,
         ));
       }
-    } catch (e) {
+    } catch (e, st) {
+      CrashlyticsService.instance.recordError(
+        e,
+        stackTrace: st,
+        reason: 'SaleFormBloc._onSubmitted failed',
+      );
       emit(state.copyWith(
         isSubmitting: false,
         error: e.toString(),
@@ -1081,6 +1254,13 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
     Emitter<SaleFormState> emit,
   ) {
     emit(state.copyWith(paidAmountCents: event.paidAmountCents));
+  }
+
+  void _onOverpaymentHandlingChanged(
+    SaleOverpaymentHandlingChanged event,
+    Emitter<SaleFormState> emit,
+  ) {
+    emit(state.copyWith(overpaymentHandling: event.handling));
   }
 
   void _onDueDateChanged(
@@ -1267,5 +1447,15 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
       remaining--;
     }
     return result;
+  }
+
+  void _onTaxSettingsChanged(
+    SaleTaxSettingsChanged event,
+    Emitter<SaleFormState> emit,
+  ) {
+    emit(state.copyWith(
+      enableTaxCalculations: event.enableTaxCalculations,
+      defaultSalesTaxRateBps: event.defaultSalesTaxRateBps,
+    ));
   }
 }

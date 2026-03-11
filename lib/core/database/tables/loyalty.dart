@@ -103,6 +103,9 @@ class LoyaltySettingsTable extends Table {
   IntColumn get maxRedemptionPercentBps => integer().withDefault(const Constant(5000))();
   /// Whether points redemption at checkout is enabled
   BoolColumn get allowPointsRedemption => boolean().withDefault(const Constant(true))();
+  /// Business birthday date (month and day) for birthday bonus calculation
+  /// This is the business/company anniversary, not individual customer birthdays
+  DateTimeColumn get businessBirthdayDate => dateTime().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
 }

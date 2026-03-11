@@ -139,14 +139,16 @@ class SalespeopleCommissionReportData {
 class SalespeopleCommissionReportBloc extends RealtimeBloc<
     SalespeopleCommissionReportData, SalespeopleCommissionReportEvent> {
   final AppDatabase _db;
-  ReportDateRange _dateRange = ReportDateRange.thisMonth();
+  ReportDateRange _dateRange;
   SalespeopleCommissionSortType _sort =
       SalespeopleCommissionSortType.revenueDesc;
 
+  SalespeopleCommissionReportBloc(this._db, {String defaultDateRange = 'month'})
+      : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+        super(const RealtimeLoading());
+
   /// Monthly sales target in cents (configurable, default 100,000 = 1000.00)
   static const int monthlyTargetCents = 10000000; // 100,000.00
-
-  SalespeopleCommissionReportBloc(this._db) : super(const RealtimeLoading());
 
   ReportDateRange get dateRange => _dateRange;
 

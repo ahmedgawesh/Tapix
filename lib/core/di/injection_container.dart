@@ -1,5 +1,7 @@
+import 'package:flutter/foundation.dart';
 import 'package:get_it/get_it.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/crashlytics_service.dart';
 import '../bloc/currency_bloc.dart';
 import '../bloc/localization_bloc.dart';
 import '../bloc/theme_bloc.dart';
@@ -55,7 +57,9 @@ import '../../features/barcode/services/barcode_printer_service.dart';
 import '../../features/barcode/presentation/bloc/barcode_scanner_bloc.dart';
 import '../../features/barcode/presentation/bloc/barcode_design_bloc.dart';
 import '../../features/settings/data/services/company_profile_service.dart';
+import '../../features/settings/data/services/app_settings_service.dart';
 import '../../features/settings/presentation/bloc/company_bloc.dart';
+import '../../features/settings/presentation/bloc/app_settings_bloc.dart';
 import '../../features/purchases/data/datasources/purchase_local_datasource.dart';
 import '../../features/purchases/data/repositories/purchase_repository_impl.dart';
 import '../../features/purchases/domain/repositories/purchase_repository.dart';
@@ -109,6 +113,7 @@ import '../../features/accounting/data/repositories/journal_repository_impl.dart
 import '../../features/accounting/data/repositories/accounting_repository.dart';
 import '../../features/accounting/domain/services/accounting_close_service.dart';
 import '../services/journal_entry_service.dart';
+import '../services/data_integrity_service.dart';
 import '../services/ledger_rebuild_service.dart';
 import '../services/attendance_service.dart';
 import '../../features/accounting/presentation/bloc/accounts_bloc.dart';
@@ -135,12 +140,19 @@ import '../../features/reports/presentation/bloc/supplier_analysis_report_bloc.d
 import '../../features/reports/presentation/bloc/supplier_aging_report_bloc.dart';
 import '../../features/reports/presentation/bloc/supplier_statement_report_bloc.dart';
 import '../../features/reports/presentation/bloc/supplier_ledger_report_bloc.dart';
+import '../../features/reports/presentation/bloc/customer_ledger_report_bloc.dart';
 import '../../features/reports/presentation/bloc/supplier_stocktake_report_bloc.dart';
 import '../../features/reports/presentation/bloc/supplier_balance_drilldown_bloc.dart';
 import '../../features/reports/presentation/bloc/salespeople_commission_report_bloc.dart';
 import '../../features/reports/presentation/bloc/expense_report_bloc.dart';
 import '../../features/reports/presentation/bloc/sales_tax_report_bloc.dart';
 import '../../features/reports/presentation/bloc/purchase_tax_report_bloc.dart';
+import '../../features/reports/presentation/bloc/sales_reports_bloc.dart';
+import '../../features/reports/presentation/bloc/purchase_reports_bloc.dart';
+import '../../features/reports/presentation/bloc/discount_reports_bloc.dart';
+import '../../features/reports/presentation/bloc/profit_reports_bloc.dart';
+import '../services/revenuecat_service.dart';
+import '../../features/subscription/subscription.dart';
 
 final sl = GetIt.instance;
 
@@ -191,6 +203,7 @@ Future<void> init() async {
   sl.registerLazySingleton(() => CurrencyService(sl()));
   sl.registerLazySingleton(() => AuditLogService(sl<AppDatabase>(), sl<SessionService>()));
   sl.registerLazySingleton(() => const BelowCostSaleService());
+  sl.registerLazySingleton(() => DataIntegrityService(sl<AppDatabase>()));
 
   // Datasources
   sl.registerLazySingleton<ProductLocalDatasource>(
@@ -269,10 +282,10 @@ Future<void> init() async {
   sl.registerLazySingleton<SupplierRepository>(
     () => SupplierRepositoryImpl(
       sl<SupplierLocalDatasource>(),
-      sl<AuditLogService>(),
       sl<SessionService>(),
       sl<JournalEntryService>(),
       sl<AppDatabase>(),
+      sl<AuditLogService>(),
     ),
   );
 
@@ -337,13 +350,13 @@ Future<void> init() async {
 
   // Purchases Blocs
   sl.registerFactory(() => PurchasesBloc(sl<PurchaseRepository>()));
-  sl.registerFactory(() => PurchaseFormBloc(sl<PurchaseRepository>(), sl<ProductVariantRepository>()));
+  sl.registerFactory(() => PurchaseFormBloc(sl<PurchaseRepository>(), sl<ProductVariantRepository>(), sl<ProductRepository>()));
   sl.registerFactory(() => PurchaseReturnsBloc(sl<PurchaseRepository>()));
   sl.registerFactory(() => PurchaseReturnFormBloc(sl<PurchaseRepository>()));
 
   // Sales Blocs
   sl.registerFactory(() => SalesBloc(sl<SaleRepository>()));
-  sl.registerFactory(() => SaleFormBloc(sl<SaleRepository>(), sl<ProductVariantRepository>(), sl<AuditLogService>(), belowCostService: sl<BelowCostSaleService>(), loyaltyRepository: sl<LoyaltyRepository>()));
+  sl.registerFactory(() => SaleFormBloc(sl<SaleRepository>(), sl<ProductVariantRepository>(), sl<ProductRepository>(), sl<AuditLogService>(), belowCostService: sl<BelowCostSaleService>(), loyaltyRepository: sl<LoyaltyRepository>()));
   sl.registerFactory(() => SaleReturnsBloc(sl<SaleRepository>()));
   sl.registerFactory(() => SaleReturnFormBloc(sl<SaleRepository>()));
 
@@ -398,32 +411,132 @@ Future<void> init() async {
   ));
   sl.registerFactory(() => JournalEntriesBloc(sl<JournalRepository>()));
   sl.registerFactory(() => JournalEntryFormBloc(sl<JournalRepository>()));
-  sl.registerFactory(() => ReportsBloc(sl<JournalRepository>(), sl<AppDatabase>()));
-  sl.registerFactory(() => InventoryReportsBloc(sl<AppDatabase>()));
-  sl.registerFactory(() => ProductMovementDetailBloc(sl<AppDatabase>()));
-  sl.registerFactory(() => ProductVariantMovementBloc(sl<AppDatabase>()));
-  sl.registerFactory(() => CategoryMovementBloc(sl<AppDatabase>()));
-  sl.registerFactory(() => CustomerReportsBloc(sl<AppDatabase>()));
-  sl.registerFactory(() => CustomerSalesReturnsBloc(sl<AppDatabase>()));
-  sl.registerFactory(() => TopCustomersBloc(sl<AppDatabase>()));
-  sl.registerFactory(() => CustomerPaymentReportsBloc(sl<AppDatabase>()));
-  sl.registerFactory(() => CustomerSalesReportBloc(sl<AppDatabase>()));
-  sl.registerFactory(() => CustomerAgingReportBloc(sl<AppDatabase>()));
-  sl.registerFactory(() => CustomerStatementReportBloc(sl<AppDatabase>()));
-  sl.registerFactory(() => CustomerAnalysisReportBloc(sl<AppDatabase>()));
-  sl.registerFactory(() => SupplierBalanceReportBloc(sl<AppDatabase>()));
-  sl.registerFactory(() => SupplierDebitBalanceReportBloc(sl<AppDatabase>()));
-  sl.registerFactory(() => SupplierCreditBalanceReportBloc(sl<AppDatabase>()));
-  sl.registerFactory(() => SupplierAnalysisReportBloc(sl<AppDatabase>()));
-  sl.registerFactory(() => SupplierAgingReportBloc(sl<AppDatabase>()));
-  sl.registerFactory(() => SupplierStatementReportBloc(sl<AppDatabase>()));
-  sl.registerFactory(() => SupplierLedgerReportBloc(sl<AppDatabase>()));
-  sl.registerFactory(() => SupplierStocktakeReportBloc(sl<AppDatabase>()));
-  sl.registerFactory(() => SupplierBalanceDrilldownBloc(sl<AppDatabase>()));
-  sl.registerFactory(() => SalespeopleCommissionReportBloc(sl<AppDatabase>()));
-  sl.registerFactory(() => ExpenseReportBloc(sl<AppDatabase>()));
-  sl.registerFactory(() => SalesTaxReportBloc(sl<AppDatabase>()));
-  sl.registerFactory(() => PurchaseTaxReportBloc(sl<AppDatabase>()));
+  
+  // Report blocs - use defaultDateRange from AppSettings
+  sl.registerFactory(() {
+    final defaultRange = sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
+    return ReportsBloc(sl<JournalRepository>(), sl<AppDatabase>(), defaultDateRange: defaultRange);
+  });
+  sl.registerFactory(() {
+    final defaultRange = sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
+    return InventoryReportsBloc(sl<AppDatabase>(), defaultDateRange: defaultRange);
+  });
+  sl.registerFactory(() {
+    final defaultRange = sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
+    return ProductMovementDetailBloc(sl<AppDatabase>(), defaultDateRange: defaultRange);
+  });
+  sl.registerFactory(() {
+    final defaultRange = sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
+    return ProductVariantMovementBloc(sl<AppDatabase>(), defaultDateRange: defaultRange);
+  });
+  sl.registerFactory(() {
+    final defaultRange = sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
+    return CategoryMovementBloc(sl<AppDatabase>(), defaultDateRange: defaultRange);
+  });
+  sl.registerFactory(() {
+    final defaultRange = sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
+    return CustomerReportsBloc(sl<AppDatabase>(), defaultDateRange: defaultRange);
+  });
+  sl.registerFactory(() {
+    final defaultRange = sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
+    return CustomerSalesReturnsBloc(sl<AppDatabase>(), defaultDateRange: defaultRange);
+  });
+  sl.registerFactory(() {
+    final defaultRange = sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
+    return TopCustomersBloc(sl<AppDatabase>(), defaultDateRange: defaultRange);
+  });
+  sl.registerFactory(() {
+    final defaultRange = sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
+    return CustomerPaymentReportsBloc(sl<AppDatabase>(), defaultDateRange: defaultRange);
+  });
+  sl.registerFactory(() {
+    final defaultRange = sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
+    return CustomerSalesReportBloc(sl<AppDatabase>(), defaultDateRange: defaultRange);
+  });
+  sl.registerFactory(() {
+    final defaultRange = sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
+    return CustomerAgingReportBloc(sl<AppDatabase>(), defaultDateRange: defaultRange);
+  });
+  sl.registerFactory(() {
+    final defaultRange = sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
+    return CustomerStatementReportBloc(sl<AppDatabase>(), defaultDateRange: defaultRange);
+  });
+  sl.registerFactory(() {
+    final defaultRange = sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
+    return CustomerAnalysisReportBloc(sl<AppDatabase>(), defaultDateRange: defaultRange);
+  });
+  sl.registerFactory(() {
+    final defaultRange = sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
+    return SupplierBalanceReportBloc(sl<AppDatabase>(), defaultDateRange: defaultRange);
+  });
+  sl.registerFactory(() {
+    final defaultRange = sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
+    return SupplierDebitBalanceReportBloc(sl<AppDatabase>(), defaultDateRange: defaultRange);
+  });
+  sl.registerFactory(() {
+    final defaultRange = sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
+    return SupplierCreditBalanceReportBloc(sl<AppDatabase>(), defaultDateRange: defaultRange);
+  });
+  sl.registerFactory(() {
+    final defaultRange = sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
+    return SupplierAnalysisReportBloc(sl<AppDatabase>(), defaultDateRange: defaultRange);
+  });
+  sl.registerFactory(() {
+    final defaultRange = sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
+    return SupplierAgingReportBloc(sl<AppDatabase>(), defaultDateRange: defaultRange);
+  });
+  sl.registerFactory(() {
+    final defaultRange = sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
+    return SupplierStatementReportBloc(sl<AppDatabase>(), defaultDateRange: defaultRange);
+  });
+  sl.registerFactory(() {
+    final defaultRange = sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
+    return SupplierLedgerReportBloc(sl<AppDatabase>(), defaultDateRange: defaultRange);
+  });
+  sl.registerFactory(() {
+    final defaultRange = sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
+    return CustomerLedgerReportBloc(sl<AppDatabase>(), defaultDateRange: defaultRange);
+  });
+  sl.registerFactory(() {
+    final defaultRange = sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
+    return SupplierStocktakeReportBloc(sl<AppDatabase>(), defaultDateRange: defaultRange);
+  });
+  sl.registerFactory(() {
+    final defaultRange = sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
+    return SupplierBalanceDrilldownBloc(sl<AppDatabase>(), defaultDateRange: defaultRange);
+  });
+  sl.registerFactory(() {
+    final defaultRange = sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
+    return SalespeopleCommissionReportBloc(sl<AppDatabase>(), defaultDateRange: defaultRange);
+  });
+  sl.registerFactory(() {
+    final defaultRange = sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
+    return ExpenseReportBloc(sl<AppDatabase>(), defaultDateRange: defaultRange);
+  });
+  sl.registerFactory(() {
+    final defaultRange = sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
+    return SalesTaxReportBloc(sl<AppDatabase>(), defaultDateRange: defaultRange);
+  });
+  sl.registerFactory(() {
+    final defaultRange = sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
+    return PurchaseTaxReportBloc(sl<AppDatabase>(), defaultDateRange: defaultRange);
+  });
+  sl.registerFactory(() {
+    final defaultRange = sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
+    return SalesReportsBloc(sl<AppDatabase>(), defaultDateRange: defaultRange);
+  });
+  sl.registerFactory(() {
+    final defaultRange = sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
+    return PurchaseReportsBloc(sl<AppDatabase>(), defaultDateRange: defaultRange);
+  });
+  sl.registerFactory(() {
+    final defaultRange = sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
+    return DiscountReportsBloc(sl<AppDatabase>(), defaultDateRange: defaultRange);
+  });
+  sl.registerFactory(() {
+    final defaultRange = sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
+    return ProfitReportsBloc(sl<AppDatabase>(), defaultDateRange: defaultRange);
+  });
 
   // Ledger Rebuild Service
   sl.registerLazySingleton<LedgerRebuildService>(
@@ -435,14 +548,29 @@ Future<void> init() async {
   );
 
   // Barcode Services
+  // Crashlytics Service (singleton instance)
+  sl.registerLazySingleton(() => CrashlyticsService.instance);
+
   sl.registerLazySingleton(() => BarcodeValidationService());
   sl.registerLazySingleton(() => BarcodePrinterService(settingsDao: sl()));
 
   // Settings Services
   sl.registerLazySingleton(() => CompanyProfileService(sl()));
+  sl.registerLazySingleton(() => AppSettingsService(sl()));
   
   // Settings Blocs
   sl.registerFactory(() => CompanyBloc(sl<CompanyProfileService>()));
+  sl.registerLazySingleton(() => AppSettingsBloc(sl<AppSettingsService>()));
+
+  // RevenueCat / Subscription
+  sl.registerLazySingleton(() => RevenueCatService.instance);
+  sl.registerLazySingleton(() => SubscriptionBloc(revenueCatService: sl<RevenueCatService>()));
+  
+  // Configure SessionService to use AppSettings for timeout
+  sl<SessionService>().configureTimeoutSettings(() {
+    final settings = sl<AppSettingsBloc>().state.settings;
+    return (enabled: settings.enableSessionTimeout, timeoutMinutes: settings.sessionTimeoutMinutes);
+  });
   
   // Barcode Blocs
   sl.registerFactory(() => BarcodeScannerBloc(
@@ -454,5 +582,20 @@ Future<void> init() async {
     printerService: sl<BarcodePrinterService>(),
     companyProfileService: sl<CompanyProfileService>(),
     productVariantDao: sl<ProductVariantDao>(),
+    appSettings: sl<AppSettingsBloc>().state.settings,
   ));
+
+  // ONE-TIME REPAIR: Fix journal entries (draft purchase orphans + overpayments).
+  // Uses a SharedPreferences flag to ensure it only runs once per version.
+  const repairKey = 'overpayment_journal_repair_done_v2';
+  if (!sharedPreferences.containsKey(repairKey)) {
+    try {
+      final repaired = await sl<JournalEntryService>().repairOverpaymentJournalEntries();
+      await sharedPreferences.setBool(repairKey, true);
+      debugPrint('Overpayment journal repair complete: $repaired entries fixed');
+    } catch (e, st) {
+      debugPrint('Overpayment journal repair failed (will retry next launch): $e');
+      debugPrint('$st');
+    }
+  }
 }

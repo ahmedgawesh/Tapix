@@ -24,8 +24,13 @@ void main() {
     mockRepository = MockProductRepository();
     // Stub watchAllProducts since it's called immediately in constructor
     // Use Stream.empty() to prevent automatic state changes during tests
-    when(() => mockRepository.watchAllProducts())
+    when(() => mockRepository.watchAllProducts(isActive: any(named: 'isActive')))
         .thenAnswer((_) => const Stream.empty());
+    when(() => mockRepository.watchFilteredProducts(
+          categoryId: any(named: 'categoryId'),
+          stockStatus: any(named: 'stockStatus'),
+          isActive: any(named: 'isActive'),
+        )).thenAnswer((_) => const Stream.empty());
     bloc = ProductsBloc(mockRepository);
   });
 
@@ -42,9 +47,9 @@ void main() {
       blocTest<ProductsBloc, RealtimeState<List<Product>>>(
         'emits loading then success with search results',
         build: () {
-          when(() => mockRepository.watchAllProducts())
+          when(() => mockRepository.watchAllProducts(isActive: any(named: 'isActive')))
               .thenAnswer((_) => const Stream.empty());
-          when(() => mockRepository.searchProducts(any()))
+          when(() => mockRepository.searchProducts(any(), isActive: any(named: 'isActive')))
               .thenAnswer((_) async => testProducts);
           return ProductsBloc(mockRepository);
         },
@@ -61,13 +66,13 @@ void main() {
       blocTest<ProductsBloc, RealtimeState<List<Product>>>(
         'clears search when query is empty',
         build: () {
-          when(() => mockRepository.watchAllProducts())
+          when(() => mockRepository.watchAllProducts(isActive: any(named: 'isActive')))
               .thenAnswer((_) => Stream.value(testProducts));
           return ProductsBloc(mockRepository);
         },
         act: (bloc) => bloc.add(const ProductSearchRequested('')),
         verify: (_) {
-          verify(() => mockRepository.watchAllProducts()).called(greaterThan(0));
+          verify(() => mockRepository.watchAllProducts(isActive: any(named: 'isActive'))).called(greaterThan(0));
         },
       );
     });
@@ -76,13 +81,19 @@ void main() {
       blocTest<ProductsBloc, RealtimeState<List<Product>>>(
         'emits loading then success with filtered results',
         build: () {
-          when(() => mockRepository.watchAllProducts())
+          when(() => mockRepository.watchAllProducts(isActive: any(named: 'isActive')))
               .thenAnswer((_) => const Stream.empty());
+          when(() => mockRepository.watchFilteredProducts(
+                categoryId: any(named: 'categoryId'),
+                stockStatus: any(named: 'stockStatus'),
+                isActive: any(named: 'isActive'),
+              )).thenAnswer((_) => Stream.value(testProducts));
           when(() => mockRepository.filterProducts(
                 categoryId: any(named: 'categoryId'),
                 stockStatus: any(named: 'stockStatus'),
                 limit: any(named: 'limit'),
                 offset: any(named: 'offset'),
+                isActive: any(named: 'isActive'),
               )).thenAnswer((_) async => testProducts);
           return ProductsBloc(mockRepository);
         },
@@ -91,6 +102,7 @@ void main() {
           stockStatus: 'low_stock',
         )),
         expect: () => [
+          isA<RealtimeLoading<List<Product>>>(),
           isA<RealtimeLoading<List<Product>>>(),
           isA<RealtimeSuccess<List<Product>>>(),
         ],
@@ -106,14 +118,14 @@ void main() {
       blocTest<ProductsBloc, RealtimeState<List<Product>>>(
         'clears all filters and refreshes',
         build: () {
-          when(() => mockRepository.watchAllProducts())
+          when(() => mockRepository.watchAllProducts(isActive: any(named: 'isActive')))
               .thenAnswer((_) => Stream.value(testProducts));
+          when(() => mockRepository.watchFilteredProducts(
+                categoryId: any(named: 'categoryId'),
+                stockStatus: any(named: 'stockStatus'),
+                isActive: any(named: 'isActive'),
+              )).thenAnswer((_) => Stream.value(testProducts));
           return ProductsBloc(mockRepository);
-        },
-        seed: () {
-          final bloc = ProductsBloc(mockRepository);
-          bloc.add(const ProductFilterRequested(categoryId: 1));
-          return bloc.state;
         },
         act: (bloc) => bloc.add(const ProductFilterCleared()),
         verify: (bloc) {
@@ -130,7 +142,7 @@ void main() {
       blocTest<ProductsBloc, RealtimeState<List<Product>>>(
         'emits loading then success with scanned product',
         build: () {
-          when(() => mockRepository.watchAllProducts())
+          when(() => mockRepository.watchAllProducts(isActive: any(named: 'isActive')))
               .thenAnswer((_) => const Stream.empty());
           when(() => mockRepository.findByBarcode(any()))
               .thenAnswer((_) async => testProduct);
@@ -149,7 +161,7 @@ void main() {
       blocTest<ProductsBloc, RealtimeState<List<Product>>>(
         'emits empty list when barcode not found',
         build: () {
-          when(() => mockRepository.watchAllProducts())
+          when(() => mockRepository.watchAllProducts(isActive: any(named: 'isActive')))
               .thenAnswer((_) => const Stream.empty());
           when(() => mockRepository.findByBarcode(any()))
               .thenAnswer((_) async => null);
@@ -169,8 +181,13 @@ void main() {
       blocTest<ProductsBloc, RealtimeState<List<Product>>>(
         'loads more products and appends to list',
         build: () {
-          when(() => mockRepository.watchAllProducts())
+          when(() => mockRepository.watchAllProducts(isActive: any(named: 'isActive')))
               .thenAnswer((_) => const Stream.empty());
+          when(() => mockRepository.watchFilteredProducts(
+                categoryId: any(named: 'categoryId'),
+                stockStatus: any(named: 'stockStatus'),
+                isActive: any(named: 'isActive'),
+              )).thenAnswer((_) => const Stream.empty());
           // Return enough products to trigger hasMoreData = true (>= pageSize)
           final manyProducts = List.generate(50, (i) => MockProduct());
           when(() => mockRepository.filterProducts(
@@ -178,6 +195,7 @@ void main() {
                 stockStatus: any(named: 'stockStatus'),
                 limit: any(named: 'limit'),
                 offset: any(named: 'offset'),
+                isActive: any(named: 'isActive'),
               )).thenAnswer((_) async => manyProducts);
           return ProductsBloc(mockRepository);
         },
@@ -190,7 +208,7 @@ void main() {
         },
         expect: () => [
           isA<RealtimeLoading<List<Product>>>(),
-          isA<RealtimeSuccess<List<Product>>>(),
+          isA<RealtimeLoading<List<Product>>>(),
           isA<RealtimeSuccess<List<Product>>>(),
         ],
       );
@@ -198,13 +216,14 @@ void main() {
       blocTest<ProductsBloc, RealtimeState<List<Product>>>(
         'does not load more when hasMoreData is false',
         build: () {
-          when(() => mockRepository.watchAllProducts())
+          when(() => mockRepository.watchAllProducts(isActive: any(named: 'isActive')))
               .thenAnswer((_) => const Stream.empty());
           when(() => mockRepository.filterProducts(
                 categoryId: any(named: 'categoryId'),
                 stockStatus: any(named: 'stockStatus'),
                 limit: any(named: 'limit'),
                 offset: any(named: 'offset'),
+                isActive: any(named: 'isActive'),
               )).thenAnswer((_) async => []);
           final bloc = ProductsBloc(mockRepository);
           bloc.add(const ProductLoadMoreRequested());
@@ -221,7 +240,7 @@ void main() {
       blocTest<ProductsBloc, RealtimeState<List<Product>>>(
         'creates product successfully',
         build: () {
-          when(() => mockRepository.watchAllProducts())
+          when(() => mockRepository.watchAllProducts(isActive: any(named: 'isActive')))
               .thenAnswer((_) => const Stream.empty());
           when(() => mockRepository.createProduct(
                 name: any(named: 'name'),

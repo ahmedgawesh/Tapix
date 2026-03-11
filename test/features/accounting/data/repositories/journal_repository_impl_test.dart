@@ -389,7 +389,7 @@ void main() {
 
       await repository.seedDefaultAccounts(1);
 
-      expect(fakeDatasource.createAccountCallCount, 21);
+      expect(fakeDatasource.createAccountCallCount, 16);
     });
   });
 }

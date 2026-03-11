@@ -49,21 +49,43 @@ class CustomerRepositoryImpl implements CustomerRepository {
     Decimal? initialBalance,
     String segment = 'retail',
     bool loyaltyEnabled = true,
-  }) {
+  }) async {
+    final balanceCents = initialBalance ?? Decimal.zero;
     final companion = CustomersCompanion(
       name: Value(name),
       email: Value(email),
       phone: Value(phone),
       address: Value(address),
       currencyId: Value(currencyId),
-      balanceCents: Value(initialBalance ?? Decimal.zero),
+      balanceCents: Value(balanceCents),
+      openingBalanceCents: Value(balanceCents), // Store opening balance separately
       segment: Value(segment),
       loyaltyEnabled: Value(loyaltyEnabled),
       isActive: const Value(true),
       createdAt: Value(DateTime.now()),
       updatedAt: Value(DateTime.now()),
     );
-    return _datasource.createCustomer(companion);
+
+    final balanceInt = balanceCents.toBigInt().toInt();
+
+    // ATOMIC: create customer + post opening balance journal entry together
+    final customerId = await _db.transaction(() async {
+      final id = await _datasource.createCustomer(companion);
+
+      if (balanceInt != 0) {
+        final userId = await _currentUserId();
+        await _journalService.recordCustomerOpeningBalanceJournalEntry(
+          customerId: id,
+          amountCents: balanceInt,
+          currencyId: currencyId,
+          userId: userId,
+        );
+      }
+
+      return id;
+    });
+
+    return customerId;
   }
 
   @override
@@ -170,6 +192,16 @@ class CustomerRepositoryImpl implements CustomerRepository {
           currencyId: currencyId,
           userId: userId,
         );
+      } else if (transactionType == 'adjustment' && amountCents != 0) {
+        // Balance adjustment uses the opening balance equity account.
+        // amountCents carries the sign: positive = customer owes more,
+        // negative = customer owes less.
+        await _journalService.recordCustomerOpeningBalanceJournalEntry(
+          customerId: customerId,
+          amountCents: amountCents,
+          currencyId: currencyId,
+          userId: userId,
+        );
       }
 
       return id;
@@ -181,6 +213,97 @@ class CustomerRepositoryImpl implements CustomerRepository {
   @override
   Future<CustomerTransaction?> getTransaction(int transactionId) {
     return _datasource.getTransaction(transactionId);
+  }
+
+  @override
+  Future<CustomerTransaction> updateTransaction({
+    required int transactionId,
+    required int newAmountCents,
+    String? newDescription,
+  }) async {
+    // 1. Fetch existing transaction to validate and get date
+    final existing = await _datasource.getTransaction(transactionId);
+    if (existing == null) {
+      throw StateError('Transaction #$transactionId not found');
+    }
+
+    // 2. Check accounting period is open for the transaction date
+    final txDate = existing.transactionDate;
+    final periodRows = await _db.customSelect(
+      '''SELECT id, is_closed FROM accounting_periods
+         WHERE start_date <= ? AND end_date >= ?
+         ORDER BY start_date DESC LIMIT 1''',
+      variables: [
+        Variable.withDateTime(txDate),
+        Variable.withDateTime(txDate),
+      ],
+      readsFrom: {_db.accountingPeriods},
+    ).get();
+    if (periodRows.isNotEmpty && periodRows.first.read<bool>('is_closed')) {
+      throw StateError(
+        'Cannot edit transaction: the accounting period containing this '
+        'transaction has been closed.',
+      );
+    }
+
+    final userId = await _currentUserId();
+    final oldAmountCents = existing.amountCents.toBigInt().toInt().abs();
+    final absNewAmount = newAmountCents.abs();
+
+    // 3. ATOMIC: update transaction + void old journal + create new journal
+    final oldTx = await _db.transaction(() async {
+      final old = await _datasource.updateTransactionAmount(
+        transactionId,
+        newAmountCents: absNewAmount,
+        newDescription: newDescription,
+      );
+
+      // Void old journal entries for this transaction
+      await _journalService.voidJournalEntriesForSource(
+        sourceTable: 'customer_transactions',
+        sourceId: transactionId,
+        reason: 'Transaction amount edited from $oldAmountCents to $absNewAmount cents',
+        userId: userId,
+      );
+
+      // Create new journal entries with updated amount
+      if (existing.transactionType == 'payment' && absNewAmount > 0) {
+        await _journalService.recordDirectCustomerPaymentJournalEntry(
+          transactionId: transactionId,
+          amountCents: absNewAmount,
+          currencyId: existing.currencyId,
+          userId: userId,
+        );
+      } else if (existing.transactionType == 'discount' && absNewAmount > 0) {
+        await _journalService.recordDirectCustomerDiscountJournalEntry(
+          transactionId: transactionId,
+          amountCents: absNewAmount,
+          currencyId: existing.currencyId,
+          userId: userId,
+        );
+      }
+
+      return old;
+    });
+
+    // 4. Audit log
+    await _auditService.log(
+      entityType: 'customer_transaction',
+      entityId: transactionId,
+      action: 'edit_transaction',
+      oldValue: {
+        'amountCents': oldAmountCents,
+        'type': existing.transactionType,
+        'customerId': existing.customerId,
+      },
+      newValue: {
+        'amountCents': absNewAmount,
+        'description': newDescription,
+      },
+      userId: userId,
+    );
+
+    return oldTx;
   }
 
   @override

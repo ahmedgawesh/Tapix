@@ -150,10 +150,12 @@ class SalesTaxReportData {
 class SalesTaxReportBloc
     extends RealtimeBloc<SalesTaxReportData, SalesTaxReportEvent> {
   final AppDatabase _db;
-  ReportDateRange _dateRange = ReportDateRange.thisMonth();
+  ReportDateRange _dateRange;
   SalesTaxSortType _sort = SalesTaxSortType.dateDesc;
 
-  SalesTaxReportBloc(this._db) : super(const RealtimeLoading());
+  SalesTaxReportBloc(this._db, {String defaultDateRange = 'month'})
+      : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+        super(const RealtimeLoading());
 
   @override
   Stream<SalesTaxReportData> get dataStream {

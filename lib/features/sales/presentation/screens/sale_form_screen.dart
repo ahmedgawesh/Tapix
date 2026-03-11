@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -30,53 +31,127 @@ import '../../../products/presentation/bloc/product_variants_bloc.dart';
 import '../../../customers/domain/repositories/customer_repository.dart';
 import '../../../customers/presentation/bloc/customers_bloc.dart';
 import '../../../employees/domain/repositories/employee_repository.dart';
+import '../../../settings/presentation/bloc/app_settings_bloc.dart';
 import '../bloc/sale_form_bloc.dart';
 import '../services/sale_pdf_service.dart';
 
 part 'sale_form_dialogs.dart';
 
-class SaleFormScreen extends StatelessWidget {
+class SaleFormScreen extends StatefulWidget {
   final int? saleId;
-  const SaleFormScreen({super.key, this.saleId});
+  final bool isEditingPosted;
+  const SaleFormScreen({super.key, this.saleId, this.isEditingPosted = false});
+
+  @override
+  State<SaleFormScreen> createState() => _SaleFormScreenState();
+}
+
+class _SaleFormScreenState extends State<SaleFormScreen> {
+  final List<SaleFormBloc> _tabs = [];
+  final List<TextEditingController> _notesControllers = [];
+  int _activeTab = 0;
+  late final UserRole _userRole;
+  late final int? _userId;
+
+  @override
+  void initState() {
+    super.initState();
+    final authState = context.read<AuthBloc>().state;
+    _userRole = (authState is AuthAuthenticated) ? authState.user.role : UserRole.cashier;
+    _userId = (authState is AuthAuthenticated) ? authState.user.id : null;
+    _addTab(saleId: widget.saleId, isEditingPosted: widget.isEditingPosted);
+  }
+
+  SaleFormBloc _createBloc({int? saleId, bool isEditingPosted = false}) {
+    final bloc = sl<SaleFormBloc>();
+    bloc.currentUserRole = _userRole;
+    bloc.currentUserId = _userId;
+    
+    // Get global settings from AppSettingsBloc
+    final appSettingsState = context.read<AppSettingsBloc>().state;
+    final settings = appSettingsState.settings;
+    final enableTax = settings.enableTaxCalculations;
+    // Convert percentage to basis points (e.g., 15% -> 1500 bps)
+    final taxRateBps = (settings.defaultSalesTaxRate * 100).round();
+    
+    bloc.add(SaleFormInitialized(
+      saleId: saleId,
+      currencyId: 1,
+      enableTaxCalculations: enableTax,
+      defaultSalesTaxRateBps: taxRateBps,
+      allowNegativeStock: settings.allowNegativeStock,
+      isEditingPosted: isEditingPosted,
+    ));
+    return bloc;
+  }
+
+  void _addTab({int? saleId, bool isEditingPosted = false}) {
+    setState(() {
+      _tabs.add(_createBloc(saleId: saleId, isEditingPosted: isEditingPosted));
+      _notesControllers.add(TextEditingController());
+      _activeTab = _tabs.length - 1;
+    });
+  }
+
+  void _closeTab(int index) {
+    if (_tabs.length <= 1) return;
+    setState(() {
+      _tabs[index].close();
+      _tabs.removeAt(index);
+      _notesControllers[index].dispose();
+      _notesControllers.removeAt(index);
+      if (_activeTab >= _tabs.length) _activeTab = _tabs.length - 1;
+    });
+  }
+
+  void _switchTab(int index) {
+    if (index != _activeTab) setState(() => _activeTab = index);
+  }
+
+  bool get _isEditMode => widget.saleId != null;
+
+  @override
+  void dispose() {
+    for (final bloc in _tabs) { bloc.close(); }
+    for (final ctrl in _notesControllers) { ctrl.dispose(); }
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    // Read user role from AuthBloc to pass to SaleFormBloc
-    final authState = context.read<AuthBloc>().state;
-    UserRole userRole = UserRole.cashier;
-    int? userId;
-    if (authState is AuthAuthenticated) {
-      userRole = authState.user.role;
-      userId = authState.user.id;
-    }
-
-    return BlocProvider(
-      create: (_) {
-        final bloc = sl<SaleFormBloc>();
-        bloc.currentUserRole = userRole;
-        bloc.currentUserId = userId;
-        bloc.add(SaleFormInitialized(saleId: saleId, currencyId: 1));
-        return bloc;
-      },
-      child: const _SaleFormView(),
+    return BlocProvider.value(
+      value: _tabs[_activeTab],
+      child: _SaleFormView(
+        notesCtrl: _notesControllers[_activeTab],
+        isEditMode: _isEditMode,
+        tabCount: _tabs.length,
+        activeTab: _activeTab,
+        onAddTab: _isEditMode ? null : () => _addTab(),
+        onCloseTab: _isEditMode ? null : _closeTab,
+        onSwitchTab: _switchTab,
+      ),
     );
   }
 }
 
-class _SaleFormView extends StatefulWidget {
-  const _SaleFormView();
-  @override
-  State<_SaleFormView> createState() => _SaleFormViewState();
-}
+class _SaleFormView extends StatelessWidget {
+  final TextEditingController notesCtrl;
+  final bool isEditMode;
+  final int tabCount;
+  final int activeTab;
+  final VoidCallback? onAddTab;
+  final void Function(int)? onCloseTab;
+  final void Function(int) onSwitchTab;
 
-class _SaleFormViewState extends State<_SaleFormView> {
-  final _notesCtrl = TextEditingController();
-
-  @override
-  void dispose() {
-    _notesCtrl.dispose();
-    super.dispose();
-  }
+  const _SaleFormView({
+    required this.notesCtrl,
+    required this.isEditMode,
+    required this.tabCount,
+    required this.activeTab,
+    this.onAddTab,
+    this.onCloseTab,
+    required this.onSwitchTab,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -91,7 +166,21 @@ class _SaleFormViewState extends State<_SaleFormView> {
           p.belowCostWarning != c.belowCostWarning,
       listener: (context, state) {
         if (state.isSuccess) {
-          _showSaveConfirmationDialog(context, state);
+          // Capture state snapshot before navigating away
+          final stateSnapshot = state;
+          // Navigate back immediately to prevent duplicate submissions
+          if (context.canPop()) {
+            context.pop();
+          } else {
+            context.go('/sales');
+          }
+          // Show print/share dialog after navigation completes
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            final nav = Navigator.of(context, rootNavigator: true);
+            if (nav.context.mounted) {
+              _showSaveConfirmationOverlay(nav.context, stateSnapshot);
+            }
+          });
         }
         if (state.error != null) {
           final key = state.error!;
@@ -120,6 +209,16 @@ class _SaleFormViewState extends State<_SaleFormView> {
               },
             ),
             title: Text(state.saleId == null ? 'sales.new'.tr() : 'sales.edit'.tr()),
+            actions: [
+              if (!isEditMode)
+                _SaleTabBar(
+                  tabCount: tabCount,
+                  activeTab: activeTab,
+                  onSwitchTab: onSwitchTab,
+                  onAddTab: onAddTab,
+                  onCloseTab: onCloseTab,
+                ),
+            ],
           ),
           body: Column(
             children: [
@@ -890,15 +989,16 @@ class _SaleFormViewState extends State<_SaleFormView> {
   }
 
   // ═══════════════════════════════════════════════════════
-  // SAVE CONFIRMATION DIALOG (Print / Share / Finish)
+  // SAVE CONFIRMATION OVERLAY (Print / Share / Finish)
+  // Shown AFTER navigating back to the sales list.
   // ═══════════════════════════════════════════════════════
-  void _showSaveConfirmationDialog(BuildContext context, SaleFormState state) {
+  void _showSaveConfirmationOverlay(BuildContext context, SaleFormState state) {
     final theme = Theme.of(context);
     final invoiceNumber = state.saleNumber ?? '${state.saleId ?? ''}';
 
     showDialog<void>(
       context: context,
-      barrierDismissible: false,
+      barrierDismissible: true,
       builder: (ctx) {
         return AlertDialog(
           content: Column(
@@ -942,13 +1042,6 @@ class _SaleFormViewState extends State<_SaleFormView> {
                     );
                   }
                 }
-                if (context.mounted) {
-                  if (context.canPop()) {
-                    context.pop();
-                  } else {
-                    context.go('/sales');
-                  }
-                }
               },
             ),
             TextButton.icon(
@@ -962,13 +1055,6 @@ class _SaleFormViewState extends State<_SaleFormView> {
                     state: state,
                   );
                 } catch (_) {}
-                if (context.mounted) {
-                  if (context.canPop()) {
-                    context.pop();
-                  } else {
-                    context.go('/sales');
-                  }
-                }
               },
             ),
             FilledButton.icon(
@@ -976,11 +1062,6 @@ class _SaleFormViewState extends State<_SaleFormView> {
               label: Text('sales.finish'.tr()),
               onPressed: () {
                 Navigator.pop(ctx);
-                if (context.canPop()) {
-                  context.pop();
-                } else {
-                  context.go('/sales');
-                }
               },
             ),
           ],
@@ -994,7 +1075,126 @@ class _SaleFormViewState extends State<_SaleFormView> {
     showModalBottomSheet<void>(context: ctx, isScrollControlled: true, useSafeArea: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (sc) => BlocProvider.value(value: bloc,
-        child: _CheckoutSheet(currencyService: curr, notesCtrl: _notesCtrl,
+        child: _CheckoutSheet(currencyService: curr, notesCtrl: notesCtrl,
           onConfirm: () { bloc.add(const SaleFormSubmitted()); Navigator.pop(sc); })));
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// SALE TAB BAR — Multi-session POS tabs in the app bar
+// ═══════════════════════════════════════════════════════
+class _SaleTabBar extends StatelessWidget {
+  final int tabCount;
+  final int activeTab;
+  final void Function(int) onSwitchTab;
+  final VoidCallback? onAddTab;
+  final void Function(int)? onCloseTab;
+
+  const _SaleTabBar({
+    required this.tabCount,
+    required this.activeTab,
+    required this.onSwitchTab,
+    this.onAddTab,
+    this.onCloseTab,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Tab chips
+        for (int i = 0; i < tabCount; i++)
+          Padding(
+            padding: const EdgeInsetsDirectional.only(end: 2),
+            child: GestureDetector(
+              onTap: () => onSwitchTab(i),
+              onLongPress: tabCount > 1 && onCloseTab != null
+                  ? () => _showCloseConfirm(context, i)
+                  : null,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: i == activeTab
+                      ? cs.primaryContainer
+                      : cs.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: i == activeTab
+                        ? cs.primary
+                        : cs.outlineVariant.withValues(alpha: 0.5),
+                    width: i == activeTab ? 1.5 : 1,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '${i + 1}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: i == activeTab ? FontWeight.bold : FontWeight.w500,
+                        color: i == activeTab ? cs.onPrimaryContainer : cs.onSurfaceVariant,
+                      ),
+                    ),
+                    if (i == activeTab && tabCount > 1 && onCloseTab != null) ...[
+                      const SizedBox(width: 2),
+                      GestureDetector(
+                        onTap: () => _showCloseConfirm(context, i),
+                        child: Icon(LucideIcons.x, size: 12, color: cs.onPrimaryContainer),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+        // Add tab button
+        if (onAddTab != null)
+          SizedBox(
+            width: 30,
+            height: 30,
+            child: IconButton(
+              padding: EdgeInsets.zero,
+              iconSize: 16,
+              icon: Icon(LucideIcons.plus, color: cs.primary),
+              onPressed: onAddTab,
+              tooltip: 'sales.add_tab'.tr(),
+              style: IconButton.styleFrom(
+                backgroundColor: cs.primaryContainer.withValues(alpha: 0.5),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+            ),
+          ),
+        const SizedBox(width: 8),
+      ],
+    );
+  }
+
+  void _showCloseConfirm(BuildContext context, int index) {
+    final cs = Theme.of(context).colorScheme;
+    showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('sales.close_tab_title'.tr()),
+        content: Text('sales.close_tab_message'.tr(args: ['${index + 1}'])),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('common.cancel'.tr()),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: cs.error),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('common.close'.tr()),
+          ),
+        ],
+      ),
+    ).then((confirmed) {
+      if (confirmed == true) onCloseTab?.call(index);
+    });
   }
 }

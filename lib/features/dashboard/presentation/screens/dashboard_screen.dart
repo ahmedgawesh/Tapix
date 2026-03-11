@@ -10,6 +10,9 @@ import '../../../auth/auth.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../settings/presentation/bloc/company_bloc.dart';
 import '../../../settings/domain/entities/company_profile.dart';
+import '../widgets/stock_alerts_section.dart';
+import '../widgets/daily_sales_summary_section.dart';
+import '../widgets/payment_reminders_section.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
@@ -170,6 +173,15 @@ class DashboardScreen extends StatelessWidget {
                   return const SizedBox.shrink();
                 },
               ),
+
+              // Stock alerts / notifications
+              const StockAlertsSection(),
+              
+              // Daily sales summary
+              const DailySalesSummarySection(),
+              
+              // Payment reminders
+              const PaymentRemindersSection(),
               
               // Quick actions grid
               Text(

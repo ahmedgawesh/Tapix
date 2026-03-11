@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart';
+import '../../../../core/services/crashlytics_service.dart';
 import '../../../accounting/domain/models/trial_balance.dart';
 import '../../../accounting/domain/models/reconciliation_result.dart';
 import '../../../accounting/domain/repositories/journal_repository.dart';
@@ -66,9 +67,15 @@ class ReportsData {
 class ReportsBloc extends RealtimeBloc<ReportsData, ReportsEvent> {
   final JournalRepository _repository;
   final AppDatabase _db;
-  ReportDateRange _dateRange = ReportDateRange.thisMonth();
+  ReportDateRange _dateRange;
 
-  ReportsBloc(this._repository, this._db) : super(const RealtimeLoading());
+  ReportsBloc(this._repository, this._db, {String defaultDateRange = 'month'})
+      : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+        super(const RealtimeLoading()) {
+    CrashlyticsService.instance.logAction('report_opened', {
+      'date_range': defaultDateRange,
+    });
+  }
 
   ReportDateRange get dateRange => _dateRange;
 

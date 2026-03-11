@@ -211,12 +211,14 @@ class ProductVariantMovementData {
 class ProductVariantMovementBloc
     extends RealtimeBloc<ProductVariantMovementData, ProductVariantMovementEvent> {
   final AppDatabase _db;
-  ReportDateRange _dateRange = ReportDateRange.thisMonth();
+  ReportDateRange _dateRange;
   String _searchQuery = '';
   int? _selectedProductId;
   VariantGroupBy _groupBy = VariantGroupBy.variant;
 
-  ProductVariantMovementBloc(this._db) : super(const RealtimeLoading());
+  ProductVariantMovementBloc(this._db, {String defaultDateRange = 'month'})
+      : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+        super(const RealtimeLoading());
 
   @override
   Stream<ProductVariantMovementData> get dataStream {

@@ -289,10 +289,23 @@ class SupplierFormBloc extends Bloc<SupplierFormEvent, SupplierFormState> {
             email: Value(currentState.email.isEmpty ? null : currentState.email),
             phone: Value(currentState.phone.isEmpty ? null : currentState.phone),
             address: Value(currentState.address.isEmpty ? null : currentState.address),
-            balanceCents: balanceCents,
             updatedAt: DateTime.now(),
           );
           await _repository.updateSupplier(updatedSupplier);
+
+          final desiredBalanceCents = balanceCents.toBigInt().toInt();
+          final currentBalanceCents = existingSupplier.balanceCents.toBigInt().toInt();
+          if (desiredBalanceCents != currentBalanceCents) {
+            final deltaCents = desiredBalanceCents - currentBalanceCents;
+            await _repository.recordTransaction(
+              supplierId: existingSupplier.id,
+              transactionType: 'adjustment',
+              amountCents: deltaCents,
+              currencyId: existingSupplier.currencyId,
+              description: null,
+            );
+          }
+
           emit(SupplierFormSuccess(
             supplierId: currentState.supplierId!,
             isNew: false,

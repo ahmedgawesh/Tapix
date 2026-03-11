@@ -2,6 +2,7 @@ import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/bloc/realtime_bloc.dart';
+import '../../../../core/services/crashlytics_service.dart';
 
 import '../../domain/entities/user_entity.dart';
 import '../../domain/repositories/auth_repository_interface.dart';
@@ -25,6 +26,8 @@ class AuthBloc extends RealtimeBloc<UserEntity?, AuthEvent> {
     on<AuthLoginRequested>(_onLoginRequested);
     on<AuthLogoutRequested>(_onLogoutRequested);
     on<AuthFirstOwnerCreated>(_onFirstOwnerCreated);
+    on<AuthSecurityQuestionRequested>(_onSecurityQuestionRequested);
+    on<AuthPasswordResetRequested>(_onPasswordResetRequested);
   }
 
   @override
@@ -63,8 +66,12 @@ class AuthBloc extends RealtimeBloc<UserEntity?, AuthEvent> {
       } else {
         emit(const AuthUnauthenticated());
       }
-    } catch (e) {
-      emit(const AuthError(message: 'Authentication error'));
+    } catch (e, stackTrace) {
+      // ignore: avoid_print
+      print('AuthCheckRequested error: $e');
+      // ignore: avoid_print
+      print('Stack trace: $stackTrace');
+      emit(AuthError(message: 'Authentication error: $e'));
     }
   }
 
@@ -77,6 +84,14 @@ class AuthBloc extends RealtimeBloc<UserEntity?, AuthEvent> {
     try {
       final user = await _repository.login(event.username, event.password);
       if (user != null) {
+        CrashlyticsService.instance.setUser(
+          userId: user.id,
+          role: user.role.name,
+        );
+        CrashlyticsService.instance.logAction('login', {
+          'user_id': user.id.toString(),
+          'role': user.role.name,
+        });
         emit(AuthAuthenticated(user: user));
       } else {
         emit(const AuthError(message: 'Invalid username or password'));
@@ -94,6 +109,8 @@ class AuthBloc extends RealtimeBloc<UserEntity?, AuthEvent> {
 
     try {
       await _repository.logout();
+      CrashlyticsService.instance.logAction('logout');
+      CrashlyticsService.instance.clearUser();
       emit(const AuthUnauthenticated());
     } catch (e) {
       emit(const AuthError(message: 'Authentication error'));
@@ -110,10 +127,62 @@ class AuthBloc extends RealtimeBloc<UserEntity?, AuthEvent> {
       final user = await _repository.createFirstOwner(
         event.username,
         event.password,
+        securityQuestion: event.securityQuestion,
+        securityAnswer: event.securityAnswer,
       );
+      CrashlyticsService.instance.setUser(
+        userId: user.id,
+        role: user.role.name,
+      );
+      CrashlyticsService.instance.logAction('first_owner_created', {
+        'user_id': user.id.toString(),
+      });
       emit(AuthAuthenticated(user: user));
     } catch (e) {
       emit(const AuthError(message: 'Failed to create owner account'));
+    }
+  }
+
+  Future<void> _onSecurityQuestionRequested(
+    AuthSecurityQuestionRequested event,
+    Emitter<RealtimeState<UserEntity?>> emit,
+  ) async {
+    emit(const AuthLoading());
+
+    try {
+      final question = await _repository.getSecurityQuestion(event.username);
+      if (question != null && question.isNotEmpty) {
+        emit(AuthSecurityQuestionLoaded(
+          username: event.username,
+          question: question,
+        ));
+      } else {
+        emit(AuthSecurityQuestionNotSet(username: event.username));
+      }
+    } catch (e) {
+      emit(const AuthError(message: 'Failed to load security question'));
+    }
+  }
+
+  Future<void> _onPasswordResetRequested(
+    AuthPasswordResetRequested event,
+    Emitter<RealtimeState<UserEntity?>> emit,
+  ) async {
+    emit(const AuthLoading());
+
+    try {
+      final success = await _repository.resetPasswordWithSecurityAnswer(
+        username: event.username,
+        securityAnswer: event.securityAnswer,
+        newPassword: event.newPassword,
+      );
+      if (success) {
+        emit(const AuthPasswordResetSuccess());
+      } else {
+        emit(const AuthPasswordResetFailed(message: 'incorrect_answer'));
+      }
+    } catch (e) {
+      emit(const AuthPasswordResetFailed(message: 'reset_failed'));
     }
   }
 }

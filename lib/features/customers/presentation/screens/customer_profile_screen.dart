@@ -16,6 +16,7 @@ import '../../domain/repositories/loyalty_repository.dart';
 import '../bloc/customer_loyalty_bloc.dart';
 import '../bloc/customer_profile_bloc.dart';
 import '../services/customer_transaction_pdf_service.dart';
+import '../widgets/edit_transaction_dialog.dart';
 
 /// Customer profile screen with 360° view
 class CustomerProfileScreen extends StatefulWidget {
@@ -339,6 +340,7 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                     const SizedBox(height: 16),
                     _BalanceCard(
                       balanceCents: balanceCents,
+                      openingBalanceCents: customer.openingBalanceCents.toBigInt().toInt(),
                       currencyService: currencyService,
                     ),
                     const SizedBox(height: 16),
@@ -1070,10 +1072,12 @@ class _SegmentBadge extends StatelessWidget {
 
 class _BalanceCard extends StatelessWidget {
   final int balanceCents;
+  final int openingBalanceCents;
   final CurrencyService currencyService;
 
   const _BalanceCard({
     required this.balanceCents,
+    required this.openingBalanceCents,
     required this.currencyService,
   });
 
@@ -1135,6 +1139,50 @@ class _BalanceCard extends StatelessWidget {
                     : theme.colorScheme.onSurfaceVariant,
               ),
             ),
+            // Show opening balance if it exists
+            if (openingBalanceCents != 0) ...[
+              const SizedBox(height: 12),
+              Divider(color: colorScheme.outlineVariant.withValues(alpha: 0.3)),
+              const SizedBox(height: 8),
+              Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        'customers.opening_balance'.tr(),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: isDark
+                              ? Colors.white.withValues(alpha: 0.65)
+                              : colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        currencyService.format(openingBalanceCents),
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: openingBalanceCents > 0
+                              ? (isDark ? const Color(0xFFA5D6A7) : Colors.green)
+                              : (isDark ? const Color(0xFFEF9A9A) : Colors.red),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    openingBalanceCents > 0
+                        ? '(${'customers.opening_balance_receivable'.tr()})'
+                        : '(${'customers.opening_balance_payable'.tr()})',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.5)
+                          : colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
       ),
@@ -1206,21 +1254,37 @@ class _LoyaltySection extends StatelessWidget {
                         ),
                       ),
                       const Spacer(),
-                      if (summary.currentTier != null)
-                        Container(
+                      InkWell(
+                        onTap: () => _showChangeTierDialog(context, customerId, summary.currentTier),
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                           decoration: BoxDecoration(
-                            color: _parseColor(summary.currentTier!.color),
+                            color: summary.currentTier != null 
+                                ? _parseColor(summary.currentTier!.color)
+                                : colorScheme.surfaceContainerHighest,
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          child: Text(
-                            summary.currentTier!.name,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                            ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                summary.currentTier?.name ?? 'customers.no_tier'.tr(),
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: summary.currentTier != null ? Colors.white : null,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Icon(
+                                LucideIcons.chevronDown,
+                                size: 14,
+                                color: summary.currentTier != null ? Colors.white : null,
+                              ),
+                            ],
                           ),
                         ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 16),
@@ -1321,6 +1385,14 @@ class _LoyaltySection extends StatelessWidget {
                       label: Text('customers.next_tier_benefits'.tr()),
                     ),
                   ],
+
+                  // Points History Button
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: () => _showPointsHistory(context, customerId),
+                    icon: const Icon(Icons.history, size: 18),
+                    label: Text('customers.points_history'.tr()),
+                  ),
                 ],
               ),
             ),
@@ -1337,6 +1409,41 @@ class _LoyaltySection extends StatelessWidget {
       return Color(int.parse(hexColor.replaceFirst('#', '0xFF')));
     } catch (_) {
       return Colors.grey;
+    }
+  }
+
+  Future<void> _showChangeTierDialog(BuildContext context, int customerId, LoyaltyTier? currentTier) async {
+    final loyaltyRepo = sl<LoyaltyRepository>();
+    final tiers = await loyaltyRepo.getAllTiers();
+    
+    if (!context.mounted) return;
+    
+    final selectedTierId = await showDialog<int?>(
+      context: context,
+      builder: (ctx) => _ChangeTierDialog(
+        tiers: tiers,
+        currentTierId: currentTier?.id,
+      ),
+    );
+    
+    if (selectedTierId == null) return; // User cancelled or no change
+    
+    // -1 means "remove tier"
+    final newTierId = selectedTierId == -1 ? null : selectedTierId;
+    
+    try {
+      await loyaltyRepo.assignTierToCustomer(customerId, newTierId);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('customers.tier_updated'.tr())),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
     }
   }
 
@@ -1389,6 +1496,155 @@ class _LoyaltySection extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _showPointsHistory(BuildContext context, int customerId) async {
+    final loyaltyRepo = sl<LoyaltyRepository>();
+    final transactions = await loyaltyRepo.getPointsTransactions(customerId);
+    
+    if (!context.mounted) return;
+    
+    final theme = Theme.of(context);
+    
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        expand: false,
+        builder: (context, scrollController) => Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.outline.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'customers.points_history'.tr(),
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 16),
+              if (transactions.isEmpty)
+                Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(32),
+                    child: Column(
+                      children: [
+                        Icon(Icons.history, size: 48, color: theme.colorScheme.outline),
+                        const SizedBox(height: 8),
+                        Text(
+                          'customers.no_points_history'.tr(),
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: theme.colorScheme.outline,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              else
+                Expanded(
+                  child: ListView.separated(
+                    controller: scrollController,
+                    itemCount: transactions.length,
+                    separatorBuilder: (context, index) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final tx = transactions[index];
+                      final isEarn = tx.transactionType == 'earn';
+                      final isRedeem = tx.transactionType == 'redeem';
+                      final isReturn = tx.referenceType == 'sale_return';
+                      
+                      IconData icon;
+                      Color color;
+                      String typeLabel;
+                      
+                      if (isReturn) {
+                        icon = Icons.undo;
+                        color = Colors.orange;
+                        typeLabel = 'customers.points_returned'.tr();
+                      } else if (isRedeem) {
+                        icon = Icons.redeem;
+                        color = Colors.red;
+                        typeLabel = 'customers.points_redeemed'.tr();
+                      } else {
+                        icon = Icons.add_circle;
+                        color = Colors.green;
+                        typeLabel = 'customers.points_earned'.tr();
+                      }
+                      
+                      final pointsText = isEarn ? '+${tx.points}' : '-${tx.points}';
+                      
+                      return ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: color.withValues(alpha: 0.1),
+                          child: Icon(icon, color: color, size: 20),
+                        ),
+                        title: Row(
+                          children: [
+                            Text(
+                              pointsText,
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                color: color,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              typeLabel,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.outline,
+                              ),
+                            ),
+                          ],
+                        ),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (tx.description != null)
+                              Text(
+                                tx.description!,
+                                style: theme.textTheme.bodySmall,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            Text(
+                              _formatDate(tx.transactionDate),
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.outline,
+                              ),
+                            ),
+                          ],
+                        ),
+                        trailing: Text(
+                          'customers.balance_after'.tr(args: [tx.balanceAfter.toString()]),
+                          style: theme.textTheme.bodySmall,
+                        ),
+                      );
+                    },
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.day}/${date.month}/${date.year} ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
   }
 }
 
@@ -1756,6 +2012,14 @@ class _TransactionTile extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
+              leading: const Icon(LucideIcons.pencil),
+              title: Text('customers.edit_transaction'.tr()),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _showEditDialog(context);
+              },
+            ),
+            ListTile(
               leading: const Icon(LucideIcons.printer),
               title: Text('customers.print_receipt'.tr()),
               onTap: () {
@@ -1787,6 +2051,29 @@ class _TransactionTile extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  void _showEditDialog(BuildContext context) {
+    final absCents = transaction.amountCents.toDouble().round().abs();
+    EditTransactionDialog.show(
+      context: context,
+      currentAmountCents: absCents,
+      transactionType: transaction.transactionType,
+      currentDescription: transaction.description,
+      onSave: (newAmountCents, newDescription) async {
+        await sl<CustomerRepository>().updateTransaction(
+          transactionId: transaction.id,
+          newAmountCents: newAmountCents,
+          newDescription: newDescription,
+        );
+      },
+    ).then((edited) {
+      if (edited && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('customers.transaction_updated'.tr())),
+        );
+      }
+    });
   }
 
   String _formatDate(DateTime date) {
@@ -1950,6 +2237,116 @@ class _ContactInformationSection extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Dialog for changing customer loyalty tier
+class _ChangeTierDialog extends StatefulWidget {
+  final List<LoyaltyTier> tiers;
+  final int? currentTierId;
+
+  const _ChangeTierDialog({
+    required this.tiers,
+    this.currentTierId,
+  });
+
+  @override
+  State<_ChangeTierDialog> createState() => _ChangeTierDialogState();
+}
+
+class _ChangeTierDialogState extends State<_ChangeTierDialog> {
+  late int? _selectedTierId;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedTierId = widget.currentTierId;
+  }
+
+  Color _parseColor(String? hex) {
+    if (hex == null || hex.isEmpty) return Colors.grey;
+    try {
+      return Color(int.parse(hex.replaceFirst('#', '0xFF')));
+    } catch (_) {
+      return Colors.grey;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    
+    return AlertDialog(
+      title: Text('customers.change_tier'.tr()),
+      content: SizedBox(
+        width: 300,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Option to remove tier
+            ListTile(
+              leading: const Icon(LucideIcons.userMinus),
+              title: Text('customers.no_tier'.tr()),
+              subtitle: Text('customers.no_tier_hint'.tr()),
+              trailing: Icon(
+                _selectedTierId == null 
+                    ? Icons.radio_button_checked 
+                    : Icons.radio_button_unchecked,
+                color: _selectedTierId == null ? cs.primary : cs.outline,
+              ),
+              onTap: () => setState(() => _selectedTierId = null),
+            ),
+            const Divider(),
+            // List of tiers
+            ...widget.tiers.map((tier) {
+              final tierColor = _parseColor(tier.color);
+              final isSelected = _selectedTierId == tier.id;
+              return ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: tierColor.withValues(alpha: 0.2),
+                  child: Icon(LucideIcons.award, color: tierColor, size: 20),
+                ),
+                title: Text(
+                  tier.name,
+                  style: TextStyle(
+                    color: tierColor,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                subtitle: Text(
+                  'customers.loyalty_tier_points_range'.tr(args: [
+                    tier.minPoints.toString(),
+                    tier.maxPoints?.toString() ?? '∞',
+                  ]),
+                ),
+                trailing: Icon(
+                  isSelected 
+                      ? Icons.radio_button_checked 
+                      : Icons.radio_button_unchecked,
+                  color: isSelected ? cs.primary : cs.outline,
+                ),
+                onTap: () => setState(() => _selectedTierId = tier.id),
+              );
+            }),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text('common.cancel'.tr()),
+        ),
+        FilledButton(
+          onPressed: () {
+            // Always return the selected tier ID
+            // -1 means "remove tier" (when _selectedTierId is null)
+            // Any positive number is a tier ID
+            Navigator.pop(context, _selectedTierId ?? -1);
+          },
+          child: Text('common.save'.tr()),
+        ),
+      ],
     );
   }
 }

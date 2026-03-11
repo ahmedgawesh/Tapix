@@ -1253,23 +1253,45 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                         ]),
                       )
                     else
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: cs.tertiaryContainer.withValues(alpha: 0.3),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: cs.tertiary.withValues(alpha: 0.3)),
-                        ),
-                        child: Row(children: [
-                          Icon(LucideIcons.info, size: 16, color: cs.tertiary),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'sales.credit_balance_info'.tr(),
-                              style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                      Column(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: cs.tertiaryContainer.withValues(alpha: 0.3),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: cs.tertiary.withValues(alpha: 0.3)),
+                            ),
+                            child: Row(children: [
+                              Icon(LucideIcons.info, size: 16, color: cs.tertiary),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'sales.credit_balance_info'.tr(),
+                                  style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                                ),
+                              ),
+                            ]),
+                          ),
+                          const SizedBox(height: 12),
+                          // Add Payment button for credit sales
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              onPressed: () {
+                                Navigator.pop(context);
+                                // Navigate to receive payment screen with customer pre-selected
+                                context.push('/customers/receive-payment', extra: {'customerId': state.customerId});
+                              },
+                              icon: const Icon(LucideIcons.banknote, size: 18),
+                              label: Text('sales.add_payment'.tr()),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                side: BorderSide(color: cs.primary),
+                              ),
                             ),
                           ),
-                        ]),
+                        ],
                       ),
                     const SizedBox(height: 16),
                   ],
@@ -1358,11 +1380,66 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                             ? cs.error.withValues(alpha: 0.2)
                             : cs.primary.withValues(alpha: 0.2))),
                       child: Column(children: [
-                        if (state.remainingCents > Decimal.zero)
+                        // Underpayment warning (cash with customer selected)
+                        if (state.remainingCents > Decimal.zero && state.customerId != null)
+                          Column(children: [
+                            Row(children: [
+                              Icon(LucideIcons.alertTriangle, size: 16, color: cs.error),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'sales.underpayment_warning'.tr(),
+                                  style: theme.textTheme.bodySmall?.copyWith(color: cs.error),
+                                ),
+                              ),
+                            ]),
+                            const SizedBox(height: 8),
+                            _cRow(theme, 'sales.remaining'.tr(),
+                              widget.currencyService.format(state.remainingCents.toBigInt().toInt()),
+                              isBold: true, valueColor: cs.error),
+                          ])
+                        // Underpayment without customer (walk-in)
+                        else if (state.remainingCents > Decimal.zero)
                           _cRow(theme, 'sales.remaining'.tr(),
                             widget.currencyService.format(state.remainingCents.toBigInt().toInt()),
                             isBold: true, valueColor: cs.error),
-                        if (state.changeCents > Decimal.zero)
+                        // Overpayment with customer - show options
+                        if (state.changeCents > Decimal.zero && state.customerId != null) ...[
+                          _cRow(theme, 'sales.overpayment_amount'.tr(),
+                            widget.currencyService.format(state.changeCents.toBigInt().toInt()),
+                            isBold: true, valueColor: Colors.green),
+                          const SizedBox(height: 12),
+                          Text('sales.overpayment_handling'.tr(),
+                            style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                          const SizedBox(height: 8),
+                          Row(children: [
+                            Expanded(
+                              child: ChoiceChip(
+                                label: Text('sales.return_change'.tr()),
+                                selected: state.overpaymentHandling == SaleOverpaymentHandling.returnChange,
+                                onSelected: (_) => context.read<SaleFormBloc>().add(
+                                  const SaleOverpaymentHandlingChanged(SaleOverpaymentHandling.returnChange)),
+                                avatar: const Icon(LucideIcons.banknote, size: 16),
+                                selectedColor: cs.primaryContainer,
+                                showCheckmark: false,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: ChoiceChip(
+                                label: Text('sales.add_to_balance'.tr()),
+                                selected: state.overpaymentHandling == SaleOverpaymentHandling.addToBalance,
+                                onSelected: (_) => context.read<SaleFormBloc>().add(
+                                  const SaleOverpaymentHandlingChanged(SaleOverpaymentHandling.addToBalance)),
+                                avatar: const Icon(LucideIcons.wallet, size: 16),
+                                selectedColor: cs.primaryContainer,
+                                showCheckmark: false,
+                              ),
+                            ),
+                          ]),
+                        ]
+                        // Overpayment without customer (walk-in) - just show change
+                        else if (state.changeCents > Decimal.zero)
                           _cRow(theme, 'sales.change'.tr(),
                             widget.currencyService.format(state.changeCents.toBigInt().toInt()),
                             isBold: true, valueColor: Colors.green),
@@ -1591,21 +1668,29 @@ class _CustomerBalanceInfo extends StatelessWidget {
                   style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
                 ),
               ),
-              Text(
-                currencyService.format(currentBalanceCents),
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                  color: isCurrentReceivable ? cs.error : Colors.green,
-                ),
-              ),
-              const SizedBox(width: 4),
-              Icon(LucideIcons.arrowRight, size: 14, color: cs.onSurfaceVariant),
-              const SizedBox(width: 4),
-              Text(
-                currencyService.format(projectedBalanceCents),
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: isProjectedReceivable ? cs.error : Colors.green,
+              Directionality(
+                textDirection: ui.TextDirection.ltr,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      currencyService.format(currentBalanceCents),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: isCurrentReceivable ? cs.error : Colors.green,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Icon(LucideIcons.arrowRight, size: 14, color: cs.onSurfaceVariant),
+                    const SizedBox(width: 4),
+                    Text(
+                      currencyService.format(projectedBalanceCents),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: isProjectedReceivable ? cs.error : Colors.green,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ]),

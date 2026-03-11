@@ -94,6 +94,19 @@ class ReportDateRange {
     );
   }
 
+  /// Create from AppSettings default range string ('today', 'week', 'month')
+  factory ReportDateRange.fromSettingsDefault(String defaultRange) {
+    switch (defaultRange) {
+      case 'today':
+        return ReportDateRange.today();
+      case 'week':
+        return ReportDateRange.thisWeek();
+      case 'month':
+      default:
+        return ReportDateRange.thisMonth();
+    }
+  }
+
   ReportDateRange copyWith({
     DateTime? startDate,
     DateTime? endDate,

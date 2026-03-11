@@ -178,7 +178,7 @@ void main() {
     group('Role Hierarchy', () {
       test('owner is at the top of hierarchy', () {
         final owner = createUser(UserRole.owner);
-        expect(permissionService.getRoleLevel(UserRole.owner), equals(3));
+        expect(permissionService.getRoleLevel(UserRole.owner), equals(4));
         expect(permissionService.isRoleAtLeast(owner, UserRole.owner), isTrue);
         expect(permissionService.isRoleAtLeast(owner, UserRole.manager), isTrue);
         expect(permissionService.isRoleAtLeast(owner, UserRole.cashier), isTrue);
@@ -187,7 +187,7 @@ void main() {
 
       test('manager is below owner but above cashier', () {
         final manager = createUser(UserRole.manager);
-        expect(permissionService.getRoleLevel(UserRole.manager), equals(2));
+        expect(permissionService.getRoleLevel(UserRole.manager), equals(3));
         expect(permissionService.isRoleAtLeast(manager, UserRole.owner), isFalse);
         expect(permissionService.isRoleAtLeast(manager, UserRole.manager), isTrue);
         expect(permissionService.isRoleAtLeast(manager, UserRole.cashier), isTrue);

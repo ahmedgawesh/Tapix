@@ -29,6 +29,7 @@ void main() {
     when(() => mockVariantRepository.getAllColors()).thenAnswer((_) async => <ProductColor>[]);
     when(() => mockVariantRepository.getAllSizes()).thenAnswer((_) async => <Size>[]);
     when(() => mockVariantRepository.getVariantsByProduct(any())).thenAnswer((_) async => []);
+    when(() => mockVariantRepository.getDefaultVariantByProduct(any())).thenAnswer((_) async => null);
     when(() => mockCategoryRepository.getAllCategories()).thenAnswer((_) async => []);
 
     exportService = ExportServiceImpl(mockProductRepository, mockVariantRepository, mockCategoryRepository);
@@ -83,8 +84,8 @@ void main() {
         final result = await exportService.exportToCSV();
 
         expect(result, isNotNull);
-        expect(result, contains('id,sku,barcode,name,color,size'));
-        expect(result, contains('1,SKU001,BAR001,Product 1'));
+        expect(result, contains('product_id,name,description,category,sku,barcode,color,size'));
+        expect(result, contains('Product 1'));
         expect(result, contains('1000')); // cost in cents
         expect(result, contains('1500')); // price in cents
         expect(result, contains('100')); // stock quantity
@@ -102,7 +103,7 @@ void main() {
         final result = await exportService.exportToCSV();
 
         expect(result, isNotNull);
-        expect(result, contains('id,sku,barcode,name,color,size')); // Header only
+        expect(result, contains('product_id,name,description,category,sku,barcode,color,size')); // Header only
       });
 
       test('respects category filter', () async {

@@ -1,10 +1,12 @@
 import 'package:drift/drift.dart' hide Column;
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/database/app_database.dart' hide Currency;
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/audit_log_service.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../../settings/presentation/bloc/app_settings_bloc.dart';
 import '../widgets/date_range_selector.dart';
 import '../widgets/report_date_range.dart';
 
@@ -26,27 +28,29 @@ class _LedgerEntry {
 // ── Account definitions matching the synthetic chart used by ReportsBloc ──
 class _VirtualAccount {
   final String code;
-  final String name;
+  final String nameKey;
   final String type;
 
-  const _VirtualAccount(this.code, this.name, this.type);
+  const _VirtualAccount(this.code, this.nameKey, this.type);
+
+  String get name => 'financial_management.$nameKey'.tr();
 }
 
 const _virtualAccounts = [
-  _VirtualAccount('1000', 'Cash', 'asset'),
-  _VirtualAccount('1010', 'Bank', 'asset'),
-  _VirtualAccount('1100', 'Accounts Receivable', 'asset'),
-  _VirtualAccount('1200', 'Inventory', 'asset'),
-  _VirtualAccount('1300', 'VAT Receivable', 'asset'),
-  _VirtualAccount('2000', 'Accounts Payable', 'liability'),
-  _VirtualAccount('2100', 'VAT Payable', 'liability'),
-  _VirtualAccount('2300', 'Loyalty Points Liability', 'liability'),
-  _VirtualAccount('3000', 'Owner Capital', 'equity'),
-  _VirtualAccount('4000', 'Sales Revenue', 'revenue'),
-  _VirtualAccount('5100', 'Expenses', 'expense'),
-  _VirtualAccount('5200', 'Salaries Expense', 'expense'),
-  _VirtualAccount('5500', 'Discounts Given', 'expense'),
-  _VirtualAccount('5600', 'Commissions Expense', 'expense'),
+  _VirtualAccount('1000', 'acct_1000_name', 'asset'),
+  _VirtualAccount('1010', 'acct_1010_name', 'asset'),
+  _VirtualAccount('1100', 'acct_1100_name', 'asset'),
+  _VirtualAccount('1200', 'acct_1200_name', 'asset'),
+  _VirtualAccount('1300', 'acct_1300_name', 'asset'),
+  _VirtualAccount('2000', 'acct_2000_name', 'liability'),
+  _VirtualAccount('2100', 'acct_2100_name', 'liability'),
+  _VirtualAccount('2300', 'acct_2300_name', 'liability'),
+  _VirtualAccount('3000', 'acct_3000_name', 'equity'),
+  _VirtualAccount('4000', 'acct_4000_name', 'revenue'),
+  _VirtualAccount('5100', 'acct_5100_name', 'expense'),
+  _VirtualAccount('5200', 'acct_5200_name', 'expense'),
+  _VirtualAccount('5500', 'acct_5500_name', 'expense'),
+  _VirtualAccount('5600', 'acct_5600_name', 'expense'),
 ];
 
 class GeneralLedgerScreen extends StatelessWidget {
@@ -69,7 +73,14 @@ class _GeneralLedgerViewState extends State<_GeneralLedgerView> {
   _VirtualAccount? _selectedAccount;
   List<_LedgerEntry>? _entries;
   bool _loading = false;
-  ReportDateRange _dateRange = ReportDateRange.thisMonth();
+  late ReportDateRange _dateRange;
+
+  @override
+  void initState() {
+    super.initState();
+    final settings = context.read<AppSettingsBloc>().state.settings;
+    _dateRange = ReportDateRange.fromSettingsDefault(settings.defaultReportDateRange);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -165,7 +176,7 @@ class _GeneralLedgerViewState extends State<_GeneralLedgerView> {
           for (final r in salesRows) {
             entries.add(_LedgerEntry(
               date: DateTime.parse(r.read<String>('dt')),
-              description: 'Sale ${r.read<String>('ref')}',
+              description: 'reports.txn_sale'.tr(args: [r.read<String>('ref')]),
               debitCents: r.read<int>('amount'),
               creditCents: 0,
             ));
@@ -185,7 +196,7 @@ class _GeneralLedgerViewState extends State<_GeneralLedgerView> {
           for (final r in purchRows) {
             entries.add(_LedgerEntry(
               date: DateTime.parse(r.read<String>('dt')),
-              description: 'Purchase ${r.read<String>('ref')}',
+              description: 'reports.txn_purchase'.tr(args: [r.read<String>('ref')]),
               debitCents: 0,
               creditCents: r.read<int>('amount'),
             ));
@@ -204,7 +215,7 @@ class _GeneralLedgerViewState extends State<_GeneralLedgerView> {
           for (final r in expRows) {
             entries.add(_LedgerEntry(
               date: DateTime.parse(r.read<String>('dt')),
-              description: 'Expense: ${r.read<String>('ref')}',
+              description: 'reports.txn_expense'.tr(args: [r.read<String>('ref')]),
               debitCents: 0,
               creditCents: r.read<int>('amount'),
             ));
@@ -224,7 +235,7 @@ class _GeneralLedgerViewState extends State<_GeneralLedgerView> {
           for (final r in sRetRows) {
             entries.add(_LedgerEntry(
               date: DateTime.parse(r.read<String>('dt')),
-              description: 'Sale Return ${r.read<String>('ref')}',
+              description: 'reports.txn_sale_return'.tr(args: [r.read<String>('ref')]),
               debitCents: 0,
               creditCents: r.read<int>('amount'),
             ));
@@ -244,7 +255,7 @@ class _GeneralLedgerViewState extends State<_GeneralLedgerView> {
           for (final r in pRetRows) {
             entries.add(_LedgerEntry(
               date: DateTime.parse(r.read<String>('dt')),
-              description: 'Purchase Return ${r.read<String>('ref')}',
+              description: 'reports.txn_purchase_return'.tr(args: [r.read<String>('ref')]),
               debitCents: r.read<int>('amount'),
               creditCents: 0,
             ));
@@ -268,7 +279,7 @@ class _GeneralLedgerViewState extends State<_GeneralLedgerView> {
             if (unpaid > 0) {
               entries.add(_LedgerEntry(
                 date: DateTime.parse(r.read<String>('dt')),
-                description: 'Sale ${r.read<String>('ref')} (unpaid)',
+                description: 'reports.txn_sale_unpaid'.tr(args: [r.read<String>('ref')]),
                 debitCents: unpaid,
                 creditCents: 0,
               ));
@@ -291,7 +302,7 @@ class _GeneralLedgerViewState extends State<_GeneralLedgerView> {
           for (final r in purchRows) {
             entries.add(_LedgerEntry(
               date: DateTime.parse(r.read<String>('dt')),
-              description: 'Purchase ${r.read<String>('ref')}',
+              description: 'reports.txn_purchase'.tr(args: [r.read<String>('ref')]),
               debitCents: r.read<int>('net'),
               creditCents: 0,
             ));
@@ -311,7 +322,7 @@ class _GeneralLedgerViewState extends State<_GeneralLedgerView> {
           for (final r in retRows) {
             entries.add(_LedgerEntry(
               date: DateTime.parse(r.read<String>('dt')),
-              description: 'Purchase Return ${r.read<String>('ref')}',
+              description: 'reports.txn_purchase_return'.tr(args: [r.read<String>('ref')]),
               debitCents: 0,
               creditCents: r.read<int>('net'),
             ));
@@ -335,7 +346,7 @@ class _GeneralLedgerViewState extends State<_GeneralLedgerView> {
             if (unpaid > 0) {
               entries.add(_LedgerEntry(
                 date: DateTime.parse(r.read<String>('dt')),
-                description: 'Purchase ${r.read<String>('ref')} (unpaid)',
+                description: 'reports.txn_purchase_unpaid'.tr(args: [r.read<String>('ref')]),
                 debitCents: 0,
                 creditCents: unpaid,
               ));
@@ -358,7 +369,7 @@ class _GeneralLedgerViewState extends State<_GeneralLedgerView> {
           for (final r in salesRows) {
             entries.add(_LedgerEntry(
               date: DateTime.parse(r.read<String>('dt')),
-              description: 'Sale ${r.read<String>('ref')}',
+              description: 'reports.txn_sale'.tr(args: [r.read<String>('ref')]),
               debitCents: 0,
               creditCents: r.read<int>('net_revenue'),
             ));
@@ -378,7 +389,7 @@ class _GeneralLedgerViewState extends State<_GeneralLedgerView> {
           for (final r in retRows) {
             entries.add(_LedgerEntry(
               date: DateTime.parse(r.read<String>('dt')),
-              description: 'Sale Return ${r.read<String>('ref')}',
+              description: 'reports.txn_sale_return'.tr(args: [r.read<String>('ref')]),
               debitCents: r.read<int>('net_return'),
               creditCents: 0,
             ));
@@ -482,8 +493,36 @@ class _GeneralLedgerViewState extends State<_GeneralLedgerView> {
           columns: [
             DataColumn(label: Text('reports.date'.tr())),
             DataColumn(label: Text('reports.description'.tr())),
-            DataColumn(label: Text('reports.debit'.tr()), numeric: true),
-            DataColumn(label: Text('reports.credit'.tr()), numeric: true),
+            DataColumn(
+              label: Tooltip(
+                message: 'financial_management.debit_tooltip'.tr(),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('reports.debit'.tr()),
+                    const SizedBox(width: 4),
+                    Icon(Icons.help_outline, size: 12,
+                        color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5)),
+                  ],
+                ),
+              ),
+              numeric: true,
+            ),
+            DataColumn(
+              label: Tooltip(
+                message: 'financial_management.credit_tooltip'.tr(),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('reports.credit'.tr()),
+                    const SizedBox(width: 4),
+                    Icon(Icons.help_outline, size: 12,
+                        color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5)),
+                  ],
+                ),
+              ),
+              numeric: true,
+            ),
             DataColumn(label: Text('reports.balance'.tr()), numeric: true),
           ],
           rows: _entries!.map((entry) {

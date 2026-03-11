@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:decimal/decimal.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
@@ -17,11 +19,19 @@ abstract class ProductFormEvent extends Equatable {
 class ProductFormInitialized extends ProductFormEvent {
   final int? productId;
   final String? initialBarcode;
+  // Global inventory settings for new products
+  final bool defaultTrackInventory;
+  final int defaultMinQuantity;
 
-  const ProductFormInitialized({this.productId, this.initialBarcode});
+  const ProductFormInitialized({
+    this.productId,
+    this.initialBarcode,
+    this.defaultTrackInventory = true,
+    this.defaultMinQuantity = 0,
+  });
 
   @override
-  List<Object?> get props => [productId, initialBarcode];
+  List<Object?> get props => [productId, initialBarcode, defaultTrackInventory, defaultMinQuantity];
 }
 
 class ProductFormFieldChanged extends ProductFormEvent {
@@ -244,10 +254,12 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
     Emitter<ProductFormState> emit,
   ) async {
     if (event.productId == null) {
-      // New product - set initial state with barcode if provided
+      // New product - set initial state with barcode and global settings
       emit(state.copyWith(
         isEditing: false,
         barcode: event.initialBarcode,
+        trackInventory: event.defaultTrackInventory,
+        minQuantity: event.defaultMinQuantity,
       ));
       return;
     }
@@ -410,33 +422,45 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
     final errors = <String, String>{};
 
     if (state.name.isEmpty) {
-      errors['name'] = 'Product name is required';
+      errors['name'] = 'products.validation_name_required';
     }
 
-    if (state.costCents < Decimal.zero) {
-      errors['costCents'] = 'Cost cannot be negative';
+    if (state.costCents <= Decimal.zero) {
+      errors['costCents'] = 'products.validation_cost_required';
     }
 
-    if (state.priceCents < Decimal.zero) {
-      errors['priceCents'] = 'Price cannot be negative';
+    if (state.priceCents <= Decimal.zero) {
+      errors['priceCents'] = 'products.validation_price_required';
     }
 
-    if (state.priceCents < state.costCents) {
-      errors['priceCents'] = 'Selling price should be greater than cost';
+    if (state.costCents > Decimal.zero && state.priceCents > Decimal.zero && state.priceCents < state.costCents) {
+      errors['priceCents'] = 'products.validation_price_below_cost';
     }
 
     if (state.stockQuantity < 0) {
-      errors['stockQuantity'] = 'Stock quantity cannot be negative';
+      errors['stockQuantity'] = 'products.validation_stock_negative';
     }
 
     if (state.minQuantity < 0) {
-      errors['minQuantity'] = 'Minimum quantity cannot be negative';
+      errors['minQuantity'] = 'products.validation_min_qty_negative';
     }
 
     if (state.isTaxable && state.purchaseTaxRateBps <= 0 && state.salesTaxRateBps <= 0) {
-      errors['purchaseTaxRateBps'] = 'At least one tax rate is required when product is taxable';
+      errors['purchaseTaxRateBps'] = 'products.validation_tax_rate_required';
     }
 
+    return errors;
+  }
+
+  Future<Map<String, String>> _validateNameUniqueness() async {
+    final errors = <String, String>{};
+    final name = state.name.trim();
+    if (name.isEmpty) return errors;
+
+    final existingProduct = await _repository.findByName(name);
+    if (existingProduct != null && existingProduct.id != state.productId) {
+      errors['name'] = 'products.validation_name_exists';
+    }
     return errors;
   }
 
@@ -506,6 +530,24 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
     return errors;
   }
 
+  /// Generate EAN-13 barcode automatically
+  String _generateBarcode() {
+    final random = Random();
+    final prefix = '2'; // Internal use prefix for store-generated barcodes
+    final digits = List.generate(11, (_) => random.nextInt(10)).join();
+    final barcode12 = prefix + digits;
+    
+    // Calculate EAN-13 checksum
+    int sum = 0;
+    for (int i = 0; i < 12; i++) {
+      final digit = int.parse(barcode12[i]);
+      sum += (i % 2 == 0) ? digit : digit * 3;
+    }
+    final checksum = (10 - (sum % 10)) % 10;
+    
+    return barcode12 + checksum.toString();
+  }
+
   Future<void> _onSubmitted(
     ProductFormSubmitted event,
     Emitter<ProductFormState> emit,
@@ -517,6 +559,20 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
     }
 
     emit(state.copyWith(fieldErrors: const {}, error: null));
+
+    // Validate name uniqueness
+    final nameErrors = await _validateNameUniqueness();
+    if (nameErrors.isNotEmpty) {
+      emit(state.copyWith(fieldErrors: {...state.fieldErrors, ...nameErrors}));
+      return;
+    }
+
+    // Auto-generate barcode if empty
+    String? effectiveBarcode = state.barcode;
+    if (effectiveBarcode == null || effectiveBarcode.trim().isEmpty) {
+      effectiveBarcode = _generateBarcode();
+      emit(state.copyWith(barcode: effectiveBarcode));
+    }
 
     final barcodeErrors = await _validateBarcodeUniqueness();
     if (barcodeErrors.isNotEmpty) {

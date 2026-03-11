@@ -20,14 +20,26 @@ class _SetupScreenState extends State<SetupScreen> {
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  final _securityAnswerController = TextEditingController();
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
+  String? _selectedSecurityQuestion;
+
+  List<String> get _securityQuestions => [
+        'auth.security_questions.q1'.tr(),
+        'auth.security_questions.q2'.tr(),
+        'auth.security_questions.q3'.tr(),
+        'auth.security_questions.q4'.tr(),
+        'auth.security_questions.q5'.tr(),
+        'auth.security_questions.q6'.tr(),
+      ];
 
   @override
   void dispose() {
     _usernameController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
+    _securityAnswerController.dispose();
     super.dispose();
   }
 
@@ -36,6 +48,8 @@ class _SetupScreenState extends State<SetupScreen> {
       context.read<AuthBloc>().add(AuthFirstOwnerCreated(
             username: _usernameController.text.trim(),
             password: _passwordController.text,
+            securityQuestion: _selectedSecurityQuestion,
+            securityAnswer: _securityAnswerController.text.trim(),
           ));
     }
   }
@@ -198,6 +212,73 @@ class _SetupScreenState extends State<SetupScreen> {
                           }
                           if (value != _passwordController.text) {
                             return 'auth.passwords_dont_match'.tr();
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 24),
+                      // Security Question Section
+                      Card(
+                        color: colorScheme.surfaceContainerHighest,
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Row(
+                            children: [
+                              Icon(
+                                LucideIcons.shieldCheck,
+                                color: colorScheme.primary,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  'auth.security_question_info'.tr(),
+                                  style: theme.textTheme.bodySmall,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<String>(
+                        initialValue: _selectedSecurityQuestion,
+                        decoration: InputDecoration(
+                          labelText: 'auth.security_question_label'.tr(),
+                          prefixIcon: const Icon(LucideIcons.helpCircle),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        isExpanded: true,
+                        items: _securityQuestions
+                            .map((q) => DropdownMenuItem(value: q, child: Text(q, overflow: TextOverflow.ellipsis)))
+                            .toList(),
+                        onChanged: (value) {
+                          setState(() {
+                            _selectedSecurityQuestion = value;
+                          });
+                        },
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'auth.security_question_required'.tr();
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      AuthTextField(
+                        controller: _securityAnswerController,
+                        labelText: 'auth.security_answer_label'.tr(),
+                        hintText: 'auth.security_answer_hint'.tr(),
+                        prefixIcon: LucideIcons.messageCircle,
+                        textInputAction: TextInputAction.done,
+                        onFieldSubmitted: (_) => _onCreateAccount(),
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return 'auth.security_answer_required'.tr();
+                          }
+                          if (value.trim().length < 2) {
+                            return 'auth.security_answer_min_length'.tr();
                           }
                           return null;
                         },

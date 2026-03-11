@@ -137,11 +137,13 @@ class ProductMovementDetailData {
 class ProductMovementDetailBloc
     extends RealtimeBloc<ProductMovementDetailData, ProductMovementDetailEvent> {
   final AppDatabase _db;
-  ReportDateRange _dateRange = ReportDateRange.thisMonth();
+  ReportDateRange _dateRange;
   String _searchQuery = '';
   int? _selectedProductId;
 
-  ProductMovementDetailBloc(this._db) : super(const RealtimeLoading());
+  ProductMovementDetailBloc(this._db, {String defaultDateRange = 'month'})
+      : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+        super(const RealtimeLoading());
 
   @override
   Stream<ProductMovementDetailData> get dataStream {

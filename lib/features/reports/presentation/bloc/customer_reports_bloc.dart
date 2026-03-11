@@ -15,51 +15,39 @@ class CustomerReportsDateRangeChanged extends CustomerReportsEvent {
   const CustomerReportsDateRangeChanged(this.dateRange);
 }
 
-class CustomerReportsTabChanged extends CustomerReportsEvent {
-  final int tabIndex;
-  const CustomerReportsTabChanged(this.tabIndex);
+class CustomerReportsSearchChanged extends CustomerReportsEvent {
+  final String query;
+  const CustomerReportsSearchChanged(this.query);
 }
 
 // ==================== DATA MODELS ====================
 
-class CustomerStatementItem {
-  final int transactionId;
-  final DateTime date;
-  final String type;
-  final String? description;
-  final int amountCents;
-  final int runningBalanceCents;
-
-  const CustomerStatementItem({
-    required this.transactionId,
-    required this.date,
-    required this.type,
-    this.description,
-    required this.amountCents,
-    required this.runningBalanceCents,
-  });
-}
-
-class CustomerStatementData {
+/// Per-customer balance breakdown for the report
+class CustomerBalanceItem {
   final int customerId;
   final String customerName;
+  final String segment;
   final int openingBalanceCents;
-  final int closingBalanceCents;
-  final int totalDebitCents;
-  final int totalCreditCents;
-  final List<CustomerStatementItem> items;
+  final int totalSalesCents;
+  final int totalPaymentsCents;
+  final int totalDiscountsCents;
+  final int totalReturnsCents;
+  final int currentBalanceCents;
 
-  const CustomerStatementData({
+  const CustomerBalanceItem({
     required this.customerId,
     required this.customerName,
+    required this.segment,
     required this.openingBalanceCents,
-    required this.closingBalanceCents,
-    required this.totalDebitCents,
-    required this.totalCreditCents,
-    required this.items,
+    required this.totalSalesCents,
+    required this.totalPaymentsCents,
+    required this.totalDiscountsCents,
+    required this.totalReturnsCents,
+    required this.currentBalanceCents,
   });
 }
 
+/// Aging data models (kept for aging tab)
 class CustomerAgingItem {
   final int customerId;
   final String customerName;
@@ -84,6 +72,7 @@ class CustomerAgingItem {
   });
 }
 
+/// Analytics data models (kept for analytics tab)
 class CustomerAnalyticsItem {
   final int customerId;
   final String customerName;
@@ -107,46 +96,69 @@ class CustomerAnalyticsItem {
 }
 
 class CustomerReportsData {
-  final List<CustomerStatementData> statements;
+  final List<CustomerBalanceItem> customers;
   final List<CustomerAgingItem> agingItems;
   final List<CustomerAnalyticsItem> analyticsItems;
   final int totalReceivablesCents;
-  final int totalCustomers;
-  final int totalOverdueCents;
+  final int totalPayablesCents;
+  final int totalOpeningDebitCents;
+  final int totalOpeningCreditCents;
+  final int totalDiscountsCents;
+  final int totalPaymentsCents;
+  final int activeCustomerCount;
   final ReportDateRange dateRange;
-  final int activeTab;
+  final String searchQuery;
 
   const CustomerReportsData({
-    this.statements = const [],
+    this.customers = const [],
     this.agingItems = const [],
     this.analyticsItems = const [],
     this.totalReceivablesCents = 0,
-    this.totalCustomers = 0,
-    this.totalOverdueCents = 0,
+    this.totalPayablesCents = 0,
+    this.totalOpeningDebitCents = 0,
+    this.totalOpeningCreditCents = 0,
+    this.totalDiscountsCents = 0,
+    this.totalPaymentsCents = 0,
+    this.activeCustomerCount = 0,
     required this.dateRange,
-    this.activeTab = 0,
+    this.searchQuery = '',
   });
 
   CustomerReportsData copyWith({
-    List<CustomerStatementData>? statements,
+    List<CustomerBalanceItem>? customers,
     List<CustomerAgingItem>? agingItems,
     List<CustomerAnalyticsItem>? analyticsItems,
     int? totalReceivablesCents,
-    int? totalCustomers,
-    int? totalOverdueCents,
+    int? totalPayablesCents,
+    int? totalOpeningDebitCents,
+    int? totalOpeningCreditCents,
+    int? totalDiscountsCents,
+    int? totalPaymentsCents,
+    int? activeCustomerCount,
     ReportDateRange? dateRange,
-    int? activeTab,
+    String? searchQuery,
   }) {
     return CustomerReportsData(
-      statements: statements ?? this.statements,
+      customers: customers ?? this.customers,
       agingItems: agingItems ?? this.agingItems,
       analyticsItems: analyticsItems ?? this.analyticsItems,
       totalReceivablesCents: totalReceivablesCents ?? this.totalReceivablesCents,
-      totalCustomers: totalCustomers ?? this.totalCustomers,
-      totalOverdueCents: totalOverdueCents ?? this.totalOverdueCents,
+      totalPayablesCents: totalPayablesCents ?? this.totalPayablesCents,
+      totalOpeningDebitCents: totalOpeningDebitCents ?? this.totalOpeningDebitCents,
+      totalOpeningCreditCents: totalOpeningCreditCents ?? this.totalOpeningCreditCents,
+      totalDiscountsCents: totalDiscountsCents ?? this.totalDiscountsCents,
+      totalPaymentsCents: totalPaymentsCents ?? this.totalPaymentsCents,
+      activeCustomerCount: activeCustomerCount ?? this.activeCustomerCount,
       dateRange: dateRange ?? this.dateRange,
-      activeTab: activeTab ?? this.activeTab,
+      searchQuery: searchQuery ?? this.searchQuery,
     );
+  }
+
+  /// Filtered customers based on search query
+  List<CustomerBalanceItem> get filteredCustomers {
+    if (searchQuery.isEmpty) return customers;
+    final q = searchQuery.toLowerCase();
+    return customers.where((c) => c.customerName.toLowerCase().contains(q)).toList();
   }
 }
 
@@ -155,48 +167,71 @@ class CustomerReportsData {
 class CustomerReportsBloc
     extends RealtimeBloc<CustomerReportsData, CustomerReportsEvent> {
   final AppDatabase _db;
-  ReportDateRange _dateRange = ReportDateRange.thisMonth();
+  ReportDateRange _dateRange;
+  String _searchQuery = '';
 
-  CustomerReportsBloc(this._db) : super(const RealtimeLoading());
+  CustomerReportsBloc(this._db, {String defaultDateRange = 'month'})
+      : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+        super(const RealtimeLoading());
 
   ReportDateRange get dateRange => _dateRange;
 
   @override
-  Stream<CustomerReportsData> get dataStream {
-    return _buildCombinedStream();
-  }
+  Stream<CustomerReportsData> get dataStream => _buildStream();
 
   @override
   void registerEventHandlers() {
     on<CustomerReportsDateRangeChanged>(_onDateRangeChanged);
-    on<CustomerReportsTabChanged>(_onTabChanged);
+    on<CustomerReportsSearchChanged>(_onSearchChanged);
   }
 
-  Stream<CustomerReportsData> _buildCombinedStream() {
-    // Watch customer_transactions for real-time changes
-    return _db.select(_db.customerTransactions).watch().asyncMap((_) async {
-      final statements = await _loadStatements();
-      final aging = await _loadAging();
-      final analytics = await _loadAnalytics();
+  Stream<CustomerReportsData> _buildStream() {
+    // Watch both customers and customer_transactions for real-time changes
+    return _db.select(_db.customerTransactions).watch().asyncMap((_) => _loadAll());
+  }
 
-      int totalReceivables = 0;
-      int totalOverdue = 0;
-      for (final item in aging) {
-        totalReceivables += item.totalCents;
-        totalOverdue += item.days30Cents + item.days60Cents + item.days90Cents + item.over90Cents;
+  Future<CustomerReportsData> _loadAll() async {
+    final balances = await _loadCustomerBalances();
+    final aging = await _loadAging();
+    final analytics = await _loadAnalytics();
+
+    // Calculate summary totals from customers.balance_cents (source of truth)
+    int totalReceivables = 0;
+    int totalPayables = 0;
+    int totalOpeningDebit = 0;
+    int totalOpeningCredit = 0;
+    int totalDiscounts = 0;
+    int totalPayments = 0;
+
+    for (final c in balances) {
+      if (c.currentBalanceCents > 0) {
+        totalReceivables += c.currentBalanceCents;
+      } else if (c.currentBalanceCents < 0) {
+        totalPayables += c.currentBalanceCents.abs();
       }
+      if (c.openingBalanceCents > 0) {
+        totalOpeningDebit += c.openingBalanceCents;
+      } else if (c.openingBalanceCents < 0) {
+        totalOpeningCredit += c.openingBalanceCents.abs();
+      }
+      totalDiscounts += c.totalDiscountsCents;
+      totalPayments += c.totalPaymentsCents;
+    }
 
-      return CustomerReportsData(
-        statements: statements,
-        agingItems: aging,
-        analyticsItems: analytics,
-        totalReceivablesCents: totalReceivables,
-        totalCustomers: analytics.length,
-        totalOverdueCents: totalOverdue,
-        dateRange: _dateRange,
-        activeTab: currentData?.activeTab ?? 0,
-      );
-    });
+    return CustomerReportsData(
+      customers: balances,
+      agingItems: aging,
+      analyticsItems: analytics,
+      totalReceivablesCents: totalReceivables,
+      totalPayablesCents: totalPayables,
+      totalOpeningDebitCents: totalOpeningDebit,
+      totalOpeningCreditCents: totalOpeningCredit,
+      totalDiscountsCents: totalDiscounts,
+      totalPaymentsCents: totalPayments,
+      activeCustomerCount: balances.length,
+      dateRange: _dateRange,
+      searchQuery: _searchQuery,
+    );
   }
 
   Future<void> _onDateRangeChanged(
@@ -207,103 +242,110 @@ class CustomerReportsBloc
     refresh();
   }
 
-  void _onTabChanged(
-    CustomerReportsTabChanged event,
+  void _onSearchChanged(
+    CustomerReportsSearchChanged event,
     Emitter<RealtimeState<CustomerReportsData>> emit,
   ) {
+    _searchQuery = event.query;
     final current = currentData;
     if (current != null) {
       emit(RealtimeSuccess<CustomerReportsData>(
-        data: current.copyWith(activeTab: event.tabIndex),
+        data: current.copyWith(searchQuery: event.query),
       ));
     }
   }
 
-  Future<List<CustomerStatementData>> _loadStatements() async {
-    final startIso = _dateRange.startDate.toIso8601String();
-    final endIso = _dateRange.endDate.toIso8601String();
+  /// Load per-customer balance breakdown using customers table (source of truth)
+  /// plus transaction aggregates for the selected period.
+  ///
+  /// Transaction types in customer_transactions:
+  ///   sale (+), payment (-), discount (-), credit_note (-), refund (-),
+  ///   adjustment (+/-), opening_balance (+/-)
+  Future<List<CustomerBalanceItem>> _loadCustomerBalances() async {
+    final start = _dateRange.startDate.toIso8601String();
+    final end = _dateRange.endDate.toIso8601String();
 
-    // Get all active customers with transactions in the date range
-    final customers = await _db.select(_db.customers).get();
-    final statements = <CustomerStatementData>[];
+    final rows = await _db.customSelect(
+      '''
+      SELECT 
+        c.id,
+        c.name,
+        c.segment,
+        c.opening_balance_cents,
+        c.balance_cents AS current_balance_cents,
+        COALESCE((
+          SELECT SUM(ct.amount_cents)
+          FROM customer_transactions ct
+          WHERE ct.customer_id = c.id
+            AND ct.transaction_type = 'sale'
+            AND ct.transaction_date >= ?
+            AND ct.transaction_date <= ?
+        ), 0) AS total_sales_cents,
+        COALESCE((
+          SELECT SUM(ABS(ct.amount_cents))
+          FROM customer_transactions ct
+          WHERE ct.customer_id = c.id
+            AND ct.transaction_type = 'payment'
+            AND ct.transaction_date >= ?
+            AND ct.transaction_date <= ?
+        ), 0) AS total_payments_cents,
+        COALESCE((
+          SELECT SUM(ABS(ct.amount_cents))
+          FROM customer_transactions ct
+          WHERE ct.customer_id = c.id
+            AND ct.transaction_type = 'discount'
+            AND ct.transaction_date >= ?
+            AND ct.transaction_date <= ?
+        ), 0) AS total_discounts_cents,
+        COALESCE((
+          SELECT SUM(ABS(ct.amount_cents))
+          FROM customer_transactions ct
+          WHERE ct.customer_id = c.id
+            AND ct.transaction_type IN ('credit_note', 'refund')
+            AND ct.transaction_date >= ?
+            AND ct.transaction_date <= ?
+        ), 0) AS total_returns_cents
+      FROM customers c
+      WHERE c.is_active = 1
+      ORDER BY ABS(c.balance_cents) DESC
+      ''',
+      variables: [
+        Variable.withString(start),
+        Variable.withString(end),
+        Variable.withString(start),
+        Variable.withString(end),
+        Variable.withString(start),
+        Variable.withString(end),
+        Variable.withString(start),
+        Variable.withString(end),
+      ],
+      readsFrom: {_db.customers, _db.customerTransactions},
+    ).get();
 
-    for (final customer in customers) {
-      if (!customer.isActive) continue;
-
-      // Get transactions before the start date for opening balance
-      final priorRows = await _db.customSelect(
-        'SELECT COALESCE(SUM(amount_cents), 0) AS total '
-        'FROM customer_transactions '
-        'WHERE customer_id = ? AND transaction_date < ?',
-        variables: [
-          Variable.withInt(customer.id),
-          Variable.withString(startIso),
-        ],
-        readsFrom: {_db.customerTransactions},
-      ).getSingle();
-      final openingBalance = priorRows.read<int>('total');
-
-      // Get transactions in the date range
-      final txRows = await _db.customSelect(
-        'SELECT id, transaction_type, amount_cents, description, transaction_date '
-        'FROM customer_transactions '
-        'WHERE customer_id = ? AND transaction_date >= ? AND transaction_date <= ? '
-        'ORDER BY transaction_date ASC, id ASC',
-        variables: [
-          Variable.withInt(customer.id),
-          Variable.withString(startIso),
-          Variable.withString(endIso),
-        ],
-        readsFrom: {_db.customerTransactions},
-      ).get();
-
-      if (txRows.isEmpty) continue;
-
-      int runningBalance = openingBalance;
-      int totalDebit = 0;
-      int totalCredit = 0;
-      final items = <CustomerStatementItem>[];
-
-      for (final row in txRows) {
-        final amount = row.read<int>('amount_cents');
-        runningBalance += amount;
-
-        if (amount > 0) {
-          totalDebit += amount;
-        } else {
-          totalCredit += amount.abs();
-        }
-
-        items.add(CustomerStatementItem(
-          transactionId: row.read<int>('id'),
-          date: DateTime.parse(row.read<String>('transaction_date')),
-          type: row.read<String>('transaction_type'),
-          description: row.readNullable<String>('description'),
-          amountCents: amount,
-          runningBalanceCents: runningBalance,
-        ));
-      }
-
-      statements.add(CustomerStatementData(
-        customerId: customer.id,
-        customerName: customer.name,
-        openingBalanceCents: openingBalance,
-        closingBalanceCents: runningBalance,
-        totalDebitCents: totalDebit,
-        totalCreditCents: totalCredit,
-        items: items,
-      ));
-    }
-
-    return statements;
+    return rows.map((row) {
+      return CustomerBalanceItem(
+        customerId: row.read<int>('id'),
+        customerName: row.read<String>('name'),
+        segment: row.read<String>('segment'),
+        openingBalanceCents: row.read<int>('opening_balance_cents'),
+        totalSalesCents: row.read<int>('total_sales_cents'),
+        totalPaymentsCents: row.read<int>('total_payments_cents'),
+        totalDiscountsCents: row.read<int>('total_discounts_cents'),
+        totalReturnsCents: row.read<int>('total_returns_cents'),
+        currentBalanceCents: row.read<int>('current_balance_cents'),
+      );
+    }).toList();
   }
 
+  /// Aging analysis: only considers positive-amount (debit) transactions that
+  /// generated receivables. Buckets by transaction age relative to today.
   Future<List<CustomerAgingItem>> _loadAging() async {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day, 23, 59, 59);
-    final days30 = today.subtract(const Duration(days: 30));
-    final days60 = today.subtract(const Duration(days: 60));
-    final days90 = today.subtract(const Duration(days: 90));
+    final d30 = today.subtract(const Duration(days: 30));
+    final d60 = today.subtract(const Duration(days: 60));
+    final d90 = today.subtract(const Duration(days: 90));
+    final d120 = today.subtract(const Duration(days: 120));
 
     final rows = await _db.customSelect(
       '''
@@ -311,28 +353,38 @@ class CustomerReportsBloc
         c.id AS customer_id,
         c.name AS customer_name,
         c.segment AS segment,
-        COALESCE(SUM(CASE WHEN ct.transaction_date >= ? THEN ct.amount_cents ELSE 0 END), 0) AS current_cents,
-        COALESCE(SUM(CASE WHEN ct.transaction_date >= ? AND ct.transaction_date < ? THEN ct.amount_cents ELSE 0 END), 0) AS days_30_cents,
-        COALESCE(SUM(CASE WHEN ct.transaction_date >= ? AND ct.transaction_date < ? THEN ct.amount_cents ELSE 0 END), 0) AS days_60_cents,
-        COALESCE(SUM(CASE WHEN ct.transaction_date >= ? AND ct.transaction_date < ? THEN ct.amount_cents ELSE 0 END), 0) AS days_90_cents,
-        COALESCE(SUM(CASE WHEN ct.transaction_date < ? THEN ct.amount_cents ELSE 0 END), 0) AS over_90_cents,
-        COALESCE(SUM(ct.amount_cents), 0) AS total_cents
+        COALESCE(SUM(CASE 
+          WHEN ct.transaction_date >= ? THEN ct.amount_cents ELSE 0 
+        END), 0) AS current_cents,
+        COALESCE(SUM(CASE 
+          WHEN ct.transaction_date >= ? AND ct.transaction_date < ? THEN ct.amount_cents ELSE 0 
+        END), 0) AS days_30_cents,
+        COALESCE(SUM(CASE 
+          WHEN ct.transaction_date >= ? AND ct.transaction_date < ? THEN ct.amount_cents ELSE 0 
+        END), 0) AS days_60_cents,
+        COALESCE(SUM(CASE 
+          WHEN ct.transaction_date >= ? AND ct.transaction_date < ? THEN ct.amount_cents ELSE 0 
+        END), 0) AS days_90_cents,
+        COALESCE(SUM(CASE 
+          WHEN ct.transaction_date < ? THEN ct.amount_cents ELSE 0 
+        END), 0) AS over_90_cents,
+        c.balance_cents AS total_cents
       FROM customers c
       LEFT JOIN customer_transactions ct ON ct.customer_id = c.id
-      WHERE c.is_active = 1
+        AND ct.amount_cents > 0
+      WHERE c.is_active = 1 AND c.balance_cents > 0
       GROUP BY c.id
-      HAVING total_cents > 0
-      ORDER BY total_cents DESC
+      ORDER BY c.balance_cents DESC
       ''',
       variables: [
-        Variable.withString(days30.toIso8601String()),
-        Variable.withString(days60.toIso8601String()),
-        Variable.withString(days30.toIso8601String()),
-        Variable.withString(days90.toIso8601String()),
-        Variable.withString(days60.toIso8601String()),
-        Variable.withString(days90.toIso8601String()),
-        Variable.withString(days90.toIso8601String()),
-        Variable.withString(days90.toIso8601String()),
+        Variable.withString(d30.toIso8601String()),   // ?1: current >= today-30
+        Variable.withString(d60.toIso8601String()),   // ?2: 1-30d  >= today-60
+        Variable.withString(d30.toIso8601String()),   // ?3: 1-30d  <  today-30
+        Variable.withString(d90.toIso8601String()),   // ?4: 31-60d >= today-90
+        Variable.withString(d60.toIso8601String()),   // ?5: 31-60d <  today-60
+        Variable.withString(d120.toIso8601String()),  // ?6: 61-90d >= today-120
+        Variable.withString(d90.toIso8601String()),   // ?7: 61-90d <  today-90
+        Variable.withString(d120.toIso8601String()),  // ?8: 90+    <  today-120
       ],
       readsFrom: {_db.customers, _db.customerTransactions},
     ).get();

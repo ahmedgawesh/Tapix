@@ -10,6 +10,15 @@ import '../../../../core/bloc/localization_bloc.dart';
 import '../../../../core/bloc/currency_bloc.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
+import '../widgets/receipt_settings_section.dart';
+import '../widgets/barcode_label_settings_section.dart';
+import '../widgets/tax_settings_section.dart';
+import '../widgets/inventory_settings_section.dart';
+import '../widgets/sales_settings_section.dart';
+import '../widgets/security_settings_section.dart';
+import '../widgets/reports_settings_section.dart';
+import '../widgets/notification_settings_section.dart';
+import '../widgets/printer_settings_section.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -70,6 +79,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          // ── General ──
           _buildSectionCard(
             context: context,
             title: 'settings.theme'.tr(),
@@ -194,9 +204,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ? state.data
                     : Currency.supportedCurrencies.first;
 
-                // Example amount for preview (e.g., 1234.56)
                 final previewAmount = 123456;
-                // Use the service directly for formatting to ensure it matches current selection logic
                 final formattedPreview = context.read<CurrencyService>().format(previewAmount);
 
                 return Column(
@@ -266,6 +274,81 @@ class _SettingsScreenState extends State<SettingsScreen> {
               },
             ),
           ),
+
+          // ── Business Settings (expandable sections) ──
+          const SizedBox(height: 24),
+          Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: 8),
+            child: Text(
+              'app_settings.section_business'.tr(),
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                color: Theme.of(context).colorScheme.primary,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          const TaxSettingsSection(),
+          const SizedBox(height: 8),
+          const SalesSettingsSection(),
+          const SizedBox(height: 8),
+          const InventorySettingsSection(),
+
+          // ── POS & Printing ──
+          const SizedBox(height: 24),
+          Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: 8),
+            child: Text(
+              'app_settings.section_pos'.tr(),
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                color: Theme.of(context).colorScheme.primary,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          const ReceiptSettingsSection(),
+          const SizedBox(height: 8),
+          const BarcodeLabelSettingsSection(),
+          const SizedBox(height: 8),
+          const PrinterSettingsSection(),
+
+          // ── System ──
+          const SizedBox(height: 24),
+          Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: 8),
+            child: Text(
+              'app_settings.section_system'.tr(),
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                color: Theme.of(context).colorScheme.primary,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          const SecuritySettingsSection(),
+          const SizedBox(height: 8),
+          const ReportsSettingsSection(),
+          const SizedBox(height: 8),
+          const NotificationSettingsSection(),
+          const SizedBox(height: 8),
+          _buildSectionCard(
+            context: context,
+            title: 'settings.backup.section_title'.tr(),
+            icon: LucideIcons.hardDrive,
+            child: Column(
+              children: [
+                ListTile(
+                  leading: Icon(
+                    LucideIcons.databaseBackup,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                  title: Text('settings.backup.title'.tr()),
+                  subtitle: Text('settings.backup.subtitle'.tr()),
+                  trailing: const Icon(LucideIcons.chevronRight),
+                  onTap: () => context.push('/settings/backup'),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
         ],
       ),
     );

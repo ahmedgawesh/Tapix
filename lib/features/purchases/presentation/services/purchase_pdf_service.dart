@@ -9,6 +9,8 @@ import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../../settings/data/services/company_profile_service.dart';
 import '../../../settings/domain/entities/company_profile.dart';
+import '../../../settings/domain/entities/app_settings.dart';
+import '../../../settings/presentation/bloc/app_settings_bloc.dart';
 import '../../domain/entities/purchase_entity.dart';
 import '../../../suppliers/domain/repositories/supplier_repository.dart';
 import '../bloc/purchase_form_bloc.dart';
@@ -24,6 +26,7 @@ class PurchasePdfService {
     final locale = context.locale;
     final isRtl = locale.languageCode == 'ar';
     final company = await sl<CompanyProfileService>().getProfile();
+    final appSettings = sl<AppSettingsBloc>().state.settings;
 
     final pdf = await _buildPurchaseInvoicePdf(
       purchase: purchase,
@@ -32,6 +35,7 @@ class PurchasePdfService {
       locale: locale,
       isRtl: isRtl,
       company: company,
+      appSettings: appSettings,
     );
 
     await Printing.layoutPdf(
@@ -50,6 +54,7 @@ class PurchasePdfService {
     final locale = context.locale;
     final isRtl = locale.languageCode == 'ar';
     final company = await sl<CompanyProfileService>().getProfile();
+    final appSettings = sl<AppSettingsBloc>().state.settings;
 
     final pdf = await _buildPurchaseInvoicePdf(
       purchase: purchase,
@@ -58,6 +63,7 @@ class PurchasePdfService {
       locale: locale,
       isRtl: isRtl,
       company: company,
+      appSettings: appSettings,
     );
 
     final bytes = await pdf.save();
@@ -76,6 +82,7 @@ class PurchasePdfService {
     final locale = context.locale;
     final isRtl = locale.languageCode == 'ar';
     final company = await sl<CompanyProfileService>().getProfile();
+    final appSettings = sl<AppSettingsBloc>().state.settings;
 
     final pdf = await _buildPurchaseInvoiceFromState(
       state: state,
@@ -83,6 +90,7 @@ class PurchasePdfService {
       locale: locale,
       isRtl: isRtl,
       company: company,
+      appSettings: appSettings,
     );
 
     await Printing.layoutPdf(
@@ -100,6 +108,7 @@ class PurchasePdfService {
     final locale = context.locale;
     final isRtl = locale.languageCode == 'ar';
     final company = await sl<CompanyProfileService>().getProfile();
+    final appSettings = sl<AppSettingsBloc>().state.settings;
 
     final pdf = await _buildPurchaseInvoiceFromState(
       state: state,
@@ -107,6 +116,7 @@ class PurchasePdfService {
       locale: locale,
       isRtl: isRtl,
       company: company,
+      appSettings: appSettings,
     );
 
     final bytes = await pdf.save();
@@ -183,6 +193,7 @@ class PurchasePdfService {
     required Locale locale,
     required bool isRtl,
     required CompanyProfile company,
+    required AppSettings appSettings,
   }) async {
     final fonts = await _loadFonts();
     final pdf = pw.Document();
@@ -215,6 +226,8 @@ class PurchasePdfService {
                 title: 'purchases.title'.tr(),
                 fonts: fonts,
                 isRtl: isRtl,
+                receiptHeaderText: appSettings.showHeaderFooterOnPurchases ? appSettings.receiptHeaderText : null,
+                taxRegistrationNumber: appSettings.taxRegistrationNumber,
               ),
               pw.SizedBox(height: 16),
               _buildInvoiceInfo(
@@ -247,13 +260,14 @@ class PurchasePdfService {
                 totalPieces: items.fold<int>(0, (sum, item) => sum + item.quantity),
                 cs: cs,
                 fonts: fonts,
+                includeTaxBreakdown: appSettings.includeTaxBreakdown,
               ),
               if (supplierBalanceWidget != null) ...[
                 pw.SizedBox(height: 12),
                 supplierBalanceWidget,
               ],
               pw.Spacer(),
-              _buildFooter(fonts: fonts, locale: locale),
+              _buildFooter(fonts: fonts, locale: locale, receiptFooterText: appSettings.showHeaderFooterOnPurchases ? appSettings.receiptFooterText : null),
             ],
           );
         },
@@ -272,6 +286,7 @@ class PurchasePdfService {
     required Locale locale,
     required bool isRtl,
     required CompanyProfile company,
+    required AppSettings appSettings,
   }) async {
     final fonts = await _loadFonts();
     final pdf = pw.Document();
@@ -306,6 +321,8 @@ class PurchasePdfService {
                 title: 'purchases.title'.tr(),
                 fonts: fonts,
                 isRtl: isRtl,
+                receiptHeaderText: appSettings.showHeaderFooterOnPurchases ? appSettings.receiptHeaderText : null,
+                taxRegistrationNumber: appSettings.taxRegistrationNumber,
               ),
               pw.SizedBox(height: 16),
               _buildInvoiceInfo(
@@ -338,6 +355,7 @@ class PurchasePdfService {
                 totalPieces: state.items.fold<int>(0, (sum, item) => sum + item.quantity),
                 cs: cs,
                 fonts: fonts,
+                includeTaxBreakdown: appSettings.includeTaxBreakdown,
               ),
               if (state.notes != null && state.notes!.isNotEmpty) ...[
                 pw.SizedBox(height: 12),
@@ -362,7 +380,7 @@ class PurchasePdfService {
                 supplierBalanceWidget,
               ],
               pw.Spacer(),
-              _buildFooter(fonts: fonts, locale: locale),
+              _buildFooter(fonts: fonts, locale: locale, receiptFooterText: appSettings.showHeaderFooterOnPurchases ? appSettings.receiptFooterText : null),
             ],
           );
         },
@@ -526,6 +544,8 @@ class PurchasePdfService {
     required String title,
     required _PdfFonts fonts,
     required bool isRtl,
+    String? receiptHeaderText,
+    String? taxRegistrationNumber,
   }) {
     return pw.Container(
       padding: const pw.EdgeInsets.all(16),
@@ -533,23 +553,33 @@ class PurchasePdfService {
         color: PdfColors.blue50,
         borderRadius: pw.BorderRadius.circular(8),
       ),
-      child: pw.Row(
-        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.stretch,
         children: [
-          pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
-              if (company.name.isNotEmpty)
-                _bidiText(company.name, fonts.bold, fontSize: 16),
-              if (company.address != null && company.address!.isNotEmpty)
-                _bidiText(company.address!, fonts.regular, fontSize: 8, color: PdfColors.grey600),
-              if (company.phone != null && company.phone!.isNotEmpty)
-                _bidiText(company.phone!, fonts.regular, fontSize: 8, color: PdfColors.grey600),
-              if (company.taxNumber != null && company.taxNumber!.isNotEmpty)
-                _bidiText('Tax: ${company.taxNumber}', fonts.regular, fontSize: 8, color: PdfColors.grey600),
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  if (company.name.isNotEmpty)
+                    _bidiText(company.name, fonts.bold, fontSize: 16),
+                  if (company.address != null && company.address!.isNotEmpty)
+                    _bidiText(company.address!, fonts.regular, fontSize: 8, color: PdfColors.grey600),
+                  if (company.phone != null && company.phone!.isNotEmpty)
+                    _bidiText(company.phone!, fonts.regular, fontSize: 8, color: PdfColors.grey600),
+                  if ((taxRegistrationNumber != null && taxRegistrationNumber.isNotEmpty) ||
+                      (company.taxNumber != null && company.taxNumber!.isNotEmpty))
+                    _bidiText('Tax: ${taxRegistrationNumber ?? company.taxNumber}', fonts.regular, fontSize: 8, color: PdfColors.grey600),
+                ],
+              ),
+              _bidiText(title, fonts.bold, fontSize: 20, color: PdfColors.blue800),
             ],
           ),
-          _bidiText(title, fonts.bold, fontSize: 20, color: PdfColors.blue800),
+          if (receiptHeaderText != null && receiptHeaderText.isNotEmpty) ...[
+            pw.SizedBox(height: 8),
+            _bidiText(receiptHeaderText, fonts.regular, fontSize: 9, color: PdfColors.grey700),
+          ],
         ],
       ),
     );
@@ -717,6 +747,7 @@ class PurchasePdfService {
     required int totalPieces,
     required CurrencyService cs,
     required _PdfFonts fonts,
+    bool includeTaxBreakdown = true,
   }) {
     return pw.Container(
       padding: const pw.EdgeInsets.all(12),
@@ -734,7 +765,7 @@ class PurchasePdfService {
           if (discountCents > 0)
             _pdfMoneyRow('purchases.discount'.tr(), '- ${cs.format(discountCents)}',
                 fonts.regular, valueColor: PdfColors.orange),
-          if (taxCents > 0)
+          if (taxCents > 0 && includeTaxBreakdown)
             _pdfMoneyRow('purchases.tax'.tr(), cs.format(taxCents), fonts.regular),
           pw.Divider(thickness: 2),
           _pdfMoneyRow('purchases.total'.tr(), cs.format(totalCents),
@@ -791,11 +822,20 @@ class PurchasePdfService {
   static pw.Widget _buildFooter({
     required _PdfFonts fonts,
     required Locale locale,
+    String? receiptFooterText,
   }) {
-    final footerText = '${'purchases.generated_on'.tr()}: ${DateFormat('yyyy-MM-dd HH:mm', locale.toString()).format(DateTime.now())}';
-    return pw.Container(
-      alignment: pw.Alignment.center,
-      child: _bidiText(footerText, fonts.regular, fontSize: 8, color: PdfColors.grey500),
+    final generatedText = '${'purchases.generated_on'.tr()}: ${DateFormat('yyyy-MM-dd HH:mm', locale.toString()).format(DateTime.now())}';
+    return pw.Column(
+      children: [
+        if (receiptFooterText != null && receiptFooterText.isNotEmpty) ...[
+          _bidiText(receiptFooterText, fonts.regular, fontSize: 9, color: PdfColors.grey700),
+          pw.SizedBox(height: 4),
+        ],
+        pw.Container(
+          alignment: pw.Alignment.center,
+          child: _bidiText(generatedText, fonts.regular, fontSize: 8, color: PdfColors.grey500),
+        ),
+      ],
     );
   }
 

@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="تابكس POS - نظام نقاط البيع الكامل الذي يعمل بدون إنترنت. إدارة المبيعات، المخزون، العملاء والتقارير المالية.">
+    <meta name="keywords" content="نقاط بيع, كاشير, مخزون, مبيعات, فواتير, محاسبة">
+    <title>تابكس POS - نظام نقاط البيع الكامل</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            direction: rtl;
+        }
+        
+        /* Header */
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1rem 0;
+            position: fixed;
+            width: 100%;
+            top: 0;
+            z-index: 1000;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        nav {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .logo {
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+        
+        .nav-links {
+            display: flex;
+            gap: 2rem;
+            list-style: none;
+        }
+        
+        .nav-links a {
+            color: white;
+            text-decoration: none;
+            transition: opacity 0.3s;
+        }
+        
+        .nav-links a:hover {
+            opacity: 0.8;
+        }
+        
+        /* Hero Section */
+        .hero {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 8rem 2rem 4rem;
+            text-align: center;
+            margin-top: 60px;
+        }
+        
+        .hero h1 {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+        
+        .hero p {
+            font-size: 1.3rem;
+            margin-bottom: 2rem;
+            opacity: 0.9;
+        }
+        
+        .cta-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        .btn {
+            padding: 1rem 2rem;
+            border-radius: 50px;
+            text-decoration: none;
+            font-weight: bold;
+            transition: transform 0.3s, box-shadow 0.3s;
+            display: inline-block;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+        }
+        
+        .btn-primary {
+            background: white;
+            color: #667eea;
+        }
+        
+        .btn-secondary {
+            background: transparent;
+            color: white;
+            border: 2px solid white;
+        }
+        
+        /* Features Section */
+        .features {
+            padding: 4rem 2rem;
+            background: #f8f9fa;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .section-title {
+            text-align: center;
+            font-size: 2.5rem;
+            margin-bottom: 3rem;
+            color: #2d3748;
+        }
+        
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+        }
+        
+        .feature-card {
+            background: white;
+            padding: 2rem;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: transform 0.3s;
+        }
+        
+        .feature-card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .feature-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+        
+        .feature-card h3 {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            color: #667eea;
+        }
+        
+        /* Pricing Section */
+        .pricing {
+            padding: 4rem 2rem;
+            background: white;
+        }
+        
+        .pricing-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 2rem;
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        
+        .pricing-card {
+            background: white;
+            border: 2px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 2rem;
+            text-align: center;
+            transition: all 0.3s;
+        }
+        
+        .pricing-card:hover {
+            border-color: #667eea;
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.2);
+        }
+        
+        .pricing-card.featured {
+            border-color: #667eea;
+            transform: scale(1.05);
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
+        }
+        
+        .price {
+            font-size: 3rem;
+            font-weight: bold;
+            color: #667eea;
+            margin: 1rem 0;
+        }
+        
+        .price-period {
+            font-size: 1rem;
+            color: #718096;
+        }
+        
+        .features-list {
+            list-style: none;
+            margin: 2rem 0;
+            text-align: right;
+        }
+        
+        .features-list li {
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        
+        .features-list li:before {
+            content: "✓ ";
+            color: #48bb78;
+            font-weight: bold;
+            margin-left: 0.5rem;
+        }
+        
+        /* Download Section */
+        .download {
+            padding: 4rem 2rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-align: center;
+        }
+        
+        .download-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 2rem;
+        }
+        
+        .store-badge {
+            height: 60px;
+            transition: transform 0.3s;
+        }
+        
+        .store-badge:hover {
+            transform: scale(1.05);
+        }
+        
+        /* Footer */
+        footer {
+            background: #2d3748;
+            color: white;
+            padding: 2rem;
+            text-align: center;
+        }
+        
+        .footer-links {
+            display: flex;
+            gap: 2rem;
+            justify-content: center;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+        }
+        
+        .footer-links a {
+            color: white;
+            text-decoration: none;
+        }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            .hero h1 {
+                font-size: 2rem;
+            }
+            
+            .hero p {
+                font-size: 1rem;
+            }
+            
+            .nav-links {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header>
+        <nav>
+            <div class="logo">🛒 تابكس POS</div>
+            <ul class="nav-links">
+                <li><a href="#features">الميزات</a></li>
+                <li><a href="#pricing">الأسعار</a></li>
+                <li><a href="#download">التحميل</a></li>
+                <li><a href="privacy-policy">الخصوصية</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <h1>نظام نقاط البيع الكامل</h1>
+        <p>يعمل بدون إنترنت • آمن • سريع • سهل الاستخدام</p>
+        <div class="cta-buttons">
+            <a href="#download" class="btn btn-primary">جرب مجاناً 14 يوم</a>
+            <a href="#features" class="btn btn-secondary">اعرف المزيد</a>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section id="features" class="features">
+        <div class="container">
+            <h2 class="section-title">لماذا تختار تابكس؟</h2>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">📊</div>
+                    <h3>إدارة المبيعات</h3>
+                    <p>واجهة نقاط بيع سريعة وسهلة، فواتير احترافية، مرتجعات، وطرق دفع متعددة.</p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">📦</div>
+                    <h3>إدارة المخزون</h3>
+                    <p>تتبع المنتجات والمتغيرات، مسح الباركود، تنبيهات المخزون المنخفض.</p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">👥</div>
+                    <h3>إدارة العملاء</h3>
+                    <p>ملفات العملاء، سجل المشتريات، الحسابات الآجلة، كشوف الحسابات.</p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">💰</div>
+                    <h3>التقارير المالية</h3>
+                    <p>تقارير مفصلة للمبيعات، الأرباح، المخزون، الضرائب، والمزيد.</p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">🔒</div>
+                    <h3>آمن وخاص</h3>
+                    <p>جميع بياناتك محلية على جهازك. لا مزامنة سحابية. خصوصية كاملة.</p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">🌐</div>
+                    <h3>يعمل بدون نت</h3>
+                    <p>لا حاجة للإنترنت. يعمل في أي مكان، في أي وقت، بدون اتصال.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Pricing Section -->
+    <section id="pricing" class="pricing">
+        <div class="container">
+            <h2 class="section-title">اختر الخطة المناسبة لك</h2>
+            <div class="pricing-grid">
+                <div class="pricing-card">
+                    <h3>تجربة مجانية</h3>
+                    <div class="price">مجاناً</div>
+                    <div class="price-period">14 يوم</div>
+                    <ul class="features-list">
+                        <li>جميع الميزات مفتوحة</li>
+                        <li>منتجات غير محدودة</li>
+                        <li>تقارير كاملة</li>
+                        <li>بدون بطاقة ائتمان</li>
+                    </ul>
+                    <a href="#download" class="btn btn-primary">ابدأ الآن</a>
+                </div>
+                
+                <div class="pricing-card featured">
+                    <h3>شهري</h3>
+                    <div class="price">$9.99</div>
+                    <div class="price-period">شهرياً</div>
+                    <ul class="features-list">
+                        <li>جميع الميزات</li>
+                        <li>تحديثات مجانية</li>
+                        <li>دعم فني</li>
+                        <li>إلغاء في أي وقت</li>
+                    </ul>
+                    <a href="#download" class="btn btn-primary">اشترك الآن</a>
+                </div>
+                
+                <div class="pricing-card">
+                    <h3>مدى الحياة</h3>
+                    <div class="price">$249</div>
+                    <div class="price-period">دفعة واحدة</div>
+                    <ul class="features-list">
+                        <li>جميع الميزات للأبد</li>
+                        <li>تحديثات مجانية</li>
+                        <li>دعم فني</li>
+                        <li>بدون رسوم شهرية</li>
+                    </ul>
+                    <a href="#download" class="btn btn-primary">اشتري الآن</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Download Section -->
+    <section id="download" class="download">
+        <div class="container">
+            <h2>حمّل تابكس الآن</h2>
+            <p>متوفر على جميع المنصات</p>
+            <div class="download-buttons">
+                <!-- سيتم إضافة الروابط الفعلية بعد النشر -->
+                <a href="#" target="_blank">
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/7/78/Google_Play_Store_badge_EN.svg" 
+                         alt="Get it on Google Play" class="store-badge">
+                </a>
+                <a href="#" target="_blank">
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/3/3c/Download_on_the_App_Store_Badge.svg" 
+                         alt="Download on the App Store" class="store-badge">
+                </a>
+            </div>
+            <p style="margin-top: 2rem; opacity: 0.9;">
+                أو جرب النسخة التجريبية على الويب: <a href="/demo" style="color: white; text-decoration: underline;">تجربة الآن</a>
+            </p>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <div class="footer-links">
+            <a href="privacy-policy">سياسة الخصوصية</a>
+            <a href="terms-of-service">شروط الخدمة</a>
+            <a href="mailto:support@tapixsolutions.com">الدعم</a>
+        </div>
+        <p>&copy; 2026 تابكس POS. جميع الحقوق محفوظة.</p>
+    </footer>
+</body>
+</html>

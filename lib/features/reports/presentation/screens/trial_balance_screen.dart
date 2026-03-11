@@ -194,8 +194,36 @@ class _TrialBalanceView extends StatelessWidget {
         columns: [
           DataColumn(label: Text('reports.code'.tr())),
           DataColumn(label: Text('reports.account'.tr())),
-          DataColumn(label: Text('reports.debit'.tr()), numeric: true),
-          DataColumn(label: Text('reports.credit'.tr()), numeric: true),
+          DataColumn(
+            label: Tooltip(
+              message: 'financial_management.debit_tooltip'.tr(),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('reports.debit'.tr()),
+                  const SizedBox(width: 4),
+                  Icon(LucideIcons.helpCircle, size: 12,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.5)),
+                ],
+              ),
+            ),
+            numeric: true,
+          ),
+          DataColumn(
+            label: Tooltip(
+              message: 'financial_management.credit_tooltip'.tr(),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('reports.credit'.tr()),
+                  const SizedBox(width: 4),
+                  Icon(LucideIcons.helpCircle, size: 12,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.5)),
+                ],
+              ),
+            ),
+            numeric: true,
+          ),
         ],
         rows: items.map((item) {
           return DataRow(cells: [
@@ -242,7 +270,10 @@ class _TrialBalanceView extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('reports.total_debits'.tr(), style: theme.textTheme.bodySmall),
+                Tooltip(
+                  message: 'financial_management.debit_tooltip'.tr(),
+                  child: Text('reports.total_debits'.tr(), style: theme.textTheme.bodySmall),
+                ),
                 Text(
                   cs.formatCents(tb.totalDebitCents),
                   style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
@@ -254,7 +285,10 @@ class _TrialBalanceView extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text('reports.total_credits'.tr(), style: theme.textTheme.bodySmall),
+                Tooltip(
+                  message: 'financial_management.credit_tooltip'.tr(),
+                  child: Text('reports.total_credits'.tr(), style: theme.textTheme.bodySmall),
+                ),
                 Text(
                   cs.formatCents(tb.totalCreditCents),
                   style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),

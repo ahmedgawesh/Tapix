@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 
 import '../../../../core/bloc/realtime_bloc.dart';
+import '../../../../core/database/app_database.dart' hide Product;
 import '../../../../core/database/daos/product_variant_dao.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../products/domain/entities/product_entity.dart';
@@ -112,8 +113,14 @@ class _BarcodeDesignScreenContent extends StatelessWidget {
     }
 
     final labels = <({Product product, String? variantInfo})>[];
+    
+    // When data comes from an invoice, selectedProducts are already variants
+    // (id = variantId), so we should NOT try to fetch variants for them again.
+    final isFromInvoice = data.invoiceData != null;
+    
     for (final product in data.selectedProducts) {
-      final variants = await dao.getVariantsByProduct(product.id);
+      // Skip variant lookup if products came from invoice data
+      final variants = isFromInvoice ? <ProductVariant>[] : await dao.getVariantsByProduct(product.id);
       if (variants.isEmpty) {
         int qty;
         switch (settings.quantityMode) {
@@ -322,6 +329,67 @@ class _BarcodeDesignScreenContent extends StatelessWidget {
   }
 }
 
+/// Stateful widget that caches the labels Future so it doesn't rebuild infinitely.
+class _CachedA4Preview extends StatefulWidget {
+  final BarcodeDesignData data;
+  final double scale;
+
+  const _CachedA4Preview({required this.data, required this.scale});
+
+  @override
+  State<_CachedA4Preview> createState() => _CachedA4PreviewState();
+}
+
+class _CachedA4PreviewState extends State<_CachedA4Preview> {
+  Future<List<({Product product, String? variantInfo})>>? _labelsFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshFuture();
+  }
+
+  @override
+  void didUpdateWidget(covariant _CachedA4Preview oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_shouldRefresh(oldWidget.data, widget.data)) {
+      _refreshFuture();
+    }
+  }
+
+  bool _shouldRefresh(BarcodeDesignData oldData, BarcodeDesignData newData) {
+    return oldData.selectedProducts != newData.selectedProducts ||
+        oldData.settings != newData.settings ||
+        oldData.invoiceData != newData.invoiceData ||
+        oldData.currentQuantities != newData.currentQuantities ||
+        oldData.companyProfile != newData.companyProfile;
+  }
+
+  void _refreshFuture() {
+    _labelsFuture = const _BarcodeDesignScreenContent()._buildPreviewLabels(widget.data);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<({Product product, String? variantInfo})>>(
+      future: _labelsFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        final labels = snapshot.data ?? const [];
+        if (labels.isEmpty) return const _EmptyPreview();
+        return A4BatchPreviewWidget(
+          labels: labels,
+          settings: widget.data.settings,
+          companyProfile: widget.data.companyProfile,
+          scale: widget.scale,
+        );
+      },
+    );
+  }
+}
+
 /// Mobile layout - vertical stack with bottom sheet for settings
 class _MobileLayout extends StatelessWidget {
   final BarcodeDesignData data;
@@ -348,19 +416,7 @@ class _MobileLayout extends StatelessWidget {
                 padding: const EdgeInsets.all(16),
                 child: data.selectedProducts.isNotEmpty
                     ? (data.settings.isA4Mode
-                        ? FutureBuilder<List<({Product product, String? variantInfo})>>(
-                            future: const _BarcodeDesignScreenContent()._buildPreviewLabels(data),
-                            builder: (context, snapshot) {
-                              final labels = snapshot.data ?? const [];
-                              if (labels.isEmpty) return const _EmptyPreview();
-                              return A4BatchPreviewWidget(
-                                labels: labels,
-                                settings: data.settings,
-                                companyProfile: data.companyProfile,
-                                scale: 0.35,
-                              );
-                            },
-                          )
+                        ? _CachedA4Preview(data: data, scale: 0.35)
                         : BarcodePreviewWidget(
                             product: data.selectedProducts.first,
                             settings: data.settings,
@@ -447,19 +503,7 @@ class _TabletLayout extends StatelessWidget {
                       padding: const EdgeInsets.all(16),
                       child: data.selectedProducts.isNotEmpty
                           ? (data.settings.isA4Mode
-                              ? FutureBuilder<List<({Product product, String? variantInfo})>>(
-                                  future: const _BarcodeDesignScreenContent()._buildPreviewLabels(data),
-                                  builder: (context, snapshot) {
-                                    final labels = snapshot.data ?? const [];
-                                    if (labels.isEmpty) return const _EmptyPreview();
-                                    return A4BatchPreviewWidget(
-                                      labels: labels,
-                                      settings: data.settings,
-                                      companyProfile: data.companyProfile,
-                                      scale: 0.45,
-                                    );
-                                  },
-                                )
+                              ? _CachedA4Preview(data: data, scale: 0.45)
                               : BarcodePreviewWidget(
                                   product: data.selectedProducts.first,
                                   settings: data.settings,
@@ -553,19 +597,7 @@ class _DesktopLayout extends StatelessWidget {
                         padding: const EdgeInsets.all(24),
                         child: data.selectedProducts.isNotEmpty
                             ? (data.settings.isA4Mode
-                                ? FutureBuilder<List<({Product product, String? variantInfo})>>(
-                                    future: const _BarcodeDesignScreenContent()._buildPreviewLabels(data),
-                                    builder: (context, snapshot) {
-                                      final labels = snapshot.data ?? const [];
-                                      if (labels.isEmpty) return const _EmptyPreview();
-                                      return A4BatchPreviewWidget(
-                                        labels: labels,
-                                        settings: data.settings,
-                                        companyProfile: data.companyProfile,
-                                        scale: 0.6,
-                                      );
-                                    },
-                                  )
+                                ? _CachedA4Preview(data: data, scale: 0.6)
                                 : BarcodePreviewWidget(
                                     product: data.selectedProducts.first,
                                     settings: data.settings,

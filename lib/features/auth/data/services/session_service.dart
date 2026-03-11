@@ -1,15 +1,22 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:developer' as developer;
+import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+/// Callback type for getting session timeout settings dynamically
+typedef SessionTimeoutSettingsCallback = ({bool enabled, int timeoutMinutes}) Function();
+
 class SessionService {
   final FlutterSecureStorage _storage;
-  final Duration _sessionTimeout;
   static const String _userIdKey = 'current_user_id';
   static const String _sessionTokenKey = 'session_token';
   static const String _lastActivityKey = 'last_activity';
+
+  /// Callback to get current session timeout settings from AppSettings
+  SessionTimeoutSettingsCallback? _getTimeoutSettings;
 
   /// In-memory cache of the current user ID.
   /// This avoids relying on async FlutterSecureStorage reads for every
@@ -21,11 +28,14 @@ class SessionService {
 
   SessionService({
     FlutterSecureStorage? storage,
-    Duration sessionTimeout = const Duration(hours: 24),
-  })  : _storage = storage ?? const FlutterSecureStorage(
+  }) : _storage = storage ?? const FlutterSecureStorage(
           iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
-        ),
-        _sessionTimeout = sessionTimeout;
+        );
+
+  /// Configure the callback to get session timeout settings dynamically
+  void configureTimeoutSettings(SessionTimeoutSettingsCallback callback) {
+    _getTimeoutSettings = callback;
+  }
 
   Stream<int?> get sessionStream => _sessionController.stream;
 
@@ -63,6 +73,14 @@ class SessionService {
     final token = await _storage.read(key: _sessionTokenKey);
     if (token == null) return false;
 
+    // Get timeout settings from AppSettings via callback
+    final settings = _getTimeoutSettings?.call();
+    
+    // If session timeout is disabled, session is always valid (if token exists)
+    if (settings != null && !settings.enabled) {
+      return true;
+    }
+
     final lastActivityStr = await _storage.read(key: _lastActivityKey);
     if (lastActivityStr == null) return false;
 
@@ -70,7 +88,9 @@ class SessionService {
     if (lastActivity == null) return false;
 
     final now = DateTime.now();
-    return now.difference(lastActivity) < _sessionTimeout;
+    // Use timeout from settings, default to 30 minutes if not configured
+    final timeoutMinutes = settings?.timeoutMinutes ?? 30;
+    return now.difference(lastActivity) < Duration(minutes: timeoutMinutes);
   }
 
   Future<void> updateActivity() async {
@@ -94,9 +114,12 @@ class SessionService {
   }
 
   String _generateToken() {
-    final timestamp = DateTime.now().millisecondsSinceEpoch;
-    final random = timestamp.hashCode;
-    return base64Encode(utf8.encode('$timestamp:$random'));
+    final random = Random.secure();
+    final bytes = Uint8List(32);
+    for (int i = 0; i < 32; i++) {
+      bytes[i] = random.nextInt(256);
+    }
+    return base64Url.encode(bytes);
   }
 
   void dispose() {

@@ -121,10 +121,12 @@ class CustomerAgingReportData {
 class CustomerAgingReportBloc
     extends RealtimeBloc<CustomerAgingReportData, CustomerAgingReportEvent> {
   final AppDatabase _db;
-  ReportDateRange _dateRange = ReportDateRange.thisMonth();
+  ReportDateRange _dateRange;
   CustomerAgingSortType _sort = CustomerAgingSortType.totalDesc;
 
-  CustomerAgingReportBloc(this._db) : super(const RealtimeLoading());
+  CustomerAgingReportBloc(this._db, {String defaultDateRange = 'month'})
+      : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+        super(const RealtimeLoading());
 
   ReportDateRange get dateRange => _dateRange;
 
@@ -228,56 +230,78 @@ class CustomerAgingReportBloc
   }
 
   Future<List<CustomerAgingItem>> _loadAgingData() async {
-    // Aging buckets are calculated relative to "now", not the date range.
-    // The date range filters which transactions are included in the aging
-    // calculation (only transactions up to the end date are considered).
+    // Aging report shows customers with positive balance (they owe us money).
+    // We use customers.balance_cents as the source of truth for the total owed.
+    // The aging buckets are calculated based on the oldest unpaid transaction dates.
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day, 23, 59, 59);
     final days30 = today.subtract(const Duration(days: 30));
     final days60 = today.subtract(const Duration(days: 60));
     final days90 = today.subtract(const Duration(days: 90));
 
-    // Use the date range end date as the cutoff for which transactions to include
-    final endIso = _dateRange.endDate.toIso8601String();
-
     final rows = await _db.customSelect(
       '''
-      -- Aging buckets based on days overdue (not transaction date)
-      -- Current: 0 days overdue (not due yet)
-      -- 1-30: 1-30 days overdue
-      -- 31-60: 31-60 days overdue  
-      -- 61-90: 61-90 days overdue
-      -- 90+: 91+ days overdue
       SELECT 
         c.id AS customer_id,
         c.name AS customer_name,
         c.segment AS segment,
         c.phone AS phone,
         c.email AS email,
-        COALESCE(SUM(CASE WHEN ct.transaction_date >= ? THEN ct.amount_cents ELSE 0 END), 0) AS current_cents,
-        COALESCE(SUM(CASE WHEN ct.transaction_date >= ? AND ct.transaction_date < ? THEN ct.amount_cents ELSE 0 END), 0) AS days_30_cents,
-        COALESCE(SUM(CASE WHEN ct.transaction_date >= ? AND ct.transaction_date < ? THEN ct.amount_cents ELSE 0 END), 0) AS days_60_cents,
-        COALESCE(SUM(CASE WHEN ct.transaction_date >= ? AND ct.transaction_date < ? THEN ct.amount_cents ELSE 0 END), 0) AS days_90_cents,
-        COALESCE(SUM(CASE WHEN ct.transaction_date < ? THEN ct.amount_cents ELSE 0 END), 0) AS over_90_cents,
-        COALESCE(SUM(ct.amount_cents), 0) AS total_cents
+        c.balance_cents AS total_cents,
+        -- Calculate aging buckets based on transaction dates
+        -- Current: transactions in last 30 days
+        COALESCE((
+          SELECT SUM(ct.amount_cents) 
+          FROM customer_transactions ct 
+          WHERE ct.customer_id = c.id 
+            AND ct.transaction_date >= ?
+            AND ct.amount_cents > 0
+        ), 0) AS current_cents,
+        -- 1-30 days: transactions 30-60 days ago
+        COALESCE((
+          SELECT SUM(ct.amount_cents) 
+          FROM customer_transactions ct 
+          WHERE ct.customer_id = c.id 
+            AND ct.transaction_date >= ? AND ct.transaction_date < ?
+            AND ct.amount_cents > 0
+        ), 0) AS days_30_cents,
+        -- 31-60 days: transactions 60-90 days ago
+        COALESCE((
+          SELECT SUM(ct.amount_cents) 
+          FROM customer_transactions ct 
+          WHERE ct.customer_id = c.id 
+            AND ct.transaction_date >= ? AND ct.transaction_date < ?
+            AND ct.amount_cents > 0
+        ), 0) AS days_60_cents,
+        -- 61-90 days: transactions 90+ days ago
+        COALESCE((
+          SELECT SUM(ct.amount_cents) 
+          FROM customer_transactions ct 
+          WHERE ct.customer_id = c.id 
+            AND ct.transaction_date >= ? AND ct.transaction_date < ?
+            AND ct.amount_cents > 0
+        ), 0) AS days_90_cents,
+        -- 90+ days: transactions older than 90 days
+        COALESCE((
+          SELECT SUM(ct.amount_cents) 
+          FROM customer_transactions ct 
+          WHERE ct.customer_id = c.id 
+            AND ct.transaction_date < ?
+            AND ct.amount_cents > 0
+        ), 0) AS over_90_cents
       FROM customers c
-      LEFT JOIN customer_transactions ct ON ct.customer_id = c.id
-        AND ct.transaction_date <= ?
-      WHERE c.is_active = 1
-      GROUP BY c.id
-      HAVING total_cents > 0
-      ORDER BY total_cents DESC
+      WHERE c.is_active = 1 AND c.balance_cents > 0
+      ORDER BY c.balance_cents DESC
       ''',
       variables: [
-        Variable.withString(today.toIso8601String()),
         Variable.withString(days30.toIso8601String()),
-        Variable.withString(today.toIso8601String()),
         Variable.withString(days60.toIso8601String()),
         Variable.withString(days30.toIso8601String()),
         Variable.withString(days90.toIso8601String()),
         Variable.withString(days60.toIso8601String()),
+        Variable.withString(today.subtract(const Duration(days: 90)).toIso8601String()),
         Variable.withString(days90.toIso8601String()),
-        Variable.withString(endIso),
+        Variable.withString(days90.toIso8601String()),
       ],
       readsFrom: {_db.customers, _db.customerTransactions},
     ).get();

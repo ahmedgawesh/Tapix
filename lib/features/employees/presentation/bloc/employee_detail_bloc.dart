@@ -355,9 +355,12 @@ class EmployeeDetailBloc
       'absent': 0,
       'leave': 0,
       'early_departure': 0,
+      'overtimeMinutes': 0,
     };
     for (final a in event.attendances) {
       counts[a.status] = (counts[a.status] ?? 0) + 1;
+      // Sum up overtime minutes from all attendance records
+      counts['overtimeMinutes'] = (counts['overtimeMinutes'] ?? 0) + a.overtimeMinutes;
     }
     emit(state.copyWith(
       attendances: event.attendances,

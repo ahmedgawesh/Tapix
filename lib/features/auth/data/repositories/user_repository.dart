@@ -41,9 +41,14 @@ class UserRepository implements UserRepositoryInterface {
     required String password,
     required UserRole role,
     int? employeeId,
+    String? securityQuestion,
+    String? securityAnswer,
   }) async {
     final now = DateTime.now();
     final hashedPassword = _passwordService.hashPassword(password);
+    final hashedAnswer = securityAnswer != null && securityAnswer.isNotEmpty
+        ? _passwordService.hashPassword(securityAnswer.trim().toLowerCase())
+        : null;
 
     final id = await _database.into(_database.users).insert(
           UsersCompanion.insert(
@@ -51,6 +56,8 @@ class UserRepository implements UserRepositoryInterface {
             passwordHash: hashedPassword,
             role: role.name,
             employeeId: Value(employeeId),
+            securityQuestion: Value(securityQuestion),
+            securityAnswerHash: Value(hashedAnswer),
             createdAt: now,
             updatedAt: now,
           ),
@@ -71,8 +78,14 @@ class UserRepository implements UserRepositoryInterface {
     UserRole? role,
     int? employeeId,
     bool clearEmployeeLink = false,
+    String? securityQuestion,
+    String? securityAnswer,
   }) async {
     final now = DateTime.now();
+    final hashedAnswer = securityAnswer != null && securityAnswer.isNotEmpty
+        ? _passwordService.hashPassword(securityAnswer.trim().toLowerCase())
+        : null;
+
     final companion = UsersCompanion(
       username: username != null ? Value(username) : const Value.absent(),
       passwordHash: password != null
@@ -82,6 +95,12 @@ class UserRepository implements UserRepositoryInterface {
       employeeId: clearEmployeeLink
           ? const Value(null)
           : (employeeId != null ? Value(employeeId) : const Value.absent()),
+      securityQuestion: securityQuestion != null
+          ? Value(securityQuestion)
+          : const Value.absent(),
+      securityAnswerHash: hashedAnswer != null
+          ? Value(hashedAnswer)
+          : const Value.absent(),
       updatedAt: Value(now),
     );
 

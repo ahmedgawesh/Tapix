@@ -69,6 +69,7 @@ abstract class SaleRepository {
   Stream<List<SaleItemEntity>> watchSaleItems(int saleId);
 
   /// Create a new sale
+  /// If [allowNegativeStock] is true, stock validation is skipped.
   Future<int> createSale({
     int? customerId,
     int? employeeId,
@@ -83,6 +84,7 @@ abstract class SaleRepository {
     String? notes,
     DateTime? saleDate,
     DateTime? dueDate,
+    bool allowNegativeStock = false,
   });
 
   /// Update an existing sale
@@ -104,10 +106,32 @@ abstract class SaleRepository {
   });
 
   /// Post/complete a sale (deducts stock)
-  Future<void> postSale(int saleId);
+  /// If [allowNegativeStock] is true, stock validation is skipped.
+  Future<void> postSale(int saleId, {bool allowNegativeStock = false});
 
   /// Void a sale (restores stock if completed)
   Future<void> voidSale(int saleId);
+
+  /// Edit a posted sale by voiding the original and creating a new one.
+  /// Returns the new sale ID.
+  /// Throws if the accounting period is closed or user lacks permission.
+  Future<int> editPostedSale({
+    required int originalSaleId,
+    int? customerId,
+    int? employeeId,
+    required int currencyId,
+    required Decimal subtotalCents,
+    required Decimal discountCents,
+    required Decimal taxCents,
+    required Decimal totalCents,
+    required Decimal paidAmountCents,
+    required String paymentMethod,
+    required List<SaleItemInput> items,
+    String? notes,
+    DateTime? saleDate,
+    DateTime? dueDate,
+    bool allowNegativeStock = false,
+  });
 
   /// Delete a sale (only draft/pending)
   Future<void> deleteSale(int saleId);

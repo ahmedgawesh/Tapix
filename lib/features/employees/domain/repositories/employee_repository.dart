@@ -46,6 +46,8 @@ abstract class EmployeeRepository {
     int workingHoursPerDay = 8,
     int absenceDeductionRateBps = 10000,
     int lateDeductionRateBps = 2500,
+    String overtimeCalcType = 'hourly_rate',
+    int overtimeRateBps = 15000,
     required int currencyId,
     DateTime? hireDate,
     String weeklyOffDays = '[5,6]',

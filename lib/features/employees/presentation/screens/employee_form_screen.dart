@@ -55,6 +55,8 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
   CommissionType _commissionType = CommissionType.percentage;
   TargetPeriod _targetPeriod = TargetPeriod.monthly;
   String _payPeriodType = 'monthly';
+  String _overtimeCalcType = 'hourly_rate';
+  final TextEditingController _overtimeRateController = TextEditingController(text: '150');
   List<Employee> _managers = [];
   DateTime? _hireDate;
   Set<int> _weeklyOffDays = {5, 6}; // Default: Friday + Saturday
@@ -172,6 +174,10 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
     _workingHoursController.text = employee.workingHoursPerDay.toString();
     _absenceRateController.text = (employee.absenceDeductionRateBps / 100).toStringAsFixed(0);
     _lateRateController.text = (employee.lateDeductionRateBps / 100).toStringAsFixed(0);
+    
+    // Overtime settings
+    _overtimeCalcType = employee.overtimeCalcType;
+    _overtimeRateController.text = (employee.overtimeRateBps / 100).toStringAsFixed(0);
 
     // Hire date
     _hireDate = employee.hireDate;
@@ -548,6 +554,71 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
                     const SizedBox(height: 4),
                     Text(
                       'employees.deduction_rates_hint'.tr(),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                        fontSize: 10,
+                      ),
+                    ),
+
+                    const SizedBox(height: 24),
+
+                    // Overtime Settings Section
+                    _buildSectionHeader(
+                      context,
+                      icon: Icons.more_time_outlined,
+                      title: 'employees.overtime_settings'.tr(),
+                    ),
+                    const SizedBox(height: 12),
+                    // Overtime Calculation Type
+                    Text(
+                      'employees.overtime_calc_type'.tr(),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _buildPeriodChip(
+                          label: 'employees.overtime_calc_type_hourly_rate'.tr(),
+                          isSelected: _overtimeCalcType == 'hourly_rate',
+                          onTap: () => setState(() => _overtimeCalcType = 'hourly_rate'),
+                          colorScheme: colorScheme,
+                        ),
+                        _buildPeriodChip(
+                          label: 'employees.overtime_calc_type_percentage'.tr(),
+                          isSelected: _overtimeCalcType == 'percentage',
+                          onTap: () => setState(() => _overtimeCalcType = 'percentage'),
+                          colorScheme: colorScheme,
+                        ),
+                        _buildPeriodChip(
+                          label: 'employees.overtime_calc_type_fixed'.tr(),
+                          isSelected: _overtimeCalcType == 'fixed',
+                          onTap: () => setState(() => _overtimeCalcType = 'fixed'),
+                          colorScheme: colorScheme,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    _buildTextField(
+                      controller: _overtimeRateController,
+                      label: 'employees.overtime_rate'.tr(),
+                      prefixIcon: Icons.percent,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                      ],
+                      hint: _overtimeCalcType == 'fixed' ? '500' : '150',
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _overtimeCalcType == 'hourly_rate'
+                          ? 'employees.overtime_rate_hint_hourly'.tr()
+                          : _overtimeCalcType == 'percentage'
+                              ? 'employees.overtime_rate_hint_percentage'.tr()
+                              : 'employees.overtime_rate_hint_fixed'.tr(),
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: colorScheme.onSurfaceVariant,
                         fontSize: 10,
@@ -1082,6 +1153,8 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
           workingHoursPerDay: workingHours,
           absenceDeductionRateBps: absenceRate,
           lateDeductionRateBps: lateRate,
+          overtimeCalcType: _overtimeCalcType,
+          overtimeRateBps: (int.tryParse(_overtimeRateController.text) ?? 150) * 100,
           currencyId: _employee!.currencyId,
           isActive: _employee!.isActive,
           hireDate: _hireDate,
@@ -1124,6 +1197,8 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
           workingHoursPerDay: workingHours,
           absenceDeductionRateBps: absenceRate,
           lateDeductionRateBps: lateRate,
+          overtimeCalcType: _overtimeCalcType,
+          overtimeRateBps: (int.tryParse(_overtimeRateController.text) ?? 150) * 100,
           currencyId: await _getCurrentCurrencyId(),
           hireDate: _hireDate,
           weeklyOffDays: weeklyOffDaysJson,

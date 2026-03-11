@@ -16,7 +16,10 @@ import 'package:tapix/features/products/domain/entities/size_entity.dart' as siz
 import 'package:tapix/features/products/domain/repositories/product_variant_repository.dart';
 import 'package:tapix/features/products/domain/repositories/product_color_repository.dart';
 import 'package:tapix/features/products/domain/repositories/size_repository.dart';
+import 'package:tapix/features/products/domain/entities/category_entity.dart';
+import 'package:tapix/features/products/domain/repositories/category_repository.dart';
 import 'package:tapix/features/products/presentation/bloc/bulk_product_bloc.dart';
+import 'package:tapix/features/products/presentation/bloc/categories_bloc.dart';
 import 'package:tapix/features/products/presentation/bloc/colors_bloc.dart';
 import 'package:tapix/features/products/presentation/bloc/sizes_bloc.dart';
 import 'package:tapix/features/products/presentation/widgets/bulk_product_row.dart';
@@ -63,11 +66,50 @@ class _FakeSizeRepository implements SizeRepository {
   Future<int> getProductCountBySize(int sizeId) async => 0;
 }
 
+class _FakeCategoryRepository implements CategoryRepository {
+  @override
+  Stream<List<Category>> watchAllCategories() => Stream.value(const <Category>[]);
+
+  @override
+  Stream<List<Category>> watchCategoriesBySearch(String query) => Stream.value(const <Category>[]);
+
+  @override
+  Future<List<Category>> getAllCategories() async => const <Category>[];
+
+  @override
+  Future<Category?> getCategoryById(int id) async => null;
+
+  @override
+  Future<int> createCategory(Category category) async => 0;
+
+  @override
+  Future<bool> updateCategory(Category category) async => true;
+
+  @override
+  Future<int> deleteCategory(int id) async => 0;
+
+  @override
+  Future<bool> hasProducts(int categoryId) async => false;
+
+  @override
+  Future<int> getProductCountByCategory(int categoryId) async => 0;
+
+  @override
+  Future<bool> hasCircularReference(int categoryId, int? parentId) async => false;
+
+  @override
+  Future<List<Category>> getSubcategories(int parentId) async => const <Category>[];
+
+  @override
+  Stream<List<Category>> watchSubcategories(int parentId) => Stream.value(const <Category>[]);
+}
+
 @GenerateMocks([CurrencyService, ProductVariantRepository, ProductColorRepository])
 void main() {
   late MockCurrencyService mockCurrencyService;
   late MockProductColorRepository mockColorRepository;
   late SizeRepository sizeRepository;
+  late CategoryRepository categoryRepository;
   late _TestAssetLoader assetLoader;
 
   setUpAll(() async {
@@ -94,6 +136,7 @@ void main() {
     mockCurrencyService = MockCurrencyService();
     mockColorRepository = MockProductColorRepository();
     sizeRepository = _FakeSizeRepository();
+    categoryRepository = _FakeCategoryRepository();
     
     // Stub CurrencyService
     when(mockCurrencyService.currencyCode).thenReturn('USD');
@@ -161,6 +204,9 @@ void main() {
                   ),
                   BlocProvider<SizesBloc>(
                     create: (_) => SizesBloc(sizeRepository),
+                  ),
+                  BlocProvider<CategoriesBloc>(
+                    create: (_) => CategoriesBloc(categoryRepository),
                   ),
                 ],
                 child: Scaffold(

@@ -48,32 +48,47 @@ class _ReportsHubView extends StatelessWidget {
               _buildHealthBanner(context, state, theme, colorScheme),
               const SizedBox(height: 16),
 
-              // Financial Reports Section
-              _SectionHeader(title: 'reports.financial_reports'.tr()),
+              // Sales Reports Section
+              _SectionHeader(title: 'reports.sales_reports'.tr()),
               const SizedBox(height: 8),
               _ReportTile(
-                icon: Icons.balance,
-                title: 'reports.trial_balance'.tr(),
-                subtitle: 'reports.trial_balance_desc'.tr(),
-                onTap: () => context.push('/reports/trial-balance'),
+                icon: LucideIcons.shoppingCart,
+                title: 'reports.sales_reports'.tr(),
+                subtitle: 'reports.sales_reports_desc'.tr(),
+                onTap: () => context.push('/reports/sales'),
               ),
+              const SizedBox(height: 24),
+
+              // Purchase Reports Section
+              _SectionHeader(title: 'reports.purchase_reports'.tr()),
+              const SizedBox(height: 8),
               _ReportTile(
-                icon: Icons.trending_up,
-                title: 'reports.profit_loss'.tr(),
-                subtitle: 'reports.profit_loss_desc'.tr(),
-                onTap: () => context.push('/reports/profit-loss'),
+                icon: LucideIcons.shoppingBag,
+                title: 'reports.purchase_reports'.tr(),
+                subtitle: 'reports.purchase_reports_desc'.tr(),
+                onTap: () => context.push('/reports/purchases'),
               ),
+              const SizedBox(height: 24),
+
+              // Discount Reports Section
+              _SectionHeader(title: 'reports.discount_reports'.tr()),
+              const SizedBox(height: 8),
               _ReportTile(
-                icon: Icons.account_balance,
-                title: 'reports.balance_sheet'.tr(),
-                subtitle: 'reports.balance_sheet_desc'.tr(),
-                onTap: () => context.push('/reports/balance-sheet'),
+                icon: LucideIcons.tag,
+                title: 'reports.discount_reports'.tr(),
+                subtitle: 'reports.discount_reports_desc'.tr(),
+                onTap: () => context.push('/reports/discounts'),
               ),
+              const SizedBox(height: 24),
+
+              // Profit Reports Section
+              _SectionHeader(title: 'reports.profit_reports'.tr()),
+              const SizedBox(height: 8),
               _ReportTile(
-                icon: Icons.menu_book,
-                title: 'reports.general_ledger'.tr(),
-                subtitle: 'reports.general_ledger_desc'.tr(),
-                onTap: () => context.push('/reports/general-ledger'),
+                icon: LucideIcons.trendingUp,
+                title: 'reports.profit_reports'.tr(),
+                subtitle: 'reports.profit_reports_desc'.tr(),
+                onTap: () => context.push('/reports/profits'),
               ),
               const SizedBox(height: 24),
 
@@ -156,6 +171,12 @@ class _ReportsHubView extends StatelessWidget {
                 title: 'reports.customer_analysis'.tr(),
                 subtitle: 'reports.customer_analysis_desc'.tr(),
                 onTap: () => context.push('/reports/customer-analysis'),
+              ),
+              _ReportTile(
+                icon: LucideIcons.bookOpen,
+                title: 'reports.customer_ledger_report'.tr(),
+                subtitle: 'reports.customer_ledger_report_desc'.tr(),
+                onTap: () => context.push('/reports/customer-ledger'),
               ),
               const SizedBox(height: 24),
 

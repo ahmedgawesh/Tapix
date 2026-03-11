@@ -12,6 +12,7 @@ export 'presentation/bloc/users_bloc.dart';
 export 'presentation/bloc/user_form_bloc.dart';
 export 'presentation/navigation/permission_navigator.dart';
 export 'presentation/screens/access_denied_screen.dart';
+export 'presentation/screens/forgot_password_screen.dart';
 export 'presentation/screens/login_screen.dart';
 export 'presentation/screens/roles_screen.dart';
 export 'presentation/screens/setup_screen.dart';

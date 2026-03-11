@@ -16,9 +16,10 @@ import '../../features/accounting/domain/models/journal_entry_data.dart';
 ///                1200 = Inventory, 1300 = VAT Receivable
 ///   Liabilities: 2000 = Accounts Payable, 2100 = VAT Payable,
 ///                2300 = Loyalty Points Liability
-///   Equity:      3000 = Owner Capital
+///   Equity:      3000 = Owner Capital, 3100 = Opening Balance Equity
 ///   Income:      4000 = Sales Revenue
 ///   Expenses:    5100 = Expenses, 5200 = Salaries Expense,
+///                5300 = Cost of Goods Sold,
 ///                5500 = Discounts Given, 5600 = Commissions Expense
 class JournalEntryService {
   final AccountingRepository _accountingRepo;
@@ -84,13 +85,18 @@ class JournalEntryService {
     final receivablesId = await _requireAccountId('1100');
     final revenueId = await _requireAccountId('4000');
 
-    // Revenue — cash portion: Dr Cash, Cr Sales Revenue (+ Cr VAT Payable)
-    if (paidAmountCents > 0) {
+    // Cap the effective paid amount to totalCents for the invoice portion.
+    // Any overpayment is handled separately as a prepayment (Dr Cash, Cr AR).
+    final effectivePaid = paidAmountCents > totalCents ? totalCents : paidAmountCents;
+    final overpayment = paidAmountCents > totalCents ? paidAmountCents - totalCents : 0;
+
+    // Revenue — cash portion (capped at totalCents): Dr Cash, Cr Sales Revenue (+ Cr VAT Payable)
+    if (effectivePaid > 0) {
       if (taxCents > 0) {
-        final paidTax = (paidAmountCents == totalCents)
+        final paidTax = (effectivePaid == totalCents)
             ? taxCents
-            : (taxCents * paidAmountCents / totalCents).round();
-        final paidRevenue = paidAmountCents - paidTax;
+            : (taxCents * effectivePaid / totalCents).round();
+        final paidRevenue = effectivePaid - paidTax;
         final vatPayableId = await _requireAccountId('2100');
 
         await _accountingRepo.createJournalEntry(
@@ -103,7 +109,7 @@ class JournalEntryService {
             lines: [
               JournalEntryLineData(
                 accountId: cashOrBankId,
-                debitCents: paidAmountCents,
+                debitCents: effectivePaid,
                 creditCents: 0,
                 currencyId: currencyId,
               ),
@@ -130,7 +136,7 @@ class JournalEntryService {
             description: 'Sale #$saleId — Cash Revenue',
             debitAccountId: cashOrBankId,
             creditAccountId: revenueId,
-            amountCents: paidAmountCents,
+            amountCents: effectivePaid,
             currencyId: currencyId,
             entryType: 'sale',
             sourceTable: 'sales',
@@ -143,11 +149,11 @@ class JournalEntryService {
     }
 
     // Revenue — credit portion: Dr Accounts Receivable, Cr Sales Revenue (+ Cr VAT Payable)
-    final unpaid = totalCents - paidAmountCents;
+    final unpaid = totalCents - effectivePaid;
     if (unpaid > 0) {
       if (taxCents > 0) {
-        final paidTax = (paidAmountCents > 0 && paidAmountCents < totalCents)
-            ? (taxCents * paidAmountCents / totalCents).round()
+        final paidTax = (effectivePaid > 0 && effectivePaid < totalCents)
+            ? (taxCents * effectivePaid / totalCents).round()
             : 0;
         final creditTax = taxCents - paidTax;
         final creditRevenue = unpaid - creditTax;
@@ -202,7 +208,100 @@ class JournalEntryService {
       }
     }
 
+    // Overpayment — customer prepayment: Dr Cash, Cr Accounts Receivable
+    // This records that we owe the customer money (negative AR balance).
+    if (overpayment > 0) {
+      await _accountingRepo.createJournalEntry(
+        entryData: JournalEntryData.simple(
+          description: 'Sale #$saleId — Overpayment (customer prepayment)',
+          debitAccountId: cashOrBankId,
+          creditAccountId: receivablesId,
+          amountCents: overpayment,
+          currencyId: currencyId,
+          entryType: 'sale',
+          sourceTable: 'sales',
+          sourceId: saleId,
+          autoPost: true,
+        ),
+        userId: userId,
+      );
+    }
+
     developer.log('Journal entries created for Sale #$saleId', name: 'JournalEntryService');
+  }
+
+  // ── Sale COGS ─────────────────────────────────────────────────
+
+  /// Create a Cost of Goods Sold journal entry when a sale is posted.
+  ///
+  /// STRICT RULES:
+  /// Dr Cost of Goods Sold (5300), Cr Inventory (1200)
+  ///
+  /// [costCents] is the total cost of all items sold, computed by the caller
+  /// from each item's variant/product cost_cents * quantity.
+  /// Throws on any failure — caller must handle.
+  Future<void> recordSaleCOGSJournalEntry({
+    required int saleId,
+    required int costCents,
+    required int currencyId,
+    int? userId,
+  }) async {
+    if (costCents <= 0) return;
+
+    final cogsId = await _requireAccountId('5300');
+    final inventoryId = await _requireAccountId('1200');
+
+    await _accountingRepo.createJournalEntry(
+      entryData: JournalEntryData.simple(
+        description: 'Sale #$saleId — Cost of Goods Sold',
+        debitAccountId: cogsId,
+        creditAccountId: inventoryId,
+        amountCents: costCents,
+        currencyId: currencyId,
+        entryType: 'sale_cogs',
+        sourceTable: 'sales',
+        sourceId: saleId,
+        autoPost: true,
+      ),
+      userId: userId,
+    );
+
+    developer.log('COGS journal entry created for Sale #$saleId ($costCents cents)', name: 'JournalEntryService');
+  }
+
+  /// Reverse COGS when a sale return is posted.
+  ///
+  /// STRICT RULES:
+  /// Dr Inventory (1200), Cr Cost of Goods Sold (5300)
+  ///
+  /// [costCents] is the total cost of the returned items.
+  Future<void> recordSaleReturnCOGSReversalJournalEntry({
+    required int returnId,
+    required int costCents,
+    required int currencyId,
+    int? userId,
+  }) async {
+    if (costCents <= 0) return;
+
+    final inventoryId = await _requireAccountId('1200');
+    final cogsId = await _requireAccountId('5300');
+
+    await _accountingRepo.createJournalEntry(
+      entryData: JournalEntryData.simple(
+        description: 'Sale Return #$returnId — COGS Reversal',
+        debitAccountId: inventoryId,
+        creditAccountId: cogsId,
+        amountCents: costCents,
+        currencyId: currencyId,
+        entryType: 'sale_return_cogs',
+        sourceTable: 'sale_returns',
+        sourceId: returnId,
+        autoPost: true,
+      ),
+      userId: userId,
+    );
+
+    developer.log('COGS reversal journal entry created for Sale Return #$returnId ($costCents cents)', name: 'JournalEntryService');
   }
 
   // ── Purchase ────────────────────────────────────────────────
@@ -213,6 +312,7 @@ class JournalEntryService {
   /// Purchase (Cash):   Dr Inventory, Cr Cash
   /// Purchase (Credit): Dr Inventory, Cr Accounts Payable
   /// VAT on Purchase:   Dr VAT Receivable, Cr Cash / Accounts Payable
+  /// Overpayment:       Dr Accounts Payable, Cr Cash (supplier prepayment)
   Future<void> recordPurchaseJournalEntry({
     required int purchaseId,
     required int totalCents,
@@ -226,14 +326,19 @@ class JournalEntryService {
     final payablesId = await _requireAccountId('2000');
     final inventoryId = await _requireAccountId('1200');
 
-    // Paid portion
-    if (paidAmountCents > 0) {
+    // Cap the effective paid amount to totalCents for the invoice portion.
+    // Any overpayment is handled separately as a prepayment (Dr AP, Cr Cash).
+    final effectivePaid = paidAmountCents > totalCents ? totalCents : paidAmountCents;
+    final overpayment = paidAmountCents > totalCents ? paidAmountCents - totalCents : 0;
+
+    // Paid portion (capped at totalCents)
+    if (effectivePaid > 0) {
       if (taxCents > 0) {
         // Split paid amount into inventory + VAT proportionally
-        final paidTax = (paidAmountCents == totalCents)
+        final paidTax = (effectivePaid == totalCents)
             ? taxCents
-            : (taxCents * paidAmountCents / totalCents).round();
-        final paidInventory = paidAmountCents - paidTax;
+            : (taxCents * effectivePaid / totalCents).round();
+        final paidInventory = effectivePaid - paidTax;
         final vatReceivableId = await _requireAccountId('1300');
 
         final lines = <JournalEntryLineData>[];
@@ -256,7 +361,7 @@ class JournalEntryService {
         lines.add(JournalEntryLineData(
           accountId: cashOrBankId,
           debitCents: 0,
-          creditCents: paidAmountCents,
+          creditCents: effectivePaid,
           currencyId: currencyId,
         ));
 
@@ -278,7 +383,7 @@ class JournalEntryService {
             description: 'Purchase #$purchaseId — Cash',
             debitAccountId: inventoryId,
             creditAccountId: cashOrBankId,
-            amountCents: paidAmountCents,
+            amountCents: effectivePaid,
             currencyId: currencyId,
             entryType: 'purchase',
             sourceTable: 'purchases',
@@ -291,11 +396,11 @@ class JournalEntryService {
     }
 
     // Unpaid portion — Dr Inventory (+ Dr VAT Receivable), Cr Accounts Payable
-    final unpaid = totalCents - paidAmountCents;
+    final unpaid = totalCents - effectivePaid;
     if (unpaid > 0) {
       if (taxCents > 0) {
-        final paidTax = (paidAmountCents > 0 && paidAmountCents < totalCents)
-            ? (taxCents * paidAmountCents / totalCents).round()
+        final paidTax = (effectivePaid > 0 && effectivePaid < totalCents)
+            ? (taxCents * effectivePaid / totalCents).round()
             : 0;
         final creditTax = taxCents - paidTax;
         final creditInventory = unpaid - creditTax;
@@ -353,6 +458,25 @@ class JournalEntryService {
           userId: userId,
         );
       }
+    }
+
+    // Overpayment — supplier prepayment: Dr Accounts Payable, Cr Cash
+    // This records that the supplier owes us money (negative AP balance).
+    if (overpayment > 0) {
+      await _accountingRepo.createJournalEntry(
+        entryData: JournalEntryData.simple(
+          description: 'Purchase #$purchaseId — Overpayment (supplier prepayment)',
+          debitAccountId: payablesId,
+          creditAccountId: cashOrBankId,
+          amountCents: overpayment,
+          currencyId: currencyId,
+          entryType: 'purchase',
+          sourceTable: 'purchases',
+          sourceId: purchaseId,
+          autoPost: true,
+        ),
+        userId: userId,
+      );
     }
 
     developer.log('Journal entries created for Purchase #$purchaseId', name: 'JournalEntryService');
@@ -872,6 +996,246 @@ class JournalEntryService {
     }
 
     developer.log('Journal entry created for Loyalty Redemption #$redemptionId', name: 'JournalEntryService');
+  }
+
+  // ── Opening Balance (Customer / Supplier) ──────────────────────
+
+  /// Create journal entry for a customer opening balance.
+  ///
+  /// STRICT RULES:
+  /// If amountCents > 0 (customer owes us):
+  ///   Dr Accounts Receivable (1100), Cr Opening Balance Equity (3100)
+  /// If amountCents < 0 (we owe customer / credit balance):
+  ///   Dr Opening Balance Equity (3100), Cr Accounts Receivable (1100)
+  ///
+  /// Idempotent: checks for existing opening_balance entry for this customer
+  /// before creating a new one.
+  Future<void> recordCustomerOpeningBalanceJournalEntry({
+    required int customerId,
+    required int amountCents,
+    required int currencyId,
+    int? userId,
+  }) async {
+    if (amountCents == 0) return;
+
+    final receivablesId = await _requireAccountId('1100');
+    final openingEquityId = await _requireAccountId('3100');
+
+    final absAmount = amountCents.abs();
+
+    final int debitAccountId;
+    final int creditAccountId;
+
+    if (amountCents > 0) {
+      // Customer owes us: Dr AR, Cr Opening Balance Equity
+      debitAccountId = receivablesId;
+      creditAccountId = openingEquityId;
+    } else {
+      // We owe customer: Dr Opening Balance Equity, Cr AR
+      debitAccountId = openingEquityId;
+      creditAccountId = receivablesId;
+    }
+
+    await _accountingRepo.createJournalEntry(
+      entryData: JournalEntryData.simple(
+        description: 'Customer #$customerId — Opening Balance',
+        debitAccountId: debitAccountId,
+        creditAccountId: creditAccountId,
+        amountCents: absAmount,
+        currencyId: currencyId,
+        entryType: 'opening_balance',
+        sourceTable: 'customers',
+        sourceId: customerId,
+        autoPost: true,
+      ),
+      userId: userId,
+    );
+
+    developer.log(
+      'Journal entry created for Customer #$customerId opening balance: $amountCents cents',
+      name: 'JournalEntryService',
+    );
+  }
+
+  /// Create journal entry for a supplier opening balance.
+  ///
+  /// STRICT RULES:
+  /// If amountCents > 0 (we owe supplier):
+  ///   Dr Opening Balance Equity (3100), Cr Accounts Payable (2000)
+  /// If amountCents < 0 (supplier owes us / debit balance):
+  ///   Dr Accounts Payable (2000), Cr Opening Balance Equity (3100)
+  ///
+  /// Idempotent: checks for existing opening_balance entry for this supplier
+  /// before creating a new one.
+  Future<void> recordSupplierOpeningBalanceJournalEntry({
+    required int supplierId,
+    required int amountCents,
+    required int currencyId,
+    int? userId,
+  }) async {
+    if (amountCents == 0) return;
+
+    final payablesId = await _requireAccountId('2000');
+    final openingEquityId = await _requireAccountId('3100');
+
+    final absAmount = amountCents.abs();
+
+    final int debitAccountId;
+    final int creditAccountId;
+
+    if (amountCents > 0) {
+      // We owe supplier: Dr Opening Balance Equity, Cr AP
+      debitAccountId = openingEquityId;
+      creditAccountId = payablesId;
+    } else {
+      // Supplier owes us: Dr AP, Cr Opening Balance Equity
+      debitAccountId = payablesId;
+      creditAccountId = openingEquityId;
+    }
+
+    await _accountingRepo.createJournalEntry(
+      entryData: JournalEntryData.simple(
+        description: 'Supplier #$supplierId — Opening Balance',
+        debitAccountId: debitAccountId,
+        creditAccountId: creditAccountId,
+        amountCents: absAmount,
+        currencyId: currencyId,
+        entryType: 'opening_balance',
+        sourceTable: 'suppliers',
+        sourceId: supplierId,
+        autoPost: true,
+      ),
+      userId: userId,
+    );
+
+    developer.log(
+      'Journal entry created for Supplier #$supplierId opening balance: $amountCents cents',
+      name: 'JournalEntryService',
+    );
+  }
+
+  // ── Repair journal entries ──────────────────────────────────
+
+  /// Repair journal entries to fix GL ↔ sub-ledger mismatches.
+  ///
+  /// Two issues are fixed:
+  /// 1. Orphaned draft journal entries: the old code created journal entries
+  ///    at purchase draft time, but supplier balances were only updated at
+  ///    post time. This voids journal entries for non-posted purchases.
+  /// 2. Overpayment entries: the old code recorded overpayment incorrectly.
+  ///    For posted purchases/sales with paid > total, void and re-create.
+  Future<int> repairOverpaymentJournalEntries() async {
+    int repaired = 0;
+
+    // ── Fix 1: Void journal entries for non-posted (draft) purchases ──
+    // The old code created journal entries at draft time, causing GL ↔ sub-ledger drift.
+    final draftPurchasesWithJournals = await _accountingRepo.rawSelect(
+      'SELECT p.id FROM purchases p '
+      'INNER JOIN journal_entries je ON je.source_table = \'purchases\' AND je.source_id = p.id '
+      'WHERE p.status != \'posted\' AND je.status = \'posted\' AND je.is_reversed = 0 '
+      'GROUP BY p.id',
+    );
+
+    for (final row in draftPurchasesWithJournals) {
+      final purchaseId = row.read<int>('id');
+      developer.log(
+        'Voiding orphaned journal entries for non-posted Purchase #$purchaseId',
+        name: 'JournalEntryService',
+      );
+      await voidJournalEntriesForSource(
+        sourceTable: 'purchases',
+        sourceId: purchaseId,
+        reason: 'Repair: void draft purchase journal entries',
+      );
+      repaired++;
+    }
+
+    // ── Fix 2: Re-create journal entries for posted purchases with overpayment ──
+    final overpaidPurchases = await _accountingRepo.rawSelect(
+      'SELECT id, total_cents, paid_amount_cents, currency_id, payment_method '
+      'FROM purchases WHERE status = \'posted\' '
+      'AND CAST(paid_amount_cents AS INTEGER) > CAST(total_cents AS INTEGER)',
+    );
+
+    for (final row in overpaidPurchases) {
+      final purchaseId = row.read<int>('id');
+      final totalCents = row.read<int>('total_cents');
+      final paidAmountCents = row.read<int>('paid_amount_cents');
+      final currencyId = row.read<int>('currency_id');
+      final paymentMethod = row.readNullable<String>('payment_method');
+
+      developer.log(
+        'Repairing Purchase #$purchaseId: total=$totalCents, paid=$paidAmountCents',
+        name: 'JournalEntryService',
+      );
+
+      await voidJournalEntriesForSource(
+        sourceTable: 'purchases',
+        sourceId: purchaseId,
+        reason: 'Repair: overpayment journal entry fix',
+      );
+
+      await recordPurchaseJournalEntry(
+        purchaseId: purchaseId,
+        totalCents: totalCents,
+        paidAmountCents: paidAmountCents,
+        currencyId: currencyId,
+        paymentMethod: paymentMethod,
+      );
+
+      repaired++;
+    }
+
+    // ── Fix 3: Re-create journal entries for posted sales with overpayment ──
+    final overpaidSales = await _accountingRepo.rawSelect(
+      'SELECT id, total_cents, paid_amount_cents, currency_id, payment_method '
+      'FROM sales WHERE status = \'completed\' '
+      'AND CAST(paid_amount_cents AS INTEGER) > CAST(total_cents AS INTEGER)',
+    );
+
+    for (final row in overpaidSales) {
+      final saleId = row.read<int>('id');
+      final totalCents = row.read<int>('total_cents');
+      final paidAmountCents = row.read<int>('paid_amount_cents');
+      final currencyId = row.read<int>('currency_id');
+      final paymentMethod = row.readNullable<String>('payment_method');
+
+      developer.log(
+        'Repairing Sale #$saleId: total=$totalCents, paid=$paidAmountCents',
+        name: 'JournalEntryService',
+      );
+
+      // Void old entries (only sale revenue entries, not COGS)
+      final entries = await _accountingRepo.getJournalEntriesForSource('sales', saleId);
+      for (final entry in entries) {
+        if (entry.status == 'posted' && !entry.isReversed && entry.entryType == 'sale') {
+          await _accountingRepo.voidJournalEntry(
+            entryId: entry.id,
+            reason: 'Repair: overpayment journal entry fix',
+            userId: 0,
+          );
+        }
+      }
+
+      await recordSaleJournalEntry(
+        saleId: saleId,
+        totalCents: totalCents,
+        paidAmountCents: paidAmountCents,
+        currencyId: currencyId,
+        paymentMethod: paymentMethod,
+      );
+
+      repaired++;
+    }
+
+    developer.log(
+      'Repaired $repaired journal entries '
+      '(${draftPurchasesWithJournals.length} draft purchases, '
+      '${overpaidPurchases.length} overpaid purchases, '
+      '${overpaidSales.length} overpaid sales)',
+      name: 'JournalEntryService',
+    );
+    return repaired;
   }
 
   // ── Void (reverse all journal entries for a source) ─────────

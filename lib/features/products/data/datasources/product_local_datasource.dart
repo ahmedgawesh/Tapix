@@ -10,6 +10,7 @@ abstract class ProductLocalDatasource {
   Future<List<ProductModel>> searchProducts(String query, {bool? isActive = true});
   Future<ProductModel?> findBySku(String sku);
   Future<ProductModel?> findByBarcode(String barcode);
+  Future<ProductModel?> findByName(String name);
   
   Future<List<ProductModel>> filterProducts({
     int? categoryId,
@@ -17,12 +18,14 @@ abstract class ProductLocalDatasource {
     int limit = 50,
     int offset = 0,
     bool? isActive = true,
+    int lowStockThreshold = 5,
   });
 
   Stream<List<ProductModel>> watchFilteredProducts({
     int? categoryId,
     String? stockStatus,
     bool? isActive = true,
+    int lowStockThreshold = 5,
   });
 
   Stream<List<ProductModel>> watchProductsForExport({
@@ -107,12 +110,19 @@ class ProductLocalDatasourceImpl implements ProductLocalDatasource {
   }
 
   @override
+  Future<ProductModel?> findByName(String name) async {
+    final product = await _productDao.findByName(name);
+    return product == null ? null : ProductModel.fromDrift(product);
+  }
+
+  @override
   Future<List<ProductModel>> filterProducts({
     int? categoryId,
     String? stockStatus,
     int limit = 50,
     int offset = 0,
     bool? isActive = true,
+    int lowStockThreshold = 5,
   }) async {
     final products = await _productDao.filterProducts(
       categoryId: categoryId,
@@ -120,6 +130,7 @@ class ProductLocalDatasourceImpl implements ProductLocalDatasource {
       limit: limit,
       offset: offset,
       isActive: isActive,
+      lowStockThreshold: lowStockThreshold,
     );
     return products.map((p) => ProductModel.fromDrift(p)).toList();
   }
@@ -129,12 +140,14 @@ class ProductLocalDatasourceImpl implements ProductLocalDatasource {
     int? categoryId,
     String? stockStatus,
     bool? isActive = true,
+    int lowStockThreshold = 5,
   }) {
     return _productDao
         .watchFilteredProducts(
           categoryId: categoryId,
           stockStatus: stockStatus,
           isActive: isActive,
+          lowStockThreshold: lowStockThreshold,
         )
         .map((products) => products.map((p) => ProductModel.fromDrift(p)).toList());
   }

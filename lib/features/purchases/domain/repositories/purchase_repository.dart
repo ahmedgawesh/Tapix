@@ -69,6 +69,26 @@ abstract class PurchaseRepository {
   /// Void purchase (reverse stock if posted)
   Future<void> voidPurchase(int purchaseId);
 
+  /// Edit a posted purchase by voiding the original and creating a new one.
+  /// Returns the new purchase ID.
+  /// Throws if the accounting period is closed or user lacks permission.
+  Future<int> editPostedPurchase({
+    required int originalPurchaseId,
+    required int supplierId,
+    required int currencyId,
+    required Decimal subtotalCents,
+    required Decimal discountCents,
+    required Decimal taxCents,
+    required Decimal totalCents,
+    required Decimal paidAmountCents,
+    required List<PurchaseItemInput> items,
+    String? paymentMethod,
+    String? supplierInvoiceRef,
+    String? notes,
+    DateTime? purchaseDate,
+    DateTime? dueDate,
+  });
+
   /// Delete purchase (only if draft)
   Future<int> deletePurchase(int purchaseId);
 

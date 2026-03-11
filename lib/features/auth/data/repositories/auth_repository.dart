@@ -90,7 +90,12 @@ class AuthRepository implements AuthRepositoryInterface {
   }
 
   @override
-  Future<UserEntity> createFirstOwner(String username, String password) async {
+  Future<UserEntity> createFirstOwner(
+    String username,
+    String password, {
+    String? securityQuestion,
+    String? securityAnswer,
+  }) async {
     final hasUsers = await hasAnyUsers();
     if (hasUsers) {
       throw Exception('Cannot create first owner: users already exist');
@@ -98,12 +103,17 @@ class AuthRepository implements AuthRepositoryInterface {
 
     final now = DateTime.now();
     final hashedPassword = _passwordService.hashPassword(password);
+    final hashedAnswer = securityAnswer != null
+        ? _passwordService.hashPassword(securityAnswer.trim().toLowerCase())
+        : null;
 
     final id = await _database.into(_database.users).insert(
       UsersCompanion.insert(
         username: username,
         passwordHash: hashedPassword,
         role: 'owner',
+        securityQuestion: Value(securityQuestion),
+        securityAnswerHash: Value(hashedAnswer),
         createdAt: now,
         updatedAt: now,
       ),
@@ -134,6 +144,62 @@ class AuthRepository implements AuthRepositoryInterface {
     if (user == null) return null;
 
     return _mapToEntity(user);
+  }
+
+  @override
+  Future<String?> getSecurityQuestion(String username) async {
+    final query = _database.select(_database.users)
+      ..where((u) => u.username.equals(username))
+      ..where((u) => u.isActive.equals(1));
+
+    final user = await query.getSingleOrNull();
+    return user?.securityQuestion;
+  }
+
+  @override
+  Future<bool> resetPasswordWithSecurityAnswer({
+    required String username,
+    required String securityAnswer,
+    required String newPassword,
+  }) async {
+    final query = _database.select(_database.users)
+      ..where((u) => u.username.equals(username))
+      ..where((u) => u.isActive.equals(1));
+
+    final user = await query.getSingleOrNull();
+    if (user == null) return false;
+    if (user.securityAnswerHash == null) return false;
+
+    final normalizedAnswer = securityAnswer.trim().toLowerCase();
+    if (!_passwordService.verifyPassword(normalizedAnswer, user.securityAnswerHash!)) {
+      return false;
+    }
+
+    final hashedPassword = _passwordService.hashPassword(newPassword);
+    final now = DateTime.now();
+    await (_database.update(_database.users)..where((u) => u.id.equals(user.id)))
+        .write(UsersCompanion(
+      passwordHash: Value(hashedPassword),
+      updatedAt: Value(now),
+    ));
+
+    return true;
+  }
+
+  @override
+  Future<void> setSecurityQuestion({
+    required int userId,
+    required String question,
+    required String answer,
+  }) async {
+    final hashedAnswer = _passwordService.hashPassword(answer.trim().toLowerCase());
+    final now = DateTime.now();
+    await (_database.update(_database.users)..where((u) => u.id.equals(userId)))
+        .write(UsersCompanion(
+      securityQuestion: Value(question),
+      securityAnswerHash: Value(hashedAnswer),
+      updatedAt: Value(now),
+    ));
   }
 
   UserEntity _mapToEntity(User user) {

@@ -1,12 +1,14 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:easy_localization/easy_localization.dart';
 
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../../auth/auth.dart';
 import '../../domain/entities/sale_entity.dart';
 import '../../domain/repositories/sale_repository.dart';
 import '../services/sale_pdf_service.dart';
@@ -115,16 +117,29 @@ class _SaleReturnDetailScreenState extends State<SaleReturnDetailScreen> {
         ),
         title: Text('sales.return_detail'.tr()),
         actions: [
-          IconButton(
-            icon: const Icon(LucideIcons.printer),
-            tooltip: 'sales.print_invoice'.tr(),
-            onPressed: () => _printOrShare(share: false),
-          ),
-          IconButton(
-            icon: const Icon(LucideIcons.share2),
-            tooltip: 'sales.share_invoice'.tr(),
-            onPressed: () => _printOrShare(share: true),
-          ),
+          if (!ret.isVoided) ...[
+            IconButton(
+              icon: const Icon(LucideIcons.printer),
+              tooltip: 'sales.print_invoice'.tr(),
+              onPressed: () => _printOrShare(share: false),
+            ),
+            IconButton(
+              icon: const Icon(LucideIcons.share2),
+              tooltip: 'sales.share_invoice'.tr(),
+              onPressed: () => _printOrShare(share: true),
+            ),
+            Builder(builder: (context) {
+              final authState = context.read<AuthBloc>().state;
+              final canVoid = authState is AuthAuthenticated &&
+                  sl<PermissionService>().hasPermission(authState.user, Permissions.editTransactions);
+              if (!canVoid) return const SizedBox.shrink();
+              return IconButton(
+                icon: Icon(LucideIcons.ban, color: colorScheme.error),
+                tooltip: 'sales.void_sale'.tr(),
+                onPressed: () => _voidReturn(context),
+              );
+            }),
+          ],
         ],
       ),
       body: ListView(
@@ -143,6 +158,55 @@ class _SaleReturnDetailScreenState extends State<SaleReturnDetailScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _voidReturn(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final errorColor = Theme.of(context).colorScheme.error;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('sales.void_confirm_title'.tr()),
+        content: Text('sales.void_return_confirm_message'.tr()),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('common.cancel'.tr()),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: errorColor,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('sales.void_sale'.tr()),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      final repo = sl<SaleRepository>();
+      await repo.voidSaleReturn(widget.returnId);
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('sales.void_success'.tr()),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        _loadData();
+      }
+    } catch (e) {
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(e.toString()),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: errorColor,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _printOrShare({required bool share}) async {

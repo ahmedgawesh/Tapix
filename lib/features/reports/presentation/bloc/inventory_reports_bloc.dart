@@ -272,7 +272,7 @@ class FilterOption {
 class InventoryReportsBloc
     extends RealtimeBloc<InventoryReportsData, InventoryReportsEvent> {
   final AppDatabase _db;
-  ReportDateRange _dateRange = ReportDateRange.thisMonth();
+  ReportDateRange _dateRange;
   StockValuationSort _sort = StockValuationSort.valueDesc;
   PriceDisplayType _priceType = PriceDisplayType.cost;
   // Movement filters
@@ -283,7 +283,9 @@ class InventoryReportsBloc
   String? _movementSupplierName;
   MovementSort _movementSort = MovementSort.mostActive;
 
-  InventoryReportsBloc(this._db) : super(const RealtimeLoading());
+  InventoryReportsBloc(this._db, {String defaultDateRange = 'month'})
+      : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+        super(const RealtimeLoading());
 
   ReportDateRange get dateRange => _dateRange;
 

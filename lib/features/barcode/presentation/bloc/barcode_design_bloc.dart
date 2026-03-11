@@ -11,6 +11,7 @@ import '../../../../core/database/daos/barcode_template_dao.dart';
 import '../../../products/domain/entities/product_entity.dart';
 import '../../../settings/data/services/company_profile_service.dart';
 import '../../../settings/domain/entities/company_profile.dart';
+import '../../../settings/domain/entities/app_settings.dart';
 import '../../data/models/invoice_print_data.dart';
 import '../../domain/models/barcode_design_state.dart';
 import '../../services/barcode_printer_service.dart';
@@ -31,7 +32,7 @@ class BarcodeDesignBloc extends RealtimeBloc<BarcodeDesignData, BarcodeDesignEve
   Map<int, String> _variantInfoByProductId = {};
   List<BarcodeTemplate> _templates = [];
   BarcodeTemplate? _selectedTemplate;
-  BarcodeDesignSettings _settings = const BarcodeDesignSettings();
+  BarcodeDesignSettings _settings;
   CompanyProfile _companyProfile = const CompanyProfile(name: '');
   PrintOperationStatus _operationStatus = PrintOperationStatus.idle;
   double? _progress;
@@ -46,12 +47,25 @@ class BarcodeDesignBloc extends RealtimeBloc<BarcodeDesignData, BarcodeDesignEve
     required BarcodePrinterService printerService,
     required CompanyProfileService companyProfileService,
     required ProductVariantDao productVariantDao,
+    AppSettings? appSettings,
   })  : _templateDao = templateDao,
         _printerService = printerService,
         _companyProfileService = companyProfileService,
         _productVariantDao = productVariantDao,
+        _settings = _initialSettingsFrom(appSettings),
         super(const RealtimeLoading()) {
     _initializeSubscriptions();
+  }
+
+  /// Build initial [BarcodeDesignSettings] from [AppSettings] defaults.
+  static BarcodeDesignSettings _initialSettingsFrom(AppSettings? appSettings) {
+    if (appSettings == null) return const BarcodeDesignSettings();
+    return BarcodeDesignSettings(
+      labelWidthMm: appSettings.labelWidthMm,
+      labelHeightMm: appSettings.labelHeightMm,
+      includePrice: appSettings.includePriceOnLabel,
+      includeBarcode: appSettings.includeBarcodeText,
+    );
   }
 
   void _initializeSubscriptions() {
@@ -175,6 +189,8 @@ class BarcodeDesignBloc extends RealtimeBloc<BarcodeDesignData, BarcodeDesignEve
     _selectedProducts = event.invoiceData.lines
         .map(_productFromInvoiceLine)
         .toList();
+    // Set quantity mode to invoiceQuantity as default when loading from invoice
+    _settings = _settings.copyWith(quantityMode: QuantityMode.invoiceQuantity);
     emit(RealtimeSuccess(data: _currentData));
   }
 
@@ -308,7 +324,12 @@ class BarcodeDesignBloc extends RealtimeBloc<BarcodeDesignData, BarcodeDesignEve
       // Get default template
       _selectedTemplate = await _templateDao.getDefaultTemplate();
       if (_selectedTemplate != null) {
+        // Preserve quantityMode if invoice data was already loaded
+        final preservedQuantityMode = _invoiceData != null ? QuantityMode.invoiceQuantity : null;
         _settings = BarcodeDesignSettings.fromTemplate(_selectedTemplate!);
+        if (preservedQuantityMode != null) {
+          _settings = _settings.copyWith(quantityMode: preservedQuantityMode);
+        }
       }
 
       // Set initial products if provided

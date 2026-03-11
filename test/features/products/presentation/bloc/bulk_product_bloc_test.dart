@@ -3,6 +3,7 @@ import 'package:decimal/decimal.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:tapix/features/products/domain/entities/product_entity.dart';
+import 'package:tapix/features/products/domain/entities/product_variant_entity.dart';
 import 'package:tapix/features/products/domain/repositories/product_repository.dart';
 import 'package:tapix/features/products/domain/repositories/product_variant_repository.dart';
 import 'package:tapix/features/products/presentation/bloc/bulk_product_bloc.dart';
@@ -13,6 +14,8 @@ class MockProductVariantRepository extends Mock implements ProductVariantReposit
 
 class FakeBulkProductData extends Fake implements BulkProductData {}
 
+class FakeProductVariant extends Fake implements ProductVariant {}
+
 void main() {
   late MockProductRepository mockRepository;
   late MockProductVariantRepository mockVariantRepository;
@@ -21,6 +24,7 @@ void main() {
     registerFallbackValue(Decimal.zero);
     registerFallbackValue(<BulkProductData>[]);
     registerFallbackValue(FakeBulkProductData());
+    registerFallbackValue(FakeProductVariant());
   });
 
   setUp(() {
@@ -38,6 +42,26 @@ void main() {
           stockQuantity: any(named: 'stockQuantity'),
           isActive: any(named: 'isActive'),
         )).thenAnswer((_) async => 1);
+    
+    // Default stubs for variant repository methods called after bulkCreateProducts
+    when(() => mockVariantRepository.ensureDefaultVariantForProduct(
+          productId: any(named: 'productId'),
+          costCents: any(named: 'costCents'),
+          priceCents: any(named: 'priceCents'),
+          stockQuantity: any(named: 'stockQuantity'),
+        )).thenAnswer((_) async => 1);
+    when(() => mockVariantRepository.getDefaultVariantByProduct(any()))
+        .thenAnswer((invocation) async => ProductVariant(
+          id: 1,
+          productId: invocation.positionalArguments[0] as int,
+          costCents: Decimal.fromInt(500),
+          priceCents: Decimal.fromInt(1000),
+          priceAdjustmentCents: Decimal.zero,
+          stockQuantity: 10,
+          isActive: true,
+        ));
+    when(() => mockVariantRepository.updateVariant(any()))
+        .thenAnswer((_) async => true);
   });
 
   group('BulkProductBloc', () {

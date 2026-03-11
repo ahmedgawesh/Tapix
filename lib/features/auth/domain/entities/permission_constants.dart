@@ -48,6 +48,9 @@ class Permissions {
   static const String managePurchases = 'manage_purchases';
   static const String viewPurchases = 'view_purchases';
 
+  // Transaction Editing
+  static const String editTransactions = 'edit_transactions';
+
   // Audit & Security
   static const String viewAuditLogs = 'view_audit_logs';
 
@@ -83,6 +86,7 @@ class Permissions {
     viewSuppliers,
     managePurchases,
     viewPurchases,
+    editTransactions,
     viewAuditLogs,
   ];
 }

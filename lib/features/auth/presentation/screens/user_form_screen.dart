@@ -49,6 +49,7 @@ class _UserFormContentState extends State<_UserFormContent> {
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  final _securityAnswerController = TextEditingController();
 
   UserRole _selectedRole = UserRole.salesperson;
   int? _selectedEmployeeId;
@@ -56,12 +57,24 @@ class _UserFormContentState extends State<_UserFormContent> {
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   bool _isEdit = false;
+  String? _selectedSecurityQuestion;
+  String? _existingSecurityQuestion;
+
+  List<String> get _securityQuestions => [
+        'auth.security_questions.q1'.tr(),
+        'auth.security_questions.q2'.tr(),
+        'auth.security_questions.q3'.tr(),
+        'auth.security_questions.q4'.tr(),
+        'auth.security_questions.q5'.tr(),
+        'auth.security_questions.q6'.tr(),
+      ];
 
   @override
   void dispose() {
     _usernameController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
+    _securityAnswerController.dispose();
     super.dispose();
   }
 
@@ -137,6 +150,10 @@ class _UserFormContentState extends State<_UserFormContent> {
             role: _selectedRole,
             employeeId: _selectedEmployeeId,
             clearEmployeeLink: _selectedEmployeeId == null && _isEdit,
+            securityQuestion: _selectedSecurityQuestion,
+            securityAnswer: _securityAnswerController.text.trim().isNotEmpty
+                ? _securityAnswerController.text.trim()
+                : null,
           ),
         );
   }
@@ -354,6 +371,130 @@ class _UserFormContentState extends State<_UserFormContent> {
                                 const SizedBox(height: 8),
                                 Text(
                                   'users.password_change_hint'.tr(),
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+
+                              const SizedBox(height: 16),
+
+                              // Security Question Section
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: colorScheme.surfaceContainerHighest
+                                      .withValues(alpha: 0.3),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: colorScheme.outlineVariant
+                                        .withValues(alpha: 0.3),
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.shield_outlined,
+                                      size: 20,
+                                      color: colorScheme.primary,
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Text(
+                                        'auth.security_question_info'.tr(),
+                                        style: theme.textTheme.bodySmall?.copyWith(
+                                          color: colorScheme.onSurfaceVariant,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              if (_isEdit && _existingSecurityQuestion != null) ...[
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: colorScheme.primaryContainer
+                                        .withValues(alpha: 0.3),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.check_circle_outline,
+                                        size: 20,
+                                        color: colorScheme.primary,
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Text(
+                                          'users.security_question_set'.tr(),
+                                          style: theme.textTheme.bodySmall?.copyWith(
+                                            color: colorScheme.primary,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                              ],
+                              DropdownButtonFormField<String>(
+                                initialValue: _selectedSecurityQuestion,
+                                decoration: InputDecoration(
+                                  labelText: 'auth.security_question_label'.tr(),
+                                  prefixIcon: const Icon(Icons.help_outline),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                isExpanded: true,
+                                items: _securityQuestions
+                                    .map((q) => DropdownMenuItem(
+                                          value: q,
+                                          child: Text(
+                                            q,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ))
+                                    .toList(),
+                                onChanged: (value) {
+                                  setState(() {
+                                    _selectedSecurityQuestion = value;
+                                  });
+                                },
+                              ),
+                              const SizedBox(height: 12),
+                              TextFormField(
+                                controller: _securityAnswerController,
+                                decoration: InputDecoration(
+                                  labelText: 'auth.security_answer_label'.tr(),
+                                  hintText: 'auth.security_answer_hint'.tr(),
+                                  prefixIcon: const Icon(Icons.message_outlined),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                textInputAction: TextInputAction.next,
+                                validator: (value) {
+                                  // Only validate if a question is selected
+                                  if (_selectedSecurityQuestion != null &&
+                                      (value == null || value.trim().isEmpty)) {
+                                    return 'auth.security_answer_required'.tr();
+                                  }
+                                  if (value != null &&
+                                      value.trim().isNotEmpty &&
+                                      value.trim().length < 2) {
+                                    return 'auth.security_answer_min_length'.tr();
+                                  }
+                                  return null;
+                                },
+                              ),
+                              if (_isEdit) ...[
+                                const SizedBox(height: 8),
+                                Text(
+                                  'users.security_question_change_hint'.tr(),
                                   style: theme.textTheme.bodySmall?.copyWith(
                                     color: colorScheme.onSurfaceVariant,
                                   ),

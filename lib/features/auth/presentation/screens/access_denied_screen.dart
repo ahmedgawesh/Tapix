@@ -37,7 +37,7 @@ class AccessDeniedScreen extends StatelessWidget {
           },
           tooltip: 'common.back'.tr(),
         ),
-        title: Text('access_denied'.tr()),
+        title: Text('common.access_denied'.tr()),
         centerTitle: true,
       ),
       body: Center(
@@ -53,7 +53,7 @@ class AccessDeniedScreen extends StatelessWidget {
               ),
               const SizedBox(height: 24),
               Text(
-                'access_denied'.tr(),
+                'common.access_denied'.tr(),
                 style: theme.textTheme.headlineMedium?.copyWith(
                   fontWeight: FontWeight.bold,
                   color: theme.colorScheme.error,
@@ -61,7 +61,7 @@ class AccessDeniedScreen extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               Text(
-                message ?? 'You do not have permission to access this feature.',
+                message ?? 'common.access_denied_message'.tr(),
                 textAlign: TextAlign.center,
                 style: theme.textTheme.bodyLarge?.copyWith(
                   color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
@@ -80,8 +80,8 @@ class AccessDeniedScreen extends StatelessWidget {
                   ),
                   child: Text(
                     requiredRole != null
-                        ? 'Required role: ${requiredRole!.name.toUpperCase()}'
-                        : 'Required permission: $requiredPermission',
+                        ? 'common.required_role'.tr(args: [requiredRole!.name.toUpperCase()])
+                        : 'common.required_permission'.tr(args: [requiredPermission ?? '']),
                     style: theme.textTheme.bodySmall?.copyWith(
                       fontFamily: 'monospace',
                     ),
@@ -96,7 +96,7 @@ class AccessDeniedScreen extends StatelessWidget {
                     OutlinedButton.icon(
                       onPressed: onBack,
                       icon: const Icon(Icons.arrow_back),
-                      label: Text('go_back'.tr()),
+                      label: Text('common.go_back'.tr()),
                     ),
                   if (onBack != null && onHome != null)
                     const SizedBox(width: 16),
@@ -104,7 +104,7 @@ class AccessDeniedScreen extends StatelessWidget {
                     FilledButton.icon(
                       onPressed: onHome,
                       icon: const Icon(Icons.home),
-                      label: Text('home'.tr()),
+                      label: Text('common.home'.tr()),
                     ),
                 ],
               ),
@@ -158,12 +158,12 @@ class PermissionDeniedDialog extends StatelessWidget {
         color: theme.colorScheme.error,
         size: 48,
       ),
-      title: Text(title ?? 'Access Denied'),
+      title: Text(title ?? 'common.access_denied'.tr()),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            message ?? 'You do not have permission to perform this action.',
+            message ?? 'common.access_denied_message'.tr(),
             textAlign: TextAlign.center,
           ),
           if (requiredPermission != null || requiredRole != null) ...[
@@ -178,9 +178,7 @@ class PermissionDeniedDialog extends StatelessWidget {
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text(
-                requiredRole != null
-                    ? 'Contact your manager or owner for access.'
-                    : 'Contact an administrator for access.',
+                'common.contact_admin'.tr(),
                 style: theme.textTheme.bodySmall,
               ),
             ),
@@ -190,7 +188,7 @@ class PermissionDeniedDialog extends StatelessWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: Text('ok'.tr()),
+          child: Text('common.ok'.tr()),
         ),
       ],
     );

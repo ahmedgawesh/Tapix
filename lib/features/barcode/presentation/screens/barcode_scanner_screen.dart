@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -40,11 +42,23 @@ class _BarcodeScannerViewState extends State<_BarcodeScannerView> {
   mobile_scanner.MobileScannerController? _controller;
   bool _isFlashOn = false;
   bool _isFrontCamera = false;
+  bool _isDesktop = false;
 
   @override
   void initState() {
     super.initState();
-    _initController();
+    _checkPlatform();
+    if (!_isDesktop) {
+      _initController();
+    }
+  }
+
+  void _checkPlatform() {
+    if (kIsWeb) {
+      _isDesktop = false; // Web can use camera
+    } else {
+      _isDesktop = Platform.isWindows || Platform.isLinux || Platform.isMacOS;
+    }
   }
 
   void _initController() {
@@ -158,7 +172,7 @@ class _BarcodeScannerViewState extends State<_BarcodeScannerView> {
         ),
         title: Text('barcode.scanner_title'.tr()),
         centerTitle: true,
-        actions: [
+        actions: _isDesktop ? null : [
           IconButton(
             icon: Icon(_isFlashOn ? LucideIcons.zapOff : LucideIcons.zap),
             onPressed: _toggleFlash,
@@ -179,6 +193,12 @@ class _BarcodeScannerViewState extends State<_BarcodeScannerView> {
 
           final scannerState = state.data;
 
+          // Desktop mode - show manual entry UI
+          if (_isDesktop) {
+            return _buildDesktopManualEntryUI(context, scannerState);
+          }
+
+          // Mobile mode - show camera scanner
           return Column(
             children: [
               // Camera preview
@@ -249,10 +269,85 @@ class _BarcodeScannerViewState extends State<_BarcodeScannerView> {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: _isDesktop ? null : FloatingActionButton.extended(
         onPressed: _showManualEntryDialog,
         icon: const Icon(LucideIcons.keyboard),
         label: Text('barcode.manual_entry'.tr()),
+      ),
+    );
+  }
+
+  Widget _buildDesktopManualEntryUI(BuildContext context, ScannerState scannerState) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textController = TextEditingController();
+
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 600),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                LucideIcons.monitor,
+                size: 64,
+                color: colorScheme.primary,
+              ),
+              const SizedBox(height: 24),
+              Text(
+                'barcode.desktop_mode_title'.tr(),
+                style: Theme.of(context).textTheme.headlineSmall,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'barcode.desktop_mode_description'.tr(),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 32),
+              TextField(
+                controller: textController,
+                autofocus: true,
+                decoration: InputDecoration(
+                  labelText: 'barcode.barcode_label'.tr(),
+                  hintText: 'barcode.barcode_hint'.tr(),
+                  prefixIcon: const Icon(LucideIcons.scan),
+                  border: const OutlineInputBorder(),
+                ),
+                textInputAction: TextInputAction.search,
+                onSubmitted: (value) {
+                  if (value.isNotEmpty) {
+                    context.read<BarcodeScannerBloc>().add(ManualBarcodeEntered(value));
+                    textController.clear();
+                  }
+                },
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: () {
+                    final value = textController.text;
+                    if (value.isNotEmpty) {
+                      context.read<BarcodeScannerBloc>().add(ManualBarcodeEntered(value));
+                      textController.clear();
+                    }
+                  },
+                  icon: const Icon(LucideIcons.search),
+                  label: Text('barcode.search_product'.tr()),
+                ),
+              ),
+              const SizedBox(height: 32),
+              Expanded(
+                child: _buildResultSection(context, scannerState),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

@@ -180,10 +180,12 @@ class CustomerSalesReturnsData {
 class CustomerSalesReturnsBloc
     extends RealtimeBloc<CustomerSalesReturnsData, CustomerSalesReturnsEvent> {
   final AppDatabase _db;
-  ReportDateRange _dateRange = ReportDateRange.thisMonth();
+  ReportDateRange _dateRange;
   ReturnsSortType _sort = ReturnsSortType.totalDesc;
 
-  CustomerSalesReturnsBloc(this._db) : super(const RealtimeLoading());
+  CustomerSalesReturnsBloc(this._db, {String defaultDateRange = 'month'})
+      : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+        super(const RealtimeLoading());
 
   ReportDateRange get dateRange => _dateRange;
 

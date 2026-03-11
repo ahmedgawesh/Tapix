@@ -83,14 +83,30 @@ class MockAuthRepositoryInterface extends _i1.Mock
   @override
   _i4.Future<_i2.UserEntity> createFirstOwner(
     String? username,
-    String? password,
-  ) =>
+    String? password, {
+    String? securityQuestion,
+    String? securityAnswer,
+  }) =>
       (super.noSuchMethod(
-            Invocation.method(#createFirstOwner, [username, password]),
+            Invocation.method(
+              #createFirstOwner,
+              [username, password],
+              {
+                #securityQuestion: securityQuestion,
+                #securityAnswer: securityAnswer,
+              },
+            ),
             returnValue: _i4.Future<_i2.UserEntity>.value(
               _FakeUserEntity_0(
                 this,
-                Invocation.method(#createFirstOwner, [username, password]),
+                Invocation.method(
+                  #createFirstOwner,
+                  [username, password],
+                  {
+                    #securityQuestion: securityQuestion,
+                    #securityAnswer: securityAnswer,
+                  },
+                ),
               ),
             ),
           )
@@ -100,6 +116,47 @@ class MockAuthRepositoryInterface extends _i1.Mock
   _i4.Future<void> updateLastLogin(int? userId) =>
       (super.noSuchMethod(
             Invocation.method(#updateLastLogin, [userId]),
+            returnValue: _i4.Future<void>.value(),
+            returnValueForMissingStub: _i4.Future<void>.value(),
+          )
+          as _i4.Future<void>);
+
+  @override
+  _i4.Future<String?> getSecurityQuestion(String? username) =>
+      (super.noSuchMethod(
+            Invocation.method(#getSecurityQuestion, [username]),
+            returnValue: _i4.Future<String?>.value(),
+          )
+          as _i4.Future<String?>);
+
+  @override
+  _i4.Future<bool> resetPasswordWithSecurityAnswer({
+    required String? username,
+    required String? securityAnswer,
+    required String? newPassword,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(#resetPasswordWithSecurityAnswer, [], {
+              #username: username,
+              #securityAnswer: securityAnswer,
+              #newPassword: newPassword,
+            }),
+            returnValue: _i4.Future<bool>.value(false),
+          )
+          as _i4.Future<bool>);
+
+  @override
+  _i4.Future<void> setSecurityQuestion({
+    required int? userId,
+    required String? question,
+    required String? answer,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(#setSecurityQuestion, [], {
+              #userId: userId,
+              #question: question,
+              #answer: answer,
+            }),
             returnValue: _i4.Future<void>.value(),
             returnValueForMissingStub: _i4.Future<void>.value(),
           )

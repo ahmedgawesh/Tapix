@@ -151,6 +151,66 @@ class CustomerDao extends DatabaseAccessor<AppDatabase> with _$CustomerDaoMixin 
     });
   }
 
+  /// Only 'payment' and 'discount' transactions may be edited.
+  static const _editableTypes = {'payment', 'discount'};
+
+  /// Update a payment or discount transaction amount.
+  /// Returns the old transaction for audit purposes.
+  /// Adjusts the customer balance by the delta (newAmount - oldAmount).
+  Future<CustomerTransaction> updateTransactionAmount(
+    int transactionId, {
+    required int newAmountCents,
+    String? newDescription,
+  }) {
+    return transaction(() async {
+      final existing = await (select(customerTransactions)
+            ..where((t) => t.id.equals(transactionId)))
+          .getSingleOrNull();
+      if (existing == null) {
+        throw StateError('Transaction #$transactionId not found');
+      }
+      if (!_editableTypes.contains(existing.transactionType)) {
+        throw StateError(
+          'Only payment and discount transactions can be edited. '
+          'Got: "${existing.transactionType}"',
+        );
+      }
+
+      final oldCents = existing.amountCents.toBigInt().toInt();
+      // For payments/discounts the stored amount is negative (reduces balance).
+      // The caller passes the absolute new amount; we preserve the sign.
+      final signedNewAmount = oldCents < 0 ? -newAmountCents.abs() : newAmountCents.abs();
+      final deltaCents = signedNewAmount - oldCents;
+
+      // Update the transaction row
+      await (update(customerTransactions)
+            ..where((t) => t.id.equals(transactionId)))
+          .write(CustomerTransactionsCompanion(
+        amountCents: Value(Decimal.fromInt(signedNewAmount)),
+        description: newDescription != null ? Value(newDescription) : const Value.absent(),
+      ));
+
+      // Adjust customer balance by the delta
+      if (deltaCents != 0) {
+        final customer = await (select(customers)
+              ..where((c) => c.id.equals(existing.customerId)))
+            .getSingleOrNull();
+        if (customer != null) {
+          final oldBalance = customer.balanceCents.toBigInt().toInt();
+          final newBalance = oldBalance + deltaCents;
+          await (update(customers)..where((c) => c.id.equals(existing.customerId))).write(
+            CustomersCompanion(
+              balanceCents: Value(Decimal.fromInt(newBalance)),
+              updatedAt: Value(DateTime.now()),
+            ),
+          );
+        }
+      }
+
+      return existing;
+    });
+  }
+
   Future<CustomerTransaction?> getTransaction(int transactionId) {
     return (select(customerTransactions)..where((t) => t.id.equals(transactionId)))
         .getSingleOrNull();

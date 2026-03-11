@@ -1,6 +1,7 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 
 import '../../../../core/bloc/realtime_bloc.dart';
@@ -170,13 +171,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             ],
                           ),
                           TextButton(
-                            onPressed: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('auth.forgot_password_coming_soon'.tr()),
-                                ),
-                              );
-                            },
+                            onPressed: () => context.go('/forgot-password'),
                             child: Text('auth.forgot_password'.tr()),
                           ),
                         ],

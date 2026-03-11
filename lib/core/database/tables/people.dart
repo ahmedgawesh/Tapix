@@ -61,6 +61,10 @@ class Employees extends Table {
   IntColumn get absenceDeductionRateBps => integer().withDefault(const Constant(10000))();
   /// Late deduction rate in basis points (2500 = 25% of daily rate)
   IntColumn get lateDeductionRateBps => integer().withDefault(const Constant(2500))();
+  /// Overtime calculation type: 'hourly_rate' (based on hourly salary), 'percentage' (% of daily rate), 'fixed' (fixed amount per hour)
+  TextColumn get overtimeCalcType => text().withDefault(const Constant('hourly_rate'))();
+  /// Overtime rate in basis points (15000 = 150% of hourly rate for 'hourly_rate'/'percentage', or fixed cents for 'fixed')
+  IntColumn get overtimeRateBps => integer().withDefault(const Constant(15000))();
   IntColumn get currencyId => integer().references(Currencies, #id, onDelete: KeyAction.restrict)();
   BoolColumn get isActive => boolean().withDefault(const Constant(true))();
   DateTimeColumn get hireDate => dateTime().nullable()();

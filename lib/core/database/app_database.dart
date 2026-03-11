@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:drift/drift.dart';
 import 'package:decimal/decimal.dart';
 import 'package:flutter/foundation.dart';
@@ -408,6 +410,137 @@ FROM product_variants__old
     );
   }
 
+  /// ONE-TIME migration: create missing opening_balance journal entries for
+  /// suppliers that have a non-zero balance_cents but no corresponding journal
+  /// entry. This fixes the GL ↔ Suppliers mismatch caused by suppliers
+  /// created before journal entries were enforced.
+  ///
+  /// IDEMPOTENT: only inserts entries for suppliers that are truly missing them.
+  /// SAFE: does NOT delete or modify any existing journal entries.
+  Future<void> _repairSupplierOpeningBalanceJournals() async {
+    // 1. Look up required account IDs
+    final apRow = await customSelect(
+      "SELECT id FROM accounts WHERE account_code = '2000'",
+    ).getSingleOrNull();
+    final obeRow = await customSelect(
+      "SELECT id FROM accounts WHERE account_code = '3100'",
+    ).getSingleOrNull();
+
+    if (apRow == null || obeRow == null) {
+      debugPrint('Migration 10032: AP or OBE account not found — skipping');
+      return;
+    }
+
+    final apId = apRow.read<int>('id');
+    final obeId = obeRow.read<int>('id');
+
+    // 2. Find suppliers with non-zero balance AND no opening_balance journal entry
+    final suppliersToFix = await customSelect(
+      'SELECT s.id, s.balance_cents, s.currency_id FROM suppliers s '
+      'WHERE s.balance_cents != 0 '
+      'AND NOT EXISTS ('
+      '  SELECT 1 FROM journal_entries je '
+      "  WHERE je.source_table = 'suppliers' "
+      '  AND je.source_id = s.id '
+      "  AND je.entry_type = 'opening_balance'"
+      ')',
+    ).get();
+
+    if (suppliersToFix.isEmpty) {
+      debugPrint('Migration 10032: no suppliers need opening balance repair');
+      return;
+    }
+
+    debugPrint('Migration 10032: repairing ${suppliersToFix.length} supplier opening balance journal entries');
+
+    final now = DateTime.now().toIso8601String();
+
+    // 3. Get a starting sequence number for entry_number generation
+    final maxSeqRow = await customSelect(
+      "SELECT COUNT(*) AS cnt FROM journal_entries WHERE entry_number LIKE 'SMIG%'",
+    ).getSingle();
+    int seq = maxSeqRow.read<int>('cnt');
+
+    for (final s in suppliersToFix) {
+      final supplierId = s.read<int>('id');
+      final balanceCents = s.read<int>('balance_cents');
+      final currencyId = s.read<int>('currency_id');
+      final absBalance = balanceCents.abs();
+
+      seq++;
+      final entryNumber = 'SMIG${seq.toString().padLeft(6, '0')}';
+
+      // Determine debit/credit sides based on balance sign:
+      //   balance > 0 (we owe supplier): Dr OBE, Cr AP
+      //   balance < 0 (supplier owes us): Dr AP, Cr OBE
+      final int debitAccountId;
+      final int creditAccountId;
+      if (balanceCents > 0) {
+        debitAccountId = obeId;
+        creditAccountId = apId;
+      } else {
+        debitAccountId = apId;
+        creditAccountId = obeId;
+      }
+
+      // 4a. Insert journal entry header
+      await customStatement(
+        'INSERT INTO journal_entries '
+        '(entry_number, description, entry_date, status, entry_type, '
+        'source_table, source_id, total_debit_cents, total_credit_cents, '
+        'is_reversed, created_at, updated_at, posted_at) '
+        'VALUES ('
+        "'$entryNumber', "
+        "'Supplier #$supplierId — Opening Balance (migration)', "
+        "'$now', 'posted', 'opening_balance', "
+        "'suppliers', $supplierId, "
+        '$absBalance, $absBalance, '
+        "0, '$now', '$now', '$now')"
+      );
+
+      // 4b. Get the inserted entry ID
+      final entryIdRow = await customSelect(
+        'SELECT last_insert_rowid() AS id',
+      ).getSingle();
+      final entryId = entryIdRow.read<int>('id');
+
+      // 4c. Insert debit line
+      await customStatement(
+        'INSERT INTO journal_entry_lines '
+        '(journal_entry_id, account_id, debit_cents, credit_cents, '
+        'currency_id, line_number, created_at) '
+        "VALUES ($entryId, $debitAccountId, $absBalance, 0, $currencyId, 1, '$now')"
+      );
+
+      // 4d. Insert credit line
+      await customStatement(
+        'INSERT INTO journal_entry_lines '
+        '(journal_entry_id, account_id, debit_cents, credit_cents, '
+        'currency_id, line_number, created_at) '
+        "VALUES ($entryId, $creditAccountId, 0, $absBalance, $currencyId, 2, '$now')"
+      );
+
+      // 4e. Update cached account balances.
+      // Both AP (liability) and OBE (equity) are credit-normal accounts:
+      //   debit → balance decreases;  credit → balance increases.
+      await customStatement(
+        'UPDATE accounts SET balance_cents = balance_cents - $absBalance, '
+        "updated_at = '$now' WHERE id = $debitAccountId"
+      );
+      await customStatement(
+        'UPDATE accounts SET balance_cents = balance_cents + $absBalance, '
+        "updated_at = '$now' WHERE id = $creditAccountId"
+      );
+
+      debugPrint(
+        'Migration 10032: created opening balance JE for Supplier #$supplierId '
+        '(${balanceCents > 0 ? 'Dr OBE / Cr AP' : 'Dr AP / Cr OBE'} = $absBalance cents)'
+      );
+    }
+
+    debugPrint('Migration 10032: completed — ${suppliersToFix.length} entries created');
+  }
+
   Future<void> _safeAddColumn(String table, String column, String type) async {
     final result = await customSelect(
       "SELECT COUNT(*) as cnt FROM pragma_table_info('$table') WHERE name = '$column'",
@@ -655,7 +788,7 @@ CREATE TABLE IF NOT EXISTS sale_payments (
   }
 
   @override
-  int get schemaVersion => 10031;
+  int get schemaVersion => 10035;
 
   @override
   MigrationStrategy get migration {
@@ -668,6 +801,23 @@ CREATE TABLE IF NOT EXISTS sale_payments (
       onUpgrade: (Migrator m, int from, int to) async {
         if (from == to) {
           return;
+        }
+
+        developer.log(
+          'DB migration starting: $from → $to',
+          name: 'DB_MIGRATION',
+        );
+
+        // Create a backup before applying any migration.
+        // Import is conditional (native only) so this is safe.
+        try {
+          // ignore: unused_local_variable
+          final backup = await _createPreMigrationBackup();
+        } catch (e) {
+          developer.log(
+            'Pre-migration backup failed (continuing): $e',
+            name: 'DB_MIGRATION',
+          );
         }
 
         // Migration from 10000 to 10001: Add barcode, name_ar, name_fr columns to products and product_variants
@@ -954,14 +1104,57 @@ CREATE TABLE IF NOT EXISTS sale_payments (
           await _safeAddColumn('employees', 'annual_leave_days', 'INTEGER NOT NULL DEFAULT 21');
         }
 
+        // Migration 10031 -> 10032: Auto-repair supplier opening balance journals.
+        // Creates missing opening_balance journal entries for suppliers that have
+        // a non-zero balance_cents but no corresponding journal entry.
+        // This is a ONE-TIME, IDEMPOTENT migration. After this, the system
+        // enforces that every balance change goes through journal entries.
+        if (from < 10032) {
+          await _repairSupplierOpeningBalanceJournals();
+        }
+
+        // Migration 10032 -> 10033: Employee overtime calculation settings
+        if (from < 10033) {
+          await _safeAddColumn('employees', 'overtime_calc_type', "TEXT NOT NULL DEFAULT 'hourly_rate'");
+          await _safeAddColumn('employees', 'overtime_rate_bps', 'INTEGER NOT NULL DEFAULT 15000');
+        }
+
+        // Migration 10033 -> 10034: Security question for offline password recovery
+        if (from < 10034) {
+          await _safeAddColumn('users', 'security_question', 'TEXT');
+          await _safeAddColumn('users', 'security_answer_hash', 'TEXT');
+        }
+
+        // Migration 10034 -> 10035: Add opening_balance_cents to suppliers and customers
+        // This stores the initial balance separately from the current balance for display
+        // and reporting purposes. Existing balance_cents values are copied as opening balance.
+        if (from < 10035) {
+          await _safeAddColumn('suppliers', 'opening_balance_cents', 'INTEGER NOT NULL DEFAULT 0');
+          await _safeAddColumn('customers', 'opening_balance_cents', 'INTEGER NOT NULL DEFAULT 0');
+          // Copy existing balance_cents to opening_balance_cents for existing records
+          // that were created with an opening balance (balance_cents != 0)
+          await customStatement('''
+            UPDATE suppliers SET opening_balance_cents = balance_cents 
+            WHERE balance_cents != 0 AND opening_balance_cents = 0
+          ''');
+          await customStatement('''
+            UPDATE customers SET opening_balance_cents = balance_cents 
+            WHERE balance_cents != 0 AND opening_balance_cents = 0
+          ''');
+        }
+
         await _createIndexes();
         await _seedInitialData();
       },
       beforeOpen: (details) async {
-        debugPrint(
-          'DB open: wasCreated=${details.wasCreated} hadUpgrade=${details.hadUpgrade} versionBefore=${details.versionBefore} versionNow=${details.versionNow}',
+        developer.log(
+          'DB open: wasCreated=${details.wasCreated} hadUpgrade=${details.hadUpgrade} '
+          'versionBefore=${details.versionBefore} versionNow=${details.versionNow}',
+          name: 'DB_LIFECYCLE',
         );
         await customStatement('PRAGMA foreign_keys = ON');
+        await customStatement('PRAGMA journal_mode = WAL');
+        await customStatement('PRAGMA synchronous = NORMAL');
         await _ensureSchemaIntegrity();
         await _repairProductVariantsSkuNullabilityIfNeeded();
         await _convertIntegerTimestampsToTextOnce();
@@ -978,7 +1171,24 @@ CREATE TABLE IF NOT EXISTS sale_payments (
           debugPrint('DB seed skipped (loyalty settings): $e');
           debugPrint('$st');
         }
+        try {
+          await _seedDefaultAccounts();
+        } catch (e, st) {
+          debugPrint('DB seed skipped (default accounts): $e');
+          debugPrint('$st');
+        }
       },
+    );
+  }
+
+  /// Log pre-migration backup intent.
+  /// The actual file-level backup is performed by [createDatabaseBackup] in
+  /// database_native.dart, which the DI layer calls before database open.
+  /// This method ensures the migration log records the backup attempt.
+  Future<void> _createPreMigrationBackup() async {
+    developer.log(
+      'Pre-migration backup requested. File-level backup handled by DI init.',
+      name: 'DB_MIGRATION',
     );
   }
 
@@ -1040,6 +1250,26 @@ CREATE TABLE IF NOT EXISTS sale_payments (
     await customStatement('CREATE INDEX IF NOT EXISTS idx_sale_payments_sale ON sale_payments(sale_id)');
     await customStatement('CREATE INDEX IF NOT EXISTS idx_sale_returns_sale ON sale_returns(sale_id)');
     await customStatement('CREATE INDEX IF NOT EXISTS idx_sale_returns_status ON sale_returns(status)');
+
+    // Dashboard aggregation indexes (covering indexes for status + totals)
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_sales_status_total ON sales(status, total_cents)');
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_sales_status_date_total ON sales(status, sale_date, total_cents)');
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_purchases_status_total ON purchases(status, total_cents, paid_amount_cents)');
+
+    // Invoice/purchase number generation (prefix LIKE + ORDER BY)
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_sales_invoice_number ON sales(invoice_number)');
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_purchases_number ON purchases(purchase_number)');
+
+    // Journal entry source lookups (used by voidJournalEntriesForSource)
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_journal_entries_source ON journal_entries(source_table, source_id)');
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_journal_entry_lines_entry ON journal_entry_lines(journal_entry_id)');
+
+    // Customer/supplier transaction lookups
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_customer_transactions_customer ON customer_transactions(customer_id)');
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_supplier_transactions_supplier ON supplier_transactions(supplier_id)');
+
+    // Product variant stock lookups (used in postSale stock validation)
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_product_variants_product_active ON product_variants(product_id, is_active)');
   }
 
   Future<void> _seedInitialData() async {
@@ -1214,6 +1444,13 @@ CREATE TABLE IF NOT EXISTS sale_payments (
     await upsertAccount(
       accountCode: '3000',
       accountName: 'Owner Capital',
+      accountType: 'equity',
+      currencyId: usdId,
+    );
+
+    await upsertAccount(
+      accountCode: '3100',
+      accountName: 'Opening Balance Equity',
       accountType: 'equity',
       currencyId: usdId,
     );
@@ -1699,6 +1936,69 @@ CREATE TABLE IF NOT EXISTS sale_payments (
       heightMm: 70,
       isDefault: false,
     );
+  }
+
+  /// Seed default Chart of Accounts (idempotent).
+  /// These accounts are required by JournalEntryService for posting transactions.
+  Future<void> _seedDefaultAccounts() async {
+    final now = DateTime.now();
+
+    // Get default currency
+    final defaultCurrencyRow = await (select(currencies)..limit(1)).getSingleOrNull();
+    if (defaultCurrencyRow == null) {
+      debugPrint('No currency found, skipping default accounts seed');
+      return;
+    }
+    final currencyId = defaultCurrencyRow.id;
+
+    // STRICT Chart of Accounts — matches JournalEntryService requirements
+    final defaultAccounts = <Map<String, dynamic>>[
+      // ── Assets (1xxx) ──
+      {'code': '1000', 'name': 'Cash', 'type': 'asset', 'system': true, 'order': 1},
+      {'code': '1010', 'name': 'Bank', 'type': 'asset', 'system': true, 'order': 2},
+      {'code': '1100', 'name': 'Accounts Receivable', 'type': 'asset', 'system': true, 'order': 3},
+      {'code': '1200', 'name': 'Inventory', 'type': 'asset', 'system': true, 'order': 4},
+      {'code': '1300', 'name': 'VAT Receivable', 'type': 'asset', 'system': true, 'order': 5},
+      // ── Liabilities (2xxx) ──
+      {'code': '2000', 'name': 'Accounts Payable', 'type': 'liability', 'system': true, 'order': 10},
+      {'code': '2100', 'name': 'VAT Payable', 'type': 'liability', 'system': true, 'order': 11},
+      {'code': '2300', 'name': 'Loyalty Points Liability', 'type': 'liability', 'system': true, 'order': 12},
+      // ── Equity (3xxx) ──
+      {'code': '3000', 'name': 'Owner Capital', 'type': 'equity', 'system': true, 'order': 20},
+      {'code': '3100', 'name': 'Opening Balance Equity', 'type': 'equity', 'system': true, 'order': 21},
+      // ── Income (4xxx) ──
+      {'code': '4000', 'name': 'Sales Revenue', 'type': 'revenue', 'system': true, 'order': 30},
+      // ── Expenses (5xxx) ──
+      {'code': '5100', 'name': 'Expenses', 'type': 'expense', 'system': true, 'order': 41},
+      {'code': '5200', 'name': 'Salaries Expense', 'type': 'expense', 'system': true, 'order': 42},
+      {'code': '5300', 'name': 'Cost of Goods Sold', 'type': 'expense', 'system': true, 'order': 43},
+      {'code': '5500', 'name': 'Discounts Given', 'type': 'expense', 'system': true, 'order': 44},
+      {'code': '5600', 'name': 'Commissions Expense', 'type': 'expense', 'system': true, 'order': 45},
+    ];
+
+    // Idempotent: skip accounts that already exist
+    for (final acct in defaultAccounts) {
+      final code = acct['code'] as String;
+      final existing = await (select(accounts)
+            ..where((a) => a.accountCode.equals(code)))
+          .getSingleOrNull();
+      if (existing != null) continue;
+
+      await into(accounts).insert(
+        AccountsCompanion(
+          accountCode: Value(code),
+          accountName: Value(acct['name'] as String),
+          accountType: Value(acct['type'] as String),
+          currencyId: Value(currencyId),
+          isSystemAccount: Value(acct['system'] as bool),
+          displayOrder: Value(acct['order'] as int),
+          isActive: const Value(true),
+          balanceCents: Value(Decimal.zero),
+          createdAt: Value(now),
+          updatedAt: Value(now),
+        ),
+      );
+    }
   }
 }
 

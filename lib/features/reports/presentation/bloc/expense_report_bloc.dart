@@ -106,10 +106,12 @@ class ExpenseReportData {
 class ExpenseReportBloc
     extends RealtimeBloc<ExpenseReportData, ExpenseReportEvent> {
   final AppDatabase _db;
-  ReportDateRange _dateRange = ReportDateRange.thisMonth();
+  ReportDateRange _dateRange;
   ExpenseReportSortType _sort = ExpenseReportSortType.amountDesc;
 
-  ExpenseReportBloc(this._db) : super(const RealtimeLoading());
+  ExpenseReportBloc(this._db, {String defaultDateRange = 'month'})
+      : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+        super(const RealtimeLoading());
 
   ReportDateRange get dateRange => _dateRange;
 

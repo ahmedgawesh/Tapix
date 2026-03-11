@@ -46,12 +46,18 @@ class ProductRepositoryImpl implements ProductRepository {
   }
 
   @override
+  Future<Product?> findByName(String name) {
+    return _datasource.findByName(name);
+  }
+
+  @override
   Future<List<Product>> filterProducts({
     int? categoryId,
     String? stockStatus,
     int limit = 50,
     int offset = 0,
     bool? isActive = true,
+    int lowStockThreshold = 5,
   }) {
     return _datasource.filterProducts(
       categoryId: categoryId,
@@ -59,6 +65,7 @@ class ProductRepositoryImpl implements ProductRepository {
       limit: limit,
       offset: offset,
       isActive: isActive,
+      lowStockThreshold: lowStockThreshold,
     );
   }
 
@@ -67,11 +74,13 @@ class ProductRepositoryImpl implements ProductRepository {
     int? categoryId,
     String? stockStatus,
     bool? isActive = true,
+    int lowStockThreshold = 5,
   }) {
     return _datasource.watchFilteredProducts(
       categoryId: categoryId,
       stockStatus: stockStatus,
       isActive: isActive,
+      lowStockThreshold: lowStockThreshold,
     );
   }
 

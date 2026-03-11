@@ -67,6 +67,16 @@ abstract class CustomerRepository {
   /// Get a single customer transaction by ID
   Future<CustomerTransaction?> getTransaction(int transactionId);
 
+  /// Update a payment or discount transaction amount.
+  /// Checks accounting period is open, voids old journal entries,
+  /// creates new ones, adjusts balance, and logs audit trail.
+  /// Returns the old transaction for audit.
+  Future<CustomerTransaction> updateTransaction({
+    required int transactionId,
+    required int newAmountCents,
+    String? newDescription,
+  });
+
   /// Watch customer transactions
   Stream<List<CustomerTransaction>> watchCustomerTransactions(int customerId);
 

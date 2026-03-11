@@ -76,6 +76,8 @@ class LedgerRebuildService {
     await _replayPurchasePayments(report);
     await _replayDirectCustomerTransactions(report);
     await _replayDirectSupplierTransactions(report);
+    await _replayCustomerOpeningBalances(report);
+    await _replaySupplierOpeningBalances(report);
     await _replayPayrolls(report);
     await _replayLoyaltyEarns(report);
     await _replayLoyaltyRedemptions(report);
@@ -93,6 +95,100 @@ class LedgerRebuildService {
     developer.log(
       '=== LEDGER REBUILD COMPLETE in ${report.durationMs}ms ===\n${report.summary}',
       name: 'LedgerRebuild',
+    );
+
+    return report;
+  }
+
+  /// Repair ONLY missing opening balance journal entries for customers and
+  /// suppliers that have a non-zero balance_cents but no corresponding
+  /// 'opening_balance' journal entry.
+  ///
+  /// This is a SAFE, IDEMPOTENT operation — it will NOT:
+  /// - Delete any existing journal entries
+  /// - Reset any account balances
+  /// - Affect sales, purchases, payments, or any other transactions
+  ///
+  /// It ONLY creates missing opening balance entries.
+  /// Safe to run multiple times — skips customers/suppliers that already
+  /// have an opening_balance journal entry.
+  Future<OpeningBalanceRepairReport> repairOpeningBalances() async {
+    final report = OpeningBalanceRepairReport();
+
+    // Repair customers
+    final customers = await _db.select(_db.customers).get();
+    for (final customer in customers) {
+      final balanceCents = customer.balanceCents.toBigInt().toInt();
+      if (balanceCents == 0) continue;
+
+      // Check if an opening_balance journal entry already exists
+      final existing = await (_db.select(_db.journalEntries)
+            ..where((j) =>
+                j.sourceTable.equals('customers') &
+                j.sourceId.equals(customer.id) &
+                j.entryType.equals('opening_balance')))
+          .getSingleOrNull();
+      if (existing != null) {
+        report.customersSkipped++;
+        continue;
+      }
+
+      try {
+        await _journalService.recordCustomerOpeningBalanceJournalEntry(
+          customerId: customer.id,
+          amountCents: balanceCents,
+          currencyId: customer.currencyId,
+        );
+        report.customersRepaired++;
+        developer.log(
+          'Created opening balance JE for Customer #${customer.id}: $balanceCents cents',
+          name: 'OpeningBalanceRepair',
+        );
+      } catch (e) {
+        report.errors.add('Customer #${customer.id}: $e');
+        developer.log('Error repairing customer #${customer.id}: $e', name: 'OpeningBalanceRepair');
+      }
+    }
+
+    // Repair suppliers
+    final suppliers = await _db.select(_db.suppliers).get();
+    for (final supplier in suppliers) {
+      final balanceCents = supplier.balanceCents.toBigInt().toInt();
+      if (balanceCents == 0) continue;
+
+      final existing = await (_db.select(_db.journalEntries)
+            ..where((j) =>
+                j.sourceTable.equals('suppliers') &
+                j.sourceId.equals(supplier.id) &
+                j.entryType.equals('opening_balance')))
+          .getSingleOrNull();
+      if (existing != null) {
+        report.suppliersSkipped++;
+        continue;
+      }
+
+      try {
+        await _journalService.recordSupplierOpeningBalanceJournalEntry(
+          supplierId: supplier.id,
+          amountCents: balanceCents,
+          currencyId: supplier.currencyId,
+        );
+        report.suppliersRepaired++;
+        developer.log(
+          'Created opening balance JE for Supplier #${supplier.id}: $balanceCents cents',
+          name: 'OpeningBalanceRepair',
+        );
+      } catch (e) {
+        report.errors.add('Supplier #${supplier.id}: $e');
+        developer.log('Error repairing supplier #${supplier.id}: $e', name: 'OpeningBalanceRepair');
+      }
+    }
+
+    developer.log(
+      'Opening balance repair complete: '
+      '${report.customersRepaired} customers, ${report.suppliersRepaired} suppliers repaired. '
+      '${report.customersSkipped} customers, ${report.suppliersSkipped} suppliers skipped.',
+      name: 'OpeningBalanceRepair',
     );
 
     return report;
@@ -187,6 +283,7 @@ class LedgerRebuildService {
       'manual',
       'adjustment',
       'opening',
+      'opening_balance',
     };
 
     final entries = await (_db.select(_db.journalEntries)
@@ -484,7 +581,77 @@ class LedgerRebuildService {
     developer.log('Replayed ${report.directSupplierTransactionsReplayed} direct supplier transactions', name: 'LedgerRebuild');
   }
 
-  /// Phase 3j: Replay all PAID payrolls as direct expense.
+  /// Phase 3j: Replay opening balances for customers that have a non-zero
+  /// balance_cents but whose opening_balance journal entry was NOT preserved
+  /// (i.e. it never existed in the first place).
+  Future<void> _replayCustomerOpeningBalances(LedgerRebuildReport report) async {
+    final customers = await _db.select(_db.customers).get();
+
+    for (final customer in customers) {
+      try {
+        final balanceCents = customer.balanceCents.toBigInt().toInt();
+        if (balanceCents == 0) continue;
+
+        // Check if an opening_balance journal entry already exists for this customer
+        // (it would have been replayed via _replayPreservedEntries)
+        final existing = await (_db.select(_db.journalEntries)
+              ..where((j) =>
+                  j.sourceTable.equals('customers') &
+                  j.sourceId.equals(customer.id) &
+                  j.entryType.equals('opening_balance')))
+            .getSingleOrNull();
+        if (existing != null) continue;
+
+        await _journalService.recordCustomerOpeningBalanceJournalEntry(
+          customerId: customer.id,
+          amountCents: balanceCents,
+          currencyId: customer.currencyId,
+        );
+        report.customerOpeningBalancesReplayed++;
+      } catch (e) {
+        report.errors.add('Customer Opening Balance #${customer.id}: $e');
+        developer.log('Error replaying customer opening balance #${customer.id}: $e', name: 'LedgerRebuild');
+      }
+    }
+
+    developer.log('Replayed ${report.customerOpeningBalancesReplayed} customer opening balances', name: 'LedgerRebuild');
+  }
+
+  /// Phase 3k: Replay opening balances for suppliers that have a non-zero
+  /// balance_cents but whose opening_balance journal entry was NOT preserved.
+  Future<void> _replaySupplierOpeningBalances(LedgerRebuildReport report) async {
+    final suppliers = await _db.select(_db.suppliers).get();
+
+    for (final supplier in suppliers) {
+      try {
+        final balanceCents = supplier.balanceCents.toBigInt().toInt();
+        if (balanceCents == 0) continue;
+
+        // Check if an opening_balance journal entry already exists for this supplier
+        final existing = await (_db.select(_db.journalEntries)
+              ..where((j) =>
+                  j.sourceTable.equals('suppliers') &
+                  j.sourceId.equals(supplier.id) &
+                  j.entryType.equals('opening_balance')))
+            .getSingleOrNull();
+        if (existing != null) continue;
+
+        await _journalService.recordSupplierOpeningBalanceJournalEntry(
+          supplierId: supplier.id,
+          amountCents: balanceCents,
+          currencyId: supplier.currencyId,
+        );
+        report.supplierOpeningBalancesReplayed++;
+      } catch (e) {
+        report.errors.add('Supplier Opening Balance #${supplier.id}: $e');
+        developer.log('Error replaying supplier opening balance #${supplier.id}: $e', name: 'LedgerRebuild');
+      }
+    }
+
+    developer.log('Replayed ${report.supplierOpeningBalancesReplayed} supplier opening balances', name: 'LedgerRebuild');
+  }
+
+  /// Phase 3l: Replay all PAID payrolls as direct expense.
   /// No accrual. No Salaries Payable. Direct: Dr Salaries Expense, Cr Cash/Bank.
   Future<void> _replayPayrolls(LedgerRebuildReport report) async {
     final paidPayrolls = await (_db.select(_db.payrolls)
@@ -655,6 +822,8 @@ class LedgerRebuildReport {
   int purchasePaymentsReplayed = 0;
   int directCustomerTransactionsReplayed = 0;
   int directSupplierTransactionsReplayed = 0;
+  int customerOpeningBalancesReplayed = 0;
+  int supplierOpeningBalancesReplayed = 0;
   int payrollsReplayed = 0;
   int loyaltyEarnsReplayed = 0;
   int loyaltyRedemptionsReplayed = 0;
@@ -687,6 +856,8 @@ Transactions replayed:
   Purchase Payments: $purchasePaymentsReplayed
   Direct Customer Transactions: $directCustomerTransactionsReplayed
   Direct Supplier Transactions: $directSupplierTransactionsReplayed
+  Customer Opening Balances: $customerOpeningBalancesReplayed
+  Supplier Opening Balances: $supplierOpeningBalancesReplayed
   Payrolls: $payrollsReplayed
   Loyalty Earns: $loyaltyEarnsReplayed
   Loyalty Redemptions: $loyaltyRedemptionsReplayed
@@ -722,4 +893,27 @@ class _PreservedJournalEntry {
     required this.createdBy,
     required this.lines,
   });
+}
+
+/// Report from the lightweight opening balance repair routine.
+class OpeningBalanceRepairReport {
+  int customersRepaired = 0;
+  int customersSkipped = 0;
+  int suppliersRepaired = 0;
+  int suppliersSkipped = 0;
+  List<String> errors = [];
+
+  bool get isSuccess => errors.isEmpty;
+  int get totalRepaired => customersRepaired + suppliersRepaired;
+
+  String get summary => '''
+OPENING BALANCE REPAIR REPORT
+==============================
+Customers repaired: $customersRepaired
+Customers skipped (already had JE): $customersSkipped
+Suppliers repaired: $suppliersRepaired
+Suppliers skipped (already had JE): $suppliersSkipped
+Errors: ${errors.isEmpty ? 'NONE' : '\n  ${errors.join('\n  ')}'}
+Result: ${isSuccess ? 'SUCCESS ✓' : 'FAILED ✗'}
+''';
 }

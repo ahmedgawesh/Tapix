@@ -59,10 +59,7 @@ class _CustomerHubContentState extends State<_CustomerHubContent> {
         actions: [
           IconButton(
             icon: const Icon(LucideIcons.award),
-            onPressed: () => showDialog<void>(
-              context: context,
-              builder: (ctx) => const _LoyaltySettingsDialog(),
-            ),
+            onPressed: () => context.push('/customers/loyalty-settings'),
             tooltip: 'customers.loyalty_settings'.tr(),
           ),
           IconButton(
@@ -133,11 +130,19 @@ class _CustomerHubContentState extends State<_CustomerHubContent> {
 
     // Calculate metrics
     final activeCount = data.customers.length;
-    final totalBalanceCents = data.customers.fold<int>(
-      0,
-      (sum, c) => sum + c.balanceCents.toBigInt().toInt(),
-    );
-    final withCreditCount = data.customers.where((c) => c.balanceCents.toBigInt().toInt() > 0).length;
+    // Positive balance = customer owes us (debit/receivable)
+    // Negative balance = we owe customer (credit/payable)
+    int customerOwesCents = 0;
+    int weOweCustomerCents = 0;
+    for (final c in data.customers) {
+      final balance = c.balanceCents.toBigInt().toInt();
+      if (balance > 0) {
+        customerOwesCents += balance;
+      } else if (balance < 0) {
+        weOweCustomerCents += balance.abs();
+      }
+    }
+    final withCreditCount = data.customers.where((c) => c.balanceCents.toBigInt().toInt() != 0).length;
 
     // Calculate segment counts
     final segmentCounts = <String, int>{
@@ -182,13 +187,22 @@ class _CustomerHubContentState extends State<_CustomerHubContent> {
                         value: activeCount.toString(),
                       );
 
-                      final receivablesCard = _StatCard(
-                        icon: Icons.account_balance_wallet_outlined,
-                        iconColor: isDark ? const Color(0xFFFFB74D) : colorScheme.secondary,
-                        backgroundColor: isDark ? const Color(0xFF0B0F14) : colorScheme.secondaryContainer,
-                        borderColor: isDark ? const Color(0xFF3D2E10) : colorScheme.secondary.withValues(alpha: 0.2),
-                        label: 'customers.total_receivables'.tr(),
-                        value: currencyService.format(totalBalanceCents),
+                      final customerOwesCard = _StatCard(
+                        icon: LucideIcons.arrowDownLeft,
+                        iconColor: Colors.green,
+                        backgroundColor: isDark ? const Color(0xFF0B0F14) : Colors.green.withValues(alpha: 0.08),
+                        borderColor: isDark ? const Color(0xFF1A3330) : Colors.green.withValues(alpha: 0.2),
+                        label: 'customers.total_customer_owes'.tr(),
+                        value: currencyService.format(customerOwesCents),
+                      );
+
+                      final weOweCustomerCard = _StatCard(
+                        icon: LucideIcons.arrowUpRight,
+                        iconColor: Colors.red,
+                        backgroundColor: isDark ? const Color(0xFF0B0F14) : Colors.red.withValues(alpha: 0.08),
+                        borderColor: isDark ? const Color(0xFF3D2E10) : Colors.red.withValues(alpha: 0.2),
+                        label: 'customers.total_we_owe_customer'.tr(),
+                        value: currencyService.format(weOweCustomerCents),
                       );
 
                       final creditCard = _StatCard(
@@ -205,7 +219,9 @@ class _CustomerHubContentState extends State<_CustomerHubContent> {
                           children: [
                             Expanded(child: activeCard),
                             const SizedBox(width: 12),
-                            Expanded(child: receivablesCard),
+                            Expanded(child: customerOwesCard),
+                            const SizedBox(width: 12),
+                            Expanded(child: weOweCustomerCard),
                             const SizedBox(width: 12),
                             Expanded(child: creditCard),
                           ],
@@ -218,11 +234,17 @@ class _CustomerHubContentState extends State<_CustomerHubContent> {
                             children: [
                               Expanded(child: activeCard),
                               const SizedBox(width: 12),
-                              Expanded(child: receivablesCard),
+                              Expanded(child: customerOwesCard),
                             ],
                           ),
                           const SizedBox(height: 12),
-                          creditCard,
+                          Row(
+                            children: [
+                              Expanded(child: weOweCustomerCard),
+                              const SizedBox(width: 12),
+                              Expanded(child: creditCard),
+                            ],
+                          ),
                         ],
                       );
                     },
@@ -355,7 +377,7 @@ class _CustomerHubContentState extends State<_CustomerHubContent> {
                     ),
                   ),
                   OutlinedButton.icon(
-                    onPressed: () {},
+                    onPressed: () => context.push('/reports'),
                     icon: const Icon(Icons.analytics_outlined, size: 18),
                     label: Text('customers.view_reports'.tr()),
                     style: OutlinedButton.styleFrom(

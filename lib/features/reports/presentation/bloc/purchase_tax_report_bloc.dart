@@ -150,10 +150,12 @@ class PurchaseTaxReportData {
 class PurchaseTaxReportBloc
     extends RealtimeBloc<PurchaseTaxReportData, PurchaseTaxReportEvent> {
   final AppDatabase _db;
-  ReportDateRange _dateRange = ReportDateRange.thisMonth();
+  ReportDateRange _dateRange;
   PurchaseTaxSortType _sort = PurchaseTaxSortType.dateDesc;
 
-  PurchaseTaxReportBloc(this._db) : super(const RealtimeLoading());
+  PurchaseTaxReportBloc(this._db, {String defaultDateRange = 'month'})
+      : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+        super(const RealtimeLoading());
 
   @override
   Stream<PurchaseTaxReportData> get dataStream {

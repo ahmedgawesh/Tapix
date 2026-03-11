@@ -11,6 +11,8 @@ class Customers extends Table {
   TextColumn get phone => text().nullable()();
   TextColumn get address => text().nullable()();
   IntColumn get balanceCents => integer().map(const MoneyConverter()).withDefault(const Constant(0))();
+  /// The initial balance when the customer was created (immutable after creation)
+  IntColumn get openingBalanceCents => integer().map(const MoneyConverter()).withDefault(const Constant(0))();
   IntColumn get currencyId => integer().references(Currencies, #id, onDelete: KeyAction.restrict)();
   TextColumn get segment => text().withDefault(const Constant('retail'))(); // retail, wholesale, premium
   BoolColumn get loyaltyEnabled => boolean().withDefault(const Constant(true))();
@@ -49,6 +51,8 @@ class Suppliers extends Table {
   TextColumn get phone => text().nullable()();
   TextColumn get address => text().nullable()();
   IntColumn get balanceCents => integer().map(const MoneyConverter()).withDefault(const Constant(0))();
+  /// The initial balance when the supplier was created (immutable after creation)
+  IntColumn get openingBalanceCents => integer().map(const MoneyConverter()).withDefault(const Constant(0))();
   IntColumn get currencyId => integer().references(Currencies, #id, onDelete: KeyAction.restrict)();
   BoolColumn get isActive => boolean().withDefault(const Constant(true))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();

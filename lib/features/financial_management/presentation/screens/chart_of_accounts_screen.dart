@@ -32,6 +32,7 @@ class _ChartView extends StatefulWidget {
 
 class _ChartViewState extends State<_ChartView> {
   String? _selectedType;
+  bool _isUnlocked = false;
 
   static const _accountTypes = [
     null, // All
@@ -50,14 +51,18 @@ class _ChartViewState extends State<_ChartView> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('financial_management.chart_of_accounts'.tr()),
+        title: GestureDetector(
+          onLongPress: () => _showDevPasswordDialog(context),
+          child: Text('financial_management.chart_of_accounts'.tr()),
+        ),
         centerTitle: true,
         actions: [
-          IconButton(
-            icon: const Icon(LucideIcons.plus),
-            tooltip: 'financial_management.add_account'.tr(),
-            onPressed: () => _showAccountDialog(context),
-          ),
+          if (_isUnlocked)
+            IconButton(
+              icon: const Icon(LucideIcons.plus),
+              tooltip: 'financial_management.add_account'.tr(),
+              onPressed: () => _showAccountDialog(context),
+            ),
         ],
       ),
       body: Column(
@@ -137,6 +142,7 @@ class _ChartViewState extends State<_ChartView> {
                         type: type,
                         accounts: typeAccounts,
                         cs: cs,
+                        isUnlocked: _isUnlocked,
                         onEdit: (acc) => _showAccountDialog(context, account: acc),
                         onDelete: (acc) => _confirmDelete(context, acc),
                         onInfo: (acc) => _showAccountDiagnostic(context, acc),
@@ -151,6 +157,92 @@ class _ChartViewState extends State<_ChartView> {
           ),
         ],
       ),
+    );
+  }
+
+  void _showDevPasswordDialog(BuildContext context) {
+    if (_isUnlocked) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('financial_management.already_unlocked'.tr()),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    final passwordController = TextEditingController();
+
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          icon: const Icon(LucideIcons.lock, size: 32),
+          title: Text('financial_management.dev_access'.tr()),
+          content: TextField(
+            controller: passwordController,
+            obscureText: true,
+            autofocus: true,
+            keyboardType: TextInputType.number,
+            decoration: InputDecoration(
+              labelText: 'financial_management.dev_password'.tr(),
+              border: const OutlineInputBorder(),
+              prefixIcon: const Icon(LucideIcons.keyRound),
+            ),
+            onSubmitted: (_) {
+              if (passwordController.text == '123456789') {
+                Navigator.pop(dialogContext);
+                setState(() => _isUnlocked = true);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('financial_management.dev_unlocked'.tr()),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              } else {
+                Navigator.pop(dialogContext);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('financial_management.dev_wrong_password'.tr()),
+                    behavior: SnackBarBehavior.floating,
+                    backgroundColor: Theme.of(context).colorScheme.error,
+                  ),
+                );
+              }
+            },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text('common.cancel'.tr()),
+            ),
+            FilledButton(
+              onPressed: () {
+                if (passwordController.text == '123456789') {
+                  Navigator.pop(dialogContext);
+                  setState(() => _isUnlocked = true);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('financial_management.dev_unlocked'.tr()),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                } else {
+                  Navigator.pop(dialogContext);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('financial_management.dev_wrong_password'.tr()),
+                      behavior: SnackBarBehavior.floating,
+                      backgroundColor: Theme.of(context).colorScheme.error,
+                    ),
+                  );
+                }
+              },
+              child: Text('financial_management.dev_unlock'.tr()),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -326,6 +418,7 @@ class _AccountTypeGroup extends StatelessWidget {
   final String type;
   final List<Account> accounts;
   final CurrencyService cs;
+  final bool isUnlocked;
   final void Function(Account) onEdit;
   final void Function(Account) onDelete;
   final void Function(Account) onInfo;
@@ -334,10 +427,16 @@ class _AccountTypeGroup extends StatelessWidget {
     required this.type,
     required this.accounts,
     required this.cs,
+    required this.isUnlocked,
     required this.onEdit,
     required this.onDelete,
     required this.onInfo,
   });
+
+  String _balanceMeaning(String type, bool isPositive) {
+    final direction = isPositive ? 'positive' : 'negative';
+    return 'financial_management.balance_${direction}_$type'.tr();
+  }
 
   Color _typeColor(String type) {
     switch (type) {
@@ -414,6 +513,16 @@ class _AccountTypeGroup extends StatelessWidget {
             ],
           ),
         ),
+        // Business description for this account type
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Text(
+            'financial_management.type_${type}_desc'.tr(),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
 
         // Account cards
         ...accounts.map((acc) => Card(
@@ -460,14 +569,27 @@ class _AccountTypeGroup extends StatelessWidget {
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      cs.formatCents(acc.balanceCents.toBigInt().toInt()),
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: acc.balanceCents >= Decimal.zero ? color : colorScheme.error,
-                      ),
+                    Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          cs.formatCents(acc.balanceCents.toBigInt().toInt()),
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: acc.balanceCents >= Decimal.zero ? color : colorScheme.error,
+                          ),
+                        ),
+                        Text(
+                          _balanceMeaning(acc.accountType, acc.balanceCents >= Decimal.zero),
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+                            fontSize: 10,
+                          ),
+                        ),
+                      ],
                     ),
-                    if (!acc.isSystemAccount) ...[
+                    if (isUnlocked && !acc.isSystemAccount) ...[
                       const SizedBox(width: 4),
                       PopupMenuButton<String>(
                         itemBuilder: (_) => [
@@ -502,7 +624,7 @@ class _AccountTypeGroup extends StatelessWidget {
                     IconButton(
                       icon: Icon(LucideIcons.info, size: 16,
                           color: colorScheme.onSurfaceVariant.withValues(alpha: 0.6)),
-                      tooltip: 'View journal entries',
+                      tooltip: 'financial_management.account_info_tooltip'.tr(),
                       onPressed: () => onInfo(acc),
                       visualDensity: VisualDensity.compact,
                       padding: EdgeInsets.zero,
@@ -559,7 +681,7 @@ class _AccountDiagnosticDialog extends StatelessWidget {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Type: ${account.accountType} · Balance: ${cs.formatCents(account.balanceCents.toBigInt().toInt())}',
+                          '${'financial_management.type_${account.accountType}'.tr()} · ${cs.formatCents(account.balanceCents.toBigInt().toInt())}',
                           style: theme.textTheme.bodySmall,
                         ),
                       ],
@@ -585,9 +707,9 @@ class _AccountDiagnosticDialog extends StatelessWidget {
 
                   final lines = snapshot.data ?? [];
                   if (lines.isEmpty) {
-                    return const Padding(
-                      padding: EdgeInsets.all(32),
-                      child: Text('No journal entry lines for this account.'),
+                    return Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Text('financial_management.no_transactions_yet'.tr()),
                     );
                   }
 
@@ -619,13 +741,13 @@ class _AccountDiagnosticDialog extends StatelessWidget {
                           children: [
                             Expanded(
                               child: _DiagnosticStat(
-                                label: 'Total Debits',
+                                label: 'financial_management.total_money_in'.tr(),
                                 value: cs.formatCents(totalDebits),
                               ),
                             ),
                             Expanded(
                               child: _DiagnosticStat(
-                                label: 'Total Credits',
+                                label: 'financial_management.total_money_out'.tr(),
                                 value: cs.formatCents(totalCredits),
                               ),
                             ),
@@ -638,13 +760,13 @@ class _AccountDiagnosticDialog extends StatelessWidget {
                           children: [
                             Expanded(
                               child: _DiagnosticStat(
-                                label: 'Cached Balance',
+                                label: 'financial_management.stored_balance'.tr(),
                                 value: cs.formatCents(cachedBalance),
                               ),
                             ),
                             Expanded(
                               child: _DiagnosticStat(
-                                label: 'Computed Balance',
+                                label: 'financial_management.calculated_balance'.tr(),
                                 value: cs.formatCents(computedBalance),
                                 color: balanceMatch ? null : theme.colorScheme.error,
                               ),
@@ -659,12 +781,12 @@ class _AccountDiagnosticDialog extends StatelessWidget {
                             children: [
                               Icon(Icons.warning_amber, size: 16, color: theme.colorScheme.error),
                               const SizedBox(width: 8),
-                              Text(
-                                'Cached balance differs from journal_lines (informational only).',
+                              Expanded(child: Text(
+                                'financial_management.balance_mismatch_info'.tr(),
                                 style: theme.textTheme.bodySmall?.copyWith(
                                   color: theme.colorScheme.error,
                                 ),
-                              ),
+                              )),
                             ],
                           ),
                         ),
@@ -684,13 +806,13 @@ class _AccountDiagnosticDialog extends StatelessWidget {
                             return ListTile(
                               dense: true,
                               title: Text(
-                                line.description ?? 'Line #${line.lineNumber}',
+                                line.description ?? '${'financial_management.transaction_line'.tr()} #${line.lineNumber}',
                                 style: theme.textTheme.bodySmall,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
                               subtitle: Text(
-                                'Entry #${line.journalEntryId}',
+                                'financial_management.entry_number'.tr(args: ['${line.journalEntryId}']),
                                 style: theme.textTheme.labelSmall?.copyWith(
                                   color: theme.colorScheme.onSurfaceVariant,
                                 ),
@@ -699,19 +821,35 @@ class _AccountDiagnosticDialog extends StatelessWidget {
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   if (debit > 0)
-                                    Text(
-                                      'Dr ${cs.formatCents(debit)}',
-                                      style: theme.textTheme.bodySmall?.copyWith(
-                                        color: Colors.blue,
-                                        fontWeight: FontWeight.w600,
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: Colors.blue.withValues(alpha: 0.1),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        '${'financial_management.money_in'.tr()} ${cs.formatCents(debit)}',
+                                        style: theme.textTheme.bodySmall?.copyWith(
+                                          color: Colors.blue,
+                                          fontWeight: FontWeight.w600,
+                                        ),
                                       ),
                                     ),
+                                  if (debit > 0 && credit > 0)
+                                    const SizedBox(width: 4),
                                   if (credit > 0)
-                                    Text(
-                                      'Cr ${cs.formatCents(credit)}',
-                                      style: theme.textTheme.bodySmall?.copyWith(
-                                        color: Colors.orange,
-                                        fontWeight: FontWeight.w600,
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: Colors.orange.withValues(alpha: 0.1),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        '${'financial_management.money_out'.tr()} ${cs.formatCents(credit)}',
+                                        style: theme.textTheme.bodySmall?.copyWith(
+                                          color: Colors.orange,
+                                          fontWeight: FontWeight.w600,
+                                        ),
                                       ),
                                     ),
                                 ],

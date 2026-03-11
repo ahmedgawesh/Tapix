@@ -3,6 +3,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/bloc/realtime_bloc.dart';
+import '../../../../core/di/injection_container.dart';
+import '../../../settings/presentation/bloc/app_settings_bloc.dart';
 import '../../domain/entities/product_entity.dart';
 import '../../domain/repositories/product_repository.dart';
 
@@ -121,16 +123,28 @@ class ProductsBloc extends RealtimeBloc<List<Product>, ProductsEvent> {
     // (especially for stock status which depends on variants).
     final hasDbFilters = _currentCategoryFilter != null || _currentStockStatusFilter != null;
     if (hasDbFilters) {
+      // Get global lowStockThreshold from settings (default 5 if not available)
+      final threshold = _getLowStockThreshold();
       return _repository.watchFilteredProducts(
         categoryId: _currentCategoryFilter,
         stockStatus: _currentStockStatusFilter,
         isActive: _currentIsActiveFilter,
+        lowStockThreshold: threshold,
       );
     }
 
     return _repository.watchAllProducts(
       isActive: _currentIsActiveFilter,
     );
+  }
+
+  int _getLowStockThreshold() {
+    try {
+      final settingsBloc = sl<AppSettingsBloc>();
+      return settingsBloc.state.settings.lowStockThreshold;
+    } catch (e) {
+      return 5; // Default fallback
+    }
   }
 
   @override
@@ -336,12 +350,14 @@ class ProductsBloc extends RealtimeBloc<List<Product>, ProductsEvent> {
     );
 
     try {
+      final threshold = _getLowStockThreshold();
       final newProducts = await _repository.filterProducts(
         categoryId: _currentCategoryFilter,
         stockStatus: _currentStockStatusFilter,
         limit: _pageSize,
         offset: _currentPage * _pageSize,
         isActive: _currentIsActiveFilter,
+        lowStockThreshold: threshold,
       );
 
       _hasMoreData = newProducts.length >= _pageSize;

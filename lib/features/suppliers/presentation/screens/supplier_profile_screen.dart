@@ -11,6 +11,7 @@ import '../../../../core/di/injection_container.dart';
 import '../../domain/repositories/supplier_repository.dart';
 import '../bloc/supplier_profile_bloc.dart';
 import '../services/supplier_transaction_pdf_service.dart';
+import '../../../customers/presentation/widgets/edit_transaction_dialog.dart';
 
 /// Supplier profile screen with balance, actions, and transactions
 class SupplierProfileScreen extends StatefulWidget {
@@ -412,13 +413,24 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
                 children: [
                   Expanded(
                     child: FilledButton.icon(
-                      onPressed: () {
+                      onPressed: () async {
                         Navigator.pop(dialogContext);
-                        SupplierTransactionPdfService.printReceiptById(
-                          context: context,
-                          transactionId: transactionId,
-                          supplierName: supplierName,
-                        );
+                        try {
+                          await SupplierTransactionPdfService.printReceiptById(
+                            context: context,
+                            transactionId: transactionId,
+                            supplierName: supplierName,
+                          );
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('suppliers.print_error'.tr()),
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          }
+                        }
                       },
                       icon: const Icon(LucideIcons.printer),
                       label: Text(
@@ -430,13 +442,17 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: OutlinedButton.icon(
-                      onPressed: () {
+                      onPressed: () async {
                         Navigator.pop(dialogContext);
-                        SupplierTransactionPdfService.shareReceiptById(
-                          context: context,
-                          transactionId: transactionId,
-                          supplierName: supplierName,
-                        );
+                        try {
+                          await SupplierTransactionPdfService.shareReceiptById(
+                            context: context,
+                            transactionId: transactionId,
+                            supplierName: supplierName,
+                          );
+                        } catch (_) {
+                          // Sharing is best-effort
+                        }
                       },
                       icon: const Icon(LucideIcons.share2),
                       label: Text(
@@ -665,6 +681,7 @@ class _ProfileHeaderCard extends StatelessWidget {
     final isDark = theme.brightness == Brightness.dark;
     final isPayable = balanceCents > 0;
     final isZero = balanceCents == 0;
+    final openingBalanceCents = supplier.openingBalanceCents.toBigInt().toInt();
 
     return Container(
       decoration: BoxDecoration(
@@ -739,8 +756,8 @@ class _ProfileHeaderCard extends StatelessWidget {
                       color: isZero
                           ? (isDark ? const Color(0xFF64B5F6) : Colors.blue)
                           : isPayable
-                              ? (isDark ? const Color(0xFFA5D6A7) : Colors.green)
-                              : (isDark ? const Color(0xFFEF9A9A) : Colors.red),
+                              ? (isDark ? const Color(0xFFEF9A9A) : Colors.red)
+                              : (isDark ? const Color(0xFFA5D6A7) : Colors.green),
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -754,6 +771,46 @@ class _ProfileHeaderCard extends StatelessWidget {
                       color: colorScheme.onSurfaceVariant,
                     ),
                   ),
+                  // Show opening balance if it exists
+                  if (openingBalanceCents != 0) ...[
+                    const SizedBox(height: 12),
+                    Divider(color: colorScheme.outlineVariant.withValues(alpha: 0.3)),
+                    const SizedBox(height: 8),
+                    Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              'suppliers.opening_balance'.tr(),
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              currencyService.format(openingBalanceCents.abs()),
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: openingBalanceCents > 0
+                                    ? (isDark ? const Color(0xFFEF9A9A) : Colors.red)
+                                    : (isDark ? const Color(0xFFA5D6A7) : Colors.green),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          openingBalanceCents > 0
+                              ? '(${'suppliers.opening_balance_payable'.tr()})'
+                              : '(${'suppliers.opening_balance_credit'.tr()})',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -1466,6 +1523,14 @@ class _TransactionTile extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
+              leading: const Icon(LucideIcons.pencil),
+              title: Text('suppliers.edit_transaction'.tr()),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _showEditDialog(context);
+              },
+            ),
+            ListTile(
               leading: const Icon(LucideIcons.printer),
               title: Text('suppliers.print_receipt'.tr()),
               onTap: () {
@@ -1493,6 +1558,29 @@ class _TransactionTile extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  void _showEditDialog(BuildContext context) {
+    final absCents = transaction.amountCents.toDouble().round().abs();
+    EditTransactionDialog.show(
+      context: context,
+      currentAmountCents: absCents,
+      transactionType: transaction.transactionType,
+      currentDescription: transaction.description,
+      onSave: (newAmountCents, newDescription) async {
+        await sl<SupplierRepository>().updateTransaction(
+          transactionId: transaction.id,
+          newAmountCents: newAmountCents,
+          newDescription: newDescription,
+        );
+      },
+    ).then((edited) {
+      if (edited && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('suppliers.transaction_updated'.tr())),
+        );
+      }
+    });
   }
 
   String _formatDate(DateTime date) {

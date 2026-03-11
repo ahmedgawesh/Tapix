@@ -218,6 +218,7 @@ class _BalanceSheetView extends StatelessWidget {
                 // ═══ ASSETS ═══
                 _BalanceSection(
                   title: 'reports.assets'.tr(),
+                  subtitle: 'financial_management.type_asset_desc'.tr(),
                   items: fig.assetItems,
                   total: fig.totalAssets,
                   cs: cs,
@@ -229,6 +230,7 @@ class _BalanceSheetView extends StatelessWidget {
                 // ═══ LIABILITIES ═══
                 _BalanceSection(
                   title: 'reports.liabilities'.tr(),
+                  subtitle: 'financial_management.type_liability_desc'.tr(),
                   items: fig.liabilityItems,
                   total: fig.totalLiabilities,
                   cs: cs,
@@ -564,6 +566,7 @@ class _DiagnosticTile extends StatelessWidget {
 
 class _BalanceSection extends StatelessWidget {
   final String title;
+  final String? subtitle;
   final List<TrialBalanceItem> items;
   final int total;
   final CurrencyService cs;
@@ -572,6 +575,7 @@ class _BalanceSection extends StatelessWidget {
 
   const _BalanceSection({
     required this.title,
+    this.subtitle,
     required this.items,
     required this.total,
     required this.cs,
@@ -607,6 +611,15 @@ class _BalanceSection extends StatelessWidget {
             ),
           ],
         ),
+        if (subtitle != null) ...[  
+          const SizedBox(height: 4),
+          Text(
+            subtitle!,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
         const SizedBox(height: 8),
         ...nonZero.map((item) {
           // Show amount in its natural balance direction
@@ -630,7 +643,7 @@ class _BalanceSection extends StatelessWidget {
                   cs.formatCents(amount),
                   style: TextStyle(
                     fontWeight: FontWeight.w500,
-                    color: amount < 0 ? theme.colorScheme.error : null,
+                    color: amount < 0 ? theme.colorScheme.error : Colors.green.shade700,
                   ),
                 ),
               ],
@@ -689,6 +702,13 @@ class _EquitySection extends StatelessWidget {
             ),
           ],
         ),
+        const SizedBox(height: 4),
+        Text(
+          'financial_management.type_equity_desc'.tr(),
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
         const SizedBox(height: 8),
         // Owner's Capital accounts
         ...nonZero.map((item) {
@@ -710,7 +730,7 @@ class _EquitySection extends StatelessWidget {
                   cs.formatCents(amount),
                   style: TextStyle(
                     fontWeight: FontWeight.w500,
-                    color: amount < 0 ? theme.colorScheme.error : null,
+                    color: amount < 0 ? theme.colorScheme.error : Colors.green.shade700,
                   ),
                 ),
               ],

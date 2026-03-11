@@ -226,14 +226,16 @@ class SupplierStocktakeReportData {
 class SupplierStocktakeReportBloc extends RealtimeBloc<
     SupplierStocktakeReportData, SupplierStocktakeReportEvent> {
   final AppDatabase _db;
-  ReportDateRange _dateRange = ReportDateRange.thisMonth();
+  ReportDateRange _dateRange;
   SupplierStocktakeSortType _sort = SupplierStocktakeSortType.valueDesc;
   int? _supplierId;
   String _searchQuery = '';
   int? _filterCategoryId;
   String? _filterCategoryName;
 
-  SupplierStocktakeReportBloc(this._db) : super(const RealtimeLoading());
+  SupplierStocktakeReportBloc(this._db, {String defaultDateRange = 'month'})
+      : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+        super(const RealtimeLoading());
 
   ReportDateRange get dateRange => _dateRange;
   int? get supplierId => _supplierId;

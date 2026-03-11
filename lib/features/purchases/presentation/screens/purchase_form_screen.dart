@@ -1,3 +1,4 @@
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -25,20 +26,35 @@ import '../../../products/presentation/bloc/variant_previews_bloc.dart';
 import '../../../suppliers/domain/repositories/supplier_repository.dart';
 import '../../../barcode/data/models/invoice_print_data.dart';
 import '../../domain/repositories/purchase_repository.dart';
+import '../../../settings/presentation/bloc/app_settings_bloc.dart';
 import '../bloc/purchase_form_bloc.dart';
 import '../services/purchase_pdf_service.dart';
 
 class PurchaseFormScreen extends StatelessWidget {
   final int? purchaseId;
+  final bool isEditingPosted;
 
-  const PurchaseFormScreen({super.key, this.purchaseId});
+  const PurchaseFormScreen({super.key, this.purchaseId, this.isEditingPosted = false});
 
   @override
   Widget build(BuildContext context) {
+    // Get tax settings from AppSettingsBloc
+    final appSettingsState = context.read<AppSettingsBloc>().state;
+    final settings = appSettingsState.settings;
+    final enableTax = settings.enableTaxCalculations;
+    // Convert percentage to basis points (e.g., 15% -> 1500 bps)
+    final taxRateBps = (settings.defaultPurchaseTaxRate * 100).round();
+    
     return MultiBlocProvider(
       providers: [
         BlocProvider(create: (context) => sl<PurchaseFormBloc>()
-          ..add(PurchaseFormInitialized(purchaseId: purchaseId, currencyId: 1))),
+          ..add(PurchaseFormInitialized(
+            purchaseId: purchaseId,
+            currencyId: 1,
+            enableTaxCalculations: enableTax,
+            defaultPurchaseTaxRateBps: taxRateBps,
+            isEditingPosted: isEditingPosted,
+          ))),
         BlocProvider(create: (context) => sl<ProductsBloc>()),
       ],
       child: const _PurchaseFormView(),
@@ -121,7 +137,21 @@ class _PurchaseFormView extends StatelessWidget {
     return BlocConsumer<PurchaseFormBloc, PurchaseFormState>(
       listener: (context, state) {
         if (state.isSuccess) {
-          _showSaveConfirmationDialog(context, state);
+          // Capture state snapshot before navigating away
+          final stateSnapshot = state;
+          // Navigate back immediately to prevent duplicate submissions
+          if (context.canPop()) {
+            context.pop();
+          } else {
+            context.go('/purchases');
+          }
+          // Show print/share dialog after navigation completes
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            final nav = Navigator.of(context, rootNavigator: true);
+            if (nav.context.mounted) {
+              _showSaveConfirmationOverlay(nav.context, stateSnapshot);
+            }
+          });
         }
         if (state.error != null) {
           final key = state.error!;
@@ -705,15 +735,16 @@ class _PurchaseFormView extends StatelessWidget {
   }
 
   // ═══════════════════════════════════════════════════════
-  // SAVE CONFIRMATION DIALOG (Print / Barcode / Finish)
+  // SAVE CONFIRMATION OVERLAY (Print / Barcode / Finish)
+  // Shown AFTER navigating back to the purchases list.
   // ═══════════════════════════════════════════════════════
-  void _showSaveConfirmationDialog(BuildContext context, PurchaseFormState state) {
+  void _showSaveConfirmationOverlay(BuildContext context, PurchaseFormState state) {
     final theme = Theme.of(context);
     final invoiceNumber = state.purchaseNumber ?? '${state.purchaseId ?? ''}';
 
     showDialog<void>(
       context: context,
-      barrierDismissible: false,
+      barrierDismissible: true,
       builder: (ctx) {
         return AlertDialog(
           content: Column(
@@ -758,7 +789,6 @@ class _PurchaseFormView extends StatelessWidget {
                     );
                   }
                 }
-                if (context.mounted) context.pop();
               },
             ),
             TextButton.icon(
@@ -774,7 +804,6 @@ class _PurchaseFormView extends StatelessWidget {
                 } catch (_) {
                   // Keep silent; sharing is best-effort.
                 }
-                if (context.mounted) context.pop();
               },
             ),
             TextButton.icon(
@@ -800,7 +829,6 @@ class _PurchaseFormView extends StatelessWidget {
               label: Text('purchases.finish'.tr()),
               onPressed: () {
                 Navigator.pop(ctx);
-                context.pop();
               },
             ),
           ],
@@ -2718,6 +2746,7 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                           PurchasePaymentMethod.purchaseOrder => 'purchases.balance_explain_po',
                         };
                         final isPo = state.paymentMethod == PurchasePaymentMethod.purchaseOrder;
+                        final isCredit = state.paymentMethod == PurchasePaymentMethod.credit;
                         final containerColor = isPo
                             ? cs.surfaceContainerHighest.withValues(alpha: 0.5)
                             : cs.tertiaryContainer.withValues(alpha: 0.3);
@@ -2727,29 +2756,53 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                         final iconColor = isPo ? cs.onSurfaceVariant : cs.tertiary;
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 16),
-                          child: Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: containerColor,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: borderColor),
-                            ),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Icon(LucideIcons.info, size: 16, color: iconColor),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    infoKey.tr(),
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                      color: cs.onSurfaceVariant,
-                                      height: 1.4,
+                          child: Column(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: containerColor,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: borderColor),
+                                ),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Icon(LucideIcons.info, size: 16, color: iconColor),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        infoKey.tr(),
+                                        style: theme.textTheme.bodySmall?.copyWith(
+                                          color: cs.onSurfaceVariant,
+                                          height: 1.4,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              // Add Payment button for credit purchases
+                              if (isCredit && state.supplierId != null) ...[
+                                const SizedBox(height: 12),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: OutlinedButton.icon(
+                                    onPressed: () {
+                                      Navigator.pop(context);
+                                      // Navigate to supplier profile screen where payment can be made
+                                      context.push('/suppliers/${state.supplierId}');
+                                    },
+                                    icon: const Icon(LucideIcons.banknote, size: 18),
+                                    label: Text('purchases.add_payment'.tr()),
+                                    style: OutlinedButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(vertical: 12),
+                                      side: BorderSide(color: cs.primary),
                                     ),
                                   ),
                                 ),
                               ],
-                            ),
+                            ],
                           ),
                         );
                       }),
@@ -2866,11 +2919,66 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                                 : cs.primary.withValues(alpha: 0.2)),
                           ),
                           child: Column(children: [
-                            if (state.remainingCents > Decimal.zero)
+                            // Underpayment warning (cash with supplier selected)
+                            if (state.remainingCents > Decimal.zero && state.supplierId != null)
+                              Column(children: [
+                                Row(children: [
+                                  Icon(LucideIcons.alertTriangle, size: 16, color: cs.error),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'purchases.underpayment_warning'.tr(),
+                                      style: theme.textTheme.bodySmall?.copyWith(color: cs.error),
+                                    ),
+                                  ),
+                                ]),
+                                const SizedBox(height: 8),
+                                _checkoutRow(theme, 'purchases.remaining'.tr(),
+                                  widget.currencyService.format(state.remainingCents.toBigInt().toInt()),
+                                  isBold: true, valueColor: cs.error),
+                              ])
+                            // Underpayment without supplier (walk-in)
+                            else if (state.remainingCents > Decimal.zero)
                               _checkoutRow(theme, 'purchases.remaining'.tr(),
                                 widget.currencyService.format(state.remainingCents.toBigInt().toInt()),
                                 isBold: true, valueColor: cs.error),
-                            if (state.changeCents > Decimal.zero)
+                            // Overpayment with supplier - show options
+                            if (state.changeCents > Decimal.zero && state.supplierId != null) ...[
+                              _checkoutRow(theme, 'purchases.overpayment_amount'.tr(),
+                                widget.currencyService.format(state.changeCents.toBigInt().toInt()),
+                                isBold: true, valueColor: Colors.green),
+                              const SizedBox(height: 12),
+                              Text('purchases.overpayment_handling'.tr(),
+                                style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                              const SizedBox(height: 8),
+                              Row(children: [
+                                Expanded(
+                                  child: ChoiceChip(
+                                    label: Text('purchases.return_change'.tr()),
+                                    selected: state.overpaymentHandling == OverpaymentHandling.returnChange,
+                                    onSelected: (_) => context.read<PurchaseFormBloc>().add(
+                                      const PurchaseOverpaymentHandlingChanged(OverpaymentHandling.returnChange)),
+                                    avatar: const Icon(LucideIcons.banknote, size: 16),
+                                    selectedColor: cs.primaryContainer,
+                                    showCheckmark: false,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: ChoiceChip(
+                                    label: Text('purchases.add_to_balance'.tr()),
+                                    selected: state.overpaymentHandling == OverpaymentHandling.addToBalance,
+                                    onSelected: (_) => context.read<PurchaseFormBloc>().add(
+                                      const PurchaseOverpaymentHandlingChanged(OverpaymentHandling.addToBalance)),
+                                    avatar: const Icon(LucideIcons.wallet, size: 16),
+                                    selectedColor: cs.primaryContainer,
+                                    showCheckmark: false,
+                                  ),
+                                ),
+                              ]),
+                            ]
+                            // Overpayment without supplier (walk-in) - just show change
+                            else if (state.changeCents > Decimal.zero)
                               _checkoutRow(theme, 'purchases.change'.tr(),
                                 widget.currencyService.format(state.changeCents.toBigInt().toInt()),
                                 isBold: true, valueColor: Colors.green),
@@ -3170,21 +3278,29 @@ class _SupplierBalanceInfo extends StatelessWidget {
                     ),
                   ),
                 ),
-                Text(
-                  currencyService.format(currentBalanceCents),
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: isCurrentPayable ? cs.error : Colors.green,
-                  ),
-                ),
-                const SizedBox(width: 4),
-                Icon(LucideIcons.arrowRight, size: 14, color: cs.onSurfaceVariant),
-                const SizedBox(width: 4),
-                Text(
-                  currencyService.format(projectedBalanceCents),
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: isProjectedPayable ? cs.error : Colors.green,
+                Directionality(
+                  textDirection: ui.TextDirection.ltr,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        currencyService.format(currentBalanceCents),
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: isCurrentPayable ? cs.error : Colors.green,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Icon(LucideIcons.arrowRight, size: 14, color: cs.onSurfaceVariant),
+                      const SizedBox(width: 4),
+                      Text(
+                        currencyService.format(projectedBalanceCents),
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: isProjectedPayable ? cs.error : Colors.green,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],

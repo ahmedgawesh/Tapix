@@ -50,6 +50,8 @@ class PermissionService {
       Permissions.viewSuppliers,
       Permissions.managePurchases,
       Permissions.viewPurchases,
+      // Transaction Editing
+      Permissions.editTransactions,
       // Audit
       Permissions.viewAuditLogs,
       // Legacy permissions for backward compatibility
@@ -98,6 +100,8 @@ class PermissionService {
       Permissions.viewSuppliers,
       Permissions.managePurchases,
       Permissions.viewPurchases,
+      // Transaction Editing
+      Permissions.editTransactions,
       // Legacy permissions
       'manage_employees',
       'view_reports',

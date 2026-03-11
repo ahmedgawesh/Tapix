@@ -233,8 +233,9 @@ void main() {
       test('role levels are consistent', () {
         expect(permissionService.getRoleLevel(UserRole.salesperson), equals(0));
         expect(permissionService.getRoleLevel(UserRole.cashier), equals(1));
-        expect(permissionService.getRoleLevel(UserRole.manager), equals(2));
-        expect(permissionService.getRoleLevel(UserRole.owner), equals(3));
+        expect(permissionService.getRoleLevel(UserRole.accountant), equals(2));
+        expect(permissionService.getRoleLevel(UserRole.manager), equals(3));
+        expect(permissionService.getRoleLevel(UserRole.owner), equals(4));
       });
 
       test('higher roles include lower role access', () {

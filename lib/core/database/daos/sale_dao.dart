@@ -260,14 +260,59 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
   ///   Customer owes the full amount until payments are recorded via recordPayment().
   /// - cheque: Like credit — full amount added to customer balance.
   ///   The cheque due date tracks when payment is expected.
-  Future<void> postSale(int saleId) {
+  ///
+  /// If [allowNegativeStock] is true, stock validation is skipped and stock can go negative.
+  Future<void> postSale(int saleId, {bool allowNegativeStock = false}) {
     return transaction(() async {
       final sale = await getSaleById(saleId);
       if (sale == null) throw Exception('Sale not found');
       if (sale.status == 'completed') throw Exception('Sale already completed');
 
-      // 1. Deduct stock
+      // 1. Validate stock availability BEFORE any deduction (unless allowNegativeStock)
       final items = await getSaleItems(saleId);
+      if (!allowNegativeStock) {
+        for (final item in items) {
+          final variantId = item.variantId;
+          final productId = item.productId;
+
+          if (variantId != null) {
+            final row = await customSelect(
+              'SELECT stock_quantity FROM product_variants WHERE id = ?',
+              variables: [Variable.withInt(variantId)],
+            ).getSingleOrNull();
+            final currentStock = row?.read<int>('stock_quantity') ?? 0;
+            if (currentStock < item.quantity) {
+              // Look up variant display info for a clear error message
+              final infoRow = await customSelect(
+                'SELECT p.name AS product_name FROM products p '
+                'INNER JOIN product_variants pv ON pv.product_id = p.id '
+                'WHERE pv.id = ?',
+                variables: [Variable.withInt(variantId)],
+              ).getSingleOrNull();
+              final productName = infoRow?.read<String>('product_name') ?? 'Unknown';
+              throw Exception(
+                'Insufficient stock for "$productName" (variant #$variantId): '
+                'available $currentStock, required ${item.quantity}.',
+              );
+            }
+          } else {
+            final row = await customSelect(
+              'SELECT stock_quantity, name FROM products WHERE id = ?',
+              variables: [Variable.withInt(productId)],
+            ).getSingleOrNull();
+            final currentStock = row?.read<int>('stock_quantity') ?? 0;
+            final productName = row?.read<String>('name') ?? 'Unknown';
+            if (currentStock < item.quantity) {
+              throw Exception(
+                'Insufficient stock for "$productName" (product #$productId): '
+                'available $currentStock, required ${item.quantity}.',
+              );
+            }
+          }
+        }
+      }
+
+      // 2. Deduct stock (validated above)
       final affectedProductIds = <int>{};
       for (final item in items) {
         final variantId = item.variantId;
@@ -336,11 +381,16 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
       var totalPaidCents = (await getSalePayments(saleId))
           .fold<int>(0, (sum, p) => sum + p.amountCents.toBigInt().toInt());
       int? backfilledPaymentId;
+      int? excessPaymentId;
       if (totalPaidCents == 0 && headerPaidCents > 0) {
+        // If overpaying, split into invoice payment + excess credit payment
+        final invoicePayment = headerPaidCents > totalCents ? totalCents : headerPaidCents;
+        final excessPayment = headerPaidCents > totalCents ? headerPaidCents - totalCents : 0;
+
         backfilledPaymentId = await into(salePayments).insert(
           SalePaymentsCompanion.insert(
             saleId: saleId,
-            amountCents: Decimal.fromInt(headerPaidCents),
+            amountCents: Decimal.fromInt(invoicePayment),
             currencyId: sale.currencyId,
             paymentMethod: paymentMethod,
             reference: const Value(null),
@@ -348,6 +398,21 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
             paymentDate: Value(sale.saleDate),
           ),
         );
+
+        if (excessPayment > 0) {
+          excessPaymentId = await into(salePayments).insert(
+            SalePaymentsCompanion.insert(
+              saleId: saleId,
+              amountCents: Decimal.fromInt(excessPayment),
+              currencyId: sale.currencyId,
+              paymentMethod: paymentMethod,
+              reference: const Value(null),
+              notes: const Value('Excess cash — added to customer balance'),
+              paymentDate: Value(sale.saleDate),
+            ),
+          );
+        }
+
         totalPaidCents = headerPaidCents;
       }
 
@@ -371,17 +436,36 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
         ),
       );
 
-      // 3d. Record payment transaction only when we backfilled a payment row.
+      // 3d. Record payment transaction(s) only when we backfilled payment rows.
       //     Later payments are logged via recordPayment().
-      if (backfilledPaymentId != null && totalPaidCents > 0) {
+      if (backfilledPaymentId != null) {
+        final invoicePayment = headerPaidCents > totalCents ? totalCents : headerPaidCents;
+        if (invoicePayment > 0) {
+          await into(db.customerTransactions).insert(
+            CustomerTransactionsCompanion.insert(
+              customerId: customerId,
+              transactionType: 'payment',
+              amountCents: Decimal.fromInt(-invoicePayment),
+              currencyId: sale.currencyId,
+              description: Value('Payment for ${sale.invoiceNumber}'),
+              referenceId: Value(backfilledPaymentId),
+              referenceType: const Value('sale_payment'),
+            ),
+          );
+        }
+      }
+
+      // 3d2. Record excess cash as a separate payment transaction
+      if (excessPaymentId != null) {
+        final excessPayment = headerPaidCents - totalCents;
         await into(db.customerTransactions).insert(
           CustomerTransactionsCompanion.insert(
             customerId: customerId,
             transactionType: 'payment',
-            amountCents: Decimal.fromInt(-totalPaidCents),
+            amountCents: Decimal.fromInt(-excessPayment),
             currencyId: sale.currencyId,
-            description: Value('Payment for ${sale.invoiceNumber}'),
-            referenceId: Value(backfilledPaymentId),
+            description: Value('Excess cash added to balance — ${sale.invoiceNumber}'),
+            referenceId: Value(excessPaymentId),
             referenceType: const Value('sale_payment'),
           ),
         );
@@ -573,6 +657,75 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
   /// Get sale items
   Future<List<SaleItem>> getSaleItems(int saleId) {
     return (select(saleItems)..where((i) => i.saleId.equals(saleId))).get();
+  }
+
+  /// Compute total cost of goods sold for a sale.
+  ///
+  /// For each sale item, looks up cost_cents from the variant (if variantId is set)
+  /// or from the product. Returns the sum of (cost_cents * quantity) for all items.
+  Future<int> computeSaleCostCents(int saleId) async {
+    final items = await getSaleItems(saleId);
+    int totalCost = 0;
+    for (final item in items) {
+      int unitCost = 0;
+      if (item.variantId != null) {
+        final row = await customSelect(
+          'SELECT cost_cents FROM product_variants WHERE id = ?',
+          variables: [Variable.withInt(item.variantId!)],
+        ).getSingleOrNull();
+        if (row != null) {
+          unitCost = row.read<int>('cost_cents');
+        }
+      } else {
+        final row = await customSelect(
+          'SELECT cost_cents FROM products WHERE id = ?',
+          variables: [Variable.withInt(item.productId)],
+        ).getSingleOrNull();
+        if (row != null) {
+          unitCost = row.read<int>('cost_cents');
+        }
+      }
+      totalCost += unitCost * item.quantity;
+    }
+    return totalCost;
+  }
+
+  /// Compute total cost of returned items for a sale return.
+  ///
+  /// For each return item, looks up cost_cents from the variant (if variantId is set
+  /// on the original sale item) or from the product.
+  Future<int> computeSaleReturnCostCents(int returnId) async {
+    final query = select(saleReturnItems).join([
+      innerJoin(saleItems, saleItems.id.equalsExp(saleReturnItems.saleItemId)),
+    ])
+      ..where(saleReturnItems.returnId.equals(returnId));
+
+    final rows = await query.get();
+    int totalCost = 0;
+    for (final row in rows) {
+      final returnItem = row.readTable(saleReturnItems);
+      final saleItem = row.readTable(saleItems);
+      int unitCost = 0;
+      if (saleItem.variantId != null) {
+        final costRow = await customSelect(
+          'SELECT cost_cents FROM product_variants WHERE id = ?',
+          variables: [Variable.withInt(saleItem.variantId!)],
+        ).getSingleOrNull();
+        if (costRow != null) {
+          unitCost = costRow.read<int>('cost_cents');
+        }
+      } else {
+        final costRow = await customSelect(
+          'SELECT cost_cents FROM products WHERE id = ?',
+          variables: [Variable.withInt(saleItem.productId)],
+        ).getSingleOrNull();
+        if (costRow != null) {
+          unitCost = costRow.read<int>('cost_cents');
+        }
+      }
+      totalCost += unitCost * returnItem.quantity;
+    }
+    return totalCost;
   }
 
   /// Get sale items with product and variant details
@@ -1083,35 +1236,41 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
 
   // ==================== DASHBOARD STATS ====================
 
-  /// Get dashboard stats
+  /// Get dashboard stats using SQL aggregation (no full-table load).
   Future<SaleDashboardStats> getDashboardStats() async {
-    final allSales = await (select(sales)).get();
-    final completedSales = allSales.where((s) => s.status == 'completed').toList();
-    final voidedSales = allSales.where((s) => s.status == 'voided').toList();
-
-    final totalSalesCents = completedSales.fold<int>(
-        0, (sum, s) => sum + s.totalCents.toBigInt().toInt());
-
     final now = DateTime.now();
-    final todayStart = DateTime(now.year, now.month, now.day);
-    final todaySales = completedSales.where((s) =>
-        s.saleDate.isAfter(todayStart) || s.saleDate.isAtSameMomentAs(todayStart)).toList();
-    final todaySalesCents = todaySales.fold<int>(
-        0, (sum, s) => sum + s.totalCents.toBigInt().toInt());
+    final todayStart = DateTime(now.year, now.month, now.day).toIso8601String();
 
-    final allReturns = await (select(saleReturns)).get();
-    final totalReturnsCents = allReturns.fold<int>(
-        0, (sum, r) => sum + r.totalCents.toBigInt().toInt());
+    // Single aggregation query for all sale stats
+    // COALESCE all SUM expressions to handle NULL when table is empty
+    final statsRow = await customSelect(
+      'SELECT '
+      '  COUNT(*) AS total_count, '
+      "  COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END), 0) AS completed_count, "
+      "  COALESCE(SUM(CASE WHEN status = 'voided' THEN 1 ELSE 0 END), 0) AS voided_count, "
+      "  COALESCE(SUM(CASE WHEN status = 'completed' THEN total_cents ELSE 0 END), 0) AS total_sales_cents, "
+      "  COALESCE(SUM(CASE WHEN status = 'completed' AND sale_date >= ? THEN total_cents ELSE 0 END), 0) AS today_sales_cents, "
+      "  COALESCE(SUM(CASE WHEN status = 'completed' AND sale_date >= ? THEN 1 ELSE 0 END), 0) AS today_count "
+      'FROM sales',
+      variables: [Variable.withString(todayStart), Variable.withString(todayStart)],
+    ).getSingle();
+
+    // Single aggregation query for returns
+    final returnsRow = await customSelect(
+      'SELECT COUNT(*) AS returns_count, '
+      'COALESCE(SUM(total_cents), 0) AS total_returns_cents '
+      'FROM sale_returns',
+    ).getSingle();
 
     return SaleDashboardStats(
-      totalCount: allSales.length,
-      completedCount: completedSales.length,
-      voidedCount: voidedSales.length,
-      totalSalesCents: totalSalesCents,
-      returnsCount: allReturns.length,
-      totalReturnsCents: totalReturnsCents,
-      todaySalesCents: todaySalesCents,
-      todayCount: todaySales.length,
+      totalCount: statsRow.read<int>('total_count'),
+      completedCount: statsRow.read<int>('completed_count'),
+      voidedCount: statsRow.read<int>('voided_count'),
+      totalSalesCents: statsRow.read<int>('total_sales_cents'),
+      returnsCount: returnsRow.read<int>('returns_count'),
+      totalReturnsCents: returnsRow.read<int>('total_returns_cents'),
+      todaySalesCents: statsRow.read<int>('today_sales_cents'),
+      todayCount: statsRow.read<int>('today_count'),
     );
   }
 

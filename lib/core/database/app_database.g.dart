@@ -76,6 +76,28 @@ class $UsersTable extends Users with TableInfo<$UsersTable, User> {
     requiredDuringInsert: false,
     defaultValue: const Constant(1),
   );
+  static const VerificationMeta _securityQuestionMeta = const VerificationMeta(
+    'securityQuestion',
+  );
+  @override
+  late final GeneratedColumn<String> securityQuestion = GeneratedColumn<String>(
+    'security_question',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _securityAnswerHashMeta =
+      const VerificationMeta('securityAnswerHash');
+  @override
+  late final GeneratedColumn<String> securityAnswerHash =
+      GeneratedColumn<String>(
+        'security_answer_hash',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
   @override
   late final GeneratedColumnWithTypeConverter<DateTime, int> createdAt =
       GeneratedColumn<int>(
@@ -111,6 +133,8 @@ class $UsersTable extends Users with TableInfo<$UsersTable, User> {
     role,
     employeeId,
     isActive,
+    securityQuestion,
+    securityAnswerHash,
     createdAt,
     updatedAt,
     lastLoginAt,
@@ -169,6 +193,24 @@ class $UsersTable extends Users with TableInfo<$UsersTable, User> {
         isActive.isAcceptableOrUnknown(data['is_active']!, _isActiveMeta),
       );
     }
+    if (data.containsKey('security_question')) {
+      context.handle(
+        _securityQuestionMeta,
+        securityQuestion.isAcceptableOrUnknown(
+          data['security_question']!,
+          _securityQuestionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('security_answer_hash')) {
+      context.handle(
+        _securityAnswerHashMeta,
+        securityAnswerHash.isAcceptableOrUnknown(
+          data['security_answer_hash']!,
+          _securityAnswerHashMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -202,6 +244,14 @@ class $UsersTable extends Users with TableInfo<$UsersTable, User> {
         DriftSqlType.int,
         data['${effectivePrefix}is_active'],
       )!,
+      securityQuestion: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}security_question'],
+      ),
+      securityAnswerHash: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}security_answer_hash'],
+      ),
       createdAt: $UsersTable.$convertercreatedAt.fromSql(
         attachedDatabase.typeMapping.read(
           DriftSqlType.int,
@@ -245,6 +295,8 @@ class User extends DataClass implements Insertable<User> {
   final String role;
   final int? employeeId;
   final int isActive;
+  final String? securityQuestion;
+  final String? securityAnswerHash;
   final DateTime createdAt;
   final DateTime updatedAt;
   final DateTime? lastLoginAt;
@@ -255,6 +307,8 @@ class User extends DataClass implements Insertable<User> {
     required this.role,
     this.employeeId,
     required this.isActive,
+    this.securityQuestion,
+    this.securityAnswerHash,
     required this.createdAt,
     required this.updatedAt,
     this.lastLoginAt,
@@ -270,6 +324,12 @@ class User extends DataClass implements Insertable<User> {
       map['employee_id'] = Variable<int>(employeeId);
     }
     map['is_active'] = Variable<int>(isActive);
+    if (!nullToAbsent || securityQuestion != null) {
+      map['security_question'] = Variable<String>(securityQuestion);
+    }
+    if (!nullToAbsent || securityAnswerHash != null) {
+      map['security_answer_hash'] = Variable<String>(securityAnswerHash);
+    }
     {
       map['created_at'] = Variable<int>(
         $UsersTable.$convertercreatedAt.toSql(createdAt),
@@ -298,6 +358,12 @@ class User extends DataClass implements Insertable<User> {
           ? const Value.absent()
           : Value(employeeId),
       isActive: Value(isActive),
+      securityQuestion: securityQuestion == null && nullToAbsent
+          ? const Value.absent()
+          : Value(securityQuestion),
+      securityAnswerHash: securityAnswerHash == null && nullToAbsent
+          ? const Value.absent()
+          : Value(securityAnswerHash),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       lastLoginAt: lastLoginAt == null && nullToAbsent
@@ -318,6 +384,10 @@ class User extends DataClass implements Insertable<User> {
       role: serializer.fromJson<String>(json['role']),
       employeeId: serializer.fromJson<int?>(json['employeeId']),
       isActive: serializer.fromJson<int>(json['isActive']),
+      securityQuestion: serializer.fromJson<String?>(json['securityQuestion']),
+      securityAnswerHash: serializer.fromJson<String?>(
+        json['securityAnswerHash'],
+      ),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       lastLoginAt: serializer.fromJson<DateTime?>(json['lastLoginAt']),
@@ -333,6 +403,8 @@ class User extends DataClass implements Insertable<User> {
       'role': serializer.toJson<String>(role),
       'employeeId': serializer.toJson<int?>(employeeId),
       'isActive': serializer.toJson<int>(isActive),
+      'securityQuestion': serializer.toJson<String?>(securityQuestion),
+      'securityAnswerHash': serializer.toJson<String?>(securityAnswerHash),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'lastLoginAt': serializer.toJson<DateTime?>(lastLoginAt),
@@ -346,6 +418,8 @@ class User extends DataClass implements Insertable<User> {
     String? role,
     Value<int?> employeeId = const Value.absent(),
     int? isActive,
+    Value<String?> securityQuestion = const Value.absent(),
+    Value<String?> securityAnswerHash = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
     Value<DateTime?> lastLoginAt = const Value.absent(),
@@ -356,6 +430,12 @@ class User extends DataClass implements Insertable<User> {
     role: role ?? this.role,
     employeeId: employeeId.present ? employeeId.value : this.employeeId,
     isActive: isActive ?? this.isActive,
+    securityQuestion: securityQuestion.present
+        ? securityQuestion.value
+        : this.securityQuestion,
+    securityAnswerHash: securityAnswerHash.present
+        ? securityAnswerHash.value
+        : this.securityAnswerHash,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     lastLoginAt: lastLoginAt.present ? lastLoginAt.value : this.lastLoginAt,
@@ -372,6 +452,12 @@ class User extends DataClass implements Insertable<User> {
           ? data.employeeId.value
           : this.employeeId,
       isActive: data.isActive.present ? data.isActive.value : this.isActive,
+      securityQuestion: data.securityQuestion.present
+          ? data.securityQuestion.value
+          : this.securityQuestion,
+      securityAnswerHash: data.securityAnswerHash.present
+          ? data.securityAnswerHash.value
+          : this.securityAnswerHash,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       lastLoginAt: data.lastLoginAt.present
@@ -389,6 +475,8 @@ class User extends DataClass implements Insertable<User> {
           ..write('role: $role, ')
           ..write('employeeId: $employeeId, ')
           ..write('isActive: $isActive, ')
+          ..write('securityQuestion: $securityQuestion, ')
+          ..write('securityAnswerHash: $securityAnswerHash, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('lastLoginAt: $lastLoginAt')
@@ -404,6 +492,8 @@ class User extends DataClass implements Insertable<User> {
     role,
     employeeId,
     isActive,
+    securityQuestion,
+    securityAnswerHash,
     createdAt,
     updatedAt,
     lastLoginAt,
@@ -418,6 +508,8 @@ class User extends DataClass implements Insertable<User> {
           other.role == this.role &&
           other.employeeId == this.employeeId &&
           other.isActive == this.isActive &&
+          other.securityQuestion == this.securityQuestion &&
+          other.securityAnswerHash == this.securityAnswerHash &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.lastLoginAt == this.lastLoginAt);
@@ -430,6 +522,8 @@ class UsersCompanion extends UpdateCompanion<User> {
   final Value<String> role;
   final Value<int?> employeeId;
   final Value<int> isActive;
+  final Value<String?> securityQuestion;
+  final Value<String?> securityAnswerHash;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<DateTime?> lastLoginAt;
@@ -440,6 +534,8 @@ class UsersCompanion extends UpdateCompanion<User> {
     this.role = const Value.absent(),
     this.employeeId = const Value.absent(),
     this.isActive = const Value.absent(),
+    this.securityQuestion = const Value.absent(),
+    this.securityAnswerHash = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.lastLoginAt = const Value.absent(),
@@ -451,6 +547,8 @@ class UsersCompanion extends UpdateCompanion<User> {
     required String role,
     this.employeeId = const Value.absent(),
     this.isActive = const Value.absent(),
+    this.securityQuestion = const Value.absent(),
+    this.securityAnswerHash = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.lastLoginAt = const Value.absent(),
@@ -466,6 +564,8 @@ class UsersCompanion extends UpdateCompanion<User> {
     Expression<String>? role,
     Expression<int>? employeeId,
     Expression<int>? isActive,
+    Expression<String>? securityQuestion,
+    Expression<String>? securityAnswerHash,
     Expression<int>? createdAt,
     Expression<int>? updatedAt,
     Expression<int>? lastLoginAt,
@@ -477,6 +577,9 @@ class UsersCompanion extends UpdateCompanion<User> {
       if (role != null) 'role': role,
       if (employeeId != null) 'employee_id': employeeId,
       if (isActive != null) 'is_active': isActive,
+      if (securityQuestion != null) 'security_question': securityQuestion,
+      if (securityAnswerHash != null)
+        'security_answer_hash': securityAnswerHash,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (lastLoginAt != null) 'last_login_at': lastLoginAt,
@@ -490,6 +593,8 @@ class UsersCompanion extends UpdateCompanion<User> {
     Value<String>? role,
     Value<int?>? employeeId,
     Value<int>? isActive,
+    Value<String?>? securityQuestion,
+    Value<String?>? securityAnswerHash,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<DateTime?>? lastLoginAt,
@@ -501,6 +606,8 @@ class UsersCompanion extends UpdateCompanion<User> {
       role: role ?? this.role,
       employeeId: employeeId ?? this.employeeId,
       isActive: isActive ?? this.isActive,
+      securityQuestion: securityQuestion ?? this.securityQuestion,
+      securityAnswerHash: securityAnswerHash ?? this.securityAnswerHash,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       lastLoginAt: lastLoginAt ?? this.lastLoginAt,
@@ -527,6 +634,12 @@ class UsersCompanion extends UpdateCompanion<User> {
     }
     if (isActive.present) {
       map['is_active'] = Variable<int>(isActive.value);
+    }
+    if (securityQuestion.present) {
+      map['security_question'] = Variable<String>(securityQuestion.value);
+    }
+    if (securityAnswerHash.present) {
+      map['security_answer_hash'] = Variable<String>(securityAnswerHash.value);
     }
     if (createdAt.present) {
       map['created_at'] = Variable<int>(
@@ -555,6 +668,8 @@ class UsersCompanion extends UpdateCompanion<User> {
           ..write('role: $role, ')
           ..write('employeeId: $employeeId, ')
           ..write('isActive: $isActive, ')
+          ..write('securityQuestion: $securityQuestion, ')
+          ..write('securityAnswerHash: $securityAnswerHash, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('lastLoginAt: $lastLoginAt')
@@ -3486,6 +3601,16 @@ class $SuppliersTable extends Suppliers
         requiredDuringInsert: false,
         defaultValue: const Constant(0),
       ).withConverter<Decimal>($SuppliersTable.$converterbalanceCents);
+  @override
+  late final GeneratedColumnWithTypeConverter<Decimal, int>
+  openingBalanceCents = GeneratedColumn<int>(
+    'opening_balance_cents',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  ).withConverter<Decimal>($SuppliersTable.$converteropeningBalanceCents);
   static const VerificationMeta _currencyIdMeta = const VerificationMeta(
     'currencyId',
   );
@@ -3547,6 +3672,7 @@ class $SuppliersTable extends Suppliers
     phone,
     address,
     balanceCents,
+    openingBalanceCents,
     currencyId,
     isActive,
     createdAt,
@@ -3654,6 +3780,13 @@ class $SuppliersTable extends Suppliers
           data['${effectivePrefix}balance_cents'],
         )!,
       ),
+      openingBalanceCents: $SuppliersTable.$converteropeningBalanceCents
+          .fromSql(
+            attachedDatabase.typeMapping.read(
+              DriftSqlType.int,
+              data['${effectivePrefix}opening_balance_cents'],
+            )!,
+          ),
       currencyId: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}currency_id'],
@@ -3680,6 +3813,8 @@ class $SuppliersTable extends Suppliers
 
   static TypeConverter<Decimal, int> $converterbalanceCents =
       const MoneyConverter();
+  static TypeConverter<Decimal, int> $converteropeningBalanceCents =
+      const MoneyConverter();
 }
 
 class Supplier extends DataClass implements Insertable<Supplier> {
@@ -3689,6 +3824,9 @@ class Supplier extends DataClass implements Insertable<Supplier> {
   final String? phone;
   final String? address;
   final Decimal balanceCents;
+
+  /// The initial balance when the supplier was created (immutable after creation)
+  final Decimal openingBalanceCents;
   final int currencyId;
   final bool isActive;
   final DateTime createdAt;
@@ -3700,6 +3838,7 @@ class Supplier extends DataClass implements Insertable<Supplier> {
     this.phone,
     this.address,
     required this.balanceCents,
+    required this.openingBalanceCents,
     required this.currencyId,
     required this.isActive,
     required this.createdAt,
@@ -3724,6 +3863,13 @@ class Supplier extends DataClass implements Insertable<Supplier> {
         $SuppliersTable.$converterbalanceCents.toSql(balanceCents),
       );
     }
+    {
+      map['opening_balance_cents'] = Variable<int>(
+        $SuppliersTable.$converteropeningBalanceCents.toSql(
+          openingBalanceCents,
+        ),
+      );
+    }
     map['currency_id'] = Variable<int>(currencyId);
     map['is_active'] = Variable<bool>(isActive);
     map['created_at'] = Variable<DateTime>(createdAt);
@@ -3745,6 +3891,7 @@ class Supplier extends DataClass implements Insertable<Supplier> {
           ? const Value.absent()
           : Value(address),
       balanceCents: Value(balanceCents),
+      openingBalanceCents: Value(openingBalanceCents),
       currencyId: Value(currencyId),
       isActive: Value(isActive),
       createdAt: Value(createdAt),
@@ -3764,6 +3911,9 @@ class Supplier extends DataClass implements Insertable<Supplier> {
       phone: serializer.fromJson<String?>(json['phone']),
       address: serializer.fromJson<String?>(json['address']),
       balanceCents: serializer.fromJson<Decimal>(json['balanceCents']),
+      openingBalanceCents: serializer.fromJson<Decimal>(
+        json['openingBalanceCents'],
+      ),
       currencyId: serializer.fromJson<int>(json['currencyId']),
       isActive: serializer.fromJson<bool>(json['isActive']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
@@ -3780,6 +3930,7 @@ class Supplier extends DataClass implements Insertable<Supplier> {
       'phone': serializer.toJson<String?>(phone),
       'address': serializer.toJson<String?>(address),
       'balanceCents': serializer.toJson<Decimal>(balanceCents),
+      'openingBalanceCents': serializer.toJson<Decimal>(openingBalanceCents),
       'currencyId': serializer.toJson<int>(currencyId),
       'isActive': serializer.toJson<bool>(isActive),
       'createdAt': serializer.toJson<DateTime>(createdAt),
@@ -3794,6 +3945,7 @@ class Supplier extends DataClass implements Insertable<Supplier> {
     Value<String?> phone = const Value.absent(),
     Value<String?> address = const Value.absent(),
     Decimal? balanceCents,
+    Decimal? openingBalanceCents,
     int? currencyId,
     bool? isActive,
     DateTime? createdAt,
@@ -3805,6 +3957,7 @@ class Supplier extends DataClass implements Insertable<Supplier> {
     phone: phone.present ? phone.value : this.phone,
     address: address.present ? address.value : this.address,
     balanceCents: balanceCents ?? this.balanceCents,
+    openingBalanceCents: openingBalanceCents ?? this.openingBalanceCents,
     currencyId: currencyId ?? this.currencyId,
     isActive: isActive ?? this.isActive,
     createdAt: createdAt ?? this.createdAt,
@@ -3820,6 +3973,9 @@ class Supplier extends DataClass implements Insertable<Supplier> {
       balanceCents: data.balanceCents.present
           ? data.balanceCents.value
           : this.balanceCents,
+      openingBalanceCents: data.openingBalanceCents.present
+          ? data.openingBalanceCents.value
+          : this.openingBalanceCents,
       currencyId: data.currencyId.present
           ? data.currencyId.value
           : this.currencyId,
@@ -3838,6 +3994,7 @@ class Supplier extends DataClass implements Insertable<Supplier> {
           ..write('phone: $phone, ')
           ..write('address: $address, ')
           ..write('balanceCents: $balanceCents, ')
+          ..write('openingBalanceCents: $openingBalanceCents, ')
           ..write('currencyId: $currencyId, ')
           ..write('isActive: $isActive, ')
           ..write('createdAt: $createdAt, ')
@@ -3854,6 +4011,7 @@ class Supplier extends DataClass implements Insertable<Supplier> {
     phone,
     address,
     balanceCents,
+    openingBalanceCents,
     currencyId,
     isActive,
     createdAt,
@@ -3869,6 +4027,7 @@ class Supplier extends DataClass implements Insertable<Supplier> {
           other.phone == this.phone &&
           other.address == this.address &&
           other.balanceCents == this.balanceCents &&
+          other.openingBalanceCents == this.openingBalanceCents &&
           other.currencyId == this.currencyId &&
           other.isActive == this.isActive &&
           other.createdAt == this.createdAt &&
@@ -3882,6 +4041,7 @@ class SuppliersCompanion extends UpdateCompanion<Supplier> {
   final Value<String?> phone;
   final Value<String?> address;
   final Value<Decimal> balanceCents;
+  final Value<Decimal> openingBalanceCents;
   final Value<int> currencyId;
   final Value<bool> isActive;
   final Value<DateTime> createdAt;
@@ -3893,6 +4053,7 @@ class SuppliersCompanion extends UpdateCompanion<Supplier> {
     this.phone = const Value.absent(),
     this.address = const Value.absent(),
     this.balanceCents = const Value.absent(),
+    this.openingBalanceCents = const Value.absent(),
     this.currencyId = const Value.absent(),
     this.isActive = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -3905,6 +4066,7 @@ class SuppliersCompanion extends UpdateCompanion<Supplier> {
     this.phone = const Value.absent(),
     this.address = const Value.absent(),
     this.balanceCents = const Value.absent(),
+    this.openingBalanceCents = const Value.absent(),
     required int currencyId,
     this.isActive = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -3918,6 +4080,7 @@ class SuppliersCompanion extends UpdateCompanion<Supplier> {
     Expression<String>? phone,
     Expression<String>? address,
     Expression<int>? balanceCents,
+    Expression<int>? openingBalanceCents,
     Expression<int>? currencyId,
     Expression<bool>? isActive,
     Expression<DateTime>? createdAt,
@@ -3930,6 +4093,8 @@ class SuppliersCompanion extends UpdateCompanion<Supplier> {
       if (phone != null) 'phone': phone,
       if (address != null) 'address': address,
       if (balanceCents != null) 'balance_cents': balanceCents,
+      if (openingBalanceCents != null)
+        'opening_balance_cents': openingBalanceCents,
       if (currencyId != null) 'currency_id': currencyId,
       if (isActive != null) 'is_active': isActive,
       if (createdAt != null) 'created_at': createdAt,
@@ -3944,6 +4109,7 @@ class SuppliersCompanion extends UpdateCompanion<Supplier> {
     Value<String?>? phone,
     Value<String?>? address,
     Value<Decimal>? balanceCents,
+    Value<Decimal>? openingBalanceCents,
     Value<int>? currencyId,
     Value<bool>? isActive,
     Value<DateTime>? createdAt,
@@ -3956,6 +4122,7 @@ class SuppliersCompanion extends UpdateCompanion<Supplier> {
       phone: phone ?? this.phone,
       address: address ?? this.address,
       balanceCents: balanceCents ?? this.balanceCents,
+      openingBalanceCents: openingBalanceCents ?? this.openingBalanceCents,
       currencyId: currencyId ?? this.currencyId,
       isActive: isActive ?? this.isActive,
       createdAt: createdAt ?? this.createdAt,
@@ -3986,6 +4153,13 @@ class SuppliersCompanion extends UpdateCompanion<Supplier> {
         $SuppliersTable.$converterbalanceCents.toSql(balanceCents.value),
       );
     }
+    if (openingBalanceCents.present) {
+      map['opening_balance_cents'] = Variable<int>(
+        $SuppliersTable.$converteropeningBalanceCents.toSql(
+          openingBalanceCents.value,
+        ),
+      );
+    }
     if (currencyId.present) {
       map['currency_id'] = Variable<int>(currencyId.value);
     }
@@ -4010,6 +4184,7 @@ class SuppliersCompanion extends UpdateCompanion<Supplier> {
           ..write('phone: $phone, ')
           ..write('address: $address, ')
           ..write('balanceCents: $balanceCents, ')
+          ..write('openingBalanceCents: $openingBalanceCents, ')
           ..write('currencyId: $currencyId, ')
           ..write('isActive: $isActive, ')
           ..write('createdAt: $createdAt, ')
@@ -8435,6 +8610,16 @@ class $CustomersTable extends Customers
         requiredDuringInsert: false,
         defaultValue: const Constant(0),
       ).withConverter<Decimal>($CustomersTable.$converterbalanceCents);
+  @override
+  late final GeneratedColumnWithTypeConverter<Decimal, int>
+  openingBalanceCents = GeneratedColumn<int>(
+    'opening_balance_cents',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  ).withConverter<Decimal>($CustomersTable.$converteropeningBalanceCents);
   static const VerificationMeta _currencyIdMeta = const VerificationMeta(
     'currencyId',
   );
@@ -8582,6 +8767,7 @@ class $CustomersTable extends Customers
     phone,
     address,
     balanceCents,
+    openingBalanceCents,
     currencyId,
     segment,
     loyaltyEnabled,
@@ -8747,6 +8933,13 @@ class $CustomersTable extends Customers
           data['${effectivePrefix}balance_cents'],
         )!,
       ),
+      openingBalanceCents: $CustomersTable.$converteropeningBalanceCents
+          .fromSql(
+            attachedDatabase.typeMapping.read(
+              DriftSqlType.int,
+              data['${effectivePrefix}opening_balance_cents'],
+            )!,
+          ),
       currencyId: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}currency_id'],
@@ -8803,6 +8996,8 @@ class $CustomersTable extends Customers
 
   static TypeConverter<Decimal, int> $converterbalanceCents =
       const MoneyConverter();
+  static TypeConverter<Decimal, int> $converteropeningBalanceCents =
+      const MoneyConverter();
   static TypeConverter<Decimal, int> $convertertotalSpentCents =
       const MoneyConverter();
 }
@@ -8814,6 +9009,9 @@ class Customer extends DataClass implements Insertable<Customer> {
   final String? phone;
   final String? address;
   final Decimal balanceCents;
+
+  /// The initial balance when the customer was created (immutable after creation)
+  final Decimal openingBalanceCents;
   final int currencyId;
   final String segment;
   final bool loyaltyEnabled;
@@ -8832,6 +9030,7 @@ class Customer extends DataClass implements Insertable<Customer> {
     this.phone,
     this.address,
     required this.balanceCents,
+    required this.openingBalanceCents,
     required this.currencyId,
     required this.segment,
     required this.loyaltyEnabled,
@@ -8861,6 +9060,13 @@ class Customer extends DataClass implements Insertable<Customer> {
     {
       map['balance_cents'] = Variable<int>(
         $CustomersTable.$converterbalanceCents.toSql(balanceCents),
+      );
+    }
+    {
+      map['opening_balance_cents'] = Variable<int>(
+        $CustomersTable.$converteropeningBalanceCents.toSql(
+          openingBalanceCents,
+        ),
       );
     }
     map['currency_id'] = Variable<int>(currencyId);
@@ -8899,6 +9105,7 @@ class Customer extends DataClass implements Insertable<Customer> {
           ? const Value.absent()
           : Value(address),
       balanceCents: Value(balanceCents),
+      openingBalanceCents: Value(openingBalanceCents),
       currencyId: Value(currencyId),
       segment: Value(segment),
       loyaltyEnabled: Value(loyaltyEnabled),
@@ -8929,6 +9136,9 @@ class Customer extends DataClass implements Insertable<Customer> {
       phone: serializer.fromJson<String?>(json['phone']),
       address: serializer.fromJson<String?>(json['address']),
       balanceCents: serializer.fromJson<Decimal>(json['balanceCents']),
+      openingBalanceCents: serializer.fromJson<Decimal>(
+        json['openingBalanceCents'],
+      ),
       currencyId: serializer.fromJson<int>(json['currencyId']),
       segment: serializer.fromJson<String>(json['segment']),
       loyaltyEnabled: serializer.fromJson<bool>(json['loyaltyEnabled']),
@@ -8956,6 +9166,7 @@ class Customer extends DataClass implements Insertable<Customer> {
       'phone': serializer.toJson<String?>(phone),
       'address': serializer.toJson<String?>(address),
       'balanceCents': serializer.toJson<Decimal>(balanceCents),
+      'openingBalanceCents': serializer.toJson<Decimal>(openingBalanceCents),
       'currencyId': serializer.toJson<int>(currencyId),
       'segment': serializer.toJson<String>(segment),
       'loyaltyEnabled': serializer.toJson<bool>(loyaltyEnabled),
@@ -8977,6 +9188,7 @@ class Customer extends DataClass implements Insertable<Customer> {
     Value<String?> phone = const Value.absent(),
     Value<String?> address = const Value.absent(),
     Decimal? balanceCents,
+    Decimal? openingBalanceCents,
     int? currencyId,
     String? segment,
     bool? loyaltyEnabled,
@@ -8995,6 +9207,7 @@ class Customer extends DataClass implements Insertable<Customer> {
     phone: phone.present ? phone.value : this.phone,
     address: address.present ? address.value : this.address,
     balanceCents: balanceCents ?? this.balanceCents,
+    openingBalanceCents: openingBalanceCents ?? this.openingBalanceCents,
     currencyId: currencyId ?? this.currencyId,
     segment: segment ?? this.segment,
     loyaltyEnabled: loyaltyEnabled ?? this.loyaltyEnabled,
@@ -9021,6 +9234,9 @@ class Customer extends DataClass implements Insertable<Customer> {
       balanceCents: data.balanceCents.present
           ? data.balanceCents.value
           : this.balanceCents,
+      openingBalanceCents: data.openingBalanceCents.present
+          ? data.openingBalanceCents.value
+          : this.openingBalanceCents,
       currencyId: data.currencyId.present
           ? data.currencyId.value
           : this.currencyId,
@@ -9058,6 +9274,7 @@ class Customer extends DataClass implements Insertable<Customer> {
           ..write('phone: $phone, ')
           ..write('address: $address, ')
           ..write('balanceCents: $balanceCents, ')
+          ..write('openingBalanceCents: $openingBalanceCents, ')
           ..write('currencyId: $currencyId, ')
           ..write('segment: $segment, ')
           ..write('loyaltyEnabled: $loyaltyEnabled, ')
@@ -9081,6 +9298,7 @@ class Customer extends DataClass implements Insertable<Customer> {
     phone,
     address,
     balanceCents,
+    openingBalanceCents,
     currencyId,
     segment,
     loyaltyEnabled,
@@ -9103,6 +9321,7 @@ class Customer extends DataClass implements Insertable<Customer> {
           other.phone == this.phone &&
           other.address == this.address &&
           other.balanceCents == this.balanceCents &&
+          other.openingBalanceCents == this.openingBalanceCents &&
           other.currencyId == this.currencyId &&
           other.segment == this.segment &&
           other.loyaltyEnabled == this.loyaltyEnabled &&
@@ -9123,6 +9342,7 @@ class CustomersCompanion extends UpdateCompanion<Customer> {
   final Value<String?> phone;
   final Value<String?> address;
   final Value<Decimal> balanceCents;
+  final Value<Decimal> openingBalanceCents;
   final Value<int> currencyId;
   final Value<String> segment;
   final Value<bool> loyaltyEnabled;
@@ -9141,6 +9361,7 @@ class CustomersCompanion extends UpdateCompanion<Customer> {
     this.phone = const Value.absent(),
     this.address = const Value.absent(),
     this.balanceCents = const Value.absent(),
+    this.openingBalanceCents = const Value.absent(),
     this.currencyId = const Value.absent(),
     this.segment = const Value.absent(),
     this.loyaltyEnabled = const Value.absent(),
@@ -9160,6 +9381,7 @@ class CustomersCompanion extends UpdateCompanion<Customer> {
     this.phone = const Value.absent(),
     this.address = const Value.absent(),
     this.balanceCents = const Value.absent(),
+    this.openingBalanceCents = const Value.absent(),
     required int currencyId,
     this.segment = const Value.absent(),
     this.loyaltyEnabled = const Value.absent(),
@@ -9180,6 +9402,7 @@ class CustomersCompanion extends UpdateCompanion<Customer> {
     Expression<String>? phone,
     Expression<String>? address,
     Expression<int>? balanceCents,
+    Expression<int>? openingBalanceCents,
     Expression<int>? currencyId,
     Expression<String>? segment,
     Expression<bool>? loyaltyEnabled,
@@ -9199,6 +9422,8 @@ class CustomersCompanion extends UpdateCompanion<Customer> {
       if (phone != null) 'phone': phone,
       if (address != null) 'address': address,
       if (balanceCents != null) 'balance_cents': balanceCents,
+      if (openingBalanceCents != null)
+        'opening_balance_cents': openingBalanceCents,
       if (currencyId != null) 'currency_id': currencyId,
       if (segment != null) 'segment': segment,
       if (loyaltyEnabled != null) 'loyalty_enabled': loyaltyEnabled,
@@ -9221,6 +9446,7 @@ class CustomersCompanion extends UpdateCompanion<Customer> {
     Value<String?>? phone,
     Value<String?>? address,
     Value<Decimal>? balanceCents,
+    Value<Decimal>? openingBalanceCents,
     Value<int>? currencyId,
     Value<String>? segment,
     Value<bool>? loyaltyEnabled,
@@ -9240,6 +9466,7 @@ class CustomersCompanion extends UpdateCompanion<Customer> {
       phone: phone ?? this.phone,
       address: address ?? this.address,
       balanceCents: balanceCents ?? this.balanceCents,
+      openingBalanceCents: openingBalanceCents ?? this.openingBalanceCents,
       currencyId: currencyId ?? this.currencyId,
       segment: segment ?? this.segment,
       loyaltyEnabled: loyaltyEnabled ?? this.loyaltyEnabled,
@@ -9275,6 +9502,13 @@ class CustomersCompanion extends UpdateCompanion<Customer> {
     if (balanceCents.present) {
       map['balance_cents'] = Variable<int>(
         $CustomersTable.$converterbalanceCents.toSql(balanceCents.value),
+      );
+    }
+    if (openingBalanceCents.present) {
+      map['opening_balance_cents'] = Variable<int>(
+        $CustomersTable.$converteropeningBalanceCents.toSql(
+          openingBalanceCents.value,
+        ),
       );
     }
     if (currencyId.present) {
@@ -9324,6 +9558,7 @@ class CustomersCompanion extends UpdateCompanion<Customer> {
           ..write('phone: $phone, ')
           ..write('address: $address, ')
           ..write('balanceCents: $balanceCents, ')
+          ..write('openingBalanceCents: $openingBalanceCents, ')
           ..write('currencyId: $currencyId, ')
           ..write('segment: $segment, ')
           ..write('loyaltyEnabled: $loyaltyEnabled, ')
@@ -12782,6 +13017,17 @@ class $LoyaltySettingsTableTable extends LoyaltySettingsTable
         ),
         defaultValue: const Constant(true),
       );
+  static const VerificationMeta _businessBirthdayDateMeta =
+      const VerificationMeta('businessBirthdayDate');
+  @override
+  late final GeneratedColumn<DateTime> businessBirthdayDate =
+      GeneratedColumn<DateTime>(
+        'business_birthday_date',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -12820,6 +13066,7 @@ class $LoyaltySettingsTableTable extends LoyaltySettingsTable
     minRedemptionPoints,
     maxRedemptionPercentBps,
     allowPointsRedemption,
+    businessBirthdayDate,
     createdAt,
     updatedAt,
   ];
@@ -12934,6 +13181,15 @@ class $LoyaltySettingsTableTable extends LoyaltySettingsTable
         ),
       );
     }
+    if (data.containsKey('business_birthday_date')) {
+      context.handle(
+        _businessBirthdayDateMeta,
+        businessBirthdayDate.isAcceptableOrUnknown(
+          data['business_birthday_date']!,
+          _businessBirthdayDateMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -13003,6 +13259,10 @@ class $LoyaltySettingsTableTable extends LoyaltySettingsTable
         DriftSqlType.bool,
         data['${effectivePrefix}allow_points_redemption'],
       )!,
+      businessBirthdayDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}business_birthday_date'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -13041,6 +13301,10 @@ class LoyaltySettings extends DataClass implements Insertable<LoyaltySettings> {
 
   /// Whether points redemption at checkout is enabled
   final bool allowPointsRedemption;
+
+  /// Business birthday date (month and day) for birthday bonus calculation
+  /// This is the business/company anniversary, not individual customer birthdays
+  final DateTime? businessBirthdayDate;
   final DateTime createdAt;
   final DateTime updatedAt;
   const LoyaltySettings({
@@ -13056,6 +13320,7 @@ class LoyaltySettings extends DataClass implements Insertable<LoyaltySettings> {
     required this.minRedemptionPoints,
     required this.maxRedemptionPercentBps,
     required this.allowPointsRedemption,
+    this.businessBirthdayDate,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -13076,6 +13341,9 @@ class LoyaltySettings extends DataClass implements Insertable<LoyaltySettings> {
     map['min_redemption_points'] = Variable<int>(minRedemptionPoints);
     map['max_redemption_percent_bps'] = Variable<int>(maxRedemptionPercentBps);
     map['allow_points_redemption'] = Variable<bool>(allowPointsRedemption);
+    if (!nullToAbsent || businessBirthdayDate != null) {
+      map['business_birthday_date'] = Variable<DateTime>(businessBirthdayDate);
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
@@ -13097,6 +13365,9 @@ class LoyaltySettings extends DataClass implements Insertable<LoyaltySettings> {
       minRedemptionPoints: Value(minRedemptionPoints),
       maxRedemptionPercentBps: Value(maxRedemptionPercentBps),
       allowPointsRedemption: Value(allowPointsRedemption),
+      businessBirthdayDate: businessBirthdayDate == null && nullToAbsent
+          ? const Value.absent()
+          : Value(businessBirthdayDate),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
     );
@@ -13130,6 +13401,9 @@ class LoyaltySettings extends DataClass implements Insertable<LoyaltySettings> {
       allowPointsRedemption: serializer.fromJson<bool>(
         json['allowPointsRedemption'],
       ),
+      businessBirthdayDate: serializer.fromJson<DateTime?>(
+        json['businessBirthdayDate'],
+      ),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
@@ -13152,6 +13426,9 @@ class LoyaltySettings extends DataClass implements Insertable<LoyaltySettings> {
         maxRedemptionPercentBps,
       ),
       'allowPointsRedemption': serializer.toJson<bool>(allowPointsRedemption),
+      'businessBirthdayDate': serializer.toJson<DateTime?>(
+        businessBirthdayDate,
+      ),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
@@ -13170,6 +13447,7 @@ class LoyaltySettings extends DataClass implements Insertable<LoyaltySettings> {
     int? minRedemptionPoints,
     int? maxRedemptionPercentBps,
     bool? allowPointsRedemption,
+    Value<DateTime?> businessBirthdayDate = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
   }) => LoyaltySettings(
@@ -13188,6 +13466,9 @@ class LoyaltySettings extends DataClass implements Insertable<LoyaltySettings> {
     maxRedemptionPercentBps:
         maxRedemptionPercentBps ?? this.maxRedemptionPercentBps,
     allowPointsRedemption: allowPointsRedemption ?? this.allowPointsRedemption,
+    businessBirthdayDate: businessBirthdayDate.present
+        ? businessBirthdayDate.value
+        : this.businessBirthdayDate,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
@@ -13225,6 +13506,9 @@ class LoyaltySettings extends DataClass implements Insertable<LoyaltySettings> {
       allowPointsRedemption: data.allowPointsRedemption.present
           ? data.allowPointsRedemption.value
           : this.allowPointsRedemption,
+      businessBirthdayDate: data.businessBirthdayDate.present
+          ? data.businessBirthdayDate.value
+          : this.businessBirthdayDate,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -13245,6 +13529,7 @@ class LoyaltySettings extends DataClass implements Insertable<LoyaltySettings> {
           ..write('minRedemptionPoints: $minRedemptionPoints, ')
           ..write('maxRedemptionPercentBps: $maxRedemptionPercentBps, ')
           ..write('allowPointsRedemption: $allowPointsRedemption, ')
+          ..write('businessBirthdayDate: $businessBirthdayDate, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -13265,6 +13550,7 @@ class LoyaltySettings extends DataClass implements Insertable<LoyaltySettings> {
     minRedemptionPoints,
     maxRedemptionPercentBps,
     allowPointsRedemption,
+    businessBirthdayDate,
     createdAt,
     updatedAt,
   );
@@ -13284,6 +13570,7 @@ class LoyaltySettings extends DataClass implements Insertable<LoyaltySettings> {
           other.minRedemptionPoints == this.minRedemptionPoints &&
           other.maxRedemptionPercentBps == this.maxRedemptionPercentBps &&
           other.allowPointsRedemption == this.allowPointsRedemption &&
+          other.businessBirthdayDate == this.businessBirthdayDate &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
 }
@@ -13301,6 +13588,7 @@ class LoyaltySettingsTableCompanion extends UpdateCompanion<LoyaltySettings> {
   final Value<int> minRedemptionPoints;
   final Value<int> maxRedemptionPercentBps;
   final Value<bool> allowPointsRedemption;
+  final Value<DateTime?> businessBirthdayDate;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   const LoyaltySettingsTableCompanion({
@@ -13316,6 +13604,7 @@ class LoyaltySettingsTableCompanion extends UpdateCompanion<LoyaltySettings> {
     this.minRedemptionPoints = const Value.absent(),
     this.maxRedemptionPercentBps = const Value.absent(),
     this.allowPointsRedemption = const Value.absent(),
+    this.businessBirthdayDate = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
   });
@@ -13332,6 +13621,7 @@ class LoyaltySettingsTableCompanion extends UpdateCompanion<LoyaltySettings> {
     this.minRedemptionPoints = const Value.absent(),
     this.maxRedemptionPercentBps = const Value.absent(),
     this.allowPointsRedemption = const Value.absent(),
+    this.businessBirthdayDate = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
   });
@@ -13348,6 +13638,7 @@ class LoyaltySettingsTableCompanion extends UpdateCompanion<LoyaltySettings> {
     Expression<int>? minRedemptionPoints,
     Expression<int>? maxRedemptionPercentBps,
     Expression<bool>? allowPointsRedemption,
+    Expression<DateTime>? businessBirthdayDate,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
   }) {
@@ -13369,6 +13660,8 @@ class LoyaltySettingsTableCompanion extends UpdateCompanion<LoyaltySettings> {
         'max_redemption_percent_bps': maxRedemptionPercentBps,
       if (allowPointsRedemption != null)
         'allow_points_redemption': allowPointsRedemption,
+      if (businessBirthdayDate != null)
+        'business_birthday_date': businessBirthdayDate,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
     });
@@ -13387,6 +13680,7 @@ class LoyaltySettingsTableCompanion extends UpdateCompanion<LoyaltySettings> {
     Value<int>? minRedemptionPoints,
     Value<int>? maxRedemptionPercentBps,
     Value<bool>? allowPointsRedemption,
+    Value<DateTime?>? businessBirthdayDate,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
   }) {
@@ -13406,6 +13700,7 @@ class LoyaltySettingsTableCompanion extends UpdateCompanion<LoyaltySettings> {
           maxRedemptionPercentBps ?? this.maxRedemptionPercentBps,
       allowPointsRedemption:
           allowPointsRedemption ?? this.allowPointsRedemption,
+      businessBirthdayDate: businessBirthdayDate ?? this.businessBirthdayDate,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -13456,6 +13751,11 @@ class LoyaltySettingsTableCompanion extends UpdateCompanion<LoyaltySettings> {
         allowPointsRedemption.value,
       );
     }
+    if (businessBirthdayDate.present) {
+      map['business_birthday_date'] = Variable<DateTime>(
+        businessBirthdayDate.value,
+      );
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -13480,6 +13780,7 @@ class LoyaltySettingsTableCompanion extends UpdateCompanion<LoyaltySettings> {
           ..write('minRedemptionPoints: $minRedemptionPoints, ')
           ..write('maxRedemptionPercentBps: $maxRedemptionPercentBps, ')
           ..write('allowPointsRedemption: $allowPointsRedemption, ')
+          ..write('businessBirthdayDate: $businessBirthdayDate, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -15116,6 +15417,30 @@ class $EmployeesTable extends Employees
     requiredDuringInsert: false,
     defaultValue: const Constant(2500),
   );
+  static const VerificationMeta _overtimeCalcTypeMeta = const VerificationMeta(
+    'overtimeCalcType',
+  );
+  @override
+  late final GeneratedColumn<String> overtimeCalcType = GeneratedColumn<String>(
+    'overtime_calc_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('hourly_rate'),
+  );
+  static const VerificationMeta _overtimeRateBpsMeta = const VerificationMeta(
+    'overtimeRateBps',
+  );
+  @override
+  late final GeneratedColumn<int> overtimeRateBps = GeneratedColumn<int>(
+    'overtime_rate_bps',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(15000),
+  );
   static const VerificationMeta _currencyIdMeta = const VerificationMeta(
     'currencyId',
   );
@@ -15251,6 +15576,8 @@ class $EmployeesTable extends Employees
     workingHoursPerDay,
     absenceDeductionRateBps,
     lateDeductionRateBps,
+    overtimeCalcType,
+    overtimeRateBps,
     currencyId,
     isActive,
     hireDate,
@@ -15416,6 +15743,24 @@ class $EmployeesTable extends Employees
         lateDeductionRateBps.isAcceptableOrUnknown(
           data['late_deduction_rate_bps']!,
           _lateDeductionRateBpsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('overtime_calc_type')) {
+      context.handle(
+        _overtimeCalcTypeMeta,
+        overtimeCalcType.isAcceptableOrUnknown(
+          data['overtime_calc_type']!,
+          _overtimeCalcTypeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('overtime_rate_bps')) {
+      context.handle(
+        _overtimeRateBpsMeta,
+        overtimeRateBps.isAcceptableOrUnknown(
+          data['overtime_rate_bps']!,
+          _overtimeRateBpsMeta,
         ),
       );
     }
@@ -15598,6 +15943,14 @@ class $EmployeesTable extends Employees
         DriftSqlType.int,
         data['${effectivePrefix}late_deduction_rate_bps'],
       )!,
+      overtimeCalcType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}overtime_calc_type'],
+      )!,
+      overtimeRateBps: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}overtime_rate_bps'],
+      )!,
       currencyId: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}currency_id'],
@@ -15715,6 +16068,12 @@ class Employee extends DataClass implements Insertable<Employee> {
 
   /// Late deduction rate in basis points (2500 = 25% of daily rate)
   final int lateDeductionRateBps;
+
+  /// Overtime calculation type: 'hourly_rate' (based on hourly salary), 'percentage' (% of daily rate), 'fixed' (fixed amount per hour)
+  final String overtimeCalcType;
+
+  /// Overtime rate in basis points (15000 = 150% of hourly rate for 'hourly_rate'/'percentage', or fixed cents for 'fixed')
+  final int overtimeRateBps;
   final int currencyId;
   final bool isActive;
   final DateTime? hireDate;
@@ -15753,6 +16112,8 @@ class Employee extends DataClass implements Insertable<Employee> {
     required this.workingHoursPerDay,
     required this.absenceDeductionRateBps,
     required this.lateDeductionRateBps,
+    required this.overtimeCalcType,
+    required this.overtimeRateBps,
     required this.currencyId,
     required this.isActive,
     this.hireDate,
@@ -15830,6 +16191,8 @@ class Employee extends DataClass implements Insertable<Employee> {
     map['working_hours_per_day'] = Variable<int>(workingHoursPerDay);
     map['absence_deduction_rate_bps'] = Variable<int>(absenceDeductionRateBps);
     map['late_deduction_rate_bps'] = Variable<int>(lateDeductionRateBps);
+    map['overtime_calc_type'] = Variable<String>(overtimeCalcType);
+    map['overtime_rate_bps'] = Variable<int>(overtimeRateBps);
     map['currency_id'] = Variable<int>(currencyId);
     map['is_active'] = Variable<bool>(isActive);
     if (!nullToAbsent || hireDate != null) {
@@ -15902,6 +16265,8 @@ class Employee extends DataClass implements Insertable<Employee> {
       workingHoursPerDay: Value(workingHoursPerDay),
       absenceDeductionRateBps: Value(absenceDeductionRateBps),
       lateDeductionRateBps: Value(lateDeductionRateBps),
+      overtimeCalcType: Value(overtimeCalcType),
+      overtimeRateBps: Value(overtimeRateBps),
       currencyId: Value(currencyId),
       isActive: Value(isActive),
       hireDate: hireDate == null && nullToAbsent
@@ -15960,6 +16325,8 @@ class Employee extends DataClass implements Insertable<Employee> {
       lateDeductionRateBps: serializer.fromJson<int>(
         json['lateDeductionRateBps'],
       ),
+      overtimeCalcType: serializer.fromJson<String>(json['overtimeCalcType']),
+      overtimeRateBps: serializer.fromJson<int>(json['overtimeRateBps']),
       currencyId: serializer.fromJson<int>(json['currencyId']),
       isActive: serializer.fromJson<bool>(json['isActive']),
       hireDate: serializer.fromJson<DateTime?>(json['hireDate']),
@@ -16003,6 +16370,8 @@ class Employee extends DataClass implements Insertable<Employee> {
         absenceDeductionRateBps,
       ),
       'lateDeductionRateBps': serializer.toJson<int>(lateDeductionRateBps),
+      'overtimeCalcType': serializer.toJson<String>(overtimeCalcType),
+      'overtimeRateBps': serializer.toJson<int>(overtimeRateBps),
       'currencyId': serializer.toJson<int>(currencyId),
       'isActive': serializer.toJson<bool>(isActive),
       'hireDate': serializer.toJson<DateTime?>(hireDate),
@@ -16040,6 +16409,8 @@ class Employee extends DataClass implements Insertable<Employee> {
     int? workingHoursPerDay,
     int? absenceDeductionRateBps,
     int? lateDeductionRateBps,
+    String? overtimeCalcType,
+    int? overtimeRateBps,
     int? currencyId,
     bool? isActive,
     Value<DateTime?> hireDate = const Value.absent(),
@@ -16082,6 +16453,8 @@ class Employee extends DataClass implements Insertable<Employee> {
     absenceDeductionRateBps:
         absenceDeductionRateBps ?? this.absenceDeductionRateBps,
     lateDeductionRateBps: lateDeductionRateBps ?? this.lateDeductionRateBps,
+    overtimeCalcType: overtimeCalcType ?? this.overtimeCalcType,
+    overtimeRateBps: overtimeRateBps ?? this.overtimeRateBps,
     currencyId: currencyId ?? this.currencyId,
     isActive: isActive ?? this.isActive,
     hireDate: hireDate.present ? hireDate.value : this.hireDate,
@@ -16148,6 +16521,12 @@ class Employee extends DataClass implements Insertable<Employee> {
       lateDeductionRateBps: data.lateDeductionRateBps.present
           ? data.lateDeductionRateBps.value
           : this.lateDeductionRateBps,
+      overtimeCalcType: data.overtimeCalcType.present
+          ? data.overtimeCalcType.value
+          : this.overtimeCalcType,
+      overtimeRateBps: data.overtimeRateBps.present
+          ? data.overtimeRateBps.value
+          : this.overtimeRateBps,
       currencyId: data.currencyId.present
           ? data.currencyId.value
           : this.currencyId,
@@ -16195,6 +16574,8 @@ class Employee extends DataClass implements Insertable<Employee> {
           ..write('workingHoursPerDay: $workingHoursPerDay, ')
           ..write('absenceDeductionRateBps: $absenceDeductionRateBps, ')
           ..write('lateDeductionRateBps: $lateDeductionRateBps, ')
+          ..write('overtimeCalcType: $overtimeCalcType, ')
+          ..write('overtimeRateBps: $overtimeRateBps, ')
           ..write('currencyId: $currencyId, ')
           ..write('isActive: $isActive, ')
           ..write('hireDate: $hireDate, ')
@@ -16234,6 +16615,8 @@ class Employee extends DataClass implements Insertable<Employee> {
     workingHoursPerDay,
     absenceDeductionRateBps,
     lateDeductionRateBps,
+    overtimeCalcType,
+    overtimeRateBps,
     currencyId,
     isActive,
     hireDate,
@@ -16272,6 +16655,8 @@ class Employee extends DataClass implements Insertable<Employee> {
           other.workingHoursPerDay == this.workingHoursPerDay &&
           other.absenceDeductionRateBps == this.absenceDeductionRateBps &&
           other.lateDeductionRateBps == this.lateDeductionRateBps &&
+          other.overtimeCalcType == this.overtimeCalcType &&
+          other.overtimeRateBps == this.overtimeRateBps &&
           other.currencyId == this.currencyId &&
           other.isActive == this.isActive &&
           other.hireDate == this.hireDate &&
@@ -16308,6 +16693,8 @@ class EmployeesCompanion extends UpdateCompanion<Employee> {
   final Value<int> workingHoursPerDay;
   final Value<int> absenceDeductionRateBps;
   final Value<int> lateDeductionRateBps;
+  final Value<String> overtimeCalcType;
+  final Value<int> overtimeRateBps;
   final Value<int> currencyId;
   final Value<bool> isActive;
   final Value<DateTime?> hireDate;
@@ -16342,6 +16729,8 @@ class EmployeesCompanion extends UpdateCompanion<Employee> {
     this.workingHoursPerDay = const Value.absent(),
     this.absenceDeductionRateBps = const Value.absent(),
     this.lateDeductionRateBps = const Value.absent(),
+    this.overtimeCalcType = const Value.absent(),
+    this.overtimeRateBps = const Value.absent(),
     this.currencyId = const Value.absent(),
     this.isActive = const Value.absent(),
     this.hireDate = const Value.absent(),
@@ -16377,6 +16766,8 @@ class EmployeesCompanion extends UpdateCompanion<Employee> {
     this.workingHoursPerDay = const Value.absent(),
     this.absenceDeductionRateBps = const Value.absent(),
     this.lateDeductionRateBps = const Value.absent(),
+    this.overtimeCalcType = const Value.absent(),
+    this.overtimeRateBps = const Value.absent(),
     required int currencyId,
     this.isActive = const Value.absent(),
     this.hireDate = const Value.absent(),
@@ -16413,6 +16804,8 @@ class EmployeesCompanion extends UpdateCompanion<Employee> {
     Expression<int>? workingHoursPerDay,
     Expression<int>? absenceDeductionRateBps,
     Expression<int>? lateDeductionRateBps,
+    Expression<String>? overtimeCalcType,
+    Expression<int>? overtimeRateBps,
     Expression<int>? currencyId,
     Expression<bool>? isActive,
     Expression<DateTime>? hireDate,
@@ -16454,6 +16847,8 @@ class EmployeesCompanion extends UpdateCompanion<Employee> {
         'absence_deduction_rate_bps': absenceDeductionRateBps,
       if (lateDeductionRateBps != null)
         'late_deduction_rate_bps': lateDeductionRateBps,
+      if (overtimeCalcType != null) 'overtime_calc_type': overtimeCalcType,
+      if (overtimeRateBps != null) 'overtime_rate_bps': overtimeRateBps,
       if (currencyId != null) 'currency_id': currencyId,
       if (isActive != null) 'is_active': isActive,
       if (hireDate != null) 'hire_date': hireDate,
@@ -16491,6 +16886,8 @@ class EmployeesCompanion extends UpdateCompanion<Employee> {
     Value<int>? workingHoursPerDay,
     Value<int>? absenceDeductionRateBps,
     Value<int>? lateDeductionRateBps,
+    Value<String>? overtimeCalcType,
+    Value<int>? overtimeRateBps,
     Value<int>? currencyId,
     Value<bool>? isActive,
     Value<DateTime?>? hireDate,
@@ -16528,6 +16925,8 @@ class EmployeesCompanion extends UpdateCompanion<Employee> {
       absenceDeductionRateBps:
           absenceDeductionRateBps ?? this.absenceDeductionRateBps,
       lateDeductionRateBps: lateDeductionRateBps ?? this.lateDeductionRateBps,
+      overtimeCalcType: overtimeCalcType ?? this.overtimeCalcType,
+      overtimeRateBps: overtimeRateBps ?? this.overtimeRateBps,
       currencyId: currencyId ?? this.currencyId,
       isActive: isActive ?? this.isActive,
       hireDate: hireDate ?? this.hireDate,
@@ -16637,6 +17036,12 @@ class EmployeesCompanion extends UpdateCompanion<Employee> {
         lateDeductionRateBps.value,
       );
     }
+    if (overtimeCalcType.present) {
+      map['overtime_calc_type'] = Variable<String>(overtimeCalcType.value);
+    }
+    if (overtimeRateBps.present) {
+      map['overtime_rate_bps'] = Variable<int>(overtimeRateBps.value);
+    }
     if (currencyId.present) {
       map['currency_id'] = Variable<int>(currencyId.value);
     }
@@ -16694,6 +17099,8 @@ class EmployeesCompanion extends UpdateCompanion<Employee> {
           ..write('workingHoursPerDay: $workingHoursPerDay, ')
           ..write('absenceDeductionRateBps: $absenceDeductionRateBps, ')
           ..write('lateDeductionRateBps: $lateDeductionRateBps, ')
+          ..write('overtimeCalcType: $overtimeCalcType, ')
+          ..write('overtimeRateBps: $overtimeRateBps, ')
           ..write('currencyId: $currencyId, ')
           ..write('isActive: $isActive, ')
           ..write('hireDate: $hireDate, ')
@@ -37937,6 +38344,8 @@ typedef $$UsersTableCreateCompanionBuilder =
       required String role,
       Value<int?> employeeId,
       Value<int> isActive,
+      Value<String?> securityQuestion,
+      Value<String?> securityAnswerHash,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<DateTime?> lastLoginAt,
@@ -37949,6 +38358,8 @@ typedef $$UsersTableUpdateCompanionBuilder =
       Value<String> role,
       Value<int?> employeeId,
       Value<int> isActive,
+      Value<String?> securityQuestion,
+      Value<String?> securityAnswerHash,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<DateTime?> lastLoginAt,
@@ -38139,6 +38550,16 @@ class $$UsersTableFilterComposer extends Composer<_$AppDatabase, $UsersTable> {
 
   ColumnFilters<int> get isActive => $composableBuilder(
     column: $table.isActive,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get securityQuestion => $composableBuilder(
+    column: $table.securityQuestion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get securityAnswerHash => $composableBuilder(
+    column: $table.securityAnswerHash,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -38375,6 +38796,16 @@ class $$UsersTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get securityQuestion => $composableBuilder(
+    column: $table.securityQuestion,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get securityAnswerHash => $composableBuilder(
+    column: $table.securityAnswerHash,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -38421,6 +38852,16 @@ class $$UsersTableAnnotationComposer
 
   GeneratedColumn<int> get isActive =>
       $composableBuilder(column: $table.isActive, builder: (column) => column);
+
+  GeneratedColumn<String> get securityQuestion => $composableBuilder(
+    column: $table.securityQuestion,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get securityAnswerHash => $composableBuilder(
+    column: $table.securityAnswerHash,
+    builder: (column) => column,
+  );
 
   GeneratedColumnWithTypeConverter<DateTime, int> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -38655,6 +39096,8 @@ class $$UsersTableTableManager
                 Value<String> role = const Value.absent(),
                 Value<int?> employeeId = const Value.absent(),
                 Value<int> isActive = const Value.absent(),
+                Value<String?> securityQuestion = const Value.absent(),
+                Value<String?> securityAnswerHash = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<DateTime?> lastLoginAt = const Value.absent(),
@@ -38665,6 +39108,8 @@ class $$UsersTableTableManager
                 role: role,
                 employeeId: employeeId,
                 isActive: isActive,
+                securityQuestion: securityQuestion,
+                securityAnswerHash: securityAnswerHash,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 lastLoginAt: lastLoginAt,
@@ -38677,6 +39122,8 @@ class $$UsersTableTableManager
                 required String role,
                 Value<int?> employeeId = const Value.absent(),
                 Value<int> isActive = const Value.absent(),
+                Value<String?> securityQuestion = const Value.absent(),
+                Value<String?> securityAnswerHash = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<DateTime?> lastLoginAt = const Value.absent(),
@@ -38687,6 +39134,8 @@ class $$UsersTableTableManager
                 role: role,
                 employeeId: employeeId,
                 isActive: isActive,
+                securityQuestion: securityQuestion,
+                securityAnswerHash: securityAnswerHash,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 lastLoginAt: lastLoginAt,
@@ -42629,6 +43078,7 @@ typedef $$SuppliersTableCreateCompanionBuilder =
       Value<String?> phone,
       Value<String?> address,
       Value<Decimal> balanceCents,
+      Value<Decimal> openingBalanceCents,
       required int currencyId,
       Value<bool> isActive,
       Value<DateTime> createdAt,
@@ -42642,6 +43092,7 @@ typedef $$SuppliersTableUpdateCompanionBuilder =
       Value<String?> phone,
       Value<String?> address,
       Value<Decimal> balanceCents,
+      Value<Decimal> openingBalanceCents,
       Value<int> currencyId,
       Value<bool> isActive,
       Value<DateTime> createdAt,
@@ -42776,6 +43227,12 @@ class $$SuppliersTableFilterComposer
         column: $table.balanceCents,
         builder: (column) => ColumnWithTypeConverterFilters(column),
       );
+
+  ColumnWithTypeConverterFilters<Decimal, Decimal, int>
+  get openingBalanceCents => $composableBuilder(
+    column: $table.openingBalanceCents,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
+  );
 
   ColumnFilters<bool> get isActive => $composableBuilder(
     column: $table.isActive,
@@ -42930,6 +43387,11 @@ class $$SuppliersTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get openingBalanceCents => $composableBuilder(
+    column: $table.openingBalanceCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get isActive => $composableBuilder(
     column: $table.isActive,
     builder: (column) => ColumnOrderings(column),
@@ -42996,6 +43458,12 @@ class $$SuppliersTableAnnotationComposer
   GeneratedColumnWithTypeConverter<Decimal, int> get balanceCents =>
       $composableBuilder(
         column: $table.balanceCents,
+        builder: (column) => column,
+      );
+
+  GeneratedColumnWithTypeConverter<Decimal, int> get openingBalanceCents =>
+      $composableBuilder(
+        column: $table.openingBalanceCents,
         builder: (column) => column,
       );
 
@@ -43147,6 +43615,7 @@ class $$SuppliersTableTableManager
                 Value<String?> phone = const Value.absent(),
                 Value<String?> address = const Value.absent(),
                 Value<Decimal> balanceCents = const Value.absent(),
+                Value<Decimal> openingBalanceCents = const Value.absent(),
                 Value<int> currencyId = const Value.absent(),
                 Value<bool> isActive = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -43158,6 +43627,7 @@ class $$SuppliersTableTableManager
                 phone: phone,
                 address: address,
                 balanceCents: balanceCents,
+                openingBalanceCents: openingBalanceCents,
                 currencyId: currencyId,
                 isActive: isActive,
                 createdAt: createdAt,
@@ -43171,6 +43641,7 @@ class $$SuppliersTableTableManager
                 Value<String?> phone = const Value.absent(),
                 Value<String?> address = const Value.absent(),
                 Value<Decimal> balanceCents = const Value.absent(),
+                Value<Decimal> openingBalanceCents = const Value.absent(),
                 required int currencyId,
                 Value<bool> isActive = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -43182,6 +43653,7 @@ class $$SuppliersTableTableManager
                 phone: phone,
                 address: address,
                 balanceCents: balanceCents,
+                openingBalanceCents: openingBalanceCents,
                 currencyId: currencyId,
                 isActive: isActive,
                 createdAt: createdAt,
@@ -47070,6 +47542,7 @@ typedef $$CustomersTableCreateCompanionBuilder =
       Value<String?> phone,
       Value<String?> address,
       Value<Decimal> balanceCents,
+      Value<Decimal> openingBalanceCents,
       required int currencyId,
       Value<String> segment,
       Value<bool> loyaltyEnabled,
@@ -47090,6 +47563,7 @@ typedef $$CustomersTableUpdateCompanionBuilder =
       Value<String?> phone,
       Value<String?> address,
       Value<Decimal> balanceCents,
+      Value<Decimal> openingBalanceCents,
       Value<int> currencyId,
       Value<String> segment,
       Value<bool> loyaltyEnabled,
@@ -47232,6 +47706,12 @@ class $$CustomersTableFilterComposer
         column: $table.balanceCents,
         builder: (column) => ColumnWithTypeConverterFilters(column),
       );
+
+  ColumnWithTypeConverterFilters<Decimal, Decimal, int>
+  get openingBalanceCents => $composableBuilder(
+    column: $table.openingBalanceCents,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
+  );
 
   ColumnFilters<String> get segment => $composableBuilder(
     column: $table.segment,
@@ -47415,6 +47895,11 @@ class $$CustomersTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get openingBalanceCents => $composableBuilder(
+    column: $table.openingBalanceCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get segment => $composableBuilder(
     column: $table.segment,
     builder: (column) => ColumnOrderings(column),
@@ -47534,6 +48019,12 @@ class $$CustomersTableAnnotationComposer
   GeneratedColumnWithTypeConverter<Decimal, int> get balanceCents =>
       $composableBuilder(
         column: $table.balanceCents,
+        builder: (column) => column,
+      );
+
+  GeneratedColumnWithTypeConverter<Decimal, int> get openingBalanceCents =>
+      $composableBuilder(
+        column: $table.openingBalanceCents,
         builder: (column) => column,
       );
 
@@ -47712,6 +48203,7 @@ class $$CustomersTableTableManager
                 Value<String?> phone = const Value.absent(),
                 Value<String?> address = const Value.absent(),
                 Value<Decimal> balanceCents = const Value.absent(),
+                Value<Decimal> openingBalanceCents = const Value.absent(),
                 Value<int> currencyId = const Value.absent(),
                 Value<String> segment = const Value.absent(),
                 Value<bool> loyaltyEnabled = const Value.absent(),
@@ -47730,6 +48222,7 @@ class $$CustomersTableTableManager
                 phone: phone,
                 address: address,
                 balanceCents: balanceCents,
+                openingBalanceCents: openingBalanceCents,
                 currencyId: currencyId,
                 segment: segment,
                 loyaltyEnabled: loyaltyEnabled,
@@ -47750,6 +48243,7 @@ class $$CustomersTableTableManager
                 Value<String?> phone = const Value.absent(),
                 Value<String?> address = const Value.absent(),
                 Value<Decimal> balanceCents = const Value.absent(),
+                Value<Decimal> openingBalanceCents = const Value.absent(),
                 required int currencyId,
                 Value<String> segment = const Value.absent(),
                 Value<bool> loyaltyEnabled = const Value.absent(),
@@ -47768,6 +48262,7 @@ class $$CustomersTableTableManager
                 phone: phone,
                 address: address,
                 balanceCents: balanceCents,
+                openingBalanceCents: openingBalanceCents,
                 currencyId: currencyId,
                 segment: segment,
                 loyaltyEnabled: loyaltyEnabled,
@@ -49706,6 +50201,7 @@ typedef $$LoyaltySettingsTableTableCreateCompanionBuilder =
       Value<int> minRedemptionPoints,
       Value<int> maxRedemptionPercentBps,
       Value<bool> allowPointsRedemption,
+      Value<DateTime?> businessBirthdayDate,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
     });
@@ -49723,6 +50219,7 @@ typedef $$LoyaltySettingsTableTableUpdateCompanionBuilder =
       Value<int> minRedemptionPoints,
       Value<int> maxRedemptionPercentBps,
       Value<bool> allowPointsRedemption,
+      Value<DateTime?> businessBirthdayDate,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
     });
@@ -49793,6 +50290,11 @@ class $$LoyaltySettingsTableTableFilterComposer
 
   ColumnFilters<bool> get allowPointsRedemption => $composableBuilder(
     column: $table.allowPointsRedemption,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get businessBirthdayDate => $composableBuilder(
+    column: $table.businessBirthdayDate,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -49876,6 +50378,11 @@ class $$LoyaltySettingsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<DateTime> get businessBirthdayDate => $composableBuilder(
+    column: $table.businessBirthdayDate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -49952,6 +50459,11 @@ class $$LoyaltySettingsTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<DateTime> get businessBirthdayDate => $composableBuilder(
+    column: $table.businessBirthdayDate,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -50014,6 +50526,7 @@ class $$LoyaltySettingsTableTableTableManager
                 Value<int> minRedemptionPoints = const Value.absent(),
                 Value<int> maxRedemptionPercentBps = const Value.absent(),
                 Value<bool> allowPointsRedemption = const Value.absent(),
+                Value<DateTime?> businessBirthdayDate = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
               }) => LoyaltySettingsTableCompanion(
@@ -50029,6 +50542,7 @@ class $$LoyaltySettingsTableTableTableManager
                 minRedemptionPoints: minRedemptionPoints,
                 maxRedemptionPercentBps: maxRedemptionPercentBps,
                 allowPointsRedemption: allowPointsRedemption,
+                businessBirthdayDate: businessBirthdayDate,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
               ),
@@ -50046,6 +50560,7 @@ class $$LoyaltySettingsTableTableTableManager
                 Value<int> minRedemptionPoints = const Value.absent(),
                 Value<int> maxRedemptionPercentBps = const Value.absent(),
                 Value<bool> allowPointsRedemption = const Value.absent(),
+                Value<DateTime?> businessBirthdayDate = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
               }) => LoyaltySettingsTableCompanion.insert(
@@ -50061,6 +50576,7 @@ class $$LoyaltySettingsTableTableTableManager
                 minRedemptionPoints: minRedemptionPoints,
                 maxRedemptionPercentBps: maxRedemptionPercentBps,
                 allowPointsRedemption: allowPointsRedemption,
+                businessBirthdayDate: businessBirthdayDate,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
               ),
@@ -51083,6 +51599,8 @@ typedef $$EmployeesTableCreateCompanionBuilder =
       Value<int> workingHoursPerDay,
       Value<int> absenceDeductionRateBps,
       Value<int> lateDeductionRateBps,
+      Value<String> overtimeCalcType,
+      Value<int> overtimeRateBps,
       required int currencyId,
       Value<bool> isActive,
       Value<DateTime?> hireDate,
@@ -51119,6 +51637,8 @@ typedef $$EmployeesTableUpdateCompanionBuilder =
       Value<int> workingHoursPerDay,
       Value<int> absenceDeductionRateBps,
       Value<int> lateDeductionRateBps,
+      Value<String> overtimeCalcType,
+      Value<int> overtimeRateBps,
       Value<int> currencyId,
       Value<bool> isActive,
       Value<DateTime?> hireDate,
@@ -51453,6 +51973,16 @@ class $$EmployeesTableFilterComposer
 
   ColumnFilters<int> get lateDeductionRateBps => $composableBuilder(
     column: $table.lateDeductionRateBps,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get overtimeCalcType => $composableBuilder(
+    column: $table.overtimeCalcType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get overtimeRateBps => $composableBuilder(
+    column: $table.overtimeRateBps,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -51860,6 +52390,16 @@ class $$EmployeesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get overtimeCalcType => $composableBuilder(
+    column: $table.overtimeCalcType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get overtimeRateBps => $composableBuilder(
+    column: $table.overtimeRateBps,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get isActive => $composableBuilder(
     column: $table.isActive,
     builder: (column) => ColumnOrderings(column),
@@ -52074,6 +52614,16 @@ class $$EmployeesTableAnnotationComposer
 
   GeneratedColumn<int> get lateDeductionRateBps => $composableBuilder(
     column: $table.lateDeductionRateBps,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get overtimeCalcType => $composableBuilder(
+    column: $table.overtimeCalcType,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get overtimeRateBps => $composableBuilder(
+    column: $table.overtimeRateBps,
     builder: (column) => column,
   );
 
@@ -52417,6 +52967,8 @@ class $$EmployeesTableTableManager
                 Value<int> workingHoursPerDay = const Value.absent(),
                 Value<int> absenceDeductionRateBps = const Value.absent(),
                 Value<int> lateDeductionRateBps = const Value.absent(),
+                Value<String> overtimeCalcType = const Value.absent(),
+                Value<int> overtimeRateBps = const Value.absent(),
                 Value<int> currencyId = const Value.absent(),
                 Value<bool> isActive = const Value.absent(),
                 Value<DateTime?> hireDate = const Value.absent(),
@@ -52451,6 +53003,8 @@ class $$EmployeesTableTableManager
                 workingHoursPerDay: workingHoursPerDay,
                 absenceDeductionRateBps: absenceDeductionRateBps,
                 lateDeductionRateBps: lateDeductionRateBps,
+                overtimeCalcType: overtimeCalcType,
+                overtimeRateBps: overtimeRateBps,
                 currencyId: currencyId,
                 isActive: isActive,
                 hireDate: hireDate,
@@ -52487,6 +53041,8 @@ class $$EmployeesTableTableManager
                 Value<int> workingHoursPerDay = const Value.absent(),
                 Value<int> absenceDeductionRateBps = const Value.absent(),
                 Value<int> lateDeductionRateBps = const Value.absent(),
+                Value<String> overtimeCalcType = const Value.absent(),
+                Value<int> overtimeRateBps = const Value.absent(),
                 required int currencyId,
                 Value<bool> isActive = const Value.absent(),
                 Value<DateTime?> hireDate = const Value.absent(),
@@ -52521,6 +53077,8 @@ class $$EmployeesTableTableManager
                 workingHoursPerDay: workingHoursPerDay,
                 absenceDeductionRateBps: absenceDeductionRateBps,
                 lateDeductionRateBps: lateDeductionRateBps,
+                overtimeCalcType: overtimeCalcType,
+                overtimeRateBps: overtimeRateBps,
                 currencyId: currencyId,
                 isActive: isActive,
                 hireDate: hireDate,

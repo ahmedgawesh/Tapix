@@ -125,6 +125,14 @@ void main() {
       final currencies = await database.select(database.currencies).get();
       final currencyId = currencies.first.id;
 
+      // Create two sizes so each variant has a distinct (product_id, color_id, size_id) tuple
+      final sizeId1 = await database.into(database.sizes).insert(
+        SizesCompanion.insert(name: 'Small', sortOrder: const Value(1)),
+      );
+      final sizeId2 = await database.into(database.sizes).insert(
+        SizesCompanion.insert(name: 'Medium', sortOrder: const Value(2)),
+      );
+
       final productId = await database.into(database.products).insert(
         ProductsCompanion.insert(
           sku: const Value<String?>('VAR-PRODUCT'),
@@ -140,6 +148,7 @@ void main() {
         ProductVariantsCompanion.insert(
           productId: productId,
           sku: const Value<String?>('VAR-001'),
+          sizeId: Value(sizeId1),
           costCents: Decimal.fromInt(0),
           priceCents: Decimal.fromInt(0),
         ),
@@ -149,6 +158,7 @@ void main() {
         ProductVariantsCompanion.insert(
           productId: productId,
           sku: const Value<String?>('VAR-002'),
+          sizeId: Value(sizeId2),
           costCents: Decimal.fromInt(0),
           priceCents: Decimal.fromInt(0),
         ),

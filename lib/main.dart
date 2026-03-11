@@ -1,6 +1,10 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:easy_localization/easy_localization.dart';
+import 'package:firebase_core/firebase_core.dart';
+import '../firebase_options.dart';
+import 'core/services/crashlytics_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -17,30 +21,51 @@ import 'features/auth/auth.dart';
 import 'core/services/currency_service.dart';
 import 'core/services/logging_service.dart';
 import 'core/bloc/simple_bloc_observer.dart';
+import 'core/widgets/app_error_widget.dart';
 import 'features/settings/presentation/bloc/company_bloc.dart';
+import 'features/settings/presentation/bloc/app_settings_bloc.dart';
+import 'features/subscription/subscription.dart';
+import 'core/services/revenuecat_service.dart';
 
 void main() {
   runZonedGuarded(() async {
     WidgetsFlutterBinding.ensureInitialized();
     await EasyLocalization.ensureInitialized();
 
+    // Initialize Firebase (not supported on Linux)
+    if (!Platform.isLinux) {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+    }
+
+    // Initialize Crashlytics
+    final crashlytics = CrashlyticsService.instance;
+    await crashlytics.initialize();
+
     Bloc.observer = SimpleBlocObserver();
 
+    // Flutter framework errors
     FlutterError.onError = (details) {
       LoggingService.error(
         'FlutterError.onError',
         error: details.exception,
         stackTrace: details.stack,
       );
+      // Report to Crashlytics
+      crashlytics.recordFlutterFatalError(details);
       FlutterError.presentError(details);
     };
 
+    // Platform dispatcher errors (async errors not caught by Flutter)
     WidgetsBinding.instance.platformDispatcher.onError = (error, stackTrace) {
       LoggingService.error(
         'PlatformDispatcher.onError',
         error: error,
         stackTrace: stackTrace,
       );
+      // Report to Crashlytics
+      crashlytics.recordError(error, stackTrace: stackTrace, fatal: true);
       return true;
     };
 
@@ -50,10 +75,19 @@ void main() {
         error: details.exception,
         stackTrace: details.stack,
       );
-      return ErrorWidget(details.exception);
+      return AppErrorWidget(details: details);
     };
 
     await di.init();
+
+    // Initialize RevenueCat
+    try {
+      await RevenueCatService.instance.initialize();
+      // Initialize the subscription bloc to start listening for updates
+      di.sl<SubscriptionBloc>().add(const SubscriptionInitialize());
+    } catch (e) {
+      LoggingService.error('Failed to initialize RevenueCat', error: e);
+    }
 
     final localizationService = di.sl<LocalizationService>();
     final startLocale = localizationService.getLocale();
@@ -73,6 +107,12 @@ void main() {
       'runZonedGuarded',
       error: error,
       stackTrace: stackTrace,
+    );
+    // Report uncaught errors to Crashlytics
+    CrashlyticsService.instance.recordError(
+      error,
+      stackTrace: stackTrace,
+      fatal: true,
     );
   });
 }
@@ -130,7 +170,9 @@ class _TapixAppState extends State<TapixApp> {
           BlocProvider(create: (_) => di.sl<LocalizationBloc>()),
           BlocProvider(create: (_) => di.sl<CurrencyBloc>()),
           BlocProvider(create: (_) => di.sl<CompanyBloc>()),
+          BlocProvider.value(value: di.sl<AppSettingsBloc>()),
           BlocProvider.value(value: authBloc),
+          BlocProvider.value(value: di.sl<SubscriptionBloc>()),
         ],
         child: BlocBuilder<ThemeBloc, RealtimeState<ThemeMode>>(
           builder: (context, themeState) {

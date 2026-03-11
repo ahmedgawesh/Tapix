@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "970698687113",
+    "project_id": "tapix-1d5fa",
+    "storage_bucket": "tapix-1d5fa.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:970698687113:android:f615ada00ed2c6d0167c58",
+        "android_client_info": {
+          "package_name": "com.tapix.pos"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBLo84R-IgUV5I1wzqR-jqOHYbt-v1h62Q"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

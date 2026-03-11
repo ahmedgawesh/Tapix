@@ -119,10 +119,12 @@ class SupplierAgingReportData {
 class SupplierAgingReportBloc
     extends RealtimeBloc<SupplierAgingReportData, SupplierAgingReportEvent> {
   final AppDatabase _db;
-  ReportDateRange _dateRange = ReportDateRange.thisMonth();
+  ReportDateRange _dateRange;
   SupplierAgingSortType _sort = SupplierAgingSortType.totalDesc;
 
-  SupplierAgingReportBloc(this._db) : super(const RealtimeLoading());
+  SupplierAgingReportBloc(this._db, {String defaultDateRange = 'month'})
+      : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+        super(const RealtimeLoading());
 
   ReportDateRange get dateRange => _dateRange;
 
@@ -224,73 +226,136 @@ class SupplierAgingReportBloc
     return list;
   }
 
+  /// Aging report: derive net balance from transactions (not cached balance_cents),
+  /// then age the outstanding amount using FIFO — payments retire the oldest
+  /// purchases first. Opening balance is treated as the oldest debt (>90 days).
   Future<List<SupplierAgingItem>> _loadAgingData() async {
-    // Aging buckets are calculated relative to "now", not the date range.
-    // The date range filters which transactions are included in the aging
-    // calculation (only transactions up to the end date are considered).
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day, 23, 59, 59);
-    final days30 = today.subtract(const Duration(days: 30));
-    final days60 = today.subtract(const Duration(days: 60));
-    final days90 = today.subtract(const Duration(days: 90));
+    final d30 = today.subtract(const Duration(days: 30));
+    final d60 = today.subtract(const Duration(days: 60));
+    final d90 = today.subtract(const Duration(days: 90));
 
-    // Use the date range end date as the cutoff for which transactions to include
-    final endIso = _dateRange.endDate.toIso8601String();
-
-    final rows = await _db.customSelect(
+    // Step 1: Get all active suppliers with their opening balances
+    final supplierRows = await _db.customSelect(
       '''
-      -- Aging buckets based on days overdue (not transaction date)
-      -- Current: 0 days overdue (not due yet)
-      -- 1-30: 1-30 days overdue
-      -- 31-60: 31-60 days overdue  
-      -- 61-90: 61-90 days overdue
-      -- 90+: 91+ days overdue
-      SELECT 
-        s.id AS supplier_id,
-        s.name AS supplier_name,
-        s.phone AS phone,
-        s.email AS email,
-        COALESCE(SUM(CASE WHEN st.transaction_date >= ? THEN st.amount_cents ELSE 0 END), 0) AS current_cents,
-        COALESCE(SUM(CASE WHEN st.transaction_date >= ? AND st.transaction_date < ? THEN st.amount_cents ELSE 0 END), 0) AS days_30_cents,
-        COALESCE(SUM(CASE WHEN st.transaction_date >= ? AND st.transaction_date < ? THEN st.amount_cents ELSE 0 END), 0) AS days_60_cents,
-        COALESCE(SUM(CASE WHEN st.transaction_date >= ? AND st.transaction_date < ? THEN st.amount_cents ELSE 0 END), 0) AS days_90_cents,
-        COALESCE(SUM(CASE WHEN st.transaction_date < ? THEN st.amount_cents ELSE 0 END), 0) AS over_90_cents,
-        COALESCE(SUM(st.amount_cents), 0) AS total_cents
+      SELECT s.id, s.name, s.phone, s.email, s.opening_balance_cents
       FROM suppliers s
-      LEFT JOIN supplier_transactions st ON st.supplier_id = s.id
-        AND st.transaction_date <= ?
       WHERE s.is_active = 1
-      GROUP BY s.id
-      HAVING total_cents > 0
-      ORDER BY total_cents DESC
       ''',
-      variables: [
-        Variable.withString(today.toIso8601String()),
-        Variable.withString(days30.toIso8601String()),
-        Variable.withString(today.toIso8601String()),
-        Variable.withString(days60.toIso8601String()),
-        Variable.withString(days30.toIso8601String()),
-        Variable.withString(days90.toIso8601String()),
-        Variable.withString(days60.toIso8601String()),
-        Variable.withString(days90.toIso8601String()),
-        Variable.withString(endIso),
-      ],
-      readsFrom: {_db.suppliers, _db.supplierTransactions},
+      readsFrom: {_db.suppliers},
     ).get();
 
-    return rows.map((row) {
-      return SupplierAgingItem(
-        supplierId: row.read<int>('supplier_id'),
-        supplierName: row.read<String>('supplier_name'),
-        phone: row.readNullable<String>('phone'),
-        email: row.readNullable<String>('email'),
-        currentCents: row.read<int>('current_cents'),
-        days30Cents: row.read<int>('days_30_cents'),
-        days60Cents: row.read<int>('days_60_cents'),
-        days90Cents: row.read<int>('days_90_cents'),
-        over90Cents: row.read<int>('over_90_cents'),
-        totalCents: row.read<int>('total_cents'),
-      );
-    }).toList();
+    final items = <SupplierAgingItem>[];
+
+    for (final sRow in supplierRows) {
+      final supplierId = sRow.read<int>('id');
+      final openingBalance = sRow.read<int>('opening_balance_cents');
+
+      // Step 2: Get purchase amounts bucketed by age for this supplier
+      // Buckets: current (0-30d), 31-60d, 61-90d, 90+d
+      final bucketRows = await _db.customSelect(
+        '''
+        SELECT
+          COALESCE(SUM(CASE WHEN st.transaction_date >= ? THEN st.amount_cents ELSE 0 END), 0) AS bucket_current,
+          COALESCE(SUM(CASE WHEN st.transaction_date >= ? AND st.transaction_date < ? THEN st.amount_cents ELSE 0 END), 0) AS bucket_30,
+          COALESCE(SUM(CASE WHEN st.transaction_date >= ? AND st.transaction_date < ? THEN st.amount_cents ELSE 0 END), 0) AS bucket_60,
+          COALESCE(SUM(CASE WHEN st.transaction_date < ? THEN st.amount_cents ELSE 0 END), 0) AS bucket_over90
+        FROM supplier_transactions st
+        WHERE st.supplier_id = ?
+          AND st.transaction_type = 'purchase'
+        ''',
+        variables: [
+          Variable.withString(d30.toIso8601String()),   // current: >= d30
+          Variable.withString(d60.toIso8601String()),   // 31-60: >= d60
+          Variable.withString(d30.toIso8601String()),   //        AND < d30
+          Variable.withString(d90.toIso8601String()),   // 61-90: >= d90
+          Variable.withString(d60.toIso8601String()),   //        AND < d60
+          Variable.withString(d90.toIso8601String()),   // over90: < d90
+          Variable.withInt(supplierId),
+        ],
+        readsFrom: {_db.supplierTransactions},
+      ).getSingle();
+
+      // Step 3: Get total credits (payments + discounts + returns) for this supplier
+      final creditRow = await _db.customSelect(
+        '''
+        SELECT COALESCE(SUM(ABS(st.amount_cents)), 0) AS total_credits
+        FROM supplier_transactions st
+        WHERE st.supplier_id = ?
+          AND st.transaction_type IN ('payment', 'discount', 'credit_note', 'refund')
+        ''',
+        variables: [Variable.withInt(supplierId)],
+        readsFrom: {_db.supplierTransactions},
+      ).getSingle();
+
+      final bucketCurrent = bucketRows.read<int>('bucket_current');
+      final bucket30 = bucketRows.read<int>('bucket_30');
+      final bucket60 = bucketRows.read<int>('bucket_60');
+      final bucketOver90 = bucketRows.read<int>('bucket_over90');
+      final totalCredits = creditRow.read<int>('total_credits');
+
+      // Step 4: FIFO aging — payments retire oldest debt first.
+      // Buckets from oldest to newest: opening > over90 > 60 > 30 > current
+      var remaining = totalCredits;
+
+      // Opening balance is the oldest debt
+      int agedOpening = openingBalance > 0 ? openingBalance : 0;
+      if (remaining > 0 && agedOpening > 0) {
+        final applied = remaining < agedOpening ? remaining : agedOpening;
+        agedOpening -= applied;
+        remaining -= applied;
+      }
+
+      int agedOver90 = bucketOver90 > 0 ? bucketOver90 : 0;
+      if (remaining > 0 && agedOver90 > 0) {
+        final applied = remaining < agedOver90 ? remaining : agedOver90;
+        agedOver90 -= applied;
+        remaining -= applied;
+      }
+
+      int aged60 = bucket60 > 0 ? bucket60 : 0;
+      if (remaining > 0 && aged60 > 0) {
+        final applied = remaining < aged60 ? remaining : aged60;
+        aged60 -= applied;
+        remaining -= applied;
+      }
+
+      int aged30 = bucket30 > 0 ? bucket30 : 0;
+      if (remaining > 0 && aged30 > 0) {
+        final applied = remaining < aged30 ? remaining : aged30;
+        aged30 -= applied;
+        remaining -= applied;
+      }
+
+      int agedCurrent = bucketCurrent > 0 ? bucketCurrent : 0;
+      if (remaining > 0 && agedCurrent > 0) {
+        final applied = remaining < agedCurrent ? remaining : agedCurrent;
+        agedCurrent -= applied;
+        remaining -= applied;
+      }
+
+      // Combine opening balance into the over-90 bucket
+      final finalOver90 = agedOpening + agedOver90;
+      final totalOutstanding = agedCurrent + aged30 + aged60 + finalOver90;
+
+      // Only include suppliers with outstanding balance > 0
+      if (totalOutstanding > 0) {
+        items.add(SupplierAgingItem(
+          supplierId: supplierId,
+          supplierName: sRow.read<String>('name'),
+          phone: sRow.readNullable<String>('phone'),
+          email: sRow.readNullable<String>('email'),
+          currentCents: agedCurrent,
+          days30Cents: aged30,
+          days60Cents: aged60,
+          days90Cents: 0,
+          over90Cents: finalOver90,
+          totalCents: totalOutstanding,
+        ));
+      }
+    }
+
+    return items;
   }
 }

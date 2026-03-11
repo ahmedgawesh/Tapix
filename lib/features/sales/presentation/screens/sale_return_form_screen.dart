@@ -74,7 +74,21 @@ class _SaleReturnFormView extends StatelessWidget {
           prev.isSuccess != curr.isSuccess || prev.error != curr.error,
       listener: (context, state) {
         if (state.isSuccess) {
-          _showReturnSavedDialog(context);
+          // Capture bloc state before navigating away
+          final stateSnapshot = context.read<SaleReturnFormBloc>().state;
+          // Navigate back immediately to prevent duplicate submissions
+          if (context.canPop()) {
+            context.pop();
+          } else {
+            context.go('/sales');
+          }
+          // Show print/share dialog after navigation completes
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            final nav = Navigator.of(context, rootNavigator: true);
+            if (nav.context.mounted) {
+              _showReturnSavedOverlay(nav.context, stateSnapshot);
+            }
+          });
         }
         if (state.error != null) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -117,13 +131,14 @@ class _SaleReturnFormView extends StatelessWidget {
   }
 
   // ═══════════════════════════════════════════════════════
-  // RETURN SAVED DIALOG
+  // RETURN SAVED OVERLAY (Print / Share / Finish)
+  // Shown AFTER navigating back to the sales list.
   // ═══════════════════════════════════════════════════════
-  void _showReturnSavedDialog(BuildContext context) {
+  void _showReturnSavedOverlay(BuildContext context, SaleReturnFormState returnState) {
     final theme = Theme.of(context);
     showDialog<void>(
       context: context,
-      barrierDismissible: false,
+      barrierDismissible: true,
       builder: (ctx) {
         return AlertDialog(
           content: Column(
@@ -150,8 +165,7 @@ class _SaleReturnFormView extends StatelessWidget {
               label: Text('sales.print_invoice'.tr()),
               onPressed: () async {
                 Navigator.pop(ctx);
-                await _printOrShareReturn(context, share: false);
-                if (context.mounted) context.pop();
+                await _printOrShareReturnFromState(context, returnState, share: false);
               },
             ),
             TextButton.icon(
@@ -159,8 +173,7 @@ class _SaleReturnFormView extends StatelessWidget {
               label: Text('sales.share_invoice'.tr()),
               onPressed: () async {
                 Navigator.pop(ctx);
-                await _printOrShareReturn(context, share: true);
-                if (context.mounted) context.pop();
+                await _printOrShareReturnFromState(context, returnState, share: true);
               },
             ),
             FilledButton.icon(
@@ -168,7 +181,6 @@ class _SaleReturnFormView extends StatelessWidget {
               label: Text('sales.finish'.tr()),
               onPressed: () {
                 Navigator.pop(ctx);
-                context.pop();
               },
             ),
           ],
@@ -177,8 +189,7 @@ class _SaleReturnFormView extends StatelessWidget {
     );
   }
 
-  Future<void> _printOrShareReturn(BuildContext context, {required bool share}) async {
-    final state = context.read<SaleReturnFormBloc>().state;
+  Future<void> _printOrShareReturnFromState(BuildContext context, SaleReturnFormState state, {required bool share}) async {
     try {
       if (state.saleId != null && state.sale != null) {
         final repo = sl<SaleRepository>();
@@ -1048,8 +1059,12 @@ class _ReturnItemTileState extends State<_ReturnItemTile> {
   void _applyQty(String value) {
     final parsed = int.tryParse(value);
     if (parsed == null || parsed < 1) {
+      // Don't update if empty or invalid - wait for valid input
+      if (value.isEmpty) return;
       widget.onQuantityChanged(1);
     } else if (parsed > widget.maxReturnableQty) {
+      // Show error immediately when quantity exceeds max
+      ScaffoldMessenger.of(context).clearSnackBars();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('sales.max_return_qty_exceeded'.tr(
@@ -1059,6 +1074,10 @@ class _ReturnItemTileState extends State<_ReturnItemTile> {
           duration: const Duration(seconds: 2),
         ),
       );
+      // Reset the text field to max allowed and update state
+      _qtyCtrl.text = '${widget.maxReturnableQty}';
+      _qtyCtrl.selection = TextSelection.fromPosition(
+          TextPosition(offset: _qtyCtrl.text.length));
       widget.onQuantityChanged(widget.maxReturnableQty);
     } else {
       widget.onQuantityChanged(parsed);
@@ -1184,6 +1203,10 @@ class _ReturnItemTileState extends State<_ReturnItemTile> {
                                   isDense: true,
                                   contentPadding: EdgeInsets.symmetric(vertical: 4),
                                 ),
+                                onChanged: (v) {
+                                  // Update totals immediately as user types
+                                  _applyQty(v);
+                                },
                                 onSubmitted: (v) {
                                   _applyQty(v);
                                   _qtyFocus.unfocus();

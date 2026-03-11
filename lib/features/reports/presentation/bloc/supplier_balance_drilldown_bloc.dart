@@ -145,10 +145,12 @@ class SupplierBalanceDrilldownData {
 class SupplierBalanceDrilldownBloc extends RealtimeBloc<
     SupplierBalanceDrilldownData, SupplierBalanceDrilldownEvent> {
   final AppDatabase _db;
-  ReportDateRange _dateRange = ReportDateRange.thisMonth();
+  ReportDateRange _dateRange;
   int? _supplierId;
 
-  SupplierBalanceDrilldownBloc(this._db) : super(const RealtimeLoading());
+  SupplierBalanceDrilldownBloc(this._db, {String defaultDateRange = 'month'})
+      : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+        super(const RealtimeLoading());
 
   ReportDateRange get dateRange => _dateRange;
   int? get supplierId => _supplierId;

@@ -81,12 +81,21 @@ class MockProductRepository extends _i1.Mock implements _i2.ProductRepository {
           as _i3.Future<_i4.Product?>);
 
   @override
+  _i3.Future<_i4.Product?> findByName(String? name) =>
+      (super.noSuchMethod(
+            Invocation.method(#findByName, [name]),
+            returnValue: _i3.Future<_i4.Product?>.value(),
+          )
+          as _i3.Future<_i4.Product?>);
+
+  @override
   _i3.Future<List<_i4.Product>> filterProducts({
     int? categoryId,
     String? stockStatus,
     int? limit = 50,
     int? offset = 0,
     bool? isActive = true,
+    int? lowStockThreshold = 5,
   }) =>
       (super.noSuchMethod(
             Invocation.method(#filterProducts, [], {
@@ -95,6 +104,7 @@ class MockProductRepository extends _i1.Mock implements _i2.ProductRepository {
               #limit: limit,
               #offset: offset,
               #isActive: isActive,
+              #lowStockThreshold: lowStockThreshold,
             }),
             returnValue: _i3.Future<List<_i4.Product>>.value(<_i4.Product>[]),
           )
@@ -105,12 +115,14 @@ class MockProductRepository extends _i1.Mock implements _i2.ProductRepository {
     int? categoryId,
     String? stockStatus,
     bool? isActive = true,
+    int? lowStockThreshold = 5,
   }) =>
       (super.noSuchMethod(
             Invocation.method(#watchFilteredProducts, [], {
               #categoryId: categoryId,
               #stockStatus: stockStatus,
               #isActive: isActive,
+              #lowStockThreshold: lowStockThreshold,
             }),
             returnValue: _i3.Stream<List<_i4.Product>>.empty(),
           )

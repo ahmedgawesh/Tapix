@@ -9,8 +9,11 @@ void main() {
         supplierId: 1,
         supplierName: 'Test Supplier',
         phone: '+1234567890',
-        totalDebitCents: 150000,
-        totalCreditCents: 50000,
+        openingBalanceCents: 50000,
+        totalPurchasesCents: 100000,
+        totalPaymentsCents: 30000,
+        totalReturnsCents: 10000,
+        totalDiscountsCents: 10000,
         netBalanceCents: 100000,
         transactionCount: 10,
         lastTransactionAt: null,
@@ -19,8 +22,11 @@ void main() {
       expect(item.supplierId, 1);
       expect(item.supplierName, 'Test Supplier');
       expect(item.phone, '+1234567890');
-      expect(item.totalDebitCents, 150000);
-      expect(item.totalCreditCents, 50000);
+      expect(item.openingBalanceCents, 50000);
+      expect(item.totalPurchasesCents, 100000);
+      expect(item.totalPaymentsCents, 30000);
+      expect(item.totalReturnsCents, 10000);
+      expect(item.totalDiscountsCents, 10000);
       expect(item.netBalanceCents, 100000);
       expect(item.transactionCount, 10);
       expect(item.lastTransactionAt, isNull);
@@ -31,8 +37,11 @@ void main() {
       final item = SupplierBalanceItem(
         supplierId: 2,
         supplierName: 'Supplier B',
-        totalDebitCents: 500000,
-        totalCreditCents: 200000,
+        openingBalanceCents: 100000,
+        totalPurchasesCents: 400000,
+        totalPaymentsCents: 150000,
+        totalReturnsCents: 30000,
+        totalDiscountsCents: 20000,
         netBalanceCents: 300000,
         transactionCount: 25,
         lastTransactionAt: date,
@@ -42,33 +51,53 @@ void main() {
       expect(item.phone, isNull);
     });
 
-    test('net balance equals debit minus credit', () {
+    test('totalDebitCents getter calculates correctly', () {
       const item = SupplierBalanceItem(
         supplierId: 1,
         supplierName: 'Test',
-        totalDebitCents: 100000,
-        totalCreditCents: 40000,
+        openingBalanceCents: 50000, // positive = debit
+        totalPurchasesCents: 50000,
+        totalPaymentsCents: 20000,
+        totalReturnsCents: 10000,
+        totalDiscountsCents: 10000,
         netBalanceCents: 60000,
         transactionCount: 5,
       );
 
-      expect(item.netBalanceCents,
-          item.totalDebitCents - item.totalCreditCents);
+      // totalDebitCents = opening debit + purchases
+      expect(item.totalDebitCents, 100000); // 50000 + 50000
     });
 
-    test('integer cents prevents floating point errors', () {
-      // Verify that using integer cents avoids floating point issues
-      // e.g., 0.1 + 0.2 != 0.3 in floating point, but 10 + 20 == 30 in cents
+    test('totalCreditCents getter calculates correctly', () {
       const item = SupplierBalanceItem(
         supplierId: 1,
         supplierName: 'Test',
-        totalDebitCents: 30, // 0.30 in dollars
-        totalCreditCents: 10, // 0.10 in dollars
-        netBalanceCents: 20, // 0.20 in dollars
+        openingBalanceCents: -10000, // negative = credit
+        totalPurchasesCents: 50000,
+        totalPaymentsCents: 20000,
+        totalReturnsCents: 10000,
+        totalDiscountsCents: 5000,
+        netBalanceCents: 5000,
+        transactionCount: 5,
+      );
+
+      // totalCreditCents = opening credit + payments + returns + discounts
+      expect(item.totalCreditCents, 45000); // 10000 + 20000 + 10000 + 5000
+    });
+
+    test('integer cents prevents floating point errors', () {
+      const item = SupplierBalanceItem(
+        supplierId: 1,
+        supplierName: 'Test',
+        openingBalanceCents: 10,
+        totalPurchasesCents: 20,
+        totalPaymentsCents: 5,
+        totalReturnsCents: 3,
+        totalDiscountsCents: 2,
+        netBalanceCents: 20,
         transactionCount: 2,
       );
 
-      expect(item.totalDebitCents - item.totalCreditCents, 20);
       expect(item.netBalanceCents, 20);
     });
 
@@ -76,27 +105,37 @@ void main() {
       const item = SupplierBalanceItem(
         supplierId: 1,
         supplierName: 'Test',
-        totalDebitCents: 30000,
-        totalCreditCents: 50000,
+        openingBalanceCents: 0,
+        totalPurchasesCents: 30000,
+        totalPaymentsCents: 50000,
+        totalReturnsCents: 0,
+        totalDiscountsCents: 0,
         netBalanceCents: -20000,
         transactionCount: 5,
       );
 
       expect(item.netBalanceCents, isNegative);
       expect(item.netBalanceCents, -20000);
+      expect(item.isReceivable, true);
+      expect(item.isPayable, false);
     });
 
     test('zero balance indicates settled account', () {
       const item = SupplierBalanceItem(
         supplierId: 1,
         supplierName: 'Test',
-        totalDebitCents: 50000,
-        totalCreditCents: 50000,
+        openingBalanceCents: 0,
+        totalPurchasesCents: 50000,
+        totalPaymentsCents: 50000,
+        totalReturnsCents: 0,
+        totalDiscountsCents: 0,
         netBalanceCents: 0,
         transactionCount: 10,
       );
 
       expect(item.netBalanceCents, 0);
+      expect(item.isPayable, false);
+      expect(item.isReceivable, false);
     });
   });
 
@@ -107,24 +146,22 @@ void main() {
       );
 
       expect(data.suppliers, isEmpty);
-      expect(data.grandTotalDebitCents, 0);
-      expect(data.grandTotalCreditCents, 0);
-      expect(data.grandNetBalanceCents, 0);
+      expect(data.filteredSuppliers, isEmpty);
+      expect(data.summary.totalPayablesCents, 0);
+      expect(data.summary.totalReceivablesCents, 0);
       expect(data.totalSuppliers, 0);
-      expect(data.suppliersWithDebit, 0);
-      expect(data.suppliersWithCredit, 0);
       expect(data.sort, SupplierBalanceSortType.balanceDesc);
       expect(data.dateRange.preset, ReportPeriodPreset.thisMonth);
     });
 
     test('copyWith preserves unchanged fields', () {
       final original = SupplierBalanceReportData(
-        grandTotalDebitCents: 500000,
-        grandTotalCreditCents: 200000,
-        grandNetBalanceCents: 300000,
-        totalSuppliers: 10,
-        suppliersWithDebit: 7,
-        suppliersWithCredit: 3,
+        summary: const SupplierBalanceSummary(
+          totalPayablesCents: 500000,
+          totalReceivablesCents: 200000,
+          suppliersWithPayable: 7,
+          suppliersWithReceivable: 3,
+        ),
         dateRange: ReportDateRange.thisMonth(),
       );
 
@@ -132,12 +169,10 @@ void main() {
         dateRange: ReportDateRange.thisYear(),
       );
 
-      expect(updated.grandTotalDebitCents, 500000);
-      expect(updated.grandTotalCreditCents, 200000);
-      expect(updated.grandNetBalanceCents, 300000);
-      expect(updated.totalSuppliers, 10);
-      expect(updated.suppliersWithDebit, 7);
-      expect(updated.suppliersWithCredit, 3);
+      expect(updated.summary.totalPayablesCents, 500000);
+      expect(updated.summary.totalReceivablesCents, 200000);
+      expect(updated.summary.suppliersWithPayable, 7);
+      expect(updated.summary.suppliersWithReceivable, 3);
       expect(updated.dateRange.preset, ReportPeriodPreset.thisYear);
     });
 
@@ -147,15 +182,15 @@ void main() {
       );
 
       final updated = original.copyWith(
-        grandTotalDebitCents: 100000,
-        grandTotalCreditCents: 50000,
-        grandNetBalanceCents: 50000,
+        summary: const SupplierBalanceSummary(
+          totalPayablesCents: 100000,
+          totalReceivablesCents: 50000,
+        ),
         sort: SupplierBalanceSortType.nameAsc,
       );
 
-      expect(updated.grandTotalDebitCents, 100000);
-      expect(updated.grandTotalCreditCents, 50000);
-      expect(updated.grandNetBalanceCents, 50000);
+      expect(updated.summary.totalPayablesCents, 100000);
+      expect(updated.summary.totalReceivablesCents, 50000);
       expect(updated.sort, SupplierBalanceSortType.nameAsc);
     });
 
@@ -167,15 +202,18 @@ void main() {
       const supplier = SupplierBalanceItem(
         supplierId: 1,
         supplierName: 'New Supplier',
-        totalDebitCents: 999900,
-        totalCreditCents: 100,
+        openingBalanceCents: 0,
+        totalPurchasesCents: 999900,
+        totalPaymentsCents: 100,
+        totalReturnsCents: 0,
+        totalDiscountsCents: 0,
         netBalanceCents: 999800,
         transactionCount: 100,
       );
 
       final updated = original.copyWith(
         suppliers: [supplier],
-        totalSuppliers: 1,
+        filteredSuppliers: [supplier],
       );
 
       expect(updated.suppliers.length, 1);
@@ -221,24 +259,33 @@ void main() {
       const SupplierBalanceItem(
         supplierId: 1,
         supplierName: 'Zebra Supplies',
-        totalDebitCents: 50000,
-        totalCreditCents: 10000,
+        openingBalanceCents: 0,
+        totalPurchasesCents: 50000,
+        totalPaymentsCents: 10000,
+        totalReturnsCents: 0,
+        totalDiscountsCents: 0,
         netBalanceCents: 40000,
         transactionCount: 5,
       ),
       const SupplierBalanceItem(
         supplierId: 2,
         supplierName: 'Apple Wholesale',
-        totalDebitCents: 200000,
-        totalCreditCents: 50000,
+        openingBalanceCents: 0,
+        totalPurchasesCents: 200000,
+        totalPaymentsCents: 50000,
+        totalReturnsCents: 0,
+        totalDiscountsCents: 0,
         netBalanceCents: 150000,
         transactionCount: 20,
       ),
       const SupplierBalanceItem(
         supplierId: 3,
         supplierName: 'Mango Trading',
-        totalDebitCents: 100000,
-        totalCreditCents: 120000,
+        openingBalanceCents: 0,
+        totalPurchasesCents: 100000,
+        totalPaymentsCents: 120000,
+        totalReturnsCents: 0,
+        totalDiscountsCents: 0,
         netBalanceCents: -20000,
         transactionCount: 10,
       ),
@@ -315,76 +362,84 @@ void main() {
         SupplierBalanceItem(
           supplierId: 1,
           supplierName: 'A',
-          totalDebitCents: 50000,
-          totalCreditCents: 10000,
+          openingBalanceCents: 0,
+          totalPurchasesCents: 50000,
+          totalPaymentsCents: 10000,
+          totalReturnsCents: 0,
+          totalDiscountsCents: 0,
           netBalanceCents: 40000,
           transactionCount: 5,
         ),
         SupplierBalanceItem(
           supplierId: 2,
           supplierName: 'B',
-          totalDebitCents: 200000,
-          totalCreditCents: 50000,
+          openingBalanceCents: 0,
+          totalPurchasesCents: 200000,
+          totalPaymentsCents: 50000,
+          totalReturnsCents: 0,
+          totalDiscountsCents: 0,
           netBalanceCents: 150000,
           transactionCount: 20,
         ),
         SupplierBalanceItem(
           supplierId: 3,
           supplierName: 'C',
-          totalDebitCents: 100000,
-          totalCreditCents: 120000,
+          openingBalanceCents: 0,
+          totalPurchasesCents: 100000,
+          totalPaymentsCents: 120000,
+          totalReturnsCents: 0,
+          totalDiscountsCents: 0,
           netBalanceCents: -20000,
           transactionCount: 10,
         ),
       ];
 
-      int totalDebit = 0;
-      int totalCredit = 0;
-      int totalNet = 0;
-      int withDebit = 0;
-      int withCredit = 0;
+      int totalPayables = 0;
+      int totalReceivables = 0;
+      int withPayable = 0;
+      int withReceivable = 0;
       for (final s in suppliers) {
-        totalDebit += s.totalDebitCents;
-        totalCredit += s.totalCreditCents;
-        totalNet += s.netBalanceCents;
-        if (s.netBalanceCents > 0) withDebit++;
-        if (s.netBalanceCents < 0) withCredit++;
+        if (s.netBalanceCents > 0) {
+          totalPayables += s.netBalanceCents;
+          withPayable++;
+        }
+        if (s.netBalanceCents < 0) {
+          totalReceivables += s.netBalanceCents.abs();
+          withReceivable++;
+        }
       }
 
-      expect(totalDebit, 350000);
-      expect(totalCredit, 180000);
-      expect(totalNet, 170000); // 40000 + 150000 + (-20000)
-      expect(withDebit, 2); // A and B have positive net balance
-      expect(withCredit, 1); // C has negative net balance
+      expect(totalPayables, 190000); // 40000 + 150000
+      expect(totalReceivables, 20000); // abs(-20000)
+      expect(withPayable, 2); // A and B have positive net balance
+      expect(withReceivable, 1); // C has negative net balance
       expect(suppliers.length, 3);
     });
 
     test('empty supplier list yields zero totals', () {
       const suppliers = <SupplierBalanceItem>[];
 
-      int totalDebit = 0;
-      int totalCredit = 0;
-      int totalNet = 0;
+      int totalPayables = 0;
+      int totalReceivables = 0;
       for (final s in suppliers) {
-        totalDebit += s.totalDebitCents;
-        totalCredit += s.totalCreditCents;
-        totalNet += s.netBalanceCents;
+        if (s.netBalanceCents > 0) totalPayables += s.netBalanceCents;
+        if (s.netBalanceCents < 0) totalReceivables += s.netBalanceCents.abs();
       }
 
-      expect(totalDebit, 0);
-      expect(totalCredit, 0);
-      expect(totalNet, 0);
+      expect(totalPayables, 0);
+      expect(totalReceivables, 0);
     });
 
     test('net balance calculation with mixed debits and credits', () {
-      // Verify net balance = total debits - total credits
-      // Using integer arithmetic to avoid floating point issues
-      const debit = 123456;
-      const credit = 78901;
-      const net = debit - credit; // 44555
+      // Verify net balance = opening + purchases - payments - returns - discounts
+      const opening = 10000;
+      const purchases = 50000;
+      const payments = 20000;
+      const returns = 5000;
+      const discounts = 2000;
+      const net = opening + purchases - payments - returns - discounts; // 33000
 
-      expect(net, 44555);
-      expect(net, debit - credit);
+      expect(net, 33000);
     });
 
     test('large amounts do not overflow int', () {
@@ -393,13 +448,16 @@ void main() {
       const item = SupplierBalanceItem(
         supplierId: 1,
         supplierName: 'Big Supplier',
-        totalDebitCents: largeCents,
-        totalCreditCents: 0,
+        openingBalanceCents: 0,
+        totalPurchasesCents: largeCents,
+        totalPaymentsCents: 0,
+        totalReturnsCents: 0,
+        totalDiscountsCents: 0,
         netBalanceCents: largeCents,
         transactionCount: 1,
       );
 
-      expect(item.totalDebitCents, largeCents);
+      expect(item.totalPurchasesCents, largeCents);
       expect(item.netBalanceCents, largeCents);
     });
   });
@@ -485,110 +543,116 @@ void main() {
       const item = SupplierBalanceItem(
         supplierId: 1,
         supplierName: 'Test',
-        totalDebitCents: 100000,
-        totalCreditCents: 30000,
+        openingBalanceCents: 0,
+        totalPurchasesCents: 100000,
+        totalPaymentsCents: 30000,
+        totalReturnsCents: 0,
+        totalDiscountsCents: 0,
         netBalanceCents: 70000,
         transactionCount: 5,
       );
 
-      final isPayable = item.netBalanceCents > 0;
-      final isReceivable = item.netBalanceCents < 0;
-      final isSettled = item.netBalanceCents == 0;
-
-      expect(isPayable, true);
-      expect(isReceivable, false);
-      expect(isSettled, false);
+      expect(item.isPayable, true);
+      expect(item.isReceivable, false);
     });
 
     test('negative net balance is receivable (supplier owes us)', () {
       const item = SupplierBalanceItem(
         supplierId: 1,
         supplierName: 'Test',
-        totalDebitCents: 30000,
-        totalCreditCents: 100000,
+        openingBalanceCents: 0,
+        totalPurchasesCents: 30000,
+        totalPaymentsCents: 100000,
+        totalReturnsCents: 0,
+        totalDiscountsCents: 0,
         netBalanceCents: -70000,
         transactionCount: 5,
       );
 
-      final isPayable = item.netBalanceCents > 0;
-      final isReceivable = item.netBalanceCents < 0;
-      final isSettled = item.netBalanceCents == 0;
-
-      expect(isPayable, false);
-      expect(isReceivable, true);
-      expect(isSettled, false);
+      expect(item.isPayable, false);
+      expect(item.isReceivable, true);
     });
 
     test('zero net balance is settled', () {
       const item = SupplierBalanceItem(
         supplierId: 1,
         supplierName: 'Test',
-        totalDebitCents: 50000,
-        totalCreditCents: 50000,
+        openingBalanceCents: 0,
+        totalPurchasesCents: 50000,
+        totalPaymentsCents: 50000,
+        totalReturnsCents: 0,
+        totalDiscountsCents: 0,
         netBalanceCents: 0,
         transactionCount: 10,
       );
 
-      final isPayable = item.netBalanceCents > 0;
-      final isReceivable = item.netBalanceCents < 0;
-      final isSettled = item.netBalanceCents == 0;
-
-      expect(isPayable, false);
-      expect(isReceivable, false);
-      expect(isSettled, true);
+      expect(item.isPayable, false);
+      expect(item.isReceivable, false);
     });
   });
 
   group('Suppliers with debit/credit counting', () {
-    test('correctly counts suppliers with debit and credit', () {
+    test('correctly counts suppliers with payable and receivable', () {
       const suppliers = [
         SupplierBalanceItem(
           supplierId: 1,
           supplierName: 'Payable Supplier',
-          totalDebitCents: 100000,
-          totalCreditCents: 20000,
+          openingBalanceCents: 0,
+          totalPurchasesCents: 100000,
+          totalPaymentsCents: 20000,
+          totalReturnsCents: 0,
+          totalDiscountsCents: 0,
           netBalanceCents: 80000,
           transactionCount: 5,
         ),
         SupplierBalanceItem(
           supplierId: 2,
           supplierName: 'Receivable Supplier',
-          totalDebitCents: 20000,
-          totalCreditCents: 100000,
+          openingBalanceCents: 0,
+          totalPurchasesCents: 20000,
+          totalPaymentsCents: 100000,
+          totalReturnsCents: 0,
+          totalDiscountsCents: 0,
           netBalanceCents: -80000,
           transactionCount: 5,
         ),
         SupplierBalanceItem(
           supplierId: 3,
           supplierName: 'Settled Supplier',
-          totalDebitCents: 50000,
-          totalCreditCents: 50000,
+          openingBalanceCents: 0,
+          totalPurchasesCents: 50000,
+          totalPaymentsCents: 50000,
+          totalReturnsCents: 0,
+          totalDiscountsCents: 0,
           netBalanceCents: 0,
           transactionCount: 10,
         ),
         SupplierBalanceItem(
           supplierId: 4,
           supplierName: 'Another Payable',
-          totalDebitCents: 30000,
-          totalCreditCents: 10000,
+          openingBalanceCents: 0,
+          totalPurchasesCents: 30000,
+          totalPaymentsCents: 10000,
+          totalReturnsCents: 0,
+          totalDiscountsCents: 0,
           netBalanceCents: 20000,
           transactionCount: 3,
         ),
       ];
 
-      int withDebit = 0;
-      int withCredit = 0;
+      int withPayable = 0;
+      int withReceivable = 0;
       int settled = 0;
       for (final s in suppliers) {
-        if (s.netBalanceCents > 0) withDebit++;
-        if (s.netBalanceCents < 0) withCredit++;
-        if (s.netBalanceCents == 0) settled++;
+        if (s.isPayable) withPayable++;
+        if (s.isReceivable) withReceivable++;
+        if (!s.isPayable && !s.isReceivable) settled++;
       }
 
-      expect(withDebit, 2);
-      expect(withCredit, 1);
+      expect(withPayable, 2);
+      expect(withReceivable, 1);
       expect(settled, 1);
-      expect(withDebit + withCredit + settled, suppliers.length);
+      expect(withPayable + withReceivable + settled, suppliers.length);
     });
   });
 }

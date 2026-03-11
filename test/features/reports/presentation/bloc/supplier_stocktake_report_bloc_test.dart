@@ -366,7 +366,7 @@ void main() {
 
   group('SupplierStocktakeSortType enum', () {
     test('has all expected values', () {
-      expect(SupplierStocktakeSortType.values.length, 8);
+      expect(SupplierStocktakeSortType.values.length, 9);
       expect(SupplierStocktakeSortType.values,
           contains(SupplierStocktakeSortType.valueDesc));
       expect(SupplierStocktakeSortType.values,
@@ -383,6 +383,8 @@ void main() {
           contains(SupplierStocktakeSortType.soldDesc));
       expect(SupplierStocktakeSortType.values,
           contains(SupplierStocktakeSortType.purchasedDesc));
+      expect(SupplierStocktakeSortType.values,
+          contains(SupplierStocktakeSortType.profitDesc));
     });
   });
 

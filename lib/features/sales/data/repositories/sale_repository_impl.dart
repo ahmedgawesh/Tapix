@@ -63,11 +63,13 @@ class SaleRepositoryImpl implements SaleRepository {
     String? notes,
     DateTime? saleDate,
     DateTime? dueDate,
+    bool allowNegativeStock = false,
   }) async {
-    final invoiceNumber = await _datasource.generateInvoiceNumber();
+    // Invoice number is generated INSIDE the transaction (see below)
+    // to prevent race conditions when two sales are created concurrently.
 
     final saleCompanion = db.SalesCompanion(
-      invoiceNumber: Value(invoiceNumber),
+      invoiceNumber: const Value.absent(), // placeholder, set inside tx
       customerId: customerId != null ? Value(customerId) : const Value.absent(),
       employeeId: employeeId != null ? Value(employeeId) : const Value.absent(),
       subtotalCents: Value(subtotalCents),
@@ -101,11 +103,20 @@ class SaleRepositoryImpl implements SaleRepository {
     final userId = await _currentUserId();
     final effectiveSaleDate = saleDate ?? DateTime.now();
 
-    final saleId = await _dao.db.transaction(() async {
-      final id = await _dao.createSaleWithItems(saleCompanion, itemCompanions);
+    const maxRetries = 3;
+    late int saleId;
+    for (int attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        saleId = await _dao.db.transaction(() async {
+      // Generate invoice number INSIDE the transaction for atomicity
+      final invoiceNumber = await _dao.generateInvoiceNumber();
+      final companionWithNumber = saleCompanion.copyWith(
+        invoiceNumber: Value(invoiceNumber),
+      );
+      final id = await _dao.createSaleWithItems(companionWithNumber, itemCompanions);
 
       // Auto-post: deduct stock and update customer balance
-      await _dao.postSale(id);
+      await _dao.postSale(id, allowNegativeStock: allowNegativeStock);
 
       // Create journal entries — MANDATORY, errors propagate
       await _journalService.recordSaleJournalEntry(
@@ -118,29 +129,46 @@ class SaleRepositoryImpl implements SaleRepository {
         userId: userId,
       );
 
+      // COGS journal entry — MANDATORY (Dr COGS, Cr Inventory)
+      final costCents = await _dao.computeSaleCostCents(id);
+      await _journalService.recordSaleCOGSJournalEntry(
+        saleId: id,
+        costCents: costCents,
+        currencyId: currencyId,
+        userId: userId,
+      );
+
       // Create commission records for assigned salesperson(s)
+      // Calculate total item count for fixed commission
+      final totalItemCount = items.fold<int>(0, (sum, i) => sum + i.quantity);
       if (employeeId != null) {
         await _createCommissionForSale(
           saleId: id,
           employeeId: employeeId,
-          totalCents: totalCents.toBigInt().toInt(),
+          subtotalCents: subtotalCents.toBigInt().toInt(),
+          itemCount: totalItemCount,
           currencyId: currencyId,
           saleDate: effectiveSaleDate,
         );
       } else {
-        final perEmployeeTotals = <int, int>{};
+        // Per-item salesperson commissions: aggregate subtotal and item count per employee
+        final perEmployeeSubtotals = <int, int>{};
+        final perEmployeeItemCounts = <int, int>{};
         for (final item in items) {
           if (item.employeeId != null) {
-            perEmployeeTotals[item.employeeId!] =
-                (perEmployeeTotals[item.employeeId!] ?? 0) +
-                    item.totalCents.toBigInt().toInt();
+            perEmployeeSubtotals[item.employeeId!] =
+                (perEmployeeSubtotals[item.employeeId!] ?? 0) +
+                    item.subtotalCents.toBigInt().toInt();
+            perEmployeeItemCounts[item.employeeId!] =
+                (perEmployeeItemCounts[item.employeeId!] ?? 0) + item.quantity;
           }
         }
-        for (final entry in perEmployeeTotals.entries) {
+        for (final empId in perEmployeeSubtotals.keys) {
           await _createCommissionForSale(
             saleId: id,
-            employeeId: entry.key,
-            totalCents: entry.value,
+            employeeId: empId,
+            subtotalCents: perEmployeeSubtotals[empId]!,
+            itemCount: perEmployeeItemCounts[empId]!,
             currencyId: currencyId,
             saleDate: effectiveSaleDate,
           );
@@ -149,6 +177,20 @@ class SaleRepositoryImpl implements SaleRepository {
 
       return id;
     });
+        break; // success
+      } catch (e) {
+        // Retry on UNIQUE constraint violation (concurrent invoice number)
+        final isUniqueViolation = e.toString().contains('UNIQUE constraint failed');
+        if (isUniqueViolation && attempt < maxRetries) {
+          developer.log(
+            'Invoice number collision on attempt $attempt, retrying...',
+            name: 'SaleRepository',
+          );
+          continue;
+        }
+        rethrow;
+      }
+    }
 
     // Award loyalty points outside transaction (non-critical)
     if (customerId != null) {
@@ -224,29 +266,79 @@ class SaleRepositoryImpl implements SaleRepository {
           totalCents: Value(i.totalCents),
         )).toList();
 
-    // Void old journal entries BEFORE updating the sale record
-    await _journalService.voidJournalEntriesForSource(
-      sourceTable: 'sales',
-      sourceId: saleId,
-      reason: 'Sale updated',
-      userId: await _currentUserId(),
-    );
+    // Resolve userId once before entering the transaction.
+    final userId = await _currentUserId();
 
-    final ok = await _dao.updateSaleWithItems(saleId, saleCompanion, itemCompanions);
-
-    if (ok) {
-      // Re-create journal entries with new amounts
-      await _journalService.recordSaleJournalEntry(
-        saleId: saleId,
-        totalCents: totalCents.toBigInt().toInt(),
-        paidAmountCents: paidAmountCents.toBigInt().toInt(),
-        currencyId: currencyId,
-        taxCents: taxCents.toBigInt().toInt(),
-        paymentMethod: paymentMethod,
-        userId: await _currentUserId(),
+    // ATOMIC: Wrap journal void → sale update → journal re-create → commission
+    // re-create in a single transaction. If any step fails, everything rolls back.
+    final ok = await _dao.db.transaction(() async {
+      // 1. Void old journal entries
+      await _journalService.voidJournalEntriesForSource(
+        sourceTable: 'sales',
+        sourceId: saleId,
+        reason: 'Sale updated',
+        userId: userId,
       );
 
-      // Audit: log sale update
+      // 2. Update sale data and items
+      final updated = await _dao.updateSaleWithItems(saleId, saleCompanion, itemCompanions);
+
+      if (updated) {
+        // 3. Re-create journal entries with new amounts
+        await _journalService.recordSaleJournalEntry(
+          saleId: saleId,
+          totalCents: totalCents.toBigInt().toInt(),
+          paidAmountCents: paidAmountCents.toBigInt().toInt(),
+          currencyId: currencyId,
+          taxCents: taxCents.toBigInt().toInt(),
+          paymentMethod: paymentMethod,
+          userId: userId,
+        );
+
+        // 4. Re-create commissions: delete old, create new if employee assigned
+        await _employeeDao.deleteCommissionsBySaleId(saleId);
+        final effectiveSaleDate = saleDate ?? DateTime.now();
+        final totalItemCount = items.fold<int>(0, (sum, i) => sum + i.quantity);
+        if (employeeId != null) {
+          await _createCommissionForSale(
+            saleId: saleId,
+            employeeId: employeeId,
+            subtotalCents: subtotalCents.toBigInt().toInt(),
+            itemCount: totalItemCount,
+            currencyId: currencyId,
+            saleDate: effectiveSaleDate,
+          );
+        } else {
+          // Per-item salesperson commissions: aggregate subtotal and item count per employee
+          final perEmployeeSubtotals = <int, int>{};
+          final perEmployeeItemCounts = <int, int>{};
+          for (final item in items) {
+            if (item.employeeId != null) {
+              perEmployeeSubtotals[item.employeeId!] =
+                  (perEmployeeSubtotals[item.employeeId!] ?? 0) +
+                      item.subtotalCents.toBigInt().toInt();
+              perEmployeeItemCounts[item.employeeId!] =
+                  (perEmployeeItemCounts[item.employeeId!] ?? 0) + item.quantity;
+            }
+          }
+          for (final empId in perEmployeeSubtotals.keys) {
+            await _createCommissionForSale(
+              saleId: saleId,
+              employeeId: empId,
+              subtotalCents: perEmployeeSubtotals[empId]!,
+              itemCount: perEmployeeItemCounts[empId]!,
+              currencyId: currencyId,
+              saleDate: effectiveSaleDate,
+            );
+          }
+        }
+      }
+
+      return updated;
+    });
+
+    // Audit log outside transaction (non-critical, must not block sale update)
+    if (ok) {
       _audit.log(
         entityType: 'sale',
         entityId: saleId,
@@ -255,62 +347,27 @@ class SaleRepositoryImpl implements SaleRepository {
           'totalCents': totalCents.toString(),
           'itemCount': items.length,
         },
-        userId: await _currentUserId(),
+        userId: userId,
       );
-
-      // Re-create commission: delete old, create new if employee assigned
-      await _employeeDao.deleteCommissionsBySaleId(saleId);
-      final effectiveSaleDate = saleDate ?? DateTime.now();
-      if (employeeId != null) {
-        await _createCommissionForSale(
-          saleId: saleId,
-          employeeId: employeeId,
-          totalCents: totalCents.toBigInt().toInt(),
-          currencyId: currencyId,
-          saleDate: effectiveSaleDate,
-        );
-      } else {
-        // Per-item salesperson commissions
-        final perEmployeeTotals = <int, int>{};
-        for (final item in items) {
-          if (item.employeeId != null) {
-            perEmployeeTotals[item.employeeId!] =
-                (perEmployeeTotals[item.employeeId!] ?? 0) +
-                    item.totalCents.toBigInt().toInt();
-          }
-        }
-        for (final entry in perEmployeeTotals.entries) {
-          await _createCommissionForSale(
-            saleId: saleId,
-            employeeId: entry.key,
-            totalCents: entry.value,
-            currencyId: currencyId,
-            saleDate: effectiveSaleDate,
-          );
-        }
-      }
     }
 
     return ok;
   }
 
   @override
-  Future<void> postSale(int saleId) => _dao.postSale(saleId);
+  Future<void> postSale(int saleId, {bool allowNegativeStock = false}) => 
+      _dao.postSale(saleId, allowNegativeStock: allowNegativeStock);
 
   @override
   Future<void> voidSale(int saleId) async {
-    // Void journal entries BEFORE voiding the sale (so we can still read the data)
-    try {
-      await _journalService.voidJournalEntriesForSource(
-        sourceTable: 'sales',
-        sourceId: saleId,
-        reason: 'Sale voided',
-        userId: await _currentUserId(),
-      );
-    } catch (e) {
-      developer.log('Warning: Failed to void journal entries for sale #$saleId: $e',
-          name: 'SaleRepository');
-    }
+    // Void journal entries BEFORE voiding the sale (so we can still read the data).
+    // This MUST succeed — if it fails the entire void is aborted to prevent GL drift.
+    await _journalService.voidJournalEntriesForSource(
+      sourceTable: 'sales',
+      sourceId: saleId,
+      reason: 'Sale voided',
+      userId: await _currentUserId(),
+    );
 
     // Void commissions linked to this sale
     await _employeeDao.deleteCommissionsBySaleId(saleId);
@@ -321,19 +378,120 @@ class SaleRepositoryImpl implements SaleRepository {
   }
 
   @override
-  Future<void> deleteSale(int saleId) async {
-    // Void any journal entries BEFORE deleting the sale record
-    try {
-      await _journalService.voidJournalEntriesForSource(
-        sourceTable: 'sales',
-        sourceId: saleId,
-        reason: 'Sale deleted',
-        userId: await _currentUserId(),
-      );
-    } catch (e) {
-      developer.log('Warning: Failed to void journal entries for sale #$saleId: $e',
-          name: 'SaleRepository');
+  Future<int> editPostedSale({
+    required int originalSaleId,
+    int? customerId,
+    int? employeeId,
+    required int currencyId,
+    required Decimal subtotalCents,
+    required Decimal discountCents,
+    required Decimal taxCents,
+    required Decimal totalCents,
+    required Decimal paidAmountCents,
+    required String paymentMethod,
+    required List<SaleItemInput> items,
+    String? notes,
+    DateTime? saleDate,
+    DateTime? dueDate,
+    bool allowNegativeStock = false,
+  }) async {
+    // 1. Fetch original sale to validate
+    final originalSale = await getSaleById(originalSaleId);
+    if (originalSale == null) {
+      throw StateError('Sale #$originalSaleId not found');
     }
+
+    // 2. Check accounting period is open for the original sale date
+    final txDate = originalSale.saleDate;
+    final periodRows = await _dao.db.customSelect(
+      '''SELECT id, is_closed FROM accounting_periods
+         WHERE start_date <= ? AND end_date >= ?
+         ORDER BY start_date DESC LIMIT 1''',
+      variables: [
+        Variable.withDateTime(txDate),
+        Variable.withDateTime(txDate),
+      ],
+      readsFrom: {_dao.db.accountingPeriods},
+    ).get();
+    if (periodRows.isNotEmpty && periodRows.first.read<bool>('is_closed')) {
+      throw StateError(
+        'Cannot edit sale: the accounting period containing this '
+        'sale has been closed.',
+      );
+    }
+
+    // 3. Check if sale has any non-voided returns - cannot edit if returns exist
+    final returns = await _dao.db.customSelect(
+      'SELECT COUNT(*) as cnt FROM sale_returns WHERE sale_id = ? AND status != ?',
+      variables: [
+        Variable.withInt(originalSaleId),
+        Variable.withString('voided'),
+      ],
+      readsFrom: {_dao.db.saleReturns},
+    ).getSingle();
+    if (returns.read<int>('cnt') > 0) {
+      throw StateError(
+        'Cannot edit sale: it has associated returns. '
+        'Void the returns first or create a new sale.',
+      );
+    }
+
+    final userId = await _currentUserId();
+
+    // 4. Void the original sale (this restores stock and reverses accounting)
+    await voidSale(originalSaleId);
+
+    // 5. Create new sale with the edited data
+    final newSaleId = await createSale(
+      customerId: customerId,
+      employeeId: employeeId,
+      currencyId: currencyId,
+      subtotalCents: subtotalCents,
+      discountCents: discountCents,
+      taxCents: taxCents,
+      totalCents: totalCents,
+      paidAmountCents: paidAmountCents,
+      paymentMethod: paymentMethod,
+      items: items,
+      notes: notes != null 
+          ? '$notes\n[Edited from ${originalSale.invoiceNumber}]'
+          : '[Edited from ${originalSale.invoiceNumber}]',
+      saleDate: saleDate ?? originalSale.saleDate,
+      dueDate: dueDate,
+      allowNegativeStock: allowNegativeStock,
+    );
+
+    // 6. Audit log
+    await _audit.log(
+      entityType: 'sale',
+      entityId: newSaleId,
+      action: 'edit_posted_sale',
+      oldValue: {
+        'originalSaleId': originalSaleId,
+        'originalInvoiceNumber': originalSale.invoiceNumber,
+        'originalTotalCents': originalSale.totalCents.toString(),
+      },
+      newValue: {
+        'newSaleId': newSaleId,
+        'newTotalCents': totalCents.toString(),
+        'itemCount': items.length,
+      },
+      userId: userId,
+    );
+
+    return newSaleId;
+  }
+
+  @override
+  Future<void> deleteSale(int saleId) async {
+    // Void any journal entries BEFORE deleting the sale record.
+    // This MUST succeed — if it fails the entire delete is aborted to prevent GL drift.
+    await _journalService.voidJournalEntriesForSource(
+      sourceTable: 'sales',
+      sourceId: saleId,
+      reason: 'Sale deleted',
+      userId: await _currentUserId(),
+    );
 
     // Delete commissions linked to this sale
     await _employeeDao.deleteCommissionsBySaleId(saleId);
@@ -422,10 +580,21 @@ class SaleRepositoryImpl implements SaleRepository {
         userId: userId,
       );
 
+      // COGS reversal journal entry — MANDATORY (Dr Inventory, Cr COGS)
+      final returnCostCents = await _dao.computeSaleReturnCostCents(id);
+      await _journalService.recordSaleReturnCOGSReversalJournalEntry(
+        returnId: id,
+        costCents: returnCostCents,
+        currencyId: currencyId,
+        userId: userId,
+      );
+
       // Reverse commission for the returned amount
+      final returnedItemCount = items.fold<int>(0, (sum, i) => sum + i.quantity);
       await _reverseCommissionForReturn(
         saleId: saleId,
-        returnTotalCents: totalCents.toBigInt().toInt(),
+        returnSubtotalCents: subtotalCents.toBigInt().toInt(),
+        returnedItemCount: returnedItemCount,
         currencyId: currencyId,
         returnDate: effectiveReturnDate,
       );
@@ -453,18 +622,14 @@ class SaleRepositoryImpl implements SaleRepository {
 
   @override
   Future<void> voidSaleReturn(int returnId) async {
-    // Void journal entries BEFORE voiding the return
-    try {
-      await _journalService.voidJournalEntriesForSource(
-        sourceTable: 'sale_returns',
-        sourceId: returnId,
-        reason: 'Sale return voided',
-        userId: await _currentUserId(),
-      );
-    } catch (e) {
-      developer.log('Warning: Failed to void journal entries for sale return #$returnId: $e',
-          name: 'SaleRepository');
-    }
+    // Void journal entries BEFORE voiding the return.
+    // This MUST succeed — if it fails the entire void is aborted to prevent GL drift.
+    await _journalService.voidJournalEntriesForSource(
+      sourceTable: 'sale_returns',
+      sourceId: returnId,
+      reason: 'Sale return voided',
+      userId: await _currentUserId(),
+    );
 
     await _datasource.voidSaleReturn(returnId);
     // Audit: log sale return void (CRITICAL)
@@ -551,18 +716,20 @@ class SaleRepositoryImpl implements SaleRepository {
   /// commission records for this sale and creating proportional negative entries.
   ///
   /// This handles both invoice-level and per-item salesperson commissions.
-  /// The reversal ratio = returnTotalCents / saleTotalCents.
+  /// - For percentage commissions: reversal ratio = returnSubtotalCents / saleSubtotalCents
+  /// - For fixed commissions: reversal = fixedCommissionCents * returnedItemCount
   Future<void> _reverseCommissionForReturn({
     required int saleId,
-    required int returnTotalCents,
+    required int returnSubtotalCents,
+    required int returnedItemCount,
     required int currencyId,
     required DateTime returnDate,
   }) async {
     final sale = await _datasource.getSaleById(saleId);
     if (sale == null) return;
 
-    final saleTotalCents = sale.totalCents.toBigInt().toInt();
-    if (saleTotalCents <= 0) return;
+    final saleSubtotalCents = sale.subtotalCents.toBigInt().toInt();
+    if (saleSubtotalCents <= 0) return;
 
     // Find all positive (original) commissions for this sale
     final commissions = await _employeeDao.getCommissionsBySaleId(saleId);
@@ -575,8 +742,19 @@ class SaleRepositoryImpl implements SaleRepository {
       final originalAmount = c.commissionAmountCents.toBigInt().toInt();
       if (originalAmount <= 0) continue; // skip already-reversed entries
 
-      // Proportional reversal: if partial return, reverse proportionally
-      final deduction = (originalAmount * returnTotalCents) ~/ saleTotalCents;
+      int deduction;
+      final employee = await _employeeDao.getEmployee(c.employeeId);
+      
+      if (employee != null && employee.commissionType == 'fixed') {
+        // Fixed commission: deduct based on returned item count
+        final fixedCents = employee.fixedCommissionCents?.toBigInt().toInt() ?? 0;
+        deduction = fixedCents * returnedItemCount;
+      } else {
+        // Percentage commission: proportional reversal based on subtotal
+        if (saleSubtotalCents <= 0) continue;
+        deduction = (originalAmount * returnSubtotalCents) ~/ saleSubtotalCents;
+      }
+      
       if (deduction <= 0) continue;
 
       final companion = db.CommissionsCompanion(
@@ -597,14 +775,16 @@ class SaleRepositoryImpl implements SaleRepository {
   /// Create a commission record for the assigned salesperson on a sale.
   ///
   /// Supports two commission types:
-  /// - **percentage**: commissionAmountCents = (totalCents * rateBps) / 10000
-  /// - **fixed**: commissionAmountCents = fixedCommissionCents (per sale)
+  /// - **percentage**: commissionAmountCents = (subtotalCents * rateBps) / 10000
+  ///   Note: Uses subtotalCents (before tax) for percentage calculation
+  /// - **fixed**: commissionAmountCents = fixedCommissionCents * itemCount (per item)
   ///
   /// The period is derived from the sale date (YYYY-MM).
   Future<void> _createCommissionForSale({
     required int saleId,
     required int employeeId,
-    required int totalCents,
+    required int subtotalCents,
+    required int itemCount,
     required int currencyId,
     required DateTime saleDate,
   }) async {
@@ -615,16 +795,16 @@ class SaleRepositoryImpl implements SaleRepository {
     int rateBps;
 
     if (employee.commissionType == 'fixed') {
-      // Fixed commission per sale
+      // Fixed commission per item (multiply by item count)
       final fixedCents = employee.fixedCommissionCents?.toBigInt().toInt() ?? 0;
       if (fixedCents <= 0) return;
-      commissionAmountCents = fixedCents;
+      commissionAmountCents = fixedCents * itemCount;
       rateBps = 0; // Not applicable for fixed
     } else {
-      // Percentage commission
+      // Percentage commission on subtotal (before tax)
       rateBps = employee.defaultCommissionRateBps;
       if (rateBps <= 0) return;
-      commissionAmountCents = (totalCents * rateBps) ~/ 10000;
+      commissionAmountCents = (subtotalCents * rateBps) ~/ 10000;
       if (commissionAmountCents <= 0) return;
     }
 
@@ -682,17 +862,43 @@ class SaleRepositoryImpl implements SaleRepository {
         return;
       }
 
-      // Get customer tier multiplier
+      // Get customer tier and its benefits
       final summary = await _loyaltyRepository.getCustomerLoyaltySummary(customerId);
-      final multiplier = summary?.currentTier?.pointsMultiplier ?? 1.0;
+      final tier = summary?.currentTier;
+      final multiplier = tier?.pointsMultiplier ?? 1.0;
+      final bonusPercent = tier?.discountPercent ?? 0.0; // Bonus points percentage
 
       // Calculate points: (totalCents / 100) * pointsPerCurrencyUnit * multiplier
       final pointsPerUnit = settings.pointsPerCurrencyUnit;
       final basePoints = (totalCents * pointsPerUnit) ~/ 100;
-      final points = (basePoints * multiplier).round();
+      var points = (basePoints * multiplier).round();
+      
+      // Add bonus points (discountPercent is now bonus points percentage)
+      if (bonusPercent > 0) {
+        final bonusPoints = (points * bonusPercent / 100).round();
+        points += bonusPoints;
+      }
+      
+      // Check for business birthday bonus (company anniversary)
+      if (tier != null && tier.birthdayBonus && settings.businessBirthdayDate != null) {
+        final today = DateTime.now();
+        final businessBirthday = settings.businessBirthdayDate!;
+        // Check if today is the business birthday (same month and day)
+        if (today.month == businessBirthday.month && today.day == businessBirthday.day) {
+          // Add birthday bonus points
+          if (tier.birthdayBonusPoints > 0) {
+            points += tier.birthdayBonusPoints;
+          }
+          // Add birthday discount as bonus points
+          if (tier.birthdayDiscountPercent > 0) {
+            final birthdayBonusPoints = (points * tier.birthdayDiscountPercent / 100).round();
+            points += birthdayBonusPoints;
+          }
+        }
+      }
 
       developer.log(
-        'Loyalty: pointsPerUnit=$pointsPerUnit, basePoints=$basePoints, multiplier=$multiplier, points=$points',
+        'Loyalty: pointsPerUnit=$pointsPerUnit, basePoints=$basePoints, multiplier=$multiplier, bonusPercent=$bonusPercent, finalPoints=$points',
         name: 'SaleRepository',
       );
 
@@ -763,6 +969,7 @@ class SaleRepositoryImpl implements SaleRepository {
       if (originalPoints <= 0) return;
 
       // Proportional deduction
+      if (saleTotalCents <= 0) return;
       final pointsToDeduct = (originalPoints * returnTotalCents) ~/ saleTotalCents;
       if (pointsToDeduct <= 0) return;
 

@@ -128,4 +128,19 @@ abstract class LoyaltyRepository {
 
   /// Calculate points to earn using actual LoyaltySettings (async, accurate)
   Future<int> calculatePointsToEarnWithSettings(int amountCents, double multiplier);
+
+  /// Create a new loyalty tier
+  Future<int> createTier(LoyaltyTier tier);
+
+  /// Update an existing loyalty tier
+  Future<void> updateTier(LoyaltyTier tier);
+
+  /// Delete a loyalty tier
+  Future<void> deleteTier(int tierId);
+
+  /// Manually assign a tier to a customer
+  Future<void> assignTierToCustomer(int customerId, int? tierId);
+
+  /// Get points transactions history for a customer
+  Future<List<LoyaltyPointTransaction>> getPointsTransactions(int customerId);
 }

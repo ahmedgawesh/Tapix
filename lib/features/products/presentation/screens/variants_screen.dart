@@ -7,6 +7,7 @@ import 'package:easy_localization/easy_localization.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../../settings/presentation/bloc/app_settings_bloc.dart';
 import '../../domain/entities/product_variant_entity.dart';
 import '../../domain/entities/product_color_entity.dart';
 import '../../domain/entities/size_entity.dart';
@@ -380,10 +381,11 @@ class _VariantsViewState extends State<_VariantsView> {
                     final sizes = sizesState is RealtimeSuccess<List<Size>> ? sizesState.data : <Size>[];
 
                     final productNameById = {for (final p in products) p.id: p.name};
+                    final productById = {for (final p in products) p.id: p};
                     final colorById = {for (final c in colors) c.id: c};
                     final sizeNameById = {for (final s in sizes) s.id: s.name};
 
-                    final filteredItems = _applyFilters(variants ?? [], colorById, sizeNameById);
+                    final filteredItems = _applyFilters(variants ?? [], productById, colorById, sizeNameById);
                     final sortedItems = _applySorting(filteredItems);
 
                     if (sortedItems.isEmpty) {
@@ -417,8 +419,11 @@ class _VariantsViewState extends State<_VariantsView> {
     );
   }
 
-  List<ProductVariant> _applyFilters(List<ProductVariant> variants, Map<int, ProductColor> colorById, Map<int, String> sizeNameById) {
+  List<ProductVariant> _applyFilters(List<ProductVariant> variants, Map<int, Product> productById, Map<int, ProductColor> colorById, Map<int, String> sizeNameById) {
     final query = _searchController.text.trim().toLowerCase();
+    // Get global low stock threshold from settings
+    final globalThreshold = _getLowStockThreshold();
+    
     return variants.where((v) {
       if (query.isNotEmpty) {
         final barcode = (v.barcode ?? '').toLowerCase();
@@ -430,15 +435,31 @@ class _VariantsViewState extends State<_VariantsView> {
       if (_productFilter != null && v.productId != _productFilter) return false;
       if (_colorFilter != null && v.colorId != _colorFilter) return false;
       if (_sizeFilter != null && v.sizeId != _sizeFilter) return false;
+      
+      // Get product-specific minQuantity or use global threshold
+      final product = productById[v.productId];
+      final threshold = (product?.minQuantity != null && product!.minQuantity > 0) 
+          ? product.minQuantity 
+          : globalThreshold;
+      
       switch (_stockFilter) {
         case StockFilter.inStock: if (v.stockQuantity <= 0) return false; break;
-        case StockFilter.lowStock: if (v.stockQuantity <= 0 || v.stockQuantity > 10) return false; break;
+        case StockFilter.lowStock: if (v.stockQuantity <= 0 || v.stockQuantity > threshold) return false; break;
         case StockFilter.outOfStock: if (v.stockQuantity > 0) return false; break;
         case StockFilter.all: break;
       }
       if (_activeFilter != null && v.isActive != _activeFilter) return false;
       return true;
     }).toList();
+  }
+
+  int _getLowStockThreshold() {
+    try {
+      final settingsBloc = sl<AppSettingsBloc>();
+      return settingsBloc.state.settings.lowStockThreshold;
+    } catch (e) {
+      return 5; // Default fallback
+    }
   }
 
   List<ProductVariant> _applySorting(List<ProductVariant> variants) {

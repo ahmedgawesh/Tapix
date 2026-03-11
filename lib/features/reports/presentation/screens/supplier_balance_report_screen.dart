@@ -6,6 +6,7 @@ import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/audit_log_service.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../services/supplier_balance_excel_service.dart';
 import '../../services/supplier_balance_pdf_service.dart';
 import '../bloc/supplier_balance_report_bloc.dart';
 import '../widgets/date_range_selector.dart';
@@ -22,8 +23,24 @@ class SupplierBalanceReportScreen extends StatelessWidget {
   }
 }
 
-class _SupplierBalanceReportView extends StatelessWidget {
+class _SupplierBalanceReportView extends StatefulWidget {
   const _SupplierBalanceReportView();
+
+  @override
+  State<_SupplierBalanceReportView> createState() =>
+      _SupplierBalanceReportViewState();
+}
+
+class _SupplierBalanceReportViewState
+    extends State<_SupplierBalanceReportView> {
+  final _searchController = TextEditingController();
+  bool _showSearch = false;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -32,8 +49,39 @@ class _SupplierBalanceReportView extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('reports.supplier_balance'.tr()),
+        title: _showSearch
+            ? TextField(
+                controller: _searchController,
+                autofocus: true,
+                decoration: InputDecoration(
+                  hintText: 'reports.search_supplier'.tr(),
+                  border: InputBorder.none,
+                  hintStyle: TextStyle(color: colorScheme.onSurfaceVariant),
+                ),
+                style: theme.textTheme.titleMedium,
+                onChanged: (value) {
+                  context
+                      .read<SupplierBalanceReportBloc>()
+                      .add(SupplierBalanceReportSearchChanged(value));
+                },
+              )
+            : Text('reports.supplier_balance'.tr()),
         actions: [
+          IconButton(
+            icon: Icon(_showSearch ? LucideIcons.x : LucideIcons.search),
+            tooltip: _showSearch ? 'common.close'.tr() : 'common.search'.tr(),
+            onPressed: () {
+              setState(() {
+                _showSearch = !_showSearch;
+                if (!_showSearch) {
+                  _searchController.clear();
+                  context
+                      .read<SupplierBalanceReportBloc>()
+                      .add(const SupplierBalanceReportSearchChanged(''));
+                }
+              });
+            },
+          ),
           BlocBuilder<SupplierBalanceReportBloc,
               RealtimeState<SupplierBalanceReportData>>(
             builder: (context, state) {
@@ -52,6 +100,11 @@ class _SupplierBalanceReportView extends StatelessWidget {
                     icon: const Icon(LucideIcons.share2),
                     tooltip: 'common.share'.tr(),
                     onPressed: () => _shareReport(context, state.data),
+                  ),
+                  IconButton(
+                    icon: const Icon(LucideIcons.fileSpreadsheet),
+                    tooltip: 'Excel',
+                    onPressed: () => _exportReportExcel(context, state.data),
                   ),
                 ],
               );
@@ -94,15 +147,15 @@ class _SupplierBalanceReportView extends StatelessWidget {
                         .add(SupplierBalanceReportDateRangeChanged(range)),
                   ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 12),
 
                 // Summary cards
-                _buildSummaryCards(context, state.data),
-                const SizedBox(height: 8),
+                _buildSummarySection(context, state.data),
+                const SizedBox(height: 12),
 
-                // Content
+                // Supplier list
                 Expanded(
-                  child: _SupplierBalanceContent(data: state.data),
+                  child: _SupplierBalanceList(data: state.data),
                 ),
               ],
             );
@@ -114,75 +167,114 @@ class _SupplierBalanceReportView extends StatelessWidget {
     );
   }
 
-  Widget _buildSummaryCards(
+  Widget _buildSummarySection(
       BuildContext context, SupplierBalanceReportData data) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final cs = sl<CurrencyService>();
+    final summary = data.summary;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final isWide = constraints.maxWidth > 600;
-          final cards = [
-            _SummaryCard(
-              label: 'reports.total_payables'.tr(),
-              value: cs.formatCents(data.grandTotalDebitCents),
-              icon: LucideIcons.arrowUpRight,
-              color: data.grandTotalDebitCents > 0
-                  ? colorScheme.error
-                  : colorScheme.primary,
-            ),
-            _SummaryCard(
-              label: 'reports.total_receivables'.tr(),
-              value: cs.formatCents(data.grandTotalCreditCents),
-              icon: LucideIcons.arrowDownLeft,
-              color: colorScheme.tertiary,
-            ),
-            _SummaryCard(
-              label: 'reports.net_balance'.tr(),
-              value: cs.formatCents(data.grandNetBalanceCents),
-              icon: LucideIcons.scale,
-              color: data.grandNetBalanceCents > 0
-                  ? colorScheme.error
-                  : colorScheme.primary,
-            ),
-          ];
-
-          if (isWide) {
-            return Row(
-              children: cards
-                  .map((c) => Expanded(
-                          child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                        child: c,
-                      )))
-                  .toList(),
-            );
-          }
-
-          return Column(
+      child: Column(
+        children: [
+          // Main summary cards - Payables vs Receivables
+          Row(
             children: [
-              Row(
-                children: [
-                  Expanded(
-                      child: Padding(
-                    padding: const EdgeInsets.only(right: 4),
-                    child: cards[0],
-                  )),
-                  Expanded(
-                      child: Padding(
-                    padding: const EdgeInsets.only(left: 4),
-                    child: cards[1],
-                  )),
-                ],
+              Expanded(
+                child: _SummaryCard(
+                  label: 'reports.total_payables'.tr(),
+                  value: cs.formatCents(summary.totalPayablesCents),
+                  subtitle: 'reports.suppliers_count'
+                      .tr(args: ['${summary.suppliersWithPayable}']),
+                  icon: LucideIcons.arrowUpRight,
+                  color: colorScheme.error,
+                ),
               ),
-              const SizedBox(height: 8),
-              SizedBox(width: double.infinity, child: cards[2]),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _SummaryCard(
+                  label: 'reports.total_receivables'.tr(),
+                  value: cs.formatCents(summary.totalReceivablesCents),
+                  subtitle: 'reports.suppliers_count'
+                      .tr(args: ['${summary.suppliersWithReceivable}']),
+                  icon: LucideIcons.arrowDownLeft,
+                  color: colorScheme.primary,
+                ),
+              ),
             ],
-          );
-        },
+          ),
+          const SizedBox(height: 8),
+
+          // Net balance card
+          _SummaryCard(
+            label: 'reports.net_balance'.tr(),
+            value: cs.formatCents(summary.netBalanceCents),
+            subtitle: summary.netBalanceCents > 0
+                ? 'reports.net_payable'.tr()
+                : summary.netBalanceCents < 0
+                    ? 'reports.net_receivable'.tr()
+                    : 'reports.balanced'.tr(),
+            icon: LucideIcons.scale,
+            color: summary.netBalanceCents > 0
+                ? colorScheme.error
+                : summary.netBalanceCents < 0
+                    ? colorScheme.primary
+                    : colorScheme.tertiary,
+            isFullWidth: true,
+          ),
+          const SizedBox(height: 8),
+
+          // Detailed breakdown - Opening balances
+          _DetailedSummaryRow(
+            items: [
+              _DetailItem(
+                label: 'reports.opening_debit'.tr(),
+                value: cs.formatCents(summary.openingDebitCents),
+                color: colorScheme.error,
+              ),
+              _DetailItem(
+                label: 'reports.opening_credit'.tr(),
+                value: cs.formatCents(summary.openingCreditCents),
+                color: colorScheme.primary,
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+
+          // Detailed breakdown - Transactions
+          _DetailedSummaryRow(
+            items: [
+              _DetailItem(
+                label: 'reports.total_purchases'.tr(),
+                value: cs.formatCents(summary.totalPurchasesCents),
+                color: colorScheme.error,
+              ),
+              _DetailItem(
+                label: 'reports.total_payments'.tr(),
+                value: cs.formatCents(summary.totalPaymentsCents),
+                color: colorScheme.primary,
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+
+          // Detailed breakdown - Returns & Discounts
+          _DetailedSummaryRow(
+            items: [
+              _DetailItem(
+                label: 'reports.total_returns'.tr(),
+                value: cs.formatCents(summary.totalReturnsCents),
+                color: colorScheme.tertiary,
+              ),
+              _DetailItem(
+                label: 'reports.total_discounts'.tr(),
+                value: cs.formatCents(summary.totalDiscountsCents),
+                color: colorScheme.tertiary,
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -212,6 +304,27 @@ class _SupplierBalanceReportView extends StatelessWidget {
       action: 'share_supplier_balance_report',
     );
   }
+
+  Future<void> _exportReportExcel(
+      BuildContext context, SupplierBalanceReportData data) async {
+    try {
+      await SupplierBalanceExcelService.shareSupplierBalanceReport(
+        context: context,
+        data: data,
+      );
+      sl<AuditLogService>().log(
+        entityType: 'report',
+        entityId: 0,
+        action: 'export_supplier_balance_excel',
+      );
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('reports.export_error'.tr())),
+        );
+      }
+    }
+  }
 }
 
 // ═══════════════════════════════════════════════════════
@@ -221,14 +334,18 @@ class _SupplierBalanceReportView extends StatelessWidget {
 class _SummaryCard extends StatelessWidget {
   final String label;
   final String value;
+  final String? subtitle;
   final IconData icon;
   final Color color;
+  final bool isFullWidth;
 
   const _SummaryCard({
     required this.label,
     required this.value,
+    this.subtitle,
     required this.icon,
     required this.color,
+    this.isFullWidth = false,
   });
 
   @override
@@ -238,20 +355,18 @@ class _SummaryCard extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment:
+              isFullWidth ? CrossAxisAlignment.center : CrossAxisAlignment.start,
           children: [
             Row(
+              mainAxisSize: isFullWidth ? MainAxisSize.min : MainAxisSize.max,
               children: [
                 Icon(icon, size: 16, color: color),
                 const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    label,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                Text(
+                  label,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
               ],
@@ -263,9 +378,17 @@ class _SummaryCard extends StatelessWidget {
                 fontWeight: FontWeight.bold,
                 color: color,
               ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
             ),
+            if (subtitle != null) ...[
+              const SizedBox(height: 2),
+              Text(
+                subtitle!,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                  fontSize: 10,
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -274,33 +397,99 @@ class _SummaryCard extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════
-// SUPPLIER BALANCE CONTENT
+// DETAILED SUMMARY ROW
 // ═══════════════════════════════════════════════════════
 
-class _SupplierBalanceContent extends StatelessWidget {
-  final SupplierBalanceReportData data;
-  const _SupplierBalanceContent({required this.data});
+class _DetailItem {
+  final String label;
+  final String value;
+  final Color color;
+
+  const _DetailItem({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+}
+
+class _DetailedSummaryRow extends StatelessWidget {
+  final List<_DetailItem> items;
+
+  const _DetailedSummaryRow({required this.items});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final cs = sl<CurrencyService>();
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Row(
+          children: items.map((item) {
+            return Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item.label,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                      fontSize: 10,
+                    ),
+                  ),
+                  Text(
+                    item.value,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: item.color,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+}
 
-    if (data.suppliers.isEmpty) {
+// ═══════════════════════════════════════════════════════
+// SUPPLIER BALANCE LIST
+// ═══════════════════════════════════════════════════════
+
+class _SupplierBalanceList extends StatelessWidget {
+  final SupplierBalanceReportData data;
+  const _SupplierBalanceList({required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final suppliers = data.filteredSuppliers;
+
+    if (suppliers.isEmpty) {
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(LucideIcons.truck, size: 48,
-                color: theme.colorScheme.onSurfaceVariant),
+            Icon(LucideIcons.truck,
+                size: 48, color: theme.colorScheme.onSurfaceVariant),
             const SizedBox(height: 16),
-            Text('reports.no_supplier_balances'.tr(),
-                style: theme.textTheme.bodyLarge),
+            Text(
+              data.searchQuery.isNotEmpty
+                  ? 'reports.no_search_results'.tr()
+                  : 'reports.no_supplier_balances'.tr(),
+              style: theme.textTheme.bodyLarge,
+            ),
             const SizedBox(height: 8),
-            Text('reports.no_supplier_balances_desc'.tr(),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                )),
+            Text(
+              data.searchQuery.isNotEmpty
+                  ? 'reports.try_different_search'.tr()
+                  : 'reports.no_supplier_balances_desc'.tr(),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+              textAlign: TextAlign.center,
+            ),
           ],
         ),
       );
@@ -308,10 +497,10 @@ class _SupplierBalanceContent extends StatelessWidget {
 
     return ListView.builder(
       padding: const EdgeInsets.all(16),
-      itemCount: data.suppliers.length,
+      itemCount: suppliers.length,
       itemBuilder: (context, index) {
-        final item = data.suppliers[index];
-        return _SupplierBalanceCard(item: item, cs: cs);
+        final item = suppliers[index];
+        return _SupplierBalanceCard(item: item);
       },
     );
   }
@@ -323,136 +512,381 @@ class _SupplierBalanceContent extends StatelessWidget {
 
 class _SupplierBalanceCard extends StatelessWidget {
   final SupplierBalanceItem item;
-  final CurrencyService cs;
 
-  const _SupplierBalanceCard({
-    required this.item,
-    required this.cs,
-  });
+  const _SupplierBalanceCard({required this.item});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final cs = sl<CurrencyService>();
 
-    final isPayable = item.netBalanceCents > 0;
-    final balanceColor = isPayable ? colorScheme.error : colorScheme.primary;
-    final balanceLabel = isPayable
+    final balanceColor = item.isPayable
+        ? colorScheme.error
+        : item.isReceivable
+            ? colorScheme.primary
+            : colorScheme.tertiary;
+    final balanceLabel = item.isPayable
         ? 'reports.payable'.tr()
-        : item.netBalanceCents < 0
+        : item.isReceivable
             ? 'reports.receivable'.tr()
             : 'reports.settled'.tr();
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header row: name + balance badge
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        item.supplierName,
-                        style: theme.textTheme.titleSmall
-                            ?.copyWith(fontWeight: FontWeight.bold),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      if (item.phone != null && item.phone!.isNotEmpty)
+      child: InkWell(
+        onTap: () => _showSupplierDetails(context, item),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header row: name + balance badge
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                         Text(
-                          item.phone!,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
-                          ),
+                          item.supplierName,
+                          style: theme.textTheme.titleSmall
+                              ?.copyWith(fontWeight: FontWeight.bold),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                    ],
-                  ),
-                ),
-                Chip(
-                  label: Text(
-                    balanceLabel,
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: balanceColor,
+                        if (item.phone != null && item.phone!.isNotEmpty)
+                          Text(
+                            item.phone!,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                      ],
                     ),
                   ),
-                  backgroundColor: balanceColor.withValues(alpha: 0.1),
-                  visualDensity: VisualDensity.compact,
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  side: BorderSide.none,
+                  Chip(
+                    label: Text(
+                      balanceLabel,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: balanceColor,
+                      ),
+                    ),
+                    backgroundColor: balanceColor.withValues(alpha: 0.1),
+                    visualDensity: VisualDensity.compact,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    side: BorderSide.none,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+
+              // Balance metrics - 2x2 grid
+              Row(
+                children: [
+                  Expanded(
+                    child: _MetricItem(
+                      label: 'reports.total_debits'.tr(),
+                      value: cs.formatCents(item.totalDebitCents),
+                      valueColor:
+                          item.totalDebitCents > 0 ? colorScheme.error : null,
+                    ),
+                  ),
+                  Expanded(
+                    child: _MetricItem(
+                      label: 'reports.total_credits'.tr(),
+                      value: cs.formatCents(item.totalCreditCents),
+                      valueColor:
+                          item.totalCreditCents > 0 ? colorScheme.primary : null,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  Expanded(
+                    child: _MetricItem(
+                      label: 'reports.net_balance'.tr(),
+                      value: cs.formatCents(item.netBalanceCents),
+                      valueColor: balanceColor,
+                    ),
+                  ),
+                  Expanded(
+                    child: _MetricItem(
+                      label: 'reports.transactions'.tr(),
+                      value: item.transactionCount.toString(),
+                    ),
+                  ),
+                ],
+              ),
+
+              if (item.lastTransactionAt != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  '${'reports.last_transaction'.tr()}: ${DateFormat.yMMMd().format(item.lastTransactionAt!)}',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ],
-            ),
-            const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
-            // Balance metrics
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final isWide = constraints.maxWidth > 400;
-                final metrics = [
-                  _MetricItem(
-                    label: 'reports.total_debits'.tr(),
-                    value: cs.formatCents(item.totalDebitCents),
-                    valueColor: item.totalDebitCents > 0
+  void _showSupplierDetails(BuildContext context, SupplierBalanceItem item) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final cs = sl<CurrencyService>();
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.6,
+          minChildSize: 0.4,
+          maxChildSize: 0.9,
+          expand: false,
+          builder: (context, scrollController) {
+            return Container(
+              padding: const EdgeInsets.all(16),
+              child: ListView(
+                controller: scrollController,
+                children: [
+                  // Handle
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                        color: colorScheme.onSurfaceVariant.withValues(alpha: 0.3),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+
+                  // Supplier name
+                  Text(
+                    item.supplierName,
+                    style: theme.textTheme.titleLarge
+                        ?.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                  if (item.phone != null || item.email != null) ...[
+                    const SizedBox(height: 4),
+                    if (item.phone != null)
+                      Text(item.phone!,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          )),
+                    if (item.email != null)
+                      Text(item.email!,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          )),
+                  ],
+                  const SizedBox(height: 16),
+
+                  // Net balance highlight
+                  Card(
+                    color: (item.isPayable ? colorScheme.error : colorScheme.primary)
+                        .withValues(alpha: 0.1),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        children: [
+                          Text(
+                            'reports.net_balance'.tr(),
+                            style: theme.textTheme.bodyMedium,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            cs.formatCents(item.netBalanceCents),
+                            style: theme.textTheme.headlineMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: item.isPayable
+                                  ? colorScheme.error
+                                  : colorScheme.primary,
+                            ),
+                          ),
+                          Text(
+                            item.isPayable
+                                ? 'reports.payable'.tr()
+                                : item.isReceivable
+                                    ? 'reports.receivable'.tr()
+                                    : 'reports.settled'.tr(),
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Detailed breakdown
+                  Text(
+                    'reports.balance_breakdown'.tr(),
+                    style: theme.textTheme.titleMedium
+                        ?.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+
+                  _DetailRow(
+                    label: 'reports.opening_balance'.tr(),
+                    value: cs.formatCents(item.openingBalanceCents),
+                    color: item.openingBalanceCents > 0
                         ? colorScheme.error
-                        : null,
+                        : item.openingBalanceCents < 0
+                            ? colorScheme.primary
+                            : null,
                   ),
-                  _MetricItem(
-                    label: 'reports.total_credits'.tr(),
-                    value: cs.formatCents(item.totalCreditCents),
-                    valueColor: item.totalCreditCents > 0
-                        ? colorScheme.primary
-                        : null,
+                  _DetailRow(
+                    label: 'reports.total_purchases'.tr(),
+                    value: '+ ${cs.formatCents(item.totalPurchasesCents)}',
+                    color: colorScheme.error,
                   ),
-                  _MetricItem(
+                  _DetailRow(
+                    label: 'reports.total_payments'.tr(),
+                    value: '- ${cs.formatCents(item.totalPaymentsCents)}',
+                    color: colorScheme.primary,
+                  ),
+                  _DetailRow(
+                    label: 'reports.total_returns'.tr(),
+                    value: '- ${cs.formatCents(item.totalReturnsCents)}',
+                    color: colorScheme.tertiary,
+                  ),
+                  _DetailRow(
+                    label: 'reports.total_discounts'.tr(),
+                    value: '- ${cs.formatCents(item.totalDiscountsCents)}',
+                    color: colorScheme.tertiary,
+                  ),
+                  const Divider(),
+                  _DetailRow(
                     label: 'reports.net_balance'.tr(),
                     value: cs.formatCents(item.netBalanceCents),
-                    valueColor: balanceColor,
+                    color: item.isPayable
+                        ? colorScheme.error
+                        : item.isReceivable
+                            ? colorScheme.primary
+                            : null,
+                    isBold: true,
                   ),
-                  _MetricItem(
-                    label: 'reports.transactions'.tr(),
-                    value: item.transactionCount.toString(),
+
+                  const SizedBox(height: 24),
+
+                  // Export buttons
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _exportSupplierPdf(context, item);
+                          },
+                          icon: const Icon(LucideIcons.fileText),
+                          label: const Text('PDF'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _exportSupplierExcel(context, item);
+                          },
+                          icon: const Icon(LucideIcons.fileSpreadsheet),
+                          label: const Text('Excel'),
+                        ),
+                      ),
+                    ],
                   ),
-                ];
-
-                if (isWide) {
-                  return Row(
-                    children:
-                        metrics.map((m) => Expanded(child: m)).toList(),
-                  );
-                }
-                return Column(
-                  children: [
-                    Row(children: [
-                      Expanded(child: metrics[0]),
-                      Expanded(child: metrics[1]),
-                    ]),
-                    const SizedBox(height: 4),
-                    Row(children: [
-                      Expanded(child: metrics[2]),
-                      Expanded(child: metrics[3]),
-                    ]),
-                  ],
-                );
-              },
-            ),
-
-            if (item.lastTransactionAt != null) ...[
-              const SizedBox(height: 4),
-              Text(
-                '${'reports.last_transaction'.tr()}: ${DateFormat.yMMMd().format(item.lastTransactionAt!)}',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                ),
+                ],
               ),
-            ],
-          ],
-        ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _exportSupplierPdf(BuildContext context, SupplierBalanceItem item) async {
+    try {
+      await SupplierBalancePdfService.printSingleSupplierReport(
+        context: context,
+        item: item,
+      );
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('reports.export_error'.tr())),
+        );
+      }
+    }
+  }
+
+  Future<void> _exportSupplierExcel(BuildContext context, SupplierBalanceItem item) async {
+    try {
+      await SupplierBalanceExcelService.shareSupplierDetail(
+        context: context,
+        item: item,
+      );
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('reports.export_error'.tr())),
+        );
+      }
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// DETAIL ROW (for bottom sheet)
+// ═══════════════════════════════════════════════════════
+
+class _DetailRow extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color? color;
+  final bool isBold;
+
+  const _DetailRow({
+    required this.label,
+    required this.value,
+    this.color,
+    this.isBold = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: isBold
+                ? theme.textTheme.bodyMedium
+                    ?.copyWith(fontWeight: FontWeight.bold)
+                : theme.textTheme.bodyMedium,
+          ),
+          Text(
+            value,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
+              color: color,
+            ),
+          ),
+        ],
       ),
     );
   }

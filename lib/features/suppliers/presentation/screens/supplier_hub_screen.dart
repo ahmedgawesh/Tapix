@@ -156,13 +156,18 @@ class _SupplierHubContentState extends State<_SupplierHubContent> {
 
     // Calculate metrics
     final activeCount = data.suppliers.length;
-    final totalPayableCents = data.suppliers.fold<int>(
-      0,
-      (sum, s) {
-        final balance = s.balanceCents.toBigInt().toInt();
-        return balance != 0 ? sum + balance.abs() : sum;
-      },
-    );
+    // Positive balance = we owe them (debit/payable)
+    // Negative balance = they owe us (credit/receivable)
+    int weOweCents = 0;
+    int theyOweCents = 0;
+    for (final s in data.suppliers) {
+      final balance = s.balanceCents.toBigInt().toInt();
+      if (balance > 0) {
+        weOweCents += balance;
+      } else if (balance < 0) {
+        theyOweCents += balance.abs();
+      }
+    }
     final withBalanceCount = data.suppliers.where((s) => s.balanceCents.toBigInt().toInt() != 0).length;
 
     return RefreshIndicator(
@@ -197,12 +202,20 @@ class _SupplierHubContentState extends State<_SupplierHubContent> {
                         value: activeCount.toString(),
                       );
 
-                      final payablesCard = _StatCard(
-                        icon: LucideIcons.wallet,
-                        iconColor: colorScheme.secondary,
-                        backgroundColor: colorScheme.secondaryContainer.withValues(alpha: 0.5),
-                        label: 'suppliers.total_payables'.tr(),
-                        value: currencyService.format(totalPayableCents),
+                      final weOweCard = _StatCard(
+                        icon: LucideIcons.arrowUpRight,
+                        iconColor: Colors.red,
+                        backgroundColor: Colors.red.withValues(alpha: 0.08),
+                        label: 'suppliers.total_we_owe'.tr(),
+                        value: currencyService.format(weOweCents),
+                      );
+
+                      final theyOweCard = _StatCard(
+                        icon: LucideIcons.arrowDownLeft,
+                        iconColor: Colors.green,
+                        backgroundColor: Colors.green.withValues(alpha: 0.08),
+                        label: 'suppliers.total_they_owe'.tr(),
+                        value: currencyService.format(theyOweCents),
                       );
 
                       final withBalanceCard = _StatCard(
@@ -218,7 +231,9 @@ class _SupplierHubContentState extends State<_SupplierHubContent> {
                           children: [
                             Expanded(child: activeCard),
                             const SizedBox(width: 12),
-                            Expanded(child: payablesCard),
+                            Expanded(child: weOweCard),
+                            const SizedBox(width: 12),
+                            Expanded(child: theyOweCard),
                             const SizedBox(width: 12),
                             Expanded(child: withBalanceCard),
                           ],
@@ -231,11 +246,17 @@ class _SupplierHubContentState extends State<_SupplierHubContent> {
                             children: [
                               Expanded(child: activeCard),
                               const SizedBox(width: 12),
-                              Expanded(child: payablesCard),
+                              Expanded(child: weOweCard),
                             ],
                           ),
                           const SizedBox(height: 12),
-                          withBalanceCard,
+                          Row(
+                            children: [
+                              Expanded(child: theyOweCard),
+                              const SizedBox(width: 12),
+                              Expanded(child: withBalanceCard),
+                            ],
+                          ),
                         ],
                       );
                     },
@@ -562,7 +583,7 @@ class _SupplierListTile extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Text(
-                currencyService.format(balanceCents),
+                currencyService.format(balanceCents.abs()),
                 style: theme.textTheme.titleMedium?.copyWith(
                   color: balanceCents > 0 ? Colors.red : balanceCents < 0 ? Colors.green : Colors.blue,
                   fontWeight: FontWeight.bold,
@@ -688,7 +709,7 @@ class _SupplierPickerSheetState extends State<_SupplierPickerSheet> {
                             overflow: TextOverflow.ellipsis,
                           ),
                           subtitle: Text(
-                            widget.currencyService.format(balanceCents),
+                            widget.currencyService.format(balanceCents.abs()),
                             style: TextStyle(
                               color: balanceCents > 0 ? Colors.red : balanceCents < 0 ? Colors.green : Colors.blue,
                             ),

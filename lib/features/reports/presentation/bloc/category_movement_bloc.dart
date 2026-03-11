@@ -225,12 +225,14 @@ class CategoryMovementData {
 class CategoryMovementBloc
     extends RealtimeBloc<CategoryMovementData, CategoryMovementEvent> {
   final AppDatabase _db;
-  ReportDateRange _dateRange = ReportDateRange.thisMonth();
+  ReportDateRange _dateRange;
   String _searchQuery = '';
   int? _selectedCategoryId;
   CategoryMovementSort _sort = CategoryMovementSort.mostActive;
 
-  CategoryMovementBloc(this._db) : super(const RealtimeLoading());
+  CategoryMovementBloc(this._db, {String defaultDateRange = 'month'})
+      : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+        super(const RealtimeLoading());
 
   @override
   Stream<CategoryMovementData> get dataStream {

@@ -33,12 +33,40 @@ class AuthLogoutRequested extends AuthEvent {
 class AuthFirstOwnerCreated extends AuthEvent {
   final String username;
   final String password;
+  final String? securityQuestion;
+  final String? securityAnswer;
 
   const AuthFirstOwnerCreated({
     required this.username,
     required this.password,
+    this.securityQuestion,
+    this.securityAnswer,
   });
 
   @override
-  List<Object?> get props => [username, password];
+  List<Object?> get props => [username, password, securityQuestion, securityAnswer];
+}
+
+class AuthSecurityQuestionRequested extends AuthEvent {
+  final String username;
+
+  const AuthSecurityQuestionRequested({required this.username});
+
+  @override
+  List<Object?> get props => [username];
+}
+
+class AuthPasswordResetRequested extends AuthEvent {
+  final String username;
+  final String securityAnswer;
+  final String newPassword;
+
+  const AuthPasswordResetRequested({
+    required this.username,
+    required this.securityAnswer,
+    required this.newPassword,
+  });
+
+  @override
+  List<Object?> get props => [username, securityAnswer, newPassword];
 }

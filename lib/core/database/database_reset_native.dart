@@ -4,7 +4,8 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 Future<String> getDatabaseLocationImpl() async {
-  final dbFolder = await getApplicationDocumentsDirectory();
+  // Must match the path used in database_native.dart (getApplicationSupportDirectory)
+  final dbFolder = await getApplicationSupportDirectory();
   return p.join(dbFolder.path, 'tapix.db');
 }
 

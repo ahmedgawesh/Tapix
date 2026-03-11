@@ -129,10 +129,12 @@ class SupplierOption {
 class SupplierStatementReportBloc extends RealtimeBloc<SupplierStatementData,
     SupplierStatementReportEvent> {
   final AppDatabase _db;
-  ReportDateRange _dateRange = ReportDateRange.thisMonth();
+  ReportDateRange _dateRange;
   int? _supplierId;
 
-  SupplierStatementReportBloc(this._db) : super(const RealtimeLoading());
+  SupplierStatementReportBloc(this._db, {String defaultDateRange = 'month'})
+      : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+        super(const RealtimeLoading());
 
   ReportDateRange get dateRange => _dateRange;
   int? get supplierId => _supplierId;

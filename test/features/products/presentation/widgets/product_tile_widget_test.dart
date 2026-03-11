@@ -3,24 +3,46 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:easy_localization/easy_localization.dart';
+import 'package:tapix/core/bloc/currency_bloc.dart';
+import 'package:tapix/core/bloc/realtime_bloc.dart';
 import 'package:tapix/core/services/currency_service.dart';
 import 'package:tapix/features/products/domain/entities/product_entity.dart';
 import 'package:tapix/features/products/presentation/widgets/product_tile_widget.dart';
 
 class MockCurrencyService extends Mock implements CurrencyService {}
 
+class MockCurrencyBloc extends Mock implements CurrencyBloc {}
+
+class _TestAssetLoader extends AssetLoader {
+  const _TestAssetLoader();
+
+  @override
+  Future<Map<String, dynamic>> load(String path, Locale locale) async {
+    return <String, dynamic>{};
+  }
+}
+
 void main() {
   group('ProductTileWidget', () {
     late Product testProduct;
     late MockCurrencyService currencyService;
+    late MockCurrencyBloc currencyBloc;
 
     setUp(() {
       currencyService = MockCurrencyService();
+      currencyBloc = MockCurrencyBloc();
       when(() => currencyService.currencySymbol).thenReturn('\$');
+      when(() => currencyService.currencyCode).thenReturn('USD');
+      when(() => currencyService.getCurrency()).thenReturn(Currency.fromCode('USD'));
+      when(() => currencyService.currencyStream).thenAnswer((_) => Stream.value(Currency.fromCode('USD')));
       when(() => currencyService.format(any())).thenAnswer((invocation) {
         final cents = invocation.positionalArguments[0] as int;
         return '\$${(cents / 100).toStringAsFixed(2)}';
       });
+      when(() => currencyBloc.state).thenReturn(RealtimeSuccess<Currency>(data: Currency.fromCode('USD')));
+      when(() => currencyBloc.stream).thenAnswer((_) => Stream.value(RealtimeSuccess<Currency>(data: Currency.fromCode('USD'))));
+      when(() => currencyBloc.close()).thenAnswer((_) async {});
       
       testProduct = Product(
         id: 1,
@@ -49,11 +71,26 @@ void main() {
     });
 
     Widget createWidget(Widget child) {
-      return MaterialApp(
-        home: Scaffold(
-          body: RepositoryProvider<CurrencyService>.value(
-            value: currencyService,
-            child: child,
+      return EasyLocalization(
+        supportedLocales: const [Locale('en')],
+        path: 'assets/translations',
+        assetLoader: const _TestAssetLoader(),
+        fallbackLocale: const Locale('en'),
+        startLocale: const Locale('en'),
+        child: Builder(
+          builder: (context) => MaterialApp(
+            localizationsDelegates: context.localizationDelegates,
+            supportedLocales: context.supportedLocales,
+            locale: context.locale,
+            home: Scaffold(
+              body: MultiBlocProvider(
+                providers: [
+                  RepositoryProvider<CurrencyService>.value(value: currencyService),
+                  BlocProvider<CurrencyBloc>.value(value: currencyBloc),
+                ],
+                child: child,
+              ),
+            ),
           ),
         ),
       );
@@ -63,6 +100,7 @@ void main() {
       await tester.pumpWidget(createWidget(
         ProductTileWidget(product: testProduct),
       ));
+      await tester.pumpAndSettle();
 
       expect(find.text('Test Product'), findsOneWidget);
       expect(find.text('SKU: TEST-001'), findsOneWidget);
@@ -72,6 +110,7 @@ void main() {
       await tester.pumpWidget(createWidget(
         ProductTileWidget(product: testProduct),
       ));
+      await tester.pumpAndSettle();
 
       expect(find.text('\$15.00'), findsOneWidget);
     });
@@ -80,6 +119,7 @@ void main() {
       await tester.pumpWidget(createWidget(
         ProductTileWidget(product: testProduct),
       ));
+      await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('normal_stock_indicator')), findsOneWidget);
       expect(find.text('50'), findsOneWidget);
@@ -91,6 +131,7 @@ void main() {
       await tester.pumpWidget(createWidget(
         ProductTileWidget(product: lowStockProduct),
       ));
+      await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('low_stock_indicator')), findsOneWidget);
       expect(find.text('5'), findsOneWidget);
@@ -102,6 +143,7 @@ void main() {
       await tester.pumpWidget(createWidget(
         ProductTileWidget(product: outOfStockProduct),
       ));
+      await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('out_of_stock_indicator')), findsOneWidget);
       expect(find.text('0'), findsOneWidget);
@@ -118,6 +160,7 @@ void main() {
           },
         ),
       ));
+      await tester.pumpAndSettle();
 
       await tester.tap(find.byType(InkWell));
       await tester.pumpAndSettle();
@@ -136,6 +179,7 @@ void main() {
           },
         ),
       ));
+      await tester.pumpAndSettle();
 
       await tester.longPress(find.byType(InkWell));
       await tester.pumpAndSettle();
@@ -149,6 +193,7 @@ void main() {
       await tester.pumpWidget(createWidget(
         ProductTileWidget(product: noSkuProduct),
       ));
+      await tester.pumpAndSettle();
 
       expect(find.textContaining('SKU:'), findsNothing);
     });

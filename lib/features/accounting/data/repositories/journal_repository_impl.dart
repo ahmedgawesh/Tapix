@@ -311,12 +311,9 @@ class JournalRepositoryImpl implements JournalRepository {
       await _datasource.updateJournalEntry(updatedReversal);
     }
 
-    // Mark original as voided
-    final voidedOriginal = updatedOriginal.copyWith(
-      status: 'voided',
-      updatedAt: DateTime.now(),
-    );
-    await _datasource.updateJournalEntry(voidedOriginal);
+    // Original stays 'posted' with isReversed=true so original + reversal
+    // cancel to net zero in GL. Do NOT set status='voided' — that would
+    // exclude the original from GL while the reversal subtracts again.
 
     return reversalId;
   }
@@ -594,13 +591,15 @@ class JournalRepositoryImpl implements JournalRepository {
       {'code': '2300', 'name': 'Loyalty Points Liability', 'type': 'liability', 'system': true, 'order': 12},
       // ── Equity (3xxx) ──
       {'code': '3000', 'name': 'Owner Capital', 'type': 'equity', 'system': true, 'order': 20},
+      {'code': '3100', 'name': 'Opening Balance Equity', 'type': 'equity', 'system': true, 'order': 21},
       // ── Income (4xxx) ──
       {'code': '4000', 'name': 'Sales Revenue', 'type': 'revenue', 'system': true, 'order': 30},
       // ── Expenses (5xxx) ──
       {'code': '5100', 'name': 'Expenses', 'type': 'expense', 'system': true, 'order': 41},
       {'code': '5200', 'name': 'Salaries Expense', 'type': 'expense', 'system': true, 'order': 42},
-      {'code': '5500', 'name': 'Discounts Given', 'type': 'expense', 'system': true, 'order': 43},
-      {'code': '5600', 'name': 'Commissions Expense', 'type': 'expense', 'system': true, 'order': 44},
+      {'code': '5300', 'name': 'Cost of Goods Sold', 'type': 'expense', 'system': true, 'order': 43},
+      {'code': '5500', 'name': 'Discounts Given', 'type': 'expense', 'system': true, 'order': 44},
+      {'code': '5600', 'name': 'Commissions Expense', 'type': 'expense', 'system': true, 'order': 45},
     ];
 
     // Idempotent: skip accounts that already exist, create only missing ones

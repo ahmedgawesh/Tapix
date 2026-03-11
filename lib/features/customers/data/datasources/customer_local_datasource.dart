@@ -18,6 +18,11 @@ abstract class CustomerLocalDatasource {
   Future<void> updateCustomerLoyaltyEnabled(int customerId, bool loyaltyEnabled);
   Future<int> createTransaction(CustomerTransactionsCompanion transaction);
   Future<CustomerTransaction?> getTransaction(int transactionId);
+  Future<CustomerTransaction> updateTransactionAmount(
+    int transactionId, {
+    required int newAmountCents,
+    String? newDescription,
+  });
   Stream<List<CustomerTransaction>> watchCustomerTransactions(int customerId);
   Future<List<CustomerTransaction>> getCustomerTransactions(
     int customerId, {
@@ -105,6 +110,19 @@ class CustomerLocalDatasourceImpl implements CustomerLocalDatasource {
   @override
   Future<CustomerTransaction?> getTransaction(int transactionId) {
     return _customerDao.getTransaction(transactionId);
+  }
+
+  @override
+  Future<CustomerTransaction> updateTransactionAmount(
+    int transactionId, {
+    required int newAmountCents,
+    String? newDescription,
+  }) {
+    return _customerDao.updateTransactionAmount(
+      transactionId,
+      newAmountCents: newAmountCents,
+      newDescription: newDescription,
+    );
   }
 
   @override

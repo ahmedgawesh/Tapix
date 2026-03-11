@@ -506,11 +506,16 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
           .fold<int>(0, (sum, p) => sum + p.amountCents.toBigInt().toInt());
       final headerPaidCents = purchase.paidAmountCents.toBigInt().toInt();
       int? backfilledInitialPaymentId;
+      int? excessPaymentId;
       if (totalPaidCents == 0 && headerPaidCents > 0) {
+        // If overpaying, split into invoice payment + excess credit payment
+        final invoicePayment = headerPaidCents > totalCents ? totalCents : headerPaidCents;
+        final excessPayment = headerPaidCents > totalCents ? headerPaidCents - totalCents : 0;
+
         backfilledInitialPaymentId = await into(purchasePayments).insert(
           PurchasePaymentsCompanion.insert(
             purchaseId: purchaseId,
-            amountCents: Decimal.fromInt(headerPaidCents),
+            amountCents: Decimal.fromInt(invoicePayment),
             currencyId: purchase.currencyId,
             paymentMethod: purchase.paymentMethod ?? 'cash',
             reference: const Value(null),
@@ -518,6 +523,21 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
             paymentDate: Value(purchase.purchaseDate),
           ),
         );
+
+        if (excessPayment > 0) {
+          excessPaymentId = await into(purchasePayments).insert(
+            PurchasePaymentsCompanion.insert(
+              purchaseId: purchaseId,
+              amountCents: Decimal.fromInt(excessPayment),
+              currencyId: purchase.currencyId,
+              paymentMethod: purchase.paymentMethod ?? 'cash',
+              reference: const Value(null),
+              notes: const Value('Excess cash — added to supplier balance'),
+              paymentDate: Value(purchase.purchaseDate),
+            ),
+          );
+        }
+
         totalPaidCents = headerPaidCents;
       }
 
@@ -541,17 +561,36 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
         ),
       );
 
-      // Only log an initial payment transaction when we had to backfill a payment row.
+      // Record payment transaction(s) only when we backfilled payment rows.
       // Later payments are logged via recordPayment().
-      if (backfilledInitialPaymentId != null && totalPaidCents > 0) {
+      if (backfilledInitialPaymentId != null) {
+        final invoicePayment = headerPaidCents > totalCents ? totalCents : headerPaidCents;
+        if (invoicePayment > 0) {
+          await into(supplierTransactions).insert(
+            SupplierTransactionsCompanion.insert(
+              supplierId: purchase.supplierId,
+              transactionType: 'payment',
+              amountCents: Decimal.fromInt(-invoicePayment),
+              currencyId: purchase.currencyId,
+              description: Value('Payment for ${purchase.purchaseNumber}'),
+              referenceId: Value(backfilledInitialPaymentId),
+              referenceType: const Value('purchase_payment'),
+            ),
+          );
+        }
+      }
+
+      // Record excess cash as a separate payment transaction
+      if (excessPaymentId != null) {
+        final excessPayment = headerPaidCents - totalCents;
         await into(supplierTransactions).insert(
           SupplierTransactionsCompanion.insert(
             supplierId: purchase.supplierId,
             transactionType: 'payment',
-            amountCents: Decimal.fromInt(-totalPaidCents),
+            amountCents: Decimal.fromInt(-excessPayment),
             currencyId: purchase.currencyId,
-            description: Value('Payment for ${purchase.purchaseNumber}'),
-            referenceId: Value(backfilledInitialPaymentId),
+            description: Value('Excess cash added to balance — ${purchase.purchaseNumber}'),
+            referenceId: Value(excessPaymentId),
             referenceType: const Value('purchase_payment'),
           ),
         );
@@ -931,53 +970,42 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
         }).toList());
   }
 
-  /// Get dashboard stats
+  /// Get dashboard stats using SQL aggregation (no full-table load).
   Future<PurchaseDashboardStats> getDashboardStats() async {
-    final allPurchases = await select(purchases).get();
+    final nowIso = DateTime.now().toIso8601String();
 
-    final draftCount = allPurchases.where((p) => p.status == 'draft' || p.status == 'pending').length;
-    final postedCount = allPurchases.where((p) => p.status == 'posted').length;
-    final totalCount = allPurchases.where((p) => p.status != 'voided').length;
+    // Single aggregation query for all purchase stats
+    // COALESCE ensures NULL (from empty table) becomes 0
+    final statsRow = await customSelect(
+      'SELECT '
+      "  COALESCE(SUM(CASE WHEN status != 'voided' THEN 1 ELSE 0 END), 0) AS total_count, "
+      "  COALESCE(SUM(CASE WHEN status IN ('draft', 'pending') THEN 1 ELSE 0 END), 0) AS draft_count, "
+      "  COALESCE(SUM(CASE WHEN status = 'posted' THEN 1 ELSE 0 END), 0) AS posted_count, "
+      "  COALESCE(SUM(CASE WHEN status = 'posted' THEN total_cents ELSE 0 END), 0) AS total_posted_cents, "
+      "  COALESCE(SUM(CASE WHEN status = 'posted' THEN paid_amount_cents ELSE 0 END), 0) AS total_paid_cents, "
+      "  COALESCE(SUM(CASE WHEN status = 'posted' AND due_date IS NOT NULL AND due_date < ? "
+      '    AND paid_amount_cents < total_cents THEN 1 ELSE 0 END), 0) AS overdue_count '
+      'FROM purchases',
+      variables: [Variable.withString(nowIso)],
+    ).getSingle();
 
-    // Calculate totals only from posted purchases.
-    // Drafts/pending should not affect accounting payables.
-    int totalPostedCents = 0;
-    int totalPostedPaidCents = 0;
-    int overdueCount = 0;
-    final now = DateTime.now();
+    // Returns count via SQL
+    final returnsRow = await customSelect(
+      'SELECT COUNT(*) AS returns_count FROM purchase_returns',
+    ).getSingle();
 
-    for (final p in allPurchases) {
-      if (p.status == 'voided') continue;
-      if (p.status == 'posted') {
-        final total = p.totalCents.toBigInt().toInt();
-        final paid = p.paidAmountCents.toBigInt().toInt();
-        totalPostedCents += total;
-        totalPostedPaidCents += paid;
-      }
-
-      // Overdue: posted, not fully paid, past due date
-      if (p.status == 'posted' && p.dueDate != null) {
-        final total = p.totalCents.toBigInt().toInt();
-        final paid = p.paidAmountCents.toBigInt().toInt();
-        if (paid < total) {
-        if (p.dueDate!.isBefore(now)) {
-          overdueCount++;
-        }
-        }
-      }
-    }
-
-    // Returns count
-    final returnsCount = await (select(purchaseReturns)).get().then((l) => l.length);
+    final totalPostedCents = statsRow.read<int>('total_posted_cents');
+    final totalPaidCents = statsRow.read<int>('total_paid_cents');
+    final payable = (totalPostedCents - totalPaidCents).clamp(0, 1 << 62);
 
     return PurchaseDashboardStats(
-      totalCount: totalCount,
-      draftCount: draftCount,
-      postedCount: postedCount,
-      totalPayableCents: (totalPostedCents - totalPostedPaidCents).clamp(0, 1 << 62),
-      totalPaidCents: totalPostedPaidCents,
-      overdueCount: overdueCount,
-      returnsCount: returnsCount,
+      totalCount: statsRow.read<int>('total_count'),
+      draftCount: statsRow.read<int>('draft_count'),
+      postedCount: statsRow.read<int>('posted_count'),
+      totalPayableCents: payable,
+      totalPaidCents: totalPaidCents,
+      overdueCount: statsRow.read<int>('overdue_count'),
+      returnsCount: returnsRow.read<int>('returns_count'),
     );
   }
 

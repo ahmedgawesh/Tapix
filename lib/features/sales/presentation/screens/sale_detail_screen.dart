@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:easy_localization/easy_localization.dart';
@@ -8,6 +9,7 @@ import 'package:decimal/decimal.dart';
 
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../../auth/auth.dart';
 import '../../domain/entities/sale_entity.dart';
 import '../../domain/repositories/sale_repository.dart';
 import '../services/sale_pdf_service.dart';
@@ -123,6 +125,11 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
   List<Widget> _buildActions(SaleEntity sale, ColorScheme colorScheme) {
     final actions = <Widget>[];
 
+    // Check if user has edit permission
+    final authState = context.read<AuthBloc>().state;
+    final canEdit = authState is AuthAuthenticated &&
+        sl<PermissionService>().hasPermission(authState.user, Permissions.editTransactions);
+
     if (sale.isCompleted) {
       actions.add(
         FilledButton.tonalIcon(
@@ -137,6 +144,15 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
           icon: const Icon(LucideIcons.moreVertical),
           onSelected: (v) => _handleAction(v, context),
           itemBuilder: (_) => [
+            if (canEdit)
+              PopupMenuItem(
+                value: 'edit',
+                child: ListTile(
+                  leading: const Icon(LucideIcons.pencil),
+                  title: Text('sales.edit_sale'.tr()),
+                  dense: true, contentPadding: EdgeInsets.zero,
+                ),
+              ),
             PopupMenuItem(
               value: 'print',
               child: ListTile(
@@ -204,6 +220,10 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
             );
           } catch (_) {}
         }
+        break;
+      case 'edit':
+        // Navigate to sale form with the sale ID for editing posted sale
+        context.push('/sales/${widget.saleId}/edit?posted=true');
         break;
       case 'void':
         final confirmed = await showDialog<bool>(

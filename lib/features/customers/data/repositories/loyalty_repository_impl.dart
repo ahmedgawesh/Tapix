@@ -484,4 +484,134 @@ class LoyaltyRepositoryImpl implements LoyaltyRepository {
     final basePoints = (amountCents * pointsPerUnit) ~/ 100;
     return (basePoints * multiplier).round();
   }
+
+  @override
+  Future<int> createTier(LoyaltyTier tier) async {
+    return _database.into(_database.loyaltyTiers).insert(
+      LoyaltyTiersCompanion.insert(
+        name: tier.name,
+        nameAr: Value(tier.nameAr),
+        nameFr: Value(tier.nameFr),
+        minPoints: Value(tier.minPoints),
+        maxPoints: Value(tier.maxPoints),
+        pointsMultiplier: Value(tier.pointsMultiplier),
+        discountPercent: Value(tier.discountPercent),
+        freeShipping: Value(tier.freeShipping),
+        freeShippingMinOrderCents: Value(tier.freeShippingMinOrderCents),
+        prioritySupport: Value(tier.prioritySupport),
+        earlyAccessDays: Value(tier.earlyAccessDays),
+        exclusiveOffers: Value(tier.exclusiveOffers),
+        birthdayBonus: Value(tier.birthdayBonus),
+        birthdayBonusPoints: Value(tier.birthdayBonusPoints),
+        birthdayDiscountPercent: Value(tier.birthdayDiscountPercent),
+        color: Value(tier.color),
+        icon: Value(tier.icon),
+        badgeText: Value(tier.badgeText),
+        sortOrder: Value(tier.sortOrder),
+        isActive: Value(tier.isActive),
+      ),
+    );
+  }
+
+  @override
+  Future<void> updateTier(LoyaltyTier tier) async {
+    await (_database.update(_database.loyaltyTiers)
+          ..where((t) => t.id.equals(tier.id)))
+        .write(LoyaltyTiersCompanion(
+          name: Value(tier.name),
+          nameAr: Value(tier.nameAr),
+          nameFr: Value(tier.nameFr),
+          minPoints: Value(tier.minPoints),
+          maxPoints: Value(tier.maxPoints),
+          pointsMultiplier: Value(tier.pointsMultiplier),
+          discountPercent: Value(tier.discountPercent),
+          freeShipping: Value(tier.freeShipping),
+          freeShippingMinOrderCents: Value(tier.freeShippingMinOrderCents),
+          prioritySupport: Value(tier.prioritySupport),
+          earlyAccessDays: Value(tier.earlyAccessDays),
+          exclusiveOffers: Value(tier.exclusiveOffers),
+          birthdayBonus: Value(tier.birthdayBonus),
+          birthdayBonusPoints: Value(tier.birthdayBonusPoints),
+          birthdayDiscountPercent: Value(tier.birthdayDiscountPercent),
+          color: Value(tier.color),
+          icon: Value(tier.icon),
+          badgeText: Value(tier.badgeText),
+          sortOrder: Value(tier.sortOrder),
+          isActive: Value(tier.isActive),
+          updatedAt: Value(DateTime.now()),
+        ));
+    
+    // Reassign all customers to correct tiers based on their points
+    await _reassignAllCustomerTiers();
+  }
+  
+  /// Reassigns all customers to their correct tier based on their loyalty points balance
+  Future<void> _reassignAllCustomerTiers() async {
+    // Get all active tiers sorted by minPoints descending (highest tier first)
+    final tiers = await (_database.select(_database.loyaltyTiers)
+          ..where((t) => t.isActive.equals(true))
+          ..orderBy([(t) => OrderingTerm.desc(t.minPoints)]))
+        .get();
+    
+    if (tiers.isEmpty) return;
+    
+    // Get all customers with loyalty enabled
+    final customers = await (_database.select(_database.customers)
+          ..where((c) => c.loyaltyEnabled.equals(true)))
+        .get();
+    
+    for (final customer in customers) {
+      final points = customer.loyaltyPointsBalance;
+      
+      // Find the correct tier for this customer's points
+      LoyaltyTier? correctTier;
+      for (final tier in tiers) {
+        final maxPoints = tier.maxPoints;
+        if (points >= tier.minPoints && (maxPoints == null || points <= maxPoints)) {
+          correctTier = tier;
+          break;
+        }
+      }
+      
+      // Update customer's tier if it's different
+      final newTierId = correctTier?.id;
+      if (customer.loyaltyTierId != newTierId) {
+        await (_database.update(_database.customers)
+              ..where((c) => c.id.equals(customer.id)))
+            .write(CustomersCompanion(
+              loyaltyTierId: Value(newTierId),
+              updatedAt: Value(DateTime.now()),
+            ));
+      }
+    }
+  }
+
+  @override
+  Future<void> deleteTier(int tierId) async {
+    // Delete the tier first
+    await (_database.delete(_database.loyaltyTiers)
+          ..where((t) => t.id.equals(tierId)))
+        .go();
+    
+    // Reassign all customers to correct tiers based on their points
+    await _reassignAllCustomerTiers();
+  }
+
+  @override
+  Future<void> assignTierToCustomer(int customerId, int? tierId) async {
+    await (_database.update(_database.customers)
+          ..where((c) => c.id.equals(customerId)))
+        .write(CustomersCompanion(
+          loyaltyTierId: Value(tierId),
+          updatedAt: Value(DateTime.now()),
+        ));
+  }
+
+  @override
+  Future<List<LoyaltyPointTransaction>> getPointsTransactions(int customerId) async {
+    return (_database.select(_database.loyaltyPointTransactions)
+          ..where((t) => t.customerId.equals(customerId))
+          ..orderBy([(t) => OrderingTerm.desc(t.transactionDate)]))
+        .get();
+  }
 }

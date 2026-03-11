@@ -131,11 +131,13 @@ class SupplierAnalysisReportData {
 class SupplierAnalysisReportBloc extends RealtimeBloc<
     SupplierAnalysisReportData, SupplierAnalysisReportEvent> {
   final AppDatabase _db;
-  ReportDateRange _dateRange = ReportDateRange.thisMonth();
+  ReportDateRange _dateRange;
   SupplierAnalysisSortType _sort =
       SupplierAnalysisSortType.purchaseVolumeDesc;
 
-  SupplierAnalysisReportBloc(this._db) : super(const RealtimeLoading());
+  SupplierAnalysisReportBloc(this._db, {String defaultDateRange = 'month'})
+      : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+        super(const RealtimeLoading());
 
   ReportDateRange get dateRange => _dateRange;
 
@@ -279,11 +281,11 @@ class SupplierAnalysisReportBloc extends RealtimeBloc<
         s.id AS supplier_id,
         s.name AS supplier_name,
         s.phone AS phone,
-        COALESCE(SUM(CASE WHEN st.amount_cents > 0 THEN st.amount_cents ELSE 0 END), 0) AS total_purchases_cents,
-        COALESCE(SUM(CASE WHEN st.amount_cents > 0 THEN 1 ELSE 0 END), 0) AS purchase_count,
-        COALESCE(SUM(CASE WHEN st.transaction_type IN ('purchase_return', 'return') AND st.amount_cents < 0 THEN ABS(st.amount_cents) ELSE 0 END), 0) AS total_returns_cents,
-        COALESCE(SUM(CASE WHEN st.transaction_type IN ('purchase_return', 'return') THEN 1 ELSE 0 END), 0) AS return_count,
-        COALESCE(SUM(CASE WHEN st.transaction_type = 'payment' AND st.amount_cents < 0 THEN ABS(st.amount_cents) ELSE 0 END), 0) AS total_payments_cents,
+        COALESCE(SUM(CASE WHEN st.transaction_type = 'purchase' THEN st.amount_cents ELSE 0 END), 0) AS total_purchases_cents,
+        COALESCE(SUM(CASE WHEN st.transaction_type = 'purchase' THEN 1 ELSE 0 END), 0) AS purchase_count,
+        COALESCE(SUM(CASE WHEN st.transaction_type IN ('credit_note', 'refund') THEN ABS(st.amount_cents) ELSE 0 END), 0) AS total_returns_cents,
+        COALESCE(SUM(CASE WHEN st.transaction_type IN ('credit_note', 'refund') THEN 1 ELSE 0 END), 0) AS return_count,
+        COALESCE(SUM(CASE WHEN st.transaction_type = 'payment' THEN ABS(st.amount_cents) ELSE 0 END), 0) AS total_payments_cents,
         COALESCE(SUM(CASE WHEN st.transaction_type = 'payment' THEN 1 ELSE 0 END), 0) AS payment_count,
         MAX(st.transaction_date) AS last_transaction_at
       FROM suppliers s

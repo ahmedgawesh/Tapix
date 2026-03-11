@@ -137,8 +137,15 @@ void main() {
       expect(permissionService.hasPermission(salesperson, Permissions.viewDailyReports), isTrue);
     });
 
-    test('All roles can access sales screen', () {
-      for (final role in UserRole.values) {
+    test('All sales roles can access sales screen', () {
+      // accountant is not a sales role - only these roles have processSales
+      const salesRoles = [
+        UserRole.owner,
+        UserRole.manager,
+        UserRole.cashier,
+        UserRole.salesperson,
+      ];
+      for (final role in salesRoles) {
         final user = createUser(role);
         expect(
           permissionService.hasPermission(user, Permissions.processSales),

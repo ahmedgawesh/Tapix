@@ -125,10 +125,12 @@ class SupplierLedgerOption {
 class SupplierLedgerReportBloc
     extends RealtimeBloc<SupplierLedgerData, SupplierLedgerReportEvent> {
   final AppDatabase _db;
-  ReportDateRange _dateRange = ReportDateRange.thisMonth();
+  ReportDateRange _dateRange;
   int? _supplierId;
 
-  SupplierLedgerReportBloc(this._db) : super(const RealtimeLoading());
+  SupplierLedgerReportBloc(this._db, {String defaultDateRange = 'month'})
+      : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+        super(const RealtimeLoading());
 
   ReportDateRange get dateRange => _dateRange;
   int? get supplierId => _supplierId;
@@ -292,7 +294,7 @@ class SupplierLedgerReportBloc
       runningBalance += amountCents;
 
       // Determine if this is a purchase return (recorded as credit_note/refund with reference_type='purchase_return')
-      final isReturnTx = (type == 'credit_note' || type == 'refund' || type == 'return') &&
+      final isReturnTx = (type == 'credit_note' || type == 'refund') &&
           refType == 'purchase_return';
 
       // Determine total pieces for purchase/return from the reference

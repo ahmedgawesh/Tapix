@@ -1,5 +1,6 @@
 import 'package:barcode_widget/barcode_widget.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:easy_localization/easy_localization.dart';
@@ -7,6 +8,7 @@ import 'package:easy_localization/easy_localization.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../../../features/products/domain/entities/product_entity.dart';
+import '../../../settings/presentation/bloc/app_settings_bloc.dart';
 import '../../services/barcode_printer_service.dart';
 
 class BarcodeLabelDesignerScreen extends StatefulWidget {
@@ -25,7 +27,6 @@ class _BarcodeLabelDesignerScreenState extends State<BarcodeLabelDesignerScreen>
   bool _isLoading = true;
   double _labelWidth = 58;
   double _labelHeight = 40;
-  bool _useThermal = true;
   bool _includePrice = true;
   bool _includeName = true;
   int _copies = 1;
@@ -41,13 +42,20 @@ class _BarcodeLabelDesignerScreenState extends State<BarcodeLabelDesignerScreen>
 
   Future<void> _loadSettings() async {
     try {
+      // Read AppSettings defaults first
+      final appSettings = context.read<AppSettingsBloc>().state.settings;
+      _labelWidth = appSettings.labelWidthMm;
+      _labelHeight = appSettings.labelHeightMm;
+      _includePrice = appSettings.includePriceOnLabel;
+      _includeName = true; // always default to true
+
+      // Override with any previously saved per-session settings
       final config = await _printerService.getSettings();
+      if (config.includeName != null) _includeName = config.includeName!;
+      if (config.includePrice != null) _includePrice = config.includePrice!;
+
       if (mounted) {
-        setState(() {
-          _labelWidth = config.widthMm;
-          _labelHeight = config.heightMm;
-          _isLoading = false;
-        });
+        setState(() => _isLoading = false);
       }
     } catch (e) {
       if (mounted) {
@@ -161,56 +169,60 @@ class _BarcodeLabelDesignerScreenState extends State<BarcodeLabelDesignerScreen>
                           final barcodeHeight = (contentHeight - nameLine - priceLine - gaps)
                               .clamp(8.0, contentHeight);
 
-                          return ClipRect(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                if (_includeName)
-                                  Text(
-                                    widget.product.name,
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.black,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    textAlign: TextAlign.center,
-                                  ),
-                                if (_includeName) const SizedBox(height: 4),
-                                if (barcodeData.isNotEmpty)
-                                  SizedBox(
-                                    height: barcodeHeight,
-                                    child: BarcodeWidget(
-                                      barcode: barcodeType,
-                                      data: barcodeData,
-                                      drawText: true,
+                          return FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: SizedBox(
+                              width: constraints.maxWidth,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (_includeName)
+                                    Text(
+                                      widget.product.name,
                                       style: const TextStyle(
-                                        fontSize: 10,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
                                         color: Colors.black,
                                       ),
-                                      errorBuilder: (context, error) => Center(
-                                        child: Text(
-                                          error,
-                                          style: const TextStyle(color: Colors.red, fontSize: 10),
-                                          textAlign: TextAlign.center,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  if (_includeName) const SizedBox(height: 4),
+                                  if (barcodeData.isNotEmpty)
+                                    SizedBox(
+                                      height: barcodeHeight,
+                                      child: BarcodeWidget(
+                                        barcode: barcodeType,
+                                        data: barcodeData,
+                                        drawText: true,
+                                        style: const TextStyle(
+                                          fontSize: 10,
+                                          color: Colors.black,
+                                        ),
+                                        errorBuilder: (context, error) => Center(
+                                          child: Text(
+                                            error,
+                                            style: const TextStyle(color: Colors.red, fontSize: 10),
+                                            textAlign: TextAlign.center,
+                                          ),
                                         ),
                                       ),
                                     ),
-                                  ),
-                                if (_includePrice) const SizedBox(height: 4),
-                                if (_includePrice)
-                                  Text(
-                                    _currencyService.format(
-                                      widget.product.priceCents.toBigInt().toInt(),
+                                  if (_includePrice) const SizedBox(height: 4),
+                                  if (_includePrice)
+                                    Text(
+                                      _currencyService.format(
+                                        widget.product.priceCents.toBigInt().toInt(),
+                                      ),
+                                      style: const TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.black,
+                                      ),
                                     ),
-                                    style: const TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.black,
-                                    ),
-                                  ),
-                              ],
+                                ],
+                              ),
                             ),
                           );
                         },
@@ -275,13 +287,6 @@ class _BarcodeLabelDesignerScreenState extends State<BarcodeLabelDesignerScreen>
                       onChanged: (value) {
                         if (value != null) setState(() => _selectedBarcodeType = value);
                       },
-                    ),
-                    const SizedBox(height: 16),
-                    SwitchListTile(
-                      title: Text('barcode.use_thermal_printer'.tr()),
-                      subtitle: Text('barcode.thermal_hint'.tr()),
-                      value: _useThermal,
-                      onChanged: (v) => setState(() => _useThermal = v),
                     ),
                     const SizedBox(height: 16),
                     Row(

@@ -36,6 +36,7 @@ import '../../features/customers/presentation/screens/customer_hub_screen.dart';
 import '../../features/customers/presentation/screens/customer_form_screen.dart';
 import '../../features/customers/presentation/screens/customer_profile_screen.dart';
 import '../../features/customers/presentation/screens/receive_payment_screen.dart';
+import '../../features/customers/presentation/screens/loyalty_settings_screen.dart';
 import '../../features/sales/presentation/screens/sale_list_screen.dart';
 import '../../features/sales/presentation/screens/sale_form_screen.dart';
 import '../../features/sales/presentation/screens/sale_detail_screen.dart';
@@ -48,6 +49,7 @@ import '../../features/barcode/presentation/screens/barcode_design_screen.dart';
 import '../../features/settings/presentation/screens/settings_screen.dart';
 import '../../features/settings/presentation/screens/admin_tools_screen.dart';
 import '../../features/settings/presentation/screens/company_profile_screen.dart';
+import '../../features/settings/presentation/screens/backup_restore_screen.dart';
 import '../../features/employees/presentation/screens/employees_screen.dart';
 import '../../features/employees/presentation/screens/attendance_screen.dart';
 import '../../features/employees/presentation/screens/leave_requests_screen.dart';
@@ -87,12 +89,21 @@ import '../../features/reports/presentation/screens/supplier_analysis_report_scr
 import '../../features/reports/presentation/screens/supplier_aging_report_screen.dart';
 import '../../features/reports/presentation/screens/supplier_statement_report_screen.dart';
 import '../../features/reports/presentation/screens/supplier_ledger_report_screen.dart';
+import '../../features/reports/presentation/screens/customer_ledger_report_screen.dart';
 import '../../features/reports/presentation/screens/supplier_stocktake_report_screen.dart';
 import '../../features/reports/presentation/screens/supplier_balance_drilldown_screen.dart';
 import '../../features/reports/presentation/screens/salespeople_commission_report_screen.dart';
 import '../../features/reports/presentation/screens/expense_report_screen.dart';
 import '../../features/reports/presentation/screens/sales_tax_report_screen.dart';
 import '../../features/reports/presentation/screens/purchase_tax_report_screen.dart';
+import '../../features/reports/presentation/screens/sales_reports_hub_screen.dart';
+import '../../features/reports/presentation/screens/sales_report_screen.dart';
+import '../../features/reports/presentation/screens/purchase_reports_hub_screen.dart';
+import '../../features/reports/presentation/screens/purchase_report_screen.dart';
+import '../../features/reports/presentation/screens/discount_reports_hub_screen.dart';
+import '../../features/reports/presentation/screens/discount_report_screen.dart';
+import '../../features/reports/presentation/screens/profit_reports_hub_screen.dart';
+import '../../features/reports/presentation/screens/profit_report_screen.dart';
 import '../../features/financial_management/presentation/screens/financial_management_hub_screen.dart';
 import '../../features/financial_management/presentation/screens/chart_of_accounts_screen.dart';
 import '../../features/financial_management/presentation/screens/accounting_periods_screen.dart';
@@ -184,7 +195,7 @@ class AppRouter {
         }
 
         // Redirect away from auth screens to dashboard
-        if (currentPath == '/login' || currentPath == '/setup' || currentPath == '/') {
+        if (currentPath == '/login' || currentPath == '/setup' || currentPath == '/' || currentPath == '/forgot-password') {
           return '/dashboard';
         }
 
@@ -192,7 +203,7 @@ class AppRouter {
       }
 
       // AuthUnauthenticated or AuthError - go to login
-      if (currentPath == '/login') {
+      if (currentPath == '/login' || currentPath == '/forgot-password') {
         return null;
       }
 
@@ -224,6 +235,10 @@ class AppRouter {
       GoRoute(
         path: '/login',
         builder: (context, state) => const LoginScreen(),
+      ),
+      GoRoute(
+        path: '/forgot-password',
+        builder: (context, state) => const ForgotPasswordScreen(),
       ),
       GoRoute(
         path: '/setup',
@@ -389,7 +404,8 @@ class AppRouter {
                 path: 'edit',
                 builder: (context, state) {
                   final id = int.tryParse(state.pathParameters['id'] ?? '');
-                  return SaleFormScreen(saleId: id);
+                  final isEditingPosted = state.uri.queryParameters['posted'] == 'true';
+                  return SaleFormScreen(saleId: id, isEditingPosted: isEditingPosted);
                 },
               ),
             ],
@@ -400,6 +416,10 @@ class AppRouter {
         path: '/customers',
         builder: (context, state) => const CustomerHubScreen(),
         routes: [
+          GoRoute(
+            path: 'loyalty-settings',
+            builder: (context, state) => const LoyaltySettingsScreen(),
+          ),
           GoRoute(
             path: 'new',
             builder: (context, state) => const CustomerFormScreen(),
@@ -502,7 +522,8 @@ class AppRouter {
                 path: 'edit',
                 builder: (context, state) {
                   final id = int.tryParse(state.pathParameters['id'] ?? '');
-                  return PurchaseFormScreen(purchaseId: id);
+                  final isEditingPosted = state.uri.queryParameters['posted'] == 'true';
+                  return PurchaseFormScreen(purchaseId: id, isEditingPosted: isEditingPosted);
                 },
               ),
             ],
@@ -603,6 +624,10 @@ class AppRouter {
             builder: (context, state) => const CustomerAnalysisReportScreen(),
           ),
           GoRoute(
+            path: 'customer-ledger',
+            builder: (context, state) => const CustomerLedgerReportScreen(),
+          ),
+          GoRoute(
             path: 'supplier-balance',
             builder: (context, state) => const SupplierBalanceReportScreen(),
           ),
@@ -654,6 +679,170 @@ class AppRouter {
             path: 'purchase-tax',
             builder: (context, state) => const PurchaseTaxReportScreen(),
           ),
+          GoRoute(
+            path: 'sales',
+            builder: (context, state) => const SalesReportsHubScreen(),
+            routes: [
+              GoRoute(
+                path: 'by-period',
+                builder: (context, state) => const SalesReportScreen(reportType: SalesReportType.byPeriod),
+              ),
+              GoRoute(
+                path: 'cash',
+                builder: (context, state) => const SalesReportScreen(reportType: SalesReportType.cash),
+              ),
+              GoRoute(
+                path: 'credit',
+                builder: (context, state) => const SalesReportScreen(reportType: SalesReportType.credit),
+              ),
+              GoRoute(
+                path: 'card',
+                builder: (context, state) => const SalesReportScreen(reportType: SalesReportType.card),
+              ),
+              GoRoute(
+                path: 'cheque',
+                builder: (context, state) => const SalesReportScreen(reportType: SalesReportType.cheque),
+              ),
+              GoRoute(
+                path: 'all',
+                builder: (context, state) => const SalesReportScreen(reportType: SalesReportType.all),
+              ),
+              GoRoute(
+                path: 'by-product',
+                builder: (context, state) => const SalesReportScreen(reportType: SalesReportType.byProduct),
+              ),
+              GoRoute(
+                path: 'by-category',
+                builder: (context, state) => const SalesReportScreen(reportType: SalesReportType.byCategory),
+              ),
+              GoRoute(
+                path: 'by-customer',
+                builder: (context, state) => const SalesReportScreen(reportType: SalesReportType.byCustomer),
+              ),
+              GoRoute(
+                path: 'cancelled',
+                builder: (context, state) => const SalesReportScreen(reportType: SalesReportType.cancelled),
+              ),
+              GoRoute(
+                path: 'tax-by-product',
+                builder: (context, state) => const SalesReportScreen(reportType: SalesReportType.taxByProduct),
+              ),
+              GoRoute(
+                path: 'tax-by-customer',
+                builder: (context, state) => const SalesReportScreen(reportType: SalesReportType.taxByCustomer),
+              ),
+              GoRoute(
+                path: 'excel',
+                builder: (context, state) => const SalesReportScreen(reportType: SalesReportType.excel),
+              ),
+              GoRoute(
+                path: 'excel-products',
+                builder: (context, state) => const SalesReportScreen(reportType: SalesReportType.excelProducts),
+              ),
+            ],
+          ),
+          GoRoute(
+            path: 'purchases',
+            builder: (context, state) => const PurchaseReportsHubScreen(),
+            routes: [
+              GoRoute(
+                path: 'all',
+                builder: (context, state) => const PurchaseReportScreen(reportType: PurchaseReportType.all),
+              ),
+              GoRoute(
+                path: 'cash',
+                builder: (context, state) => const PurchaseReportScreen(reportType: PurchaseReportType.cash),
+              ),
+              GoRoute(
+                path: 'credit',
+                builder: (context, state) => const PurchaseReportScreen(reportType: PurchaseReportType.credit),
+              ),
+              GoRoute(
+                path: 'card',
+                builder: (context, state) => const PurchaseReportScreen(reportType: PurchaseReportType.card),
+              ),
+              GoRoute(
+                path: 'cheque',
+                builder: (context, state) => const PurchaseReportScreen(reportType: PurchaseReportType.cheque),
+              ),
+              GoRoute(
+                path: 'by-product',
+                builder: (context, state) => const PurchaseReportScreen(reportType: PurchaseReportType.byProduct),
+              ),
+              GoRoute(
+                path: 'by-category',
+                builder: (context, state) => const PurchaseReportScreen(reportType: PurchaseReportType.byCategory),
+              ),
+              GoRoute(
+                path: 'by-supplier',
+                builder: (context, state) => const PurchaseReportScreen(reportType: PurchaseReportType.bySupplier),
+              ),
+              GoRoute(
+                path: 'cancelled',
+                builder: (context, state) => const PurchaseReportScreen(reportType: PurchaseReportType.cancelled),
+              ),
+              GoRoute(
+                path: 'orders',
+                builder: (context, state) => const PurchaseReportScreen(reportType: PurchaseReportType.orders),
+              ),
+              GoRoute(
+                path: 'excel',
+                builder: (context, state) => const PurchaseReportScreen(reportType: PurchaseReportType.excel),
+              ),
+              GoRoute(
+                path: 'excel-products',
+                builder: (context, state) => const PurchaseReportScreen(reportType: PurchaseReportType.excelProducts),
+              ),
+            ],
+          ),
+          GoRoute(
+            path: 'discounts',
+            builder: (context, state) => const DiscountReportsHubScreen(),
+            routes: [
+              GoRoute(
+                path: 'by-product',
+                builder: (context, state) => const DiscountReportScreen(reportType: DiscountReportType.byProduct),
+              ),
+              GoRoute(
+                path: 'by-category',
+                builder: (context, state) => const DiscountReportScreen(reportType: DiscountReportType.byCategory),
+              ),
+              GoRoute(
+                path: 'by-customer',
+                builder: (context, state) => const DiscountReportScreen(reportType: DiscountReportType.byCustomer),
+              ),
+              GoRoute(
+                path: 'by-invoice',
+                builder: (context, state) => const DiscountReportScreen(reportType: DiscountReportType.byInvoice),
+              ),
+            ],
+          ),
+          GoRoute(
+            path: 'profits',
+            builder: (context, state) => const ProfitReportsHubScreen(),
+            routes: [
+              GoRoute(
+                path: 'overall',
+                builder: (context, state) => const ProfitReportScreen(reportType: ProfitReportType.overall),
+              ),
+              GoRoute(
+                path: 'by-product',
+                builder: (context, state) => const ProfitReportScreen(reportType: ProfitReportType.byProduct),
+              ),
+              GoRoute(
+                path: 'by-category',
+                builder: (context, state) => const ProfitReportScreen(reportType: ProfitReportType.byCategory),
+              ),
+              GoRoute(
+                path: 'by-customer',
+                builder: (context, state) => const ProfitReportScreen(reportType: ProfitReportType.byCustomer),
+              ),
+              GoRoute(
+                path: 'by-invoice',
+                builder: (context, state) => const ProfitReportScreen(reportType: ProfitReportType.byInvoice),
+              ),
+            ],
+          ),
         ],
       ),
       GoRoute(
@@ -667,6 +856,10 @@ class AppRouter {
           GoRoute(
             path: 'admin-tools',
             builder: (context, state) => const AdminToolsScreen(),
+          ),
+          GoRoute(
+            path: 'backup',
+            builder: (context, state) => const BackupRestoreScreen(),
           ),
         ],
       ),

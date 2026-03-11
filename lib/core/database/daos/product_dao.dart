@@ -53,6 +53,7 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
     int limit = 50,
     int offset = 0,
     bool? isActive = true,
+    int lowStockThreshold = 5,
   }) {
     if (stockStatus == null) {
       final query = select(products);
@@ -90,8 +91,10 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
       );
     } else if (stockStatus == 'low_stock') {
       where.write(
-        ' AND ((p.has_variants = 0 AND p.stock_quantity > 0 AND p.stock_quantity <= p.min_quantity) OR (p.has_variants = 1 AND EXISTS (SELECT 1 FROM product_variants v WHERE v.product_id = p.id AND v.is_active = 1 AND v.stock_quantity > 0 AND v.stock_quantity <= p.min_quantity)))',
+        ' AND ((p.has_variants = 0 AND p.stock_quantity > 0 AND p.stock_quantity <= CASE WHEN p.min_quantity > 0 THEN p.min_quantity ELSE ? END) OR (p.has_variants = 1 AND EXISTS (SELECT 1 FROM product_variants v WHERE v.product_id = p.id AND v.is_active = 1 AND v.stock_quantity > 0 AND v.stock_quantity <= CASE WHEN p.min_quantity > 0 THEN p.min_quantity ELSE ? END)))',
       );
+      vars.add(Variable.withInt(lowStockThreshold));
+      vars.add(Variable.withInt(lowStockThreshold));
     }
 
     where.write(' ORDER BY p.name LIMIT ? OFFSET ?');
@@ -109,6 +112,7 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
     int? categoryId,
     String? stockStatus,
     bool? isActive = true,
+    int lowStockThreshold = 5,
   }) {
     if (stockStatus == null) {
       final query = select(products);
@@ -144,8 +148,10 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
       );
     } else if (stockStatus == 'low_stock') {
       where.write(
-        ' AND ((p.has_variants = 0 AND p.stock_quantity > 0 AND p.stock_quantity <= p.min_quantity) OR (p.has_variants = 1 AND EXISTS (SELECT 1 FROM product_variants v WHERE v.product_id = p.id AND v.is_active = 1 AND v.stock_quantity > 0 AND v.stock_quantity <= p.min_quantity)))',
+        ' AND ((p.has_variants = 0 AND p.stock_quantity > 0 AND p.stock_quantity <= CASE WHEN p.min_quantity > 0 THEN p.min_quantity ELSE ? END) OR (p.has_variants = 1 AND EXISTS (SELECT 1 FROM product_variants v WHERE v.product_id = p.id AND v.is_active = 1 AND v.stock_quantity > 0 AND v.stock_quantity <= CASE WHEN p.min_quantity > 0 THEN p.min_quantity ELSE ? END)))',
       );
+      vars.add(Variable.withInt(lowStockThreshold));
+      vars.add(Variable.withInt(lowStockThreshold));
     }
 
     where.write(' ORDER BY p.name');
@@ -210,6 +216,10 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
 
   Future<Product?> findByBarcode(String barcode) {
     return (select(products)..where((p) => p.barcode.equals(barcode))).getSingleOrNull();
+  }
+
+  Future<Product?> findByName(String name) {
+    return (select(products)..where((p) => p.name.equals(name))).getSingleOrNull();
   }
 
   Future<int> createProduct(ProductsCompanion product) {

@@ -70,6 +70,8 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
     int workingHoursPerDay = 8,
     int absenceDeductionRateBps = 10000,
     int lateDeductionRateBps = 2500,
+    String overtimeCalcType = 'hourly_rate',
+    int overtimeRateBps = 15000,
     required int currencyId,
     DateTime? hireDate,
     String weeklyOffDays = '[5,6]',
@@ -101,6 +103,8 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
       workingHoursPerDay: Value(workingHoursPerDay),
       absenceDeductionRateBps: Value(absenceDeductionRateBps),
       lateDeductionRateBps: Value(lateDeductionRateBps),
+      overtimeCalcType: Value(overtimeCalcType),
+      overtimeRateBps: Value(overtimeRateBps),
       currencyId: Value(currencyId),
       hireDate: Value(hireDate ?? now),
       weeklyOffDays: Value(weeklyOffDays),
@@ -514,7 +518,7 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
     final year = int.parse(parts[0]);
     final month = int.parse(parts[1]);
     final periodStart = DateTime(year, month, 1);
-    final periodEnd = DateTime(year, month + 1, 0);
+    final periodEnd = DateTime(year, month + 1, 0, 23, 59, 59);
 
     return _dao.watchPayrollsByPeriod(
       periodStart,

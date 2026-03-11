@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:easy_localization/easy_localization.dart';
@@ -7,6 +8,7 @@ import 'package:decimal/decimal.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../../auth/auth.dart';
 import '../../domain/entities/purchase_entity.dart';
 import '../../domain/repositories/purchase_repository.dart';
 import '../../../products/domain/repositories/product_variant_repository.dart';
@@ -158,6 +160,11 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
     }
 
     if (purchase.isPosted) {
+      // Check if user has edit permission
+      final authState = context.read<AuthBloc>().state;
+      final canEdit = authState is AuthAuthenticated &&
+          sl<PermissionService>().hasPermission(authState.user, Permissions.editTransactions);
+
       actions.add(
         FilledButton.tonalIcon(
           onPressed: () => _handleAction('return', context),
@@ -171,6 +178,15 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
           icon: const Icon(LucideIcons.moreVertical),
           onSelected: (v) => _handleAction(v, context),
           itemBuilder: (_) => [
+            if (canEdit)
+              PopupMenuItem(
+                value: 'edit_posted',
+                child: ListTile(
+                  leading: const Icon(LucideIcons.pencil),
+                  title: Text('purchases.edit'.tr()),
+                  dense: true, contentPadding: EdgeInsets.zero,
+                ),
+              ),
             PopupMenuItem(
               value: 'print',
               child: ListTile(
@@ -1218,6 +1234,10 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
         break;
       case 'edit':
         router.push('/purchases/${widget.purchaseId}/edit');
+        break;
+      case 'edit_posted':
+        // Navigate to purchase form for editing a posted purchase
+        router.push('/purchases/${widget.purchaseId}/edit?posted=true');
         break;
       case 'void':
         final confirmed = await showDialog<bool>(

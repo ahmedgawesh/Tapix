@@ -48,6 +48,7 @@ class AccountingRepository {
     'supplier_payment',
     'supplier_discount',
     'closing',
+    'opening_balance',
   };
 
   AccountingRepository(this._db);
@@ -362,10 +363,12 @@ class AccountingRepository {
         userId: userId,
       );
       
-      // Mark original entry as reversed
+      // Mark original entry as reversed but keep status='posted'
+      // so the original + reversal cancel each other out in the GL.
+      // Changing status to 'voided' would EXCLUDE the original from GL
+      // while the reversal (also posted) subtracts again — double removal.
       await (_db.update(_db.journalEntries)..where((e) => e.id.equals(entryId)))
           .write(JournalEntriesCompanion(
-            status: const Value('voided'),
             isReversed: const Value(true),
             updatedAt: Value(DateTime.now()),
           ));
@@ -756,6 +759,12 @@ class AccountingRepository {
   }
 
   /// Generate unique entry number
+  /// Execute a raw SQL SELECT query and return the results.
+  /// Used by JournalEntryService for repair operations.
+  Future<List<QueryRow>> rawSelect(String sql) {
+    return _db.customSelect(sql).get();
+  }
+
   Future<String> _generateEntryNumber() async {
     final now = DateTime.now();
     final prefix = 'JE${now.year}${now.month.toString().padLeft(2, '0')}';

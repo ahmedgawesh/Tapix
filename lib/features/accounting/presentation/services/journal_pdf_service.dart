@@ -865,9 +865,11 @@ class JournalPdfService {
   // ═══════════════════════════════════════════════════════
 
   /// Print a Customer Report PDF
+  /// NOTE: Use CustomerReportPdfService for new customer report PDF generation.
+  /// This legacy method is retained for backward compatibility.
   static Future<void> printCustomerReport({
     required BuildContext context,
-    required List<CustomerStatementData> statements,
+    required List<CustomerBalanceItem> customers,
     required List<CustomerAgingItem> agingItems,
     required List<CustomerAnalyticsItem> analyticsItems,
     required int totalReceivablesCents,
@@ -880,7 +882,7 @@ class JournalPdfService {
     final company = await sl<CompanyProfileService>().getProfile();
 
     final pdf = await _buildCustomerReportPdf(
-      statements: statements,
+      customers: customers,
       agingItems: agingItems,
       analyticsItems: analyticsItems,
       totalReceivablesCents: totalReceivablesCents,
@@ -899,9 +901,10 @@ class JournalPdfService {
   }
 
   /// Share a Customer Report PDF
+  /// NOTE: Use CustomerReportPdfService for new customer report PDF generation.
   static Future<void> shareCustomerReport({
     required BuildContext context,
-    required List<CustomerStatementData> statements,
+    required List<CustomerBalanceItem> customers,
     required List<CustomerAgingItem> agingItems,
     required List<CustomerAnalyticsItem> analyticsItems,
     required int totalReceivablesCents,
@@ -914,7 +917,7 @@ class JournalPdfService {
     final company = await sl<CompanyProfileService>().getProfile();
 
     final pdf = await _buildCustomerReportPdf(
-      statements: statements,
+      customers: customers,
       agingItems: agingItems,
       analyticsItems: analyticsItems,
       totalReceivablesCents: totalReceivablesCents,
@@ -934,7 +937,7 @@ class JournalPdfService {
   }
 
   static Future<pw.Document> _buildCustomerReportPdf({
-    required List<CustomerStatementData> statements,
+    required List<CustomerBalanceItem> customers,
     required List<CustomerAgingItem> agingItems,
     required List<CustomerAnalyticsItem> analyticsItems,
     required int totalReceivablesCents,
@@ -1026,8 +1029,8 @@ class JournalPdfService {
       ),
     );
 
-    // Page 2+: Customer Statements
-    for (final stmt in statements) {
+    // Page 2+: Per-customer balance breakdown
+    for (final customer in customers) {
       pdf.addPage(
         pw.Page(
           pageFormat: PdfPageFormat.a4,
@@ -1039,7 +1042,7 @@ class JournalPdfService {
                 _buildHeader(company, 'reports.customer_statement'.tr(), fonts, dir),
                 pw.SizedBox(height: 8),
                 pw.Text(
-                  stmt.customerName,
+                  customer.customerName,
                   style: pw.TextStyle(font: fonts.bold, fontSize: 12),
                 ),
                 pw.SizedBox(height: 4),
@@ -1052,11 +1055,11 @@ class JournalPdfService {
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
                     pw.Text(
-                      '${'reports.opening_balance'.tr()}: ${cs.formatCents(stmt.openingBalanceCents)}',
+                      '${'reports.opening_balance'.tr()}: ${cs.formatCents(customer.openingBalanceCents)}',
                       style: pw.TextStyle(font: fonts.regular, fontSize: 10),
                     ),
                     pw.Text(
-                      '${'reports.closing_balance'.tr()}: ${cs.formatCents(stmt.closingBalanceCents)}',
+                      '${'reports.current_balance'.tr()}: ${cs.formatCents(customer.currentBalanceCents)}',
                       style: pw.TextStyle(font: fonts.bold, fontSize: 10),
                     ),
                   ],
@@ -1069,25 +1072,18 @@ class JournalPdfService {
                   headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
                   cellAlignments: {
                     0: pw.Alignment.centerLeft,
-                    1: pw.Alignment.centerLeft,
-                    2: pw.Alignment.centerLeft,
-                    3: pw.Alignment.centerRight,
-                    4: pw.Alignment.centerRight,
+                    1: pw.Alignment.centerRight,
                   },
                   headers: [
-                    'reports.date'.tr(),
                     'reports.type'.tr(),
-                    'reports.description'.tr(),
                     'reports.amount'.tr(),
-                    'reports.balance'.tr(),
                   ],
-                  data: stmt.items.map((item) => [
-                    DateFormat.yMd().format(item.date),
-                    item.type,
-                    item.description ?? '',
-                    cs.formatCents(item.amountCents),
-                    cs.formatCents(item.runningBalanceCents),
-                  ]).toList(),
+                  data: [
+                    ['reports.total_sales'.tr(), cs.formatCents(customer.totalSalesCents)],
+                    ['reports.total_payments'.tr(), cs.formatCents(customer.totalPaymentsCents)],
+                    ['reports.total_discounts'.tr(), cs.formatCents(customer.totalDiscountsCents)],
+                    ['reports.total_returns'.tr(), cs.formatCents(customer.totalReturnsCents)],
+                  ],
                 ),
                 pw.SizedBox(height: 12),
 
@@ -1100,11 +1096,11 @@ class JournalPdfService {
                     mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                     children: [
                       pw.Text(
-                        '${'reports.total_debits'.tr()}: ${cs.formatCents(stmt.totalDebitCents)}',
+                        '${'reports.total_sales'.tr()}: ${cs.formatCents(customer.totalSalesCents)}',
                         style: pw.TextStyle(font: fonts.bold, fontSize: 10),
                       ),
                       pw.Text(
-                        '${'reports.total_credits'.tr()}: ${cs.formatCents(stmt.totalCreditCents)}',
+                        '${'reports.current_balance'.tr()}: ${cs.formatCents(customer.currentBalanceCents)}',
                         style: pw.TextStyle(font: fonts.bold, fontSize: 10),
                       ),
                     ],

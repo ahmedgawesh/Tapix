@@ -76,6 +76,8 @@ class UserFormSubmitRequested extends UserFormEvent {
   final UserRole role;
   final int? employeeId;
   final bool clearEmployeeLink;
+  final String? securityQuestion;
+  final String? securityAnswer;
 
   const UserFormSubmitRequested({
     this.userId,
@@ -85,6 +87,8 @@ class UserFormSubmitRequested extends UserFormEvent {
     required this.role,
     this.employeeId,
     this.clearEmployeeLink = false,
+    this.securityQuestion,
+    this.securityAnswer,
   });
 
   @override
@@ -96,6 +100,8 @@ class UserFormSubmitRequested extends UserFormEvent {
         role,
         employeeId,
         clearEmployeeLink,
+        securityQuestion,
+        securityAnswer,
       ];
 }
 
@@ -197,6 +203,8 @@ class UserFormBloc extends Bloc<UserFormEvent, UserFormState> {
           password: event.password,
           role: event.role,
           employeeId: event.employeeId,
+          securityQuestion: event.securityQuestion,
+          securityAnswer: event.securityAnswer,
         );
         emit(const UserFormSuccess('created_success'));
       } else {
@@ -208,6 +216,8 @@ class UserFormBloc extends Bloc<UserFormEvent, UserFormState> {
           role: event.role,
           employeeId: event.employeeId,
           clearEmployeeLink: event.clearEmployeeLink,
+          securityQuestion: event.securityQuestion,
+          securityAnswer: event.securityAnswer,
         );
         emit(const UserFormSuccess('updated_success'));
       }
