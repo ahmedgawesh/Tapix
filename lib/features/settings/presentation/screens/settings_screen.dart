@@ -19,6 +19,7 @@ import '../widgets/security_settings_section.dart';
 import '../widgets/reports_settings_section.dart';
 import '../widgets/notification_settings_section.dart';
 import '../widgets/printer_settings_section.dart';
+import '../../../subscription/presentation/screens/paywall_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -274,6 +275,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               },
             ),
           ),
+
+          // ── Subscription ──
+          const SizedBox(height: 16),
+          const SubscriptionSettingsCard(),
 
           // ── Business Settings (expandable sections) ──
           const SizedBox(height: 24),

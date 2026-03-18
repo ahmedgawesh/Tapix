@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
 
+import '../../../../core/services/app_guard_service.dart';
 import '../../../../core/services/revenuecat_service.dart';
 
 part 'subscription_event.dart';
@@ -11,62 +12,58 @@ part 'subscription_state.dart';
 
 class SubscriptionBloc extends Bloc<SubscriptionEvent, SubscriptionState> {
   final RevenueCatService _revenueCatService;
-  StreamSubscription<SubscriptionStatus>? _statusSubscription;
+  final AppGuardService _appGuardService;
+  StreamSubscription<AppGuardStatus>? _guardSubscription;
 
   SubscriptionBloc({
-    RevenueCatService? revenueCatService,
-  })  : _revenueCatService = revenueCatService ?? RevenueCatService.instance,
+    required RevenueCatService revenueCatService,
+    required AppGuardService appGuardService,
+  })  : _revenueCatService = revenueCatService,
+        _appGuardService = appGuardService,
         super(const SubscriptionInitial()) {
-    on<SubscriptionInitialize>(_onInitialize);
-    on<SubscriptionStatusChanged>(_onStatusChanged);
+    on<SubscriptionStartGuard>(_onStartGuard);
+    on<SubscriptionGuardStatusChanged>(_onGuardStatusChanged);
     on<SubscriptionRefresh>(_onRefresh);
-    on<SubscriptionPurchasePackage>(_onPurchasePackage);
-    on<SubscriptionPurchaseProduct>(_onPurchaseProduct);
-    on<SubscriptionRestore>(_onRestore);
     on<SubscriptionPresentPaywall>(_onPresentPaywall);
     on<SubscriptionPresentPaywallIfNeeded>(_onPresentPaywallIfNeeded);
     on<SubscriptionPresentCustomerCenter>(_onPresentCustomerCenter);
+    on<SubscriptionRestore>(_onRestore);
     on<SubscriptionLogIn>(_onLogIn);
     on<SubscriptionLogOut>(_onLogOut);
   }
 
-  Future<void> _onInitialize(
-    SubscriptionInitialize event,
+  /// Run the full AppGuard initialization and start listening.
+  Future<void> _onStartGuard(
+    SubscriptionStartGuard event,
     Emitter<SubscriptionState> emit,
   ) async {
     emit(const SubscriptionLoading());
 
     try {
+      // Initialize RevenueCat (no-op on unsupported platforms)
       await _revenueCatService.initialize(appUserId: event.appUserId);
 
-      // Listen to status changes
-      _statusSubscription?.cancel();
-      _statusSubscription = _revenueCatService.subscriptionStatusStream.listen(
-        (status) => add(SubscriptionStatusChanged(status)),
+      // Run full guard sequence
+      final guardStatus = await _appGuardService.initialize();
+
+      // Start listening for ongoing changes
+      _guardSubscription?.cancel();
+      _guardSubscription = _appGuardService.statusStream.listen(
+        (gs) => add(SubscriptionGuardStatusChanged(gs)),
       );
+      _appGuardService.startListening();
 
-      final status = await _revenueCatService.getSubscriptionStatus();
-      final offerings = await _revenueCatService.getOfferings();
-
-      emit(SubscriptionLoaded(
-        status: status,
-        offerings: offerings,
-      ));
+      emit(_stateFromGuardStatus(guardStatus));
     } catch (e) {
       emit(SubscriptionError(e.toString()));
     }
   }
 
-  void _onStatusChanged(
-    SubscriptionStatusChanged event,
+  void _onGuardStatusChanged(
+    SubscriptionGuardStatusChanged event,
     Emitter<SubscriptionState> emit,
   ) {
-    if (state is SubscriptionLoaded) {
-      final currentState = state as SubscriptionLoaded;
-      emit(currentState.copyWith(status: event.status));
-    } else {
-      emit(SubscriptionLoaded(status: event.status));
-    }
+    emit(_stateFromGuardStatus(event.guardStatus));
   }
 
   Future<void> _onRefresh(
@@ -74,126 +71,10 @@ class SubscriptionBloc extends Bloc<SubscriptionEvent, SubscriptionState> {
     Emitter<SubscriptionState> emit,
   ) async {
     try {
-      final status = await _revenueCatService.refreshSubscriptionStatus();
-      final offerings = await _revenueCatService.getOfferings();
-
-      if (state is SubscriptionLoaded) {
-        final currentState = state as SubscriptionLoaded;
-        emit(currentState.copyWith(
-          status: status,
-          offerings: offerings,
-        ));
-      } else {
-        emit(SubscriptionLoaded(
-          status: status,
-          offerings: offerings,
-        ));
-      }
+      final guardStatus = await _appGuardService.revalidateOnline();
+      emit(_stateFromGuardStatus(guardStatus));
     } catch (e) {
       emit(SubscriptionError(e.toString()));
-    }
-  }
-
-  Future<void> _onPurchasePackage(
-    SubscriptionPurchasePackage event,
-    Emitter<SubscriptionState> emit,
-  ) async {
-    if (state is! SubscriptionLoaded) return;
-
-    final currentState = state as SubscriptionLoaded;
-    emit(currentState.copyWith(isPurchasing: true, purchaseError: null));
-
-    try {
-      final result = await _revenueCatService.purchasePackage(event.package);
-
-      if (result.success) {
-        final status = SubscriptionStatus.fromCustomerInfo(result.customerInfo);
-        emit(currentState.copyWith(
-          status: status,
-          isPurchasing: false,
-          purchaseSuccess: true,
-        ));
-      } else if (result.userCancelled) {
-        emit(currentState.copyWith(isPurchasing: false));
-      } else {
-        emit(currentState.copyWith(
-          isPurchasing: false,
-          purchaseError: result.errorMessage,
-        ));
-      }
-    } catch (e) {
-      emit(currentState.copyWith(
-        isPurchasing: false,
-        purchaseError: e.toString(),
-      ));
-    }
-  }
-
-  Future<void> _onPurchaseProduct(
-    SubscriptionPurchaseProduct event,
-    Emitter<SubscriptionState> emit,
-  ) async {
-    if (state is! SubscriptionLoaded) return;
-
-    final currentState = state as SubscriptionLoaded;
-    emit(currentState.copyWith(isPurchasing: true, purchaseError: null));
-
-    try {
-      final result = await _revenueCatService.purchaseProduct(event.productId);
-
-      if (result.success) {
-        final status = SubscriptionStatus.fromCustomerInfo(result.customerInfo);
-        emit(currentState.copyWith(
-          status: status,
-          isPurchasing: false,
-          purchaseSuccess: true,
-        ));
-      } else if (result.userCancelled) {
-        emit(currentState.copyWith(isPurchasing: false));
-      } else {
-        emit(currentState.copyWith(
-          isPurchasing: false,
-          purchaseError: result.errorMessage,
-        ));
-      }
-    } catch (e) {
-      emit(currentState.copyWith(
-        isPurchasing: false,
-        purchaseError: e.toString(),
-      ));
-    }
-  }
-
-  Future<void> _onRestore(
-    SubscriptionRestore event,
-    Emitter<SubscriptionState> emit,
-  ) async {
-    if (state is! SubscriptionLoaded) return;
-
-    final currentState = state as SubscriptionLoaded;
-    emit(currentState.copyWith(isRestoring: true, restoreError: null));
-
-    try {
-      final result = await _revenueCatService.restorePurchases();
-
-      if (result.success) {
-        final status = SubscriptionStatus.fromCustomerInfo(result.customerInfo);
-        emit(currentState.copyWith(
-          status: status,
-          isRestoring: false,
-          restoreSuccess: true,
-        ));
-      } else {
-        emit(currentState.copyWith(
-          isRestoring: false,
-          restoreError: result.errorMessage,
-        ));
-      }
-    } catch (e) {
-      emit(currentState.copyWith(
-        isRestoring: false,
-        restoreError: e.toString(),
-      ));
     }
   }
 
@@ -201,15 +82,15 @@ class SubscriptionBloc extends Bloc<SubscriptionEvent, SubscriptionState> {
     SubscriptionPresentPaywall event,
     Emitter<SubscriptionState> emit,
   ) async {
+    if (!RevenueCatConfig.isSupported || !_revenueCatService.isInitialized) {
+      return;
+    }
     try {
       await _revenueCatService.presentPaywall(offering: event.offering);
-      // Refresh status after paywall closes
+      // After paywall closes, re-run guard to update state
       add(const SubscriptionRefresh());
     } catch (e) {
-      if (state is SubscriptionLoaded) {
-        final currentState = state as SubscriptionLoaded;
-        emit(currentState.copyWith(purchaseError: e.toString()));
-      }
+      _emitError(emit, e.toString());
     }
   }
 
@@ -217,15 +98,14 @@ class SubscriptionBloc extends Bloc<SubscriptionEvent, SubscriptionState> {
     SubscriptionPresentPaywallIfNeeded event,
     Emitter<SubscriptionState> emit,
   ) async {
+    if (!RevenueCatConfig.isSupported || !_revenueCatService.isInitialized) {
+      return;
+    }
     try {
       await _revenueCatService.presentPaywallIfNeeded();
-      // Refresh status after paywall closes
       add(const SubscriptionRefresh());
     } catch (e) {
-      if (state is SubscriptionLoaded) {
-        final currentState = state as SubscriptionLoaded;
-        emit(currentState.copyWith(purchaseError: e.toString()));
-      }
+      _emitError(emit, e.toString());
     }
   }
 
@@ -233,15 +113,38 @@ class SubscriptionBloc extends Bloc<SubscriptionEvent, SubscriptionState> {
     SubscriptionPresentCustomerCenter event,
     Emitter<SubscriptionState> emit,
   ) async {
+    if (!RevenueCatConfig.isSupported || !_revenueCatService.isInitialized) {
+      return;
+    }
     try {
       await _revenueCatService.presentCustomerCenter();
-      // Refresh status after customer center closes
       add(const SubscriptionRefresh());
     } catch (e) {
-      if (state is SubscriptionLoaded) {
-        final currentState = state as SubscriptionLoaded;
-        emit(currentState.copyWith(purchaseError: e.toString()));
+      _emitError(emit, e.toString());
+    }
+  }
+
+  Future<void> _onRestore(
+    SubscriptionRestore event,
+    Emitter<SubscriptionState> emit,
+  ) async {
+    if (!RevenueCatConfig.isSupported || !_revenueCatService.isInitialized) {
+      return;
+    }
+
+    if (state is SubscriptionLoaded) {
+      emit((state as SubscriptionLoaded).copyWith(isRestoring: true));
+    }
+
+    try {
+      final result = await _revenueCatService.restorePurchases();
+      if (result.success) {
+        add(const SubscriptionRefresh());
+      } else {
+        _emitError(emit, result.errorMessage ?? 'Restore failed');
       }
+    } catch (e) {
+      _emitError(emit, e.toString());
     }
   }
 
@@ -249,14 +152,14 @@ class SubscriptionBloc extends Bloc<SubscriptionEvent, SubscriptionState> {
     SubscriptionLogIn event,
     Emitter<SubscriptionState> emit,
   ) async {
+    if (!RevenueCatConfig.isSupported || !_revenueCatService.isInitialized) {
+      return;
+    }
     try {
       await _revenueCatService.logIn(event.appUserId);
       add(const SubscriptionRefresh());
     } catch (e) {
-      if (state is SubscriptionLoaded) {
-        final currentState = state as SubscriptionLoaded;
-        emit(currentState.copyWith(purchaseError: e.toString()));
-      }
+      _emitError(emit, e.toString());
     }
   }
 
@@ -264,20 +167,44 @@ class SubscriptionBloc extends Bloc<SubscriptionEvent, SubscriptionState> {
     SubscriptionLogOut event,
     Emitter<SubscriptionState> emit,
   ) async {
+    if (!RevenueCatConfig.isSupported || !_revenueCatService.isInitialized) {
+      return;
+    }
     try {
       await _revenueCatService.logOut();
       add(const SubscriptionRefresh());
     } catch (e) {
-      if (state is SubscriptionLoaded) {
-        final currentState = state as SubscriptionLoaded;
-        emit(currentState.copyWith(purchaseError: e.toString()));
-      }
+      _emitError(emit, e.toString());
+    }
+  }
+
+  /// Map [AppGuardStatus] to [SubscriptionState].
+  SubscriptionState _stateFromGuardStatus(AppGuardStatus gs) {
+    if (gs.isUnlocked) {
+      return SubscriptionLoaded(
+        status: gs.subscriptionStatus ?? const SubscriptionStatus(),
+        guardStatus: gs,
+      );
+    }
+
+    return SubscriptionLocked(
+      lockReason: gs.lockReason,
+      requiresInternet: gs.requiresInternet,
+      status: gs.subscriptionStatus ?? const SubscriptionStatus(),
+    );
+  }
+
+  void _emitError(Emitter<SubscriptionState> emit, String message) {
+    if (state is SubscriptionLoaded) {
+      emit((state as SubscriptionLoaded).copyWith(purchaseError: message));
+    } else {
+      emit(SubscriptionError(message));
     }
   }
 
   @override
   Future<void> close() {
-    _statusSubscription?.cancel();
+    _guardSubscription?.cancel();
     return super.close();
   }
 }

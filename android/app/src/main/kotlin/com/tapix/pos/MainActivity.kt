@@ -1,4 +1,4 @@
-package com.example.tapix
+package com.tapix.pos
 
 import io.flutter.embedding.android.FlutterFragmentActivity
 

@@ -152,6 +152,12 @@ import '../../features/reports/presentation/bloc/purchase_reports_bloc.dart';
 import '../../features/reports/presentation/bloc/discount_reports_bloc.dart';
 import '../../features/reports/presentation/bloc/profit_reports_bloc.dart';
 import '../services/revenuecat_service.dart';
+import '../services/device_fingerprint_service.dart';
+import '../services/license_service.dart';
+import '../services/connectivity_service.dart';
+import '../services/remote_security_service.dart';
+import '../services/code_integrity_service.dart';
+import '../services/app_guard_service.dart';
 import '../../features/subscription/subscription.dart';
 
 final sl = GetIt.instance;
@@ -562,9 +568,27 @@ Future<void> init() async {
   sl.registerFactory(() => CompanyBloc(sl<CompanyProfileService>()));
   sl.registerLazySingleton(() => AppSettingsBloc(sl<AppSettingsService>()));
 
-  // RevenueCat / Subscription
+  // Security & Licensing Services
+  sl.registerLazySingleton(() => DeviceFingerprintService());
+  sl.registerLazySingleton(() => LicenseService(fingerprintService: sl<DeviceFingerprintService>()));
+  sl.registerLazySingleton(() => ConnectivityService());
+  sl.registerLazySingleton(() => RemoteSecurityService());
+  sl.registerLazySingleton(() => CodeIntegrityService());
+
+  // RevenueCat / Subscription / AppGuard
   sl.registerLazySingleton(() => RevenueCatService.instance);
-  sl.registerLazySingleton(() => SubscriptionBloc(revenueCatService: sl<RevenueCatService>()));
+  sl.registerLazySingleton(() => AppGuardService(
+    revenueCat: sl<RevenueCatService>(),
+    licenseService: sl<LicenseService>(),
+    fingerprintService: sl<DeviceFingerprintService>(),
+    connectivityService: sl<ConnectivityService>(),
+    remoteSecurityService: sl<RemoteSecurityService>(),
+    codeIntegrityService: sl<CodeIntegrityService>(),
+  ));
+  sl.registerLazySingleton(() => SubscriptionBloc(
+    revenueCatService: sl<RevenueCatService>(),
+    appGuardService: sl<AppGuardService>(),
+  ));
   
   // Configure SessionService to use AppSettings for timeout
   sl<SessionService>().configureTimeoutSettings(() {

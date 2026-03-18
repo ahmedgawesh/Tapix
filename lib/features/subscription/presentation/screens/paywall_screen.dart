@@ -1,141 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:purchases_flutter/purchases_flutter.dart';
-import 'package:purchases_ui_flutter/purchases_ui_flutter.dart';
 
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/services/app_guard_service.dart';
 import '../bloc/subscription_bloc.dart';
 
-class PaywallScreen extends StatelessWidget {
-  const PaywallScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return BlocProvider.value(
-      value: sl<SubscriptionBloc>(),
-      child: const _PaywallScreenContent(),
-    );
-  }
-}
-
-class _PaywallScreenContent extends StatelessWidget {
-  const _PaywallScreenContent();
-
-  @override
-  Widget build(BuildContext context) {
-    return BlocConsumer<SubscriptionBloc, SubscriptionState>(
-      listener: (context, state) {
-        if (state is SubscriptionLoaded) {
-          if (state.purchaseSuccess) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Purchase successful! Welcome to Tapix Pro.'),
-                backgroundColor: Colors.green,
-              ),
-            );
-            Navigator.of(context).pop(true);
-          } else if (state.restoreSuccess) {
-            if (state.isPro) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Purchases restored successfully!'),
-                  backgroundColor: Colors.green,
-                ),
-              );
-              Navigator.of(context).pop(true);
-            } else {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('No previous purchases found.'),
-                ),
-              );
-            }
-          } else if (state.purchaseError != null) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(state.purchaseError!),
-                backgroundColor: Colors.red,
-              ),
-            );
-          } else if (state.restoreError != null) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(state.restoreError!),
-                backgroundColor: Colors.red,
-              ),
-            );
-          }
-        }
-      },
-      builder: (context, state) {
-        if (state is SubscriptionLoading) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
-
-        if (state is SubscriptionError) {
-          return Scaffold(
-            appBar: AppBar(title: const Text('Subscription')),
-            body: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.error_outline, size: 64, color: Colors.red),
-                  const SizedBox(height: 16),
-                  Text(state.message),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () {
-                      context.read<SubscriptionBloc>().add(
-                            const SubscriptionRefresh(),
-                          );
-                    },
-                    child: const Text('Retry'),
-                  ),
-                ],
-              ),
-            ),
-          );
-        }
-
-        if (state is SubscriptionLoaded) {
-          final offering = state.currentOffering;
-
-          if (offering == null) {
-            return Scaffold(
-              appBar: AppBar(title: const Text('Subscription')),
-              body: const Center(
-                child: Text('No subscription plans available'),
-              ),
-            );
-          }
-
-          return Scaffold(
-            body: SafeArea(
-              child: PaywallView(
-                offering: offering,
-                onRestoreCompleted: (CustomerInfo customerInfo) {
-                  context.read<SubscriptionBloc>().add(
-                        const SubscriptionRefresh(),
-                      );
-                },
-                onDismiss: () {
-                  Navigator.of(context).pop();
-                },
-              ),
-            ),
-          );
-        }
-
-        return const Scaffold(
-          body: Center(child: CircularProgressIndicator()),
-        );
-      },
-    );
-  }
-}
-
+/// Settings card showing subscription status with Manage/Upgrade button.
 class SubscriptionSettingsCard extends StatelessWidget {
   const SubscriptionSettingsCard({super.key});
 
@@ -144,13 +14,10 @@ class SubscriptionSettingsCard extends StatelessWidget {
     return BlocBuilder<SubscriptionBloc, SubscriptionState>(
       bloc: sl<SubscriptionBloc>(),
       builder: (context, state) {
-        if (state is! SubscriptionLoaded) {
-          return const SizedBox.shrink();
-        }
-
-        final isPro = state.isPro;
-        final isLifetime = state.isLifetime;
-        final expirationDate = state.status.expirationDate;
+        final isPro = state is SubscriptionLoaded && state.isPro;
+        final isLifetime = state is SubscriptionLoaded && state.isLifetime;
+        final expirationDate =
+            state is SubscriptionLoaded ? state.status.expirationDate : null;
 
         return Card(
           child: Padding(
@@ -197,7 +64,7 @@ class SubscriptionSettingsCard extends StatelessWidget {
                 if (isPro && !isLifetime && expirationDate != null) ...[
                   const SizedBox(height: 8),
                   Text(
-                    'Renews on ${_formatDate(expirationDate)}',
+                    'Renews on ${expirationDate.day}/${expirationDate.month}/${expirationDate.year}',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],
@@ -215,7 +82,10 @@ class SubscriptionSettingsCard extends StatelessWidget {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
-                      onPressed: () => _showPaywall(context),
+                      onPressed: () {
+                        sl<SubscriptionBloc>()
+                            .add(const SubscriptionPresentPaywall());
+                      },
                       icon: const Icon(Icons.upgrade),
                       label: const Text('Upgrade to Pro'),
                     ),
@@ -224,7 +94,10 @@ class SubscriptionSettingsCard extends StatelessWidget {
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton.icon(
-                      onPressed: () => _showCustomerCenter(context),
+                      onPressed: () {
+                        sl<SubscriptionBloc>()
+                            .add(const SubscriptionPresentCustomerCenter());
+                      },
                       icon: const Icon(Icons.settings),
                       label: const Text('Manage Subscription'),
                     ),
@@ -236,20 +109,9 @@ class SubscriptionSettingsCard extends StatelessWidget {
       },
     );
   }
-
-  String _formatDate(DateTime date) {
-    return '${date.day}/${date.month}/${date.year}';
-  }
-
-  void _showPaywall(BuildContext context) {
-    sl<SubscriptionBloc>().add(const SubscriptionPresentPaywall());
-  }
-
-  void _showCustomerCenter(BuildContext context) {
-    sl<SubscriptionBloc>().add(const SubscriptionPresentCustomerCenter());
-  }
 }
 
+/// Gate widget that shows [child] only if user has Pro.
 class ProFeatureGate extends StatelessWidget {
   final Widget child;
   final Widget? lockedChild;
@@ -269,21 +131,18 @@ class ProFeatureGate extends StatelessWidget {
       builder: (context, state) {
         final isPro = state is SubscriptionLoaded && state.isPro;
 
-        if (isPro) {
-          return child;
-        }
+        if (isPro) return child;
 
         return lockedChild ??
             _DefaultLockedWidget(
               featureName: featureName,
-              onUpgrade: () => _showPaywall(context),
+              onUpgrade: () {
+                sl<SubscriptionBloc>()
+                    .add(const SubscriptionPresentPaywall());
+              },
             );
       },
     );
-  }
-
-  void _showPaywall(BuildContext context) {
-    sl<SubscriptionBloc>().add(const SubscriptionPresentPaywall());
   }
 }
 
@@ -304,11 +163,7 @@ class _DefaultLockedWidget extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
-              Icons.lock_outline,
-              size: 48,
-              color: Colors.amber,
-            ),
+            const Icon(Icons.lock_outline, size: 48, color: Colors.amber),
             const SizedBox(height: 16),
             Text(
               featureName != null
@@ -336,20 +191,220 @@ class _DefaultLockedWidget extends StatelessWidget {
   }
 }
 
+/// Full-screen lock screen shown when the app is locked.
+class AppLockScreen extends StatelessWidget {
+  const AppLockScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<SubscriptionBloc, SubscriptionState>(
+      bloc: sl<SubscriptionBloc>(),
+      builder: (context, state) {
+        if (state is! SubscriptionLocked) {
+          return const SizedBox.shrink();
+        }
+
+        final reason = state.lockReason;
+        final needsInternet = state.requiresInternet;
+        final icon = _iconForReason(reason);
+        final title = _titleForReason(reason);
+        final description = _descriptionForReason(reason);
+
+        return Scaffold(
+          body: SafeArea(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(icon, size: 80, color: Colors.red.shade400),
+                    const SizedBox(height: 24),
+                    Text(
+                      title,
+                      style:
+                          Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                fontWeight: FontWeight.bold,
+                              ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      description,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                      textAlign: TextAlign.center,
+                    ),
+                    if (needsInternet) ...[
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.wifi_off,
+                              size: 16, color: Colors.orange.shade700),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Internet connection required',
+                            style: TextStyle(color: Colors.orange.shade700),
+                          ),
+                        ],
+                      ),
+                    ],
+                    const SizedBox(height: 32),
+                    // Show paywall button for subscription-related locks
+                    if (_isSubscriptionLock(reason)) ...[
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            sl<SubscriptionBloc>()
+                                .add(const SubscriptionPresentPaywall());
+                          },
+                          icon: const Icon(Icons.star),
+                          label: const Text('Subscribe to Tapix Pro'),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton(
+                          onPressed: () {
+                            sl<SubscriptionBloc>()
+                                .add(const SubscriptionRestore());
+                          },
+                          child: const Text('Restore Purchases'),
+                        ),
+                      ),
+                    ],
+                    // Show retry button for connectivity-related locks
+                    if (needsInternet && !_isSubscriptionLock(reason)) ...[
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            sl<SubscriptionBloc>()
+                                .add(const SubscriptionRefresh());
+                          },
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('Retry'),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  bool _isSubscriptionLock(AppLockReason reason) {
+    return reason == AppLockReason.noSubscription ||
+        reason == AppLockReason.licenseExpired;
+  }
+
+  IconData _iconForReason(AppLockReason reason) {
+    switch (reason) {
+      case AppLockReason.noSubscription:
+        return Icons.lock_outline;
+      case AppLockReason.licenseExpired:
+        return Icons.timer_off_outlined;
+      case AppLockReason.deviceMismatch:
+        return Icons.devices_other;
+      case AppLockReason.offlineTooLong:
+        return Icons.wifi_off;
+      case AppLockReason.licenseTampered:
+        return Icons.gpp_bad;
+      case AppLockReason.deviceBlocked:
+        return Icons.block;
+      case AppLockReason.versionUnsupported:
+      case AppLockReason.versionKilled:
+      case AppLockReason.forceUpdate:
+        return Icons.system_update;
+      case AppLockReason.codeTampered:
+        return Icons.security;
+      case AppLockReason.none:
+        return Icons.check_circle;
+    }
+  }
+
+  String _titleForReason(AppLockReason reason) {
+    switch (reason) {
+      case AppLockReason.noSubscription:
+        return 'Subscription Required';
+      case AppLockReason.licenseExpired:
+        return 'Subscription Expired';
+      case AppLockReason.deviceMismatch:
+        return 'Device Not Authorized';
+      case AppLockReason.offlineTooLong:
+        return 'Verification Required';
+      case AppLockReason.licenseTampered:
+        return 'License Invalid';
+      case AppLockReason.deviceBlocked:
+        return 'Device Blocked';
+      case AppLockReason.versionUnsupported:
+        return 'Update Required';
+      case AppLockReason.versionKilled:
+        return 'Version Disabled';
+      case AppLockReason.forceUpdate:
+        return 'Update Required';
+      case AppLockReason.codeTampered:
+        return 'Security Alert';
+      case AppLockReason.none:
+        return '';
+    }
+  }
+
+  String _descriptionForReason(AppLockReason reason) {
+    switch (reason) {
+      case AppLockReason.noSubscription:
+        return 'Subscribe to Tapix Pro to use this application.';
+      case AppLockReason.licenseExpired:
+        return 'Your subscription has expired. Please renew to continue.';
+      case AppLockReason.deviceMismatch:
+        return 'This license is not valid for this device. Please contact support.';
+      case AppLockReason.offlineTooLong:
+        return 'You have been offline too long. Please connect to the internet to verify your subscription.';
+      case AppLockReason.licenseTampered:
+        return 'Your license data appears to be corrupted. Please connect to the internet to re-validate.';
+      case AppLockReason.deviceBlocked:
+        return 'This device has been blocked. Please contact support.';
+      case AppLockReason.versionUnsupported:
+        return 'This version of Tapix is no longer supported. Please update to the latest version.';
+      case AppLockReason.versionKilled:
+        return 'This version of Tapix has been disabled. Please update to the latest version.';
+      case AppLockReason.forceUpdate:
+        return 'A critical update is available. Please update to continue.';
+      case AppLockReason.codeTampered:
+        return 'The application integrity check failed. Please reinstall from the official store.';
+      case AppLockReason.none:
+        return '';
+    }
+  }
+}
+
+/// Convenience extension on BuildContext for subscription actions.
 extension SubscriptionBlocExtension on BuildContext {
   bool get isPro {
     final state = sl<SubscriptionBloc>().state;
     return state is SubscriptionLoaded && state.isPro;
   }
 
+  void showPaywall() {
+    sl<SubscriptionBloc>().add(const SubscriptionPresentPaywall());
+  }
+
   void showPaywallIfNotPro() {
     if (!isPro) {
       sl<SubscriptionBloc>().add(const SubscriptionPresentPaywallIfNeeded());
     }
-  }
-
-  void showPaywall() {
-    sl<SubscriptionBloc>().add(const SubscriptionPresentPaywall());
   }
 
   void showCustomerCenter() {

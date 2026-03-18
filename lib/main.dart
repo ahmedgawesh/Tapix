@@ -1,7 +1,7 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:easy_localization/easy_localization.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:firebase_core/firebase_core.dart';
 import '../firebase_options.dart';
 import 'core/services/crashlytics_service.dart';
@@ -25,15 +25,19 @@ import 'core/widgets/app_error_widget.dart';
 import 'features/settings/presentation/bloc/company_bloc.dart';
 import 'features/settings/presentation/bloc/app_settings_bloc.dart';
 import 'features/subscription/subscription.dart';
-import 'core/services/revenuecat_service.dart';
+import 'core/services/connectivity_service.dart';
+import 'core/utils/platform_utils.dart';
+
+/// Check if running on Linux desktop (not web)
+bool get _isLinuxDesktop => !kIsWeb && PlatformUtils.isLinux;
 
 void main() {
   runZonedGuarded(() async {
     WidgetsFlutterBinding.ensureInitialized();
     await EasyLocalization.ensureInitialized();
 
-    // Initialize Firebase (not supported on Linux)
-    if (!Platform.isLinux) {
+    // Initialize Firebase (not supported on Linux desktop)
+    if (!_isLinuxDesktop) {
       await Firebase.initializeApp(
         options: DefaultFirebaseOptions.currentPlatform,
       );
@@ -80,14 +84,11 @@ void main() {
 
     await di.init();
 
-    // Initialize RevenueCat
-    try {
-      await RevenueCatService.instance.initialize();
-      // Initialize the subscription bloc to start listening for updates
-      di.sl<SubscriptionBloc>().add(const SubscriptionInitialize());
-    } catch (e) {
-      LoggingService.error('Failed to initialize RevenueCat', error: e);
-    }
+    // Initialize connectivity service
+    await di.sl<ConnectivityService>().initialize();
+
+    // Start the subscription guard (RevenueCat + License + Security)
+    di.sl<SubscriptionBloc>().add(const SubscriptionStartGuard());
 
     final localizationService = di.sl<LocalizationService>();
     final startLocale = localizationService.getLocale();

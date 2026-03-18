@@ -1,26 +1,27 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
 import 'package:purchases_ui_flutter/purchases_ui_flutter.dart';
 
+import '../utils/platform_utils.dart';
+
 /// RevenueCat configuration constants
 class RevenueCatConfig {
   RevenueCatConfig._();
 
   /// API key for RevenueCat
-  static const String apiKey = 'test_zPRbbXCRZAfmpKYzLZdDOGuxoQA';
+  static const String apiKey = 'goog_bmcvleZZMqUhtEkYvqaknUJRzvB';
 
   /// Entitlement identifier for Tapix Pro
-  static const String entitlementId = 'Tapix Pro';
+  static const String entitlementId = 'pro';
 
-  /// Product identifiers
-  static const String weeklyProductId = 'weekly';
-  static const String monthlyProductId = 'monthly';
-  static const String yearlyProductId = 'yearly';
-  static const String lifetimeProductId = 'lifetime';
+  /// Product identifiers (must match Google Play Console)
+  static const String weeklyProductId = 'com.tapix.pos';
+  static const String monthlyProductId = 'com.tapix.pos.monthly';
+  static const String yearlyProductId = 'com.tapix.pos.yearly';
+  static const String lifetimeProductId = 'com.tapix.pos.lifetime';
 
   /// All product identifiers
   static const List<String> allProductIds = [
@@ -29,6 +30,44 @@ class RevenueCatConfig {
     yearlyProductId,
     lifetimeProductId,
   ];
+
+  /// Whether RevenueCat is supported on the current platform
+  static bool get isSupported => PlatformUtils.isAndroid || PlatformUtils.isIOS;
+}
+
+/// Subscription type derived from the product identifier
+enum SubscriptionType {
+  weekly,
+  monthly,
+  yearly,
+  lifetime,
+  none;
+
+  static SubscriptionType fromProductId(String? productId) {
+    if (productId == null) return none;
+    // Check longer (more specific) IDs first to avoid false matches
+    if (productId == RevenueCatConfig.lifetimeProductId) return lifetime;
+    if (productId == RevenueCatConfig.yearlyProductId) return yearly;
+    if (productId == RevenueCatConfig.monthlyProductId) return monthly;
+    if (productId == RevenueCatConfig.weeklyProductId) return weekly;
+    return none;
+  }
+
+  /// Maximum allowed offline days before forced revalidation
+  int get maxOfflineDays {
+    switch (this) {
+      case weekly:
+        return 3;
+      case monthly:
+        return 7;
+      case yearly:
+        return 14;
+      case lifetime:
+        return 30;
+      case none:
+        return 0;
+    }
+  }
 }
 
 /// Subscription status model
@@ -36,17 +75,19 @@ class SubscriptionStatus {
   final bool isActive;
   final bool isPro;
   final String? activeProductId;
+  final SubscriptionType subscriptionType;
   final DateTime? expirationDate;
   final bool willRenew;
-  final CustomerInfo? customerInfo;
+  final String? userId;
 
   const SubscriptionStatus({
     this.isActive = false,
     this.isPro = false,
     this.activeProductId,
+    this.subscriptionType = SubscriptionType.none,
     this.expirationDate,
     this.willRenew = false,
-    this.customerInfo,
+    this.userId,
   });
 
   factory SubscriptionStatus.fromCustomerInfo(CustomerInfo? info) {
@@ -56,38 +97,40 @@ class SubscriptionStatus {
 
     final entitlement = info.entitlements.all[RevenueCatConfig.entitlementId];
     final isActive = entitlement?.isActive ?? false;
+    final productId = entitlement?.productIdentifier;
 
     return SubscriptionStatus(
       isActive: isActive,
       isPro: isActive,
-      activeProductId: entitlement?.productIdentifier,
+      activeProductId: productId,
+      subscriptionType: SubscriptionType.fromProductId(productId),
       expirationDate: entitlement?.expirationDate != null
           ? DateTime.tryParse(entitlement!.expirationDate!)
           : null,
       willRenew: entitlement?.willRenew ?? false,
-      customerInfo: info,
+      userId: info.originalAppUserId,
     );
   }
 
-  bool get isLifetime =>
-      activeProductId == RevenueCatConfig.lifetimeProductId ||
-      (isActive && expirationDate == null);
+  bool get isLifetime => subscriptionType == SubscriptionType.lifetime;
 
   SubscriptionStatus copyWith({
     bool? isActive,
     bool? isPro,
     String? activeProductId,
+    SubscriptionType? subscriptionType,
     DateTime? expirationDate,
     bool? willRenew,
-    CustomerInfo? customerInfo,
+    String? userId,
   }) {
     return SubscriptionStatus(
       isActive: isActive ?? this.isActive,
       isPro: isPro ?? this.isPro,
       activeProductId: activeProductId ?? this.activeProductId,
+      subscriptionType: subscriptionType ?? this.subscriptionType,
       expirationDate: expirationDate ?? this.expirationDate,
       willRenew: willRenew ?? this.willRenew,
-      customerInfo: customerInfo ?? this.customerInfo,
+      userId: userId ?? this.userId,
     );
   }
 }
@@ -122,7 +165,8 @@ class PurchaseResult {
   }
 }
 
-/// RevenueCat service for managing subscriptions
+/// RevenueCat service for managing subscriptions.
+/// Only initializes on Android and iOS.
 class RevenueCatService {
   RevenueCatService._();
 
@@ -139,21 +183,24 @@ class RevenueCatService {
   Stream<SubscriptionStatus> get subscriptionStatusStream =>
       _subscriptionStatusController.stream;
 
-  /// Initialize RevenueCat SDK
-  /// Should be called once at app startup
+  /// Initialize RevenueCat SDK.
+  /// Returns immediately on unsupported platforms (web, desktop).
   Future<void> initialize({String? appUserId}) async {
+    if (!RevenueCatConfig.isSupported) {
+      debugPrint('RevenueCat: Skipped – unsupported platform');
+      return;
+    }
+
     if (_isInitialized) {
       debugPrint('RevenueCat: Already initialized');
       return;
     }
 
     try {
-      // Enable debug logs in debug mode
       if (kDebugMode) {
         await Purchases.setLogLevel(LogLevel.debug);
       }
 
-      // Configure RevenueCat
       final configuration = PurchasesConfiguration(RevenueCatConfig.apiKey);
 
       if (appUserId != null && appUserId.isNotEmpty) {
@@ -162,13 +209,11 @@ class RevenueCatService {
 
       await Purchases.configure(configuration);
 
-      // Listen for customer info updates
       Purchases.addCustomerInfoUpdateListener(_onCustomerInfoUpdated);
 
       _isInitialized = true;
       debugPrint('RevenueCat: Initialized successfully');
 
-      // Fetch initial customer info
       await refreshSubscriptionStatus();
     } catch (e, st) {
       debugPrint('RevenueCat: Initialization failed: $e');
@@ -183,30 +228,26 @@ class RevenueCatService {
     _subscriptionStatusController.add(status);
   }
 
-  /// Get current subscription status
-  Future<SubscriptionStatus> getSubscriptionStatus() async {
-    _ensureInitialized();
+  /// Check subscription and return status. Returns inactive on unsupported platforms.
+  Future<SubscriptionStatus> checkSubscription() async {
+    if (!RevenueCatConfig.isSupported || !_isInitialized) {
+      return const SubscriptionStatus();
+    }
 
     try {
       final customerInfo = await Purchases.getCustomerInfo();
       return SubscriptionStatus.fromCustomerInfo(customerInfo);
     } catch (e) {
-      debugPrint('RevenueCat: Failed to get subscription status: $e');
+      debugPrint('RevenueCat: Failed to check subscription: $e');
       return const SubscriptionStatus();
     }
   }
 
   /// Refresh and broadcast subscription status
   Future<SubscriptionStatus> refreshSubscriptionStatus() async {
-    final status = await getSubscriptionStatus();
+    final status = await checkSubscription();
     _subscriptionStatusController.add(status);
     return status;
-  }
-
-  /// Check if user has active Tapix Pro entitlement
-  Future<bool> hasProEntitlement() async {
-    final status = await getSubscriptionStatus();
-    return status.isPro;
   }
 
   /// Get available offerings
@@ -214,18 +255,11 @@ class RevenueCatService {
     _ensureInitialized();
 
     try {
-      final offerings = await Purchases.getOfferings();
-      return offerings;
+      return await Purchases.getOfferings();
     } catch (e) {
       debugPrint('RevenueCat: Failed to get offerings: $e');
       return null;
     }
-  }
-
-  /// Get current offering
-  Future<Offering?> getCurrentOffering() async {
-    final offerings = await getOfferings();
-    return offerings?.current;
   }
 
   /// Purchase a package
@@ -251,31 +285,6 @@ class RevenueCatService {
     }
   }
 
-  /// Purchase a product by ID
-  Future<PurchaseResult> purchaseProduct(String productId) async {
-    _ensureInitialized();
-
-    try {
-      final offerings = await getOfferings();
-      final currentOffering = offerings?.current;
-
-      if (currentOffering == null) {
-        return PurchaseResult.error('No offerings available');
-      }
-
-      // Find the package with the matching product ID
-      final package = currentOffering.availablePackages.firstWhere(
-        (p) => p.storeProduct.identifier == productId,
-        orElse: () => throw Exception('Product not found: $productId'),
-      );
-
-      return purchasePackage(package);
-    } catch (e) {
-      debugPrint('RevenueCat: Purchase product error: $e');
-      return PurchaseResult.error(e.toString());
-    }
-  }
-
   /// Restore purchases
   Future<PurchaseResult> restorePurchases() async {
     _ensureInitialized();
@@ -284,9 +293,6 @@ class RevenueCatService {
       final customerInfo = await Purchases.restorePurchases();
       debugPrint('RevenueCat: Restore successful');
       return PurchaseResult.success(customerInfo);
-    } on PurchasesErrorCode catch (e) {
-      debugPrint('RevenueCat: Restore error: $e');
-      return PurchaseResult.error(_getErrorMessage(e));
     } catch (e) {
       debugPrint('RevenueCat: Restore error: $e');
       return PurchaseResult.error(e.toString());
@@ -368,12 +374,6 @@ class RevenueCatService {
     return await Purchases.appUserID;
   }
 
-  /// Check if the current user is anonymous
-  Future<bool> isAnonymous() async {
-    _ensureInitialized();
-    return await Purchases.isAnonymous;
-  }
-
   /// Set user attributes for analytics
   Future<void> setUserAttributes({
     String? email,
@@ -383,43 +383,11 @@ class RevenueCatService {
     _ensureInitialized();
 
     try {
-      if (email != null) {
-        await Purchases.setEmail(email);
-      }
-      if (displayName != null) {
-        await Purchases.setDisplayName(displayName);
-      }
-      if (phoneNumber != null) {
-        await Purchases.setPhoneNumber(phoneNumber);
-      }
+      if (email != null) await Purchases.setEmail(email);
+      if (displayName != null) await Purchases.setDisplayName(displayName);
+      if (phoneNumber != null) await Purchases.setPhoneNumber(phoneNumber);
     } catch (e) {
       debugPrint('RevenueCat: Set attributes error: $e');
-    }
-  }
-
-  /// Set custom attributes
-  Future<void> setCustomAttribute(String key, String value) async {
-    _ensureInitialized();
-
-    try {
-      await Purchases.setAttributes({key: value});
-    } catch (e) {
-      debugPrint('RevenueCat: Set custom attribute error: $e');
-    }
-  }
-
-  /// Sync purchases with RevenueCat (useful after app reinstall)
-  Future<void> syncPurchases() async {
-    _ensureInitialized();
-
-    try {
-      // Only available on iOS
-      if (Platform.isIOS) {
-        await Purchases.syncPurchases();
-        debugPrint('RevenueCat: Purchases synced');
-      }
-    } catch (e) {
-      debugPrint('RevenueCat: Sync purchases error: $e');
     }
   }
 

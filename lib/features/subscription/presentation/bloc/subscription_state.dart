@@ -15,9 +15,10 @@ class SubscriptionLoading extends SubscriptionState {
   const SubscriptionLoading();
 }
 
+/// App is unlocked – user has an active subscription or valid local license.
 class SubscriptionLoaded extends SubscriptionState {
   final SubscriptionStatus status;
-  final Offerings? offerings;
+  final AppGuardStatus? guardStatus;
   final bool isPurchasing;
   final bool isRestoring;
   final bool purchaseSuccess;
@@ -27,7 +28,7 @@ class SubscriptionLoaded extends SubscriptionState {
 
   const SubscriptionLoaded({
     this.status = const SubscriptionStatus(),
-    this.offerings,
+    this.guardStatus,
     this.isPurchasing = false,
     this.isRestoring = false,
     this.purchaseSuccess = false,
@@ -40,27 +41,9 @@ class SubscriptionLoaded extends SubscriptionState {
   bool get isActive => status.isActive;
   bool get isLifetime => status.isLifetime;
 
-  Offering? get currentOffering => offerings?.current;
-
-  List<Package> get availablePackages =>
-      currentOffering?.availablePackages ?? [];
-
-  Package? get weeklyPackage => _findPackageByType(PackageType.weekly);
-  Package? get monthlyPackage => _findPackageByType(PackageType.monthly);
-  Package? get annualPackage => _findPackageByType(PackageType.annual);
-  Package? get lifetimePackage => _findPackageByType(PackageType.lifetime);
-
-  Package? _findPackageByType(PackageType type) {
-    try {
-      return availablePackages.firstWhere((p) => p.packageType == type);
-    } catch (_) {
-      return null;
-    }
-  }
-
   SubscriptionLoaded copyWith({
     SubscriptionStatus? status,
-    Offerings? offerings,
+    AppGuardStatus? guardStatus,
     bool? isPurchasing,
     bool? isRestoring,
     bool? purchaseSuccess,
@@ -70,7 +53,7 @@ class SubscriptionLoaded extends SubscriptionState {
   }) {
     return SubscriptionLoaded(
       status: status ?? this.status,
-      offerings: offerings ?? this.offerings,
+      guardStatus: guardStatus ?? this.guardStatus,
       isPurchasing: isPurchasing ?? this.isPurchasing,
       isRestoring: isRestoring ?? this.isRestoring,
       purchaseSuccess: purchaseSuccess ?? false,
@@ -83,7 +66,7 @@ class SubscriptionLoaded extends SubscriptionState {
   @override
   List<Object?> get props => [
         status,
-        offerings,
+        guardStatus,
         isPurchasing,
         isRestoring,
         purchaseSuccess,
@@ -91,6 +74,22 @@ class SubscriptionLoaded extends SubscriptionState {
         purchaseError,
         restoreError,
       ];
+}
+
+/// App is locked – subscription invalid, license expired, offline too long, etc.
+class SubscriptionLocked extends SubscriptionState {
+  final AppLockReason lockReason;
+  final bool requiresInternet;
+  final SubscriptionStatus status;
+
+  const SubscriptionLocked({
+    required this.lockReason,
+    this.requiresInternet = false,
+    this.status = const SubscriptionStatus(),
+  });
+
+  @override
+  List<Object?> get props => [lockReason, requiresInternet, status];
 }
 
 class SubscriptionError extends SubscriptionState {

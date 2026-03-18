@@ -7,44 +7,28 @@ abstract class SubscriptionEvent extends Equatable {
   List<Object?> get props => [];
 }
 
-class SubscriptionInitialize extends SubscriptionEvent {
+/// Start the full guard sequence (RevenueCat init + AppGuard).
+class SubscriptionStartGuard extends SubscriptionEvent {
   final String? appUserId;
 
-  const SubscriptionInitialize({this.appUserId});
+  const SubscriptionStartGuard({this.appUserId});
 
   @override
   List<Object?> get props => [appUserId];
 }
 
-class SubscriptionStatusChanged extends SubscriptionEvent {
-  final SubscriptionStatus status;
+/// Internal: guard status changed via stream.
+class SubscriptionGuardStatusChanged extends SubscriptionEvent {
+  final AppGuardStatus guardStatus;
 
-  const SubscriptionStatusChanged(this.status);
+  const SubscriptionGuardStatusChanged(this.guardStatus);
 
   @override
-  List<Object?> get props => [status];
+  List<Object?> get props => [guardStatus];
 }
 
 class SubscriptionRefresh extends SubscriptionEvent {
   const SubscriptionRefresh();
-}
-
-class SubscriptionPurchasePackage extends SubscriptionEvent {
-  final Package package;
-
-  const SubscriptionPurchasePackage(this.package);
-
-  @override
-  List<Object?> get props => [package];
-}
-
-class SubscriptionPurchaseProduct extends SubscriptionEvent {
-  final String productId;
-
-  const SubscriptionPurchaseProduct(this.productId);
-
-  @override
-  List<Object?> get props => [productId];
 }
 
 class SubscriptionRestore extends SubscriptionEvent {
