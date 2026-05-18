@@ -1,6 +1,8 @@
 import 'package:decimal/decimal.dart';
 import 'package:drift/drift.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../../core/di/injection_container.dart';
+import '../../../../core/money/money_input_parser.dart';
 import '../../domain/repositories/supplier_repository.dart';
 
 /// Events for SupplierFormBloc
@@ -133,7 +135,15 @@ class SupplierFormError extends SupplierFormState {
 class SupplierFormBloc extends Bloc<SupplierFormEvent, SupplierFormState> {
   final SupplierRepository _repository;
 
-  SupplierFormBloc(this._repository) : super(const SupplierFormInitial()) {
+  // Phase 8 — sole source of truth for text→cents conversion.
+  // Replaces the legacy `(double.parse(...) * 100).round()` pattern.
+  final MoneyInputParser _moneyParser;
+
+  SupplierFormBloc(
+    this._repository, {
+    MoneyInputParser? moneyParser,
+  })  : _moneyParser = moneyParser ?? sl<MoneyInputParser>(),
+        super(const SupplierFormInitial()) {
     on<SupplierFormLoadRequested>(_onLoadRequested);
     on<SupplierFormNameChanged>(_onNameChanged);
     on<SupplierFormEmailChanged>(_onEmailChanged);
@@ -293,18 +303,12 @@ class SupplierFormBloc extends Bloc<SupplierFormEvent, SupplierFormState> {
           );
           await _repository.updateSupplier(updatedSupplier);
 
-          final desiredBalanceCents = balanceCents.toBigInt().toInt();
-          final currentBalanceCents = existingSupplier.balanceCents.toBigInt().toInt();
-          if (desiredBalanceCents != currentBalanceCents) {
-            final deltaCents = desiredBalanceCents - currentBalanceCents;
-            await _repository.recordTransaction(
-              supplierId: existingSupplier.id,
-              transactionType: 'adjustment',
-              amountCents: deltaCents,
-              currencyId: existingSupplier.currencyId,
-              description: null,
-            );
-          }
+          // Phase 1.4: read-current → compute-delta → recordTransaction is
+          // now a single atomic repository call. No-op when balance unchanged.
+          await _repository.adjustOpeningBalance(
+            supplierId: existingSupplier.id,
+            desiredBalanceCents: balanceCents.toBigInt().toInt(),
+          );
 
           emit(SupplierFormSuccess(
             supplierId: currentState.supplierId!,
@@ -334,13 +338,10 @@ class SupplierFormBloc extends Bloc<SupplierFormEvent, SupplierFormState> {
     return RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(email);
   }
 
-  Decimal _parseBalance(String balance) {
-    try {
-      final value = double.parse(balance.replaceAll(',', '.'));
-      final cents = (value * 100).round();
-      return Decimal.fromInt(cents);
-    } catch (_) {
-      return Decimal.zero;
-    }
-  }
+  // Phase 8 — delegates to the canonical signed-text parser. The supplier
+  // opening-balance field legitimately accepts a negative magnitude (a
+  // prepaid advance on file), which is why we use the signed variant
+  // rather than [MoneyInputParser.parseOrZero].
+  Decimal _parseBalance(String balance) =>
+      Decimal.fromInt(_moneyParser.parseSignedOrZero(balance));
 }

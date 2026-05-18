@@ -22,6 +22,7 @@ import '../bloc/sizes_event.dart';
 import '../bloc/categories_bloc.dart';
 import '../bloc/categories_event.dart';
 import '../widgets/variant_edit_dialog.dart';
+import '../widgets/inventory_adjustment_dialog.dart';
 
 enum StockFilter { all, inStock, lowStock, outOfStock }
 enum SortOption { barcode, sku, stock, recent }
@@ -627,20 +628,12 @@ class _VariantsViewState extends State<_VariantsView> {
                             ),
                             const SizedBox(width: 4),
                             IconButton(
-                              icon: const Icon(LucideIcons.minus, size: 16),
-                              tooltip: 'variants.decrease_stock'.tr(),
-                              onPressed: v.stockQuantity > 0 ? () => _adjustStock(context, v, -1) : null,
+                              icon: const Icon(LucideIcons.warehouse, size: 16),
+                              tooltip: 'products.adjust_inventory'.tr(),
+                              onPressed: () => _openInventoryAdjustment(context, v),
                               visualDensity: VisualDensity.compact,
                               constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                             ),
-                            IconButton(
-                              icon: const Icon(LucideIcons.plus, size: 16),
-                              tooltip: 'variants.increase_stock'.tr(),
-                              onPressed: () => _adjustStock(context, v, 1),
-                              visualDensity: VisualDensity.compact,
-                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                            ),
-                            const SizedBox(width: 4),
                             IconButton(
                               icon: const Icon(LucideIcons.edit, size: 16),
                               tooltip: 'common.edit'.tr(),
@@ -715,8 +708,7 @@ class _VariantsViewState extends State<_VariantsView> {
                           child: Text('${v.stockQuantity}', style: theme.textTheme.bodyMedium?.copyWith(color: stockColor, fontWeight: FontWeight.w600), textAlign: TextAlign.center),
                         ),
                         const SizedBox(width: 4),
-                        IconButton(icon: const Icon(LucideIcons.minus, size: 16), tooltip: 'variants.decrease_stock'.tr(), onPressed: v.stockQuantity > 0 ? () => _adjustStock(context, v, -1) : null, visualDensity: VisualDensity.compact, constraints: const BoxConstraints(minWidth: 32, minHeight: 32)),
-                        IconButton(icon: const Icon(LucideIcons.plus, size: 16), tooltip: 'variants.increase_stock'.tr(), onPressed: () => _adjustStock(context, v, 1), visualDensity: VisualDensity.compact, constraints: const BoxConstraints(minWidth: 32, minHeight: 32)),
+                        IconButton(icon: const Icon(LucideIcons.warehouse, size: 16), tooltip: 'products.adjust_inventory'.tr(), onPressed: () => _openInventoryAdjustment(context, v), visualDensity: VisualDensity.compact, constraints: const BoxConstraints(minWidth: 32, minHeight: 32)),
                         const SizedBox(width: 4),
                         IconButton(icon: const Icon(LucideIcons.edit, size: 16), tooltip: 'common.edit'.tr(), onPressed: () => _showEditDialog(context, v), visualDensity: VisualDensity.compact, constraints: const BoxConstraints(minWidth: 32, minHeight: 32)),
                         IconButton(
@@ -768,12 +760,12 @@ class _VariantsViewState extends State<_VariantsView> {
                   _buildDetailRow('variants.barcode'.tr(), variant.barcode ?? '—'),
                   if (color != null) _buildDetailRow('variants.color'.tr(), color.name, colorHex: color.hexCode),
                   if (sizeName != null) _buildDetailRow('variants.size'.tr(), sizeName),
-                  _buildDetailRow('variants.cost'.tr(), currencyService.format(variant.costCents.toBigInt().toInt())),
+                  _buildDetailRow('variants.cost'.tr(), currencyService.format((variant.lastPurchasePriceCents ?? variant.costCents).toBigInt().toInt())),
                   _buildDetailRow('variants.price'.tr(), currencyService.format(variant.priceCents.toBigInt().toInt())),
                   _buildDetailRow('variants.stock'.tr(), '${variant.stockQuantity}'),
                   _buildDetailRow('variants.status'.tr(), variant.isActive ? 'variants.active'.tr() : 'variants.inactive'.tr()),
                   const SizedBox(height: 24),
-                  Row(children: [Expanded(child: OutlinedButton.icon(onPressed: () => _showStockAdjustDialog(context, variant), icon: const Icon(LucideIcons.warehouse), label: Text('variants.adjust_stock'.tr())))]),
+                  Row(children: [Expanded(child: OutlinedButton.icon(onPressed: () => _openInventoryAdjustment(context, variant), icon: const Icon(LucideIcons.warehouse), label: Text('products.adjust_inventory'.tr())))]),
                   const SizedBox(height: 8),
                   Row(children: [Expanded(child: OutlinedButton.icon(onPressed: () => _printVariantLabel(context, variant), icon: const Icon(LucideIcons.printer), label: Text('variants.print'.tr())))]),
                   const SizedBox(height: 8),
@@ -971,21 +963,42 @@ class _VariantsViewState extends State<_VariantsView> {
     VariantEditDialog.show(context, productId: variant.productId, variant: variant);
   }
 
-  void _adjustStock(BuildContext context, ProductVariant variant, int delta) {
-    final updated = ProductVariant(
-      id: variant.id,
+  /// Opens the accounting-safe Inventory Adjustment dialog. This is the
+  /// ONLY path that may change on-hand stock or unit cost outside of
+  /// purchase / sale / return documents. Every post goes through
+  /// `InventoryAdjustmentService`, which writes a balanced journal entry
+  /// and an `inventory_adjustments` audit row atomically.
+  Future<void> _openInventoryAdjustment(
+      BuildContext context, ProductVariant variant) async {
+    final products = _getProductsFromBloc(context);
+    final colors = _getColorsFromBloc(context);
+    final sizes = _getSizesFromBloc(context);
+    final parent = products.where((p) => p.id == variant.productId).cast<Product?>().firstOrNull;
+    final colorName = variant.colorId == null
+        ? null
+        : colors.where((c) => c.id == variant.colorId).map((c) => c.name).cast<String?>().firstOrNull;
+    final sizeName = variant.sizeId == null
+        ? null
+        : sizes.where((s) => s.id == variant.sizeId).map((s) => s.name).cast<String?>().firstOrNull;
+    final label = [
+      parent?.name,
+      [colorName, sizeName].whereType<String>().join(' / '),
+    ].whereType<String>().where((s) => s.isNotEmpty).join(' — ');
+
+    final posted = await InventoryAdjustmentDialog.show(
+      context,
       productId: variant.productId,
-      sku: variant.sku,
-      barcode: variant.barcode,
-      colorId: variant.colorId,
-      sizeId: variant.sizeId,
-      costCents: variant.costCents,
-      priceCents: variant.priceCents,
-      priceAdjustmentCents: variant.priceAdjustmentCents,
-      stockQuantity: variant.stockQuantity + delta,
-      isActive: variant.isActive,
+      variantId: variant.id,
+      currentStock: variant.stockQuantity,
+      currentUnitCostCents: variant.costCents.toBigInt().toInt(),
+      subjectLabel: label.isEmpty ? null : label,
     );
-    context.read<ProductVariantsBloc>().add(VariantUpdateRequested(updated));
+    if (posted == true && context.mounted) {
+      context.read<ProductVariantsBloc>().add(const AllVariantsInitialized());
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('inventory_adjustment.posted_success'.tr())),
+      );
+    }
   }
 
   void _toggleActive(BuildContext context, ProductVariant variant) {
@@ -1005,43 +1018,6 @@ class _VariantsViewState extends State<_VariantsView> {
     context.read<ProductVariantsBloc>().add(VariantUpdateRequested(updated));
   }
 
-  void _showStockAdjustDialog(BuildContext context, ProductVariant variant) {
-    final controller = TextEditingController(text: '${variant.stockQuantity}');
-    showDialog<void>(context: context, builder: (ctx) => AlertDialog(
-      title: Text('variants.adjust_stock'.tr()),
-      content: TextField(
-        controller: controller,
-        keyboardType: TextInputType.number,
-        decoration: InputDecoration(labelText: 'variants.new_stock'.tr(), border: const OutlineInputBorder()),
-        autofocus: true,
-      ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx), child: Text('common.cancel'.tr())),
-        FilledButton(
-          onPressed: () {
-            final newStock = int.tryParse(controller.text) ?? variant.stockQuantity;
-            final updated = ProductVariant(
-              id: variant.id,
-              productId: variant.productId,
-              sku: variant.sku,
-              barcode: variant.barcode,
-              colorId: variant.colorId,
-              sizeId: variant.sizeId,
-              costCents: variant.costCents,
-              priceCents: variant.priceCents,
-              priceAdjustmentCents: variant.priceAdjustmentCents,
-              stockQuantity: newStock,
-              isActive: variant.isActive,
-            );
-            context.read<ProductVariantsBloc>().add(VariantUpdateRequested(updated));
-            Navigator.pop(ctx);
-            setState(() => _selectedVariant = updated);
-          },
-          child: Text('common.save'.tr()),
-        ),
-      ],
-    ));
-  }
 
   void _printVariantLabel(BuildContext context, ProductVariant variant) {
     final products = _getProductsFromBloc(context);

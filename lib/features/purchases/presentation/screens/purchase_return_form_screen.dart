@@ -7,6 +7,8 @@ import 'package:easy_localization/easy_localization.dart';
 
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../../../core/widgets/inputs/select_all_on_focus.dart';
+import '../../../settings/presentation/bloc/app_settings_bloc.dart';
 import '../../domain/entities/purchase_entity.dart';
 import '../../domain/repositories/purchase_repository.dart';
 import '../bloc/purchase_return_form_bloc.dart';
@@ -781,6 +783,11 @@ class _ReturnFormView extends StatelessWidget {
                 ),
               );
             }),
+            // ── Phase 14.0 — cheque due date (only shown for cheque) ──
+            if (state.refundMethod == 'cheque') ...[
+              const SizedBox(height: 6),
+              _buildChequeDueDatePicker(context, state, theme, cs),
+            ],
             Divider(height: 20, color: cs.outlineVariant.withValues(alpha: 0.4)),
             // ── Disposition (what happens to the goods) ──
             Row(
@@ -839,6 +846,81 @@ class _ReturnFormView extends StatelessWidget {
             Text('purchases.disposition_hint'.tr(),
                 style: theme.textTheme.labelSmall?.copyWith(
                     color: cs.onSurfaceVariant.withValues(alpha: 0.6), fontSize: 10)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Phase 14.0 — cheque due-date picker shown when refund method is cheque.
+  Widget _buildChequeDueDatePicker(
+    BuildContext context,
+    PurchaseReturnFormState state,
+    ThemeData theme,
+    ColorScheme cs,
+  ) {
+    final missing = state.dueDate == null;
+    return InkWell(
+      borderRadius: BorderRadius.circular(10),
+      onTap: () async {
+        final picked = await showDatePicker(
+          context: context,
+          initialDate: state.dueDate ??
+              DateTime.now().add(const Duration(days: 30)),
+          firstDate: DateTime.now(),
+          lastDate: DateTime.now().add(const Duration(days: 365)),
+        );
+        if (picked != null && context.mounted) {
+          context
+              .read<PurchaseReturnFormBloc>()
+              .add(PurchaseReturnDueDateChanged(picked));
+        }
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        decoration: BoxDecoration(
+          color: missing
+              ? cs.errorContainer.withValues(alpha: 0.18)
+              : cs.surfaceContainerHighest.withValues(alpha: 0.3),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: missing
+                ? cs.error.withValues(alpha: 0.5)
+                : cs.outlineVariant,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(LucideIcons.calendar,
+                size: 18, color: missing ? cs.error : cs.primary),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'purchases.cheque_due_date'.tr(),
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: missing ? cs.error : cs.onSurfaceVariant,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    state.dueDate != null
+                        ? '${state.dueDate!.year}-'
+                            '${state.dueDate!.month.toString().padLeft(2, '0')}-'
+                            '${state.dueDate!.day.toString().padLeft(2, '0')}'
+                        : 'purchases.select_due_date'.tr(),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: state.dueDate != null ? null : cs.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(LucideIcons.chevronDown, size: 18, color: cs.onSurfaceVariant),
           ],
         ),
       ),
@@ -1171,11 +1253,23 @@ class _ReturnFormView extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             FilledButton.icon(
-              onPressed: state.isSubmitting || state.isSuccess || state.returnItems.isEmpty
+              onPressed: state.isSubmitting ||
+                      state.isSuccess ||
+                      state.returnItems.isEmpty ||
+                      state.isChequeMissingDueDate
                   ? null
-                  : () => context
-                      .read<PurchaseReturnFormBloc>()
-                      .add(const PurchaseReturnFormSubmitted()),
+                  : () {
+                      final allowNegativeStock = context
+                          .read<AppSettingsBloc>()
+                          .state
+                          .settings
+                          .allowNegativeStock;
+                      context.read<PurchaseReturnFormBloc>().add(
+                            PurchaseReturnFormSubmitted(
+                              allowNegativeStock: allowNegativeStock,
+                            ),
+                          );
+                    },
               style: FilledButton.styleFrom(
                 backgroundColor: colorScheme.error,
               ),
@@ -1377,6 +1471,7 @@ class _ReturnItemTileState extends State<_ReturnItemTile> {
                             style: theme.textTheme.labelLarge?.copyWith(
                                 fontWeight: FontWeight.bold,
                                 color: cs.error),
+                            onTap: () => selectAllText(_qtyCtrl),
                             decoration: const InputDecoration(
                               border: InputBorder.none,
                               isDense: true,

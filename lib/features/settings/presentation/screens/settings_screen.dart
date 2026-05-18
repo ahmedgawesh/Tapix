@@ -19,6 +19,7 @@ import '../widgets/security_settings_section.dart';
 import '../widgets/reports_settings_section.dart';
 import '../widgets/notification_settings_section.dart';
 import '../widgets/printer_settings_section.dart';
+import '../widgets/currency_picker_dialog.dart';
 import '../../../subscription/presentation/screens/paywall_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -208,45 +209,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 final previewAmount = 123456;
                 final formattedPreview = context.read<CurrencyService>().format(previewAmount);
 
+                final translatedName = 'currency.${currentCurrency.code}'.tr();
+                final displayName = translatedName == 'currency.${currentCurrency.code}'
+                    ? currentCurrency.name
+                    : translatedName;
+
                 return Column(
                   children: [
-                    Theme(
-                      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-                      child: ExpansionTile(
-                        tilePadding: EdgeInsets.zero,
-                        leading: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: Theme.of(context).colorScheme.primaryContainer,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            currentCurrency.symbol,
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.onPrimaryContainer,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                            ),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.primaryContainer,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          currentCurrency.symbol,
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.onPrimaryContainer,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
                           ),
                         ),
-                        title: Text(
-                          'currency.${currentCurrency.code}'.tr(),
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        subtitle: Text(currentCurrency.code),
-                        children: Currency.supportedCurrencies.map((currency) {
-                          return _buildCurrencyTile(
-                            context: context,
-                            title: 'currency.${currency.code}'.tr(),
-                            code: currency.code,
-                            symbol: currency.symbol,
-                            currentCode: currentCurrency.code,
-                            onTap: () {
-                              context.read<CurrencyBloc>().add(CurrencyChanged(currency.code));
-                            },
-                          );
-                        }).toList(),
                       ),
+                      title: Text(
+                        displayName,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      subtitle: Text(currentCurrency.code),
+                      trailing: const Icon(LucideIcons.chevronRight),
+                      onTap: () => CurrencyPickerDialog.show(context),
                     ),
                     const SizedBox(height: 8),
                     Padding(
@@ -440,34 +433,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildCurrencyTile({
-    required BuildContext context,
-    required String title,
-    required String code,
-    required String symbol,
-    required String currentCode,
-    required VoidCallback onTap,
-  }) {
-    final isSelected = code == currentCode;
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return ListTile(
-      leading: Text(
-        symbol,
-        style: theme.textTheme.titleLarge?.copyWith(
-          color: isSelected ? colorScheme.primary : colorScheme.onSurfaceVariant,
-        ),
-      ),
-      title: Text(title),
-      subtitle: Text(code),
-      trailing: isSelected
-          ? Icon(LucideIcons.check, color: colorScheme.primary)
-          : null,
-      selected: isSelected,
-      onTap: onTap,
-    );
-  }
 }
 
 class _AdminPasswordDialog extends StatefulWidget {

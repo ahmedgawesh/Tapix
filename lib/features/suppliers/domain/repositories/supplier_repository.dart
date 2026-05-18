@@ -48,7 +48,15 @@ abstract class SupplierRepository {
   @Deprecated('Use recordTransaction(transactionType: "adjustment") instead')
   Future<void> updateSupplierBalance(int supplierId, int newBalanceCents);
 
-  /// Record a supplier transaction (payment, purchase, return, etc.)
+  /// Record a supplier transaction (payment, purchase, return, etc.).
+  ///
+  /// Prefer the [SupplierPostingApi] extension helpers
+  /// (`recordPayment` / `recordDiscount`) in UI code. The sign-flip rule
+  /// (a payment we issue reduces what we owe the supplier and therefore
+  /// persists as negative cents) is owned by the repository, never by
+  /// widgets. Direct calls remain available for system flows (opening
+  /// balances, reversals, returns posted by the unified
+  /// `ReturnPostingService`) that already carry a pre-signed amount.
   Future<int> recordTransaction({
     required int supplierId,
     required String transactionType,
@@ -59,6 +67,23 @@ abstract class SupplierRepository {
     String? referenceType,
     String? discountType,
     DateTime? transactionDate,
+  });
+
+  /// Atomically adjust a supplier's balance to [desiredBalanceCents].
+  ///
+  /// Phase 1.4 (May 2026) — mirror of `CustomerRepository.adjustOpeningBalance`.
+  /// Replaces the scattered (read → delta → recordTransaction) recipe that
+  /// previously lived in `supplier_form_bloc.dart`. The repository owns the
+  /// atomicity guarantee (read + post in the same DB transaction) and the
+  /// "no-op when delta is zero" rule, so the bloc only has to provide the
+  /// user-entered target balance.
+  ///
+  /// Returns the recorded `supplier_transactions` row id, or `null` when
+  /// the balance is already at the desired value.
+  Future<int?> adjustOpeningBalance({
+    required int supplierId,
+    required int desiredBalanceCents,
+    String? description,
   });
 
   /// Get a single supplier transaction by ID
@@ -83,4 +108,67 @@ abstract class SupplierRepository {
     DateTime? startDate,
     DateTime? endDate,
   });
+}
+
+/// Phase 3.5.3 — centralised posting helpers for the supplier ledger.
+///
+/// Mirrors `CustomerPostingApi` in shape and rationale. Implemented as
+/// an extension because [SupplierRepository] is consumed via Dart's
+/// `implements` clause, which does not inherit method bodies.
+extension SupplierPostingApi on SupplierRepository {
+  /// "We paid the supplier" — caller passes the positive amount; the
+  /// repository negates it before persisting because the supplier ledger
+  /// represents "what we still owe": a payment shrinks that figure.
+  Future<int> recordPayment({
+    required int supplierId,
+    required int amountCents,
+    required int currencyId,
+    String? description,
+    DateTime? transactionDate,
+  }) {
+    if (amountCents <= 0) {
+      throw ArgumentError.value(
+        amountCents,
+        'amountCents',
+        'recordPayment requires a strictly positive amount; the sign flip '
+            'is performed inside the repository.',
+      );
+    }
+    return recordTransaction(
+      supplierId: supplierId,
+      transactionType: 'payment',
+      amountCents: -amountCents,
+      currencyId: currencyId,
+      description: description,
+      transactionDate: transactionDate,
+    );
+  }
+
+  /// "The supplier granted us a discount" — same convention as
+  /// [recordPayment], with an optional [discountType] tag.
+  Future<int> recordDiscount({
+    required int supplierId,
+    required int amountCents,
+    required int currencyId,
+    String discountType = 'cash',
+    String? description,
+    DateTime? transactionDate,
+  }) {
+    if (amountCents <= 0) {
+      throw ArgumentError.value(
+        amountCents,
+        'amountCents',
+        'recordDiscount requires a strictly positive amount.',
+      );
+    }
+    return recordTransaction(
+      supplierId: supplierId,
+      transactionType: 'discount',
+      amountCents: -amountCents,
+      currencyId: currencyId,
+      description: description,
+      discountType: discountType,
+      transactionDate: transactionDate,
+    );
+  }
 }

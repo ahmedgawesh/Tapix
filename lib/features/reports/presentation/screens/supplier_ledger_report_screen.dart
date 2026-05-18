@@ -9,6 +9,7 @@ import '../../../../core/services/currency_service.dart';
 import '../../services/supplier_ledger_pdf_service.dart';
 import '../bloc/supplier_ledger_report_bloc.dart';
 import '../widgets/date_range_selector.dart';
+import '../widgets/searchable_party_selector.dart';
 
 class SupplierLedgerReportScreen extends StatelessWidget {
   const SupplierLedgerReportScreen({super.key});
@@ -193,48 +194,19 @@ class _SupplierSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final cs = sl<CurrencyService>();
-
-    return DropdownButtonFormField<int>(
-      // ignore: deprecated_member_use
-      value: selectedId,
-      decoration: InputDecoration(
-        labelText: 'reports.select_supplier'.tr(),
-        prefixIcon: Icon(LucideIcons.truck, color: colorScheme.primary),
-        border: const OutlineInputBorder(),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      ),
-      isExpanded: true,
-      items: suppliers.map((s) {
-        return DropdownMenuItem<int>(
-          value: s.id,
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  s.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                cs.formatCents(s.balanceCents),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: s.balanceCents > 0
-                      ? colorScheme.error
-                      : colorScheme.primary,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        );
-      }).toList(),
-      onChanged: (value) => onChanged(value),
+    return SearchablePartySelector(
+      labelText: 'reports.select_supplier'.tr(),
+      prefixIcon: LucideIcons.truck,
+      selectedId: selectedId,
+      onChanged: onChanged,
+      options: suppliers
+          .map((s) => SearchablePartyOption(
+                id: s.id,
+                name: s.name,
+                phone: s.phone,
+                balanceCents: s.balanceCents,
+              ))
+          .toList(),
     );
   }
 }

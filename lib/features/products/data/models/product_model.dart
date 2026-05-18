@@ -17,6 +17,7 @@ class ProductModel extends Product {
     super.previousCostCents,
     super.previousPriceCents,
     super.previousWholesalePriceCents,
+    super.lastPurchasePriceCents,
     required super.stockQuantity,
     required super.minQuantity,
     super.categoryId,
@@ -29,6 +30,8 @@ class ProductModel extends Product {
     required super.salesTaxRateBps,
     required super.isActive,
     required super.trackInventory,
+    super.costingMethod,
+    super.inventoryTrackingType,
   });
 
   factory ProductModel.fromDrift(db.Product product) {
@@ -46,6 +49,7 @@ class ProductModel extends Product {
       previousCostCents: product.previousCostCents,
       previousPriceCents: product.previousPriceCents,
       previousWholesalePriceCents: product.previousWholesalePriceCents,
+      lastPurchasePriceCents: product.lastPurchasePriceCents,
       stockQuantity: product.stockQuantity,
       minQuantity: product.minQuantity,
       categoryId: product.categoryId,
@@ -58,6 +62,8 @@ class ProductModel extends Product {
       salesTaxRateBps: product.salesTaxRateBps,
       isActive: product.isActive,
       trackInventory: product.trackInventory,
+      costingMethod: product.costingMethod,
+      inventoryTrackingType: product.inventoryTrackingType,
     );
   }
 
@@ -76,6 +82,7 @@ class ProductModel extends Product {
       previousCostCents: entity.previousCostCents,
       previousPriceCents: entity.previousPriceCents,
       previousWholesalePriceCents: entity.previousWholesalePriceCents,
+      lastPurchasePriceCents: entity.lastPurchasePriceCents,
       stockQuantity: entity.stockQuantity,
       minQuantity: entity.minQuantity,
       categoryId: entity.categoryId,
@@ -88,6 +95,8 @@ class ProductModel extends Product {
       salesTaxRateBps: entity.salesTaxRateBps,
       isActive: entity.isActive,
       trackInventory: entity.trackInventory,
+      costingMethod: entity.costingMethod,
+      inventoryTrackingType: entity.inventoryTrackingType,
     );
   }
 
@@ -103,6 +112,7 @@ class ProductModel extends Product {
       costCents: Value(costCents),
       priceCents: Value(priceCents),
       wholesalePriceCents: Value(wholesalePriceCents),
+      lastPurchasePriceCents: Value(lastPurchasePriceCents),
       stockQuantity: Value(stockQuantity),
       minQuantity: Value(minQuantity),
       categoryId: Value(categoryId),
@@ -115,6 +125,8 @@ class ProductModel extends Product {
       salesTaxRateBps: Value(salesTaxRateBps),
       isActive: Value(isActive),
       trackInventory: Value(trackInventory),
+      costingMethod: Value(costingMethod),
+      inventoryTrackingType: Value(inventoryTrackingType),
     );
   }
 }

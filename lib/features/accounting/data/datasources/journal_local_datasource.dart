@@ -49,6 +49,16 @@ abstract class JournalLocalDatasource {
   Future<int> getCustomerBalanceTotal();
   Future<int> getSupplierBalanceTotal();
 
+  /// Σ(stock_quantity × cost_cents) across the whole stock ledger — the
+  /// physical book value of inventory in cents. Used by the reconciliation
+  /// engine to verify that account 1200 Inventory in the GL stays aligned
+  /// with the on-hand × cost product of every SKU on the books, regardless
+  /// of whether the SKU is currently active. Soft-deleted variants (and
+  /// orphan products without variants) MUST be included because their
+  /// previous purchase / opening-balance journal entries still sit on the
+  /// 1200 ledger, so excluding them would falsely report a mismatch.
+  Future<int> getTotalInventoryValueCents();
+
   // Date-Range Queries
   Stream<List<JournalEntryLine>> watchPostedLinesByDateRange(
     DateTime startDate, DateTime endDate);
@@ -219,6 +229,91 @@ class JournalLocalDatasourceImpl implements JournalLocalDatasource {
     final row = await _accountingDao.customSelect(
       'SELECT COALESCE(SUM(balance_cents), 0) AS total FROM suppliers',
       readsFrom: {db.suppliers},
+    ).getSingle();
+    return row.read<int>('total');
+  }
+
+  @override
+  Future<int> getTotalInventoryValueCents() async {
+    final db = _accountingDao.attachedDatabase;
+    // ── Phase 15.0 — Batch-ledger-authoritative formula ─────────────────
+    //
+    // Pre-Phase-15 this was `Σ(variant.stock × variant.cost_cents)` for
+    // ALL products. That formula is correct ONLY for products whose
+    // `costing_method = 'wac'` (cost_cents is the moving-average cost
+    // basis on every layer). For products configured as `'fifo'` /
+    // `'last'`, `cost_cents` is a DISPLAY value — it always holds the
+    // most-recent paid unit cost — so the per-layer cost basis lives in
+    // `product_batches.unit_cost_cents` and `Σ(stock × cost_cents)`
+    // systematically under- or over-reports valuation as soon as two
+    // purchase lines for the same SKU carry different effective unit
+    // costs (e.g. a trade-discounted re-stock).
+    //
+    // Field-reported manifestation (May 2026): a `fifo` / `batch_expiry`
+    // product was bought at 9,900¢/unit (qty 10) and re-bought at 9,801¢
+    // /unit (qty 3, after 99¢/unit discount). GL(1200 Inventory) =
+    // 99,000 + 29,403 = 128,403. `variant.cost_cents` = 9,801 (last).
+    // 13 × 9,801 = 127,413 → reconciliation engine reported a 990¢
+    // false drift. The books were correct; the formula was wrong.
+    //
+    // New formula: **prefer the batch ledger** when active batch rows
+    // exist for the variant (FIFO products always have batches; WAC
+    // products also get a batch row per purchase line because Phase 6.4
+    // unified the ledger). Fall back to `variant.stock × variant.cost`
+    // ONLY for variants that genuinely have no batch coverage
+    // (extremely rare — legacy data, or non-batched WAC products that
+    // pre-date 10044). Same dual-fallback for products without variants.
+    //
+    // The variant/product fallback keeps the WAC happy path identical
+    // for pre-batch DBs and preserves the inactive-variant inclusion
+    // that prevents soft-delete from triggering a false mismatch
+    // (variants stay in the SUM via the batch ledger as long as the
+    // batches are still `is_active = 1`).
+    final row = await _accountingDao.customSelect(
+      '''
+      SELECT
+        COALESCE((
+          SELECT SUM(
+            CAST(b.remaining_quantity AS INTEGER) *
+            CAST(b.unit_cost_cents AS INTEGER)
+          )
+          FROM product_batches b
+          WHERE b.is_active = 1
+        ), 0)
+        +
+        COALESCE((
+          SELECT SUM(
+            CAST(v.stock_quantity AS INTEGER) *
+            CAST(v.cost_cents AS INTEGER)
+          )
+          FROM product_variants v
+          WHERE NOT EXISTS (
+            SELECT 1 FROM product_batches b
+            WHERE b.variant_id = v.id AND b.is_active = 1
+          )
+        ), 0)
+        +
+        COALESCE((
+          SELECT SUM(
+            CAST(p.stock_quantity AS INTEGER) *
+            CAST(p.cost_cents AS INTEGER)
+          )
+          FROM products p
+          WHERE NOT EXISTS (
+            SELECT 1 FROM product_variants v WHERE v.product_id = p.id
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM product_batches b
+            WHERE b.product_id = p.id AND b.is_active = 1
+          )
+        ), 0)
+        AS total
+      ''',
+      readsFrom: {
+        db.products,
+        db.productVariants,
+        db.productBatches,
+      },
     ).getSingle();
     return row.read<int>('total');
   }

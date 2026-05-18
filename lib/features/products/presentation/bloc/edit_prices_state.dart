@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import 'package:decimal/decimal.dart';
 import '../../domain/entities/product_entity.dart';
 
 class EditPricesStateData extends Equatable {
@@ -10,6 +11,8 @@ class EditPricesStateData extends Equatable {
   final bool hasUnsavedChanges;
   final int displayLimit; // For performance - limit displayed products
   final Set<int> selectedProductIds; // For bulk operations
+  final Set<int> selectedVariantIds; // For bulk variant operations
+  final Map<int, Map<String, Decimal>> variantPriceChanges;
 
   const EditPricesStateData({
     this.products = const [],
@@ -20,6 +23,8 @@ class EditPricesStateData extends Equatable {
     this.hasUnsavedChanges = false,
     this.displayLimit = 100, // Show 100 products at a time by default
     this.selectedProductIds = const {},
+    this.selectedVariantIds = const {},
+    this.variantPriceChanges = const {},
   });
 
   EditPricesStateData copyWith({
@@ -31,6 +36,8 @@ class EditPricesStateData extends Equatable {
     bool? hasUnsavedChanges,
     int? displayLimit,
     Set<int>? selectedProductIds,
+    Set<int>? selectedVariantIds,
+    Map<int, Map<String, Decimal>>? variantPriceChanges,
   }) {
     return EditPricesStateData(
       products: products ?? this.products,
@@ -41,6 +48,8 @@ class EditPricesStateData extends Equatable {
       hasUnsavedChanges: hasUnsavedChanges ?? this.hasUnsavedChanges,
       displayLimit: displayLimit ?? this.displayLimit,
       selectedProductIds: selectedProductIds ?? this.selectedProductIds,
+      selectedVariantIds: selectedVariantIds ?? this.selectedVariantIds,
+      variantPriceChanges: variantPriceChanges ?? this.variantPriceChanges,
     );
   }
 
@@ -54,5 +63,7 @@ class EditPricesStateData extends Equatable {
         hasUnsavedChanges,
         displayLimit,
         selectedProductIds,
+        selectedVariantIds,
+        variantPriceChanges,
       ];
 }

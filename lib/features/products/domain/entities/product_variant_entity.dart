@@ -14,6 +14,13 @@ class ProductVariant extends Equatable {
   final Decimal? previousCostCents;
   final Decimal? previousPriceCents;
   final Decimal? previousWholesalePriceCents;
+
+  /// Supplier reference price (gross of trade discounts). Decoupled from
+  /// [costCents] which carries the IAS-2 net cost basis used for COGS and
+  /// inventory valuation. UI displays this with fallback to [costCents]
+  /// for legacy variants predating migration 10055.
+  final Decimal? lastPurchasePriceCents;
+
   final Decimal priceAdjustmentCents;
   final int stockQuantity;
   final bool isActive;
@@ -31,6 +38,7 @@ class ProductVariant extends Equatable {
     this.previousCostCents,
     this.previousPriceCents,
     this.previousWholesalePriceCents,
+    this.lastPurchasePriceCents,
     required this.priceAdjustmentCents,
     required this.stockQuantity,
     required this.isActive,
@@ -49,6 +57,7 @@ class ProductVariant extends Equatable {
     Decimal? previousCostCents,
     Decimal? previousPriceCents,
     Decimal? previousWholesalePriceCents,
+    Decimal? lastPurchasePriceCents,
     Decimal? priceAdjustmentCents,
     int? stockQuantity,
     bool? isActive,
@@ -66,6 +75,7 @@ class ProductVariant extends Equatable {
       previousCostCents: previousCostCents ?? this.previousCostCents,
       previousPriceCents: previousPriceCents ?? this.previousPriceCents,
       previousWholesalePriceCents: previousWholesalePriceCents ?? this.previousWholesalePriceCents,
+      lastPurchasePriceCents: lastPurchasePriceCents ?? this.lastPurchasePriceCents,
       priceAdjustmentCents: priceAdjustmentCents ?? this.priceAdjustmentCents,
       stockQuantity: stockQuantity ?? this.stockQuantity,
       isActive: isActive ?? this.isActive,
@@ -86,6 +96,7 @@ class ProductVariant extends Equatable {
         previousCostCents,
         previousPriceCents,
         previousWholesalePriceCents,
+        lastPurchasePriceCents,
         priceAdjustmentCents,
         stockQuantity,
         isActive,

@@ -12,6 +12,8 @@ part 'product_dao.g.dart';
   ProductColors,
   Sizes,
   ProductBatches,
+  BatchConsumptions,
+  ProductPriceHistories,
   Purchases,
   PurchaseItems,
 ])
@@ -29,6 +31,13 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
 
   Stream<Product?> watchProduct(int id) {
     return (select(products)..where((p) => p.id.equals(id))).watchSingleOrNull();
+  }
+
+  /// Synchronous single-row fetch by primary key. Used by guards that need
+  /// to preserve server-authoritative fields (e.g. `stock_quantity`,
+  /// `cost_cents`, `created_at`) during product updates.
+  Future<Product?> getProductById(int id) {
+    return (select(products)..where((p) => p.id.equals(id))).getSingleOrNull();
   }
 
   Future<List<Product>> searchProducts(String query, {bool? isActive = true}) {
@@ -218,8 +227,15 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
     return (select(products)..where((p) => p.barcode.equals(barcode))).getSingleOrNull();
   }
 
+  /// Case-insensitive name lookup. Treating "iPhone" and "iphone" as the
+  /// same name prevents accidental duplicate SKUs when the bulk import or
+  /// manual entry typo-shifts capitalisation. Equivalent to the standard
+  /// `LOWER(name) = LOWER(?)` pattern in QuickBooks/Xero/Odoo.
   Future<Product?> findByName(String name) {
-    return (select(products)..where((p) => p.name.equals(name))).getSingleOrNull();
+    final lowered = name.toLowerCase();
+    return (select(products)
+          ..where((p) => p.name.lower().equals(lowered)))
+        .getSingleOrNull();
   }
 
   Future<int> createProduct(ProductsCompanion product) {
@@ -247,9 +263,298 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
     return (delete(products)..where((p) => p.id.equals(id))).go();
   }
 
+  /// Runs [action] inside a Drift transaction scoped to this DAO's database.
+  /// Nested `transaction(...)` calls made by other DAOs on the same database
+  /// are automatically reused (single physical transaction), which lets the
+  /// bloc orchestrate `updateProduct + ensureDefaultVariant + updateVariant`
+  /// as a single atomic save — critical for accounting/stock integrity.
+  Future<T> runInTransaction<T>(Future<T> Function() action) {
+    return transaction(action);
+  }
+
+  /// Count historical references to [productId] across all transactional
+  /// tables (sale items, purchase items, adjustment return items). Used by
+  /// the smart-delete flow: any product with a non-zero reference count must
+  /// be deactivated (soft-delete) rather than hard-deleted so audit trail,
+  /// COGS, and journal entries stay intact — the standard approach in
+  /// QuickBooks / Xero / Odoo.
+  Future<int> countProductReferences(int productId) async {
+    final row = await customSelect(
+      '''
+      SELECT
+        (SELECT COUNT(*) FROM sale_items WHERE product_id = ?1)
+        + (SELECT COUNT(*) FROM purchase_items WHERE product_id = ?1)
+        + (SELECT COUNT(*) FROM purchase_return_adjustment_items WHERE product_id = ?1)
+        + (SELECT COUNT(*) FROM sale_return_adjustment_items WHERE product_id = ?1)
+        AS ref_count
+      ''',
+      variables: [Variable.withInt(productId)],
+    ).getSingle();
+    return row.read<int>('ref_count');
+  }
+
+  /// Smart delete that mirrors QuickBooks/Xero behaviour: products with
+  /// historical references are deactivated (is_active = false, variants
+  /// deactivated transitively) to preserve audit trail and journal integrity;
+  /// products with no references are hard-deleted.
+  ///
+  /// Returns `(wasDeleted, referenceCount)`.
+  ///   - `wasDeleted = true`  -> row removed from products
+  ///   - `wasDeleted = false` -> row deactivated (had `referenceCount` refs)
+  Future<({bool wasDeleted, int referenceCount})> smartDeleteProduct(int productId) {
+    return transaction(() async {
+      final refCount = await countProductReferences(productId);
+      if (refCount > 0) {
+        await (update(products)..where((p) => p.id.equals(productId))).write(
+          ProductsCompanion(
+            isActive: const Value(false),
+            updatedAt: Value(DateTime.now()),
+          ),
+        );
+        await customUpdate(
+          'UPDATE product_variants SET is_active = 0, updated_at = ? WHERE product_id = ?',
+          variables: [
+            Variable.withDateTime(DateTime.now()),
+            Variable.withInt(productId),
+          ],
+          updates: {productVariants},
+        );
+        return (wasDeleted: false, referenceCount: refCount);
+      }
+      await (delete(products)..where((p) => p.id.equals(productId))).go();
+      return (wasDeleted: true, referenceCount: 0);
+    });
+  }
+
   Future<int> bulkDeleteProducts(List<int> ids) {
     if (ids.isEmpty) return Future.value(0);
     return (delete(products)..where((p) => p.id.isIn(ids))).go();
+  }
+
+  // ──────────────────────────────────────────────────────────────────────
+  // COSTING METHOD (WAC ↔ FIFO)
+  // ──────────────────────────────────────────────────────────────────────
+
+  /// Reasons that prevent flipping the costing method on an existing product.
+  /// Mirrors Odoo / SAP B1 behaviour: once stock or COGS history exists, the
+  /// method is frozen — switching mid-flight would mix WAC- and FIFO-priced
+  /// COGS in the same period, breaking IAS 8 consistency.
+  ///
+  ///   - `null`              → unlocked, may be edited freely.
+  ///   - `'has_stock'`       → on-hand stock > 0 on the product or any variant.
+  ///   - `'has_consumptions'`→ at least one batch_consumptions row exists.
+  Future<String?> getCostingMethodLockReason(int productId) async {
+    final stockRow = await customSelect(
+      '''
+      SELECT
+        (SELECT COALESCE(stock_quantity, 0) FROM products WHERE id = ?1) AS p_stock,
+        (SELECT COALESCE(SUM(stock_quantity), 0) FROM product_variants
+          WHERE product_id = ?1 AND is_active = 1) AS v_stock
+      ''',
+      variables: [Variable.withInt(productId)],
+    ).getSingle();
+    final pStock = stockRow.read<int>('p_stock');
+    final vStock = stockRow.read<int>('v_stock');
+    if (pStock > 0 || vStock > 0) return 'has_stock';
+
+    final consumptionRow = await customSelect(
+      '''
+      SELECT EXISTS(
+        SELECT 1 FROM batch_consumptions bc
+        INNER JOIN product_batches pb ON pb.id = bc.batch_id
+        WHERE pb.product_id = ?1
+        LIMIT 1
+      ) AS has_any
+      ''',
+      variables: [Variable.withInt(productId)],
+    ).getSingle();
+    if (consumptionRow.read<int>('has_any') == 1) {
+      return 'has_consumptions';
+    }
+    return null;
+  }
+
+  /// Update [Products.costingMethod]. Refuses the change when the product is
+  /// locked (see [getCostingMethodLockReason]) — caller must surface the
+  /// returned reason to the user.
+  ///
+  /// Returns `null` on success or a non-null lock-reason string on refusal.
+  Future<String?> setCostingMethod({
+    required int productId,
+    required String method,
+  }) async {
+    assert(method == 'wac' || method == 'fifo',
+        'costing method must be wac or fifo');
+    return transaction(() async {
+      final reason = await getCostingMethodLockReason(productId);
+      if (reason != null) return reason;
+      await (update(products)..where((p) => p.id.equals(productId))).write(
+        ProductsCompanion(
+          costingMethod: Value(method),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+      return null;
+    });
+  }
+
+  // ──────────────────────────────────────────────────────────────────────
+  // INVENTORY TRACKING TYPE (Phase B — two-layer architecture)
+  // ──────────────────────────────────────────────────────────────────────
+
+  /// Returns the per-product inventory tracking type.
+  /// One of: `'standard'` | `'batch'` | `'batch_expiry'`.
+  ///
+  /// Defaults to `'standard'` if the product is not found (fail-safe — the
+  /// cheapest path that produces no batch rows).
+  Future<String> getInventoryTrackingType(int productId) async {
+    final row = await customSelect(
+      'SELECT inventory_tracking_type FROM products WHERE id = ?',
+      variables: [Variable.withInt(productId)],
+    ).getSingleOrNull();
+    final raw = row?.read<String?>('inventory_tracking_type');
+    if (raw == 'batch' || raw == 'batch_expiry' || raw == 'standard') {
+      return raw!;
+    }
+    return 'standard';
+  }
+
+  /// Update [Products.inventoryTrackingType]. Refuses the change when the
+  /// product is locked (re-uses the same lock semantics as [setCostingMethod]
+  /// because the implications are identical: existing batches/consumptions
+  /// would otherwise be left in an inconsistent state).
+  ///
+  /// Returns `null` on success or a non-null lock-reason string on refusal.
+  Future<String?> setInventoryTrackingType({
+    required int productId,
+    required String trackingType,
+  }) async {
+    assert(
+      trackingType == 'standard' ||
+          trackingType == 'batch' ||
+          trackingType == 'batch_expiry',
+      'tracking type must be standard | batch | batch_expiry',
+    );
+    return transaction(() async {
+      final reason = await getCostingMethodLockReason(productId);
+      if (reason != null) return reason;
+      await (update(products)..where((p) => p.id.equals(productId))).write(
+        ProductsCompanion(
+          inventoryTrackingType: Value(trackingType),
+          // Keep legacy column in sync during the expand → migrate → contract
+          // window so older code paths that still read `costing_method` see a
+          // consistent view. `'batch'` and `'batch_expiry'` both imply FIFO
+          // costing semantics; `'standard'` implies WAC.
+          costingMethod: Value(
+            trackingType == 'standard' ? 'wac' : 'fifo',
+          ),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+      return null;
+    });
+  }
+
+  // ──────────────────────────────────────────────────────────────────────
+  // EXPIRY (FIFO-aware)
+  // ──────────────────────────────────────────────────────────────────────
+
+  /// Returns expiry rows for [productId] **based on remaining batch
+  /// quantities** — not the original purchase quantities. This is the
+  /// number the user actually has on the shelf today: if a 100-unit batch
+  /// expiring 2026-12-01 has been sold down to 12, the row reports 12.
+  ///
+  /// Excludes batches that are exhausted (`remaining_quantity = 0`) or have
+  /// no expiry date (non-perishable). Sorted earliest-expiry first so the
+  /// UI surfaces the most urgent rows at the top.
+  Future<List<({int quantity, DateTime expiryDate})>>
+      getProductRemainingExpiryInfo(int productId) async {
+    final query = select(productBatches)
+      ..where((b) =>
+          b.productId.equals(productId) &
+          b.expiryDate.isNotNull() &
+          b.remainingQuantity.isBiggerThanValue(0) &
+          b.isActive.equals(true))
+      ..orderBy([(b) => OrderingTerm.asc(b.expiryDate)]);
+
+    final rows = await query.get();
+    return rows
+        .map((r) => (quantity: r.remainingQuantity, expiryDate: r.expiryDate!))
+        .toList();
+  }
+
+  /// Streams a per-product expiry summary used by the product list to render
+  /// near-expiry / expired badges. Only emits an entry for products whose
+  /// `inventory_tracking_type = 'batch_expiry'` and which currently have at
+  /// least one active batch with on-hand stock and a non-null `expiry_date`.
+  ///
+  /// Each row carries:
+  ///   * `expired_qty`     — SUM(remaining_quantity) for batches whose
+  ///                         `expiry_date < today` (already expired but still
+  ///                         on the shelf — accounting still owes COGS).
+  ///   * `next_expiry_iso` — earliest `expiry_date >= today` across batches
+  ///                         with stock; null when every remaining batch is
+  ///                         already expired.
+  ///
+  /// Re-evaluates on writes to `products` or `product_batches` so the UI
+  /// updates without manual refresh — same pattern as the variant summaries
+  /// stream that drives the same screen.
+  ///
+  /// SQLite NOTE: `dateTime` columns are stored as ISO 8601 text under the
+  /// project's `storeDateTimeValuesAsText` setting, so lexicographic string
+  /// comparison matches chronological ordering. We pass `today` as an ISO
+  /// 8601 string for the same reason.
+  Stream<Map<int, ({int expiredQty, DateTime? nextExpiry})>>
+      watchExpirySummaries() {
+    return _expirySummariesQuery().watch().map((rows) {
+      final out = <int, ({int expiredQty, DateTime? nextExpiry})>{};
+      for (final row in rows) {
+        final productId = row.read<int>('product_id');
+        final expiredQty = row.read<int>('expired_qty');
+        final nextExpiryIso = row.read<String?>('next_expiry_iso');
+        DateTime? nextExpiry;
+        if (nextExpiryIso != null && nextExpiryIso.isNotEmpty) {
+          nextExpiry = DateTime.tryParse(nextExpiryIso);
+        }
+        out[productId] = (expiredQty: expiredQty, nextExpiry: nextExpiry);
+      }
+      return out;
+    });
+  }
+
+  /// Builds the underlying [Selectable] for [watchExpirySummaries]. Extracted
+  /// so the same query can be re-used by Phase E (alert dashboard / report)
+  /// without copying the SQL.
+  Selectable<QueryRow> _expirySummariesQuery() {
+    // Beginning of today, local time, formatted as ISO 8601. Using start-of-
+    // day means a batch that expires *today* is treated as "already expired"
+    // (matches Odoo / SAP B1 semantics — once the calendar day arrives, the
+    // batch is no longer sellable for FEFO).
+    final now = DateTime.now();
+    final startOfToday = DateTime(now.year, now.month, now.day);
+    final todayIso = startOfToday.toIso8601String();
+    return customSelect(
+      '''
+      SELECT
+        p.id AS product_id,
+        COALESCE(SUM(
+          CASE WHEN b.expiry_date < ?1 THEN b.remaining_quantity ELSE 0 END
+        ), 0) AS expired_qty,
+        MIN(
+          CASE WHEN b.expiry_date >= ?1 THEN b.expiry_date ELSE NULL END
+        ) AS next_expiry_iso
+      FROM products p
+      INNER JOIN product_batches b ON b.product_id = p.id
+      WHERE p.inventory_tracking_type = 'batch_expiry'
+        AND b.is_active = 1
+        AND b.remaining_quantity > 0
+        AND b.expiry_date IS NOT NULL
+      GROUP BY p.id
+      HAVING expired_qty > 0 OR next_expiry_iso IS NOT NULL
+      ''',
+      variables: [Variable.withString(todayIso)],
+      readsFrom: {products, productBatches},
+    );
   }
 
   Future<int> deactivateProduct(int id) {
@@ -327,5 +632,20 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
     });
     
     return results;
+  }
+
+  /// Append a new immutable price-history row. Rows are never updated or
+  /// deleted — every write is a fresh audit record.
+  Future<int> insertPriceHistory(ProductPriceHistoriesCompanion entry) {
+    return into(productPriceHistories).insert(entry);
+  }
+
+  /// Fetch the full price-history for a product, newest first. Includes
+  /// entries scoped to individual variants as well as product-level edits.
+  Future<List<ProductPriceHistory>> getPriceHistoryForProduct(int productId) {
+    return (select(productPriceHistories)
+          ..where((h) => h.productId.equals(productId))
+          ..orderBy([(h) => OrderingTerm.desc(h.createdAt)]))
+        .get();
   }
 }

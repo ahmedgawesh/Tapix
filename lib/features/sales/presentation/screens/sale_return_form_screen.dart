@@ -7,6 +7,7 @@ import 'package:easy_localization/easy_localization.dart';
 
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../../../core/widgets/inputs/select_all_on_focus.dart';
 import '../../domain/entities/sale_entity.dart';
 import '../../domain/repositories/sale_repository.dart';
 import '../bloc/sale_return_form_bloc.dart';
@@ -514,6 +515,11 @@ class _SaleReturnFormView extends StatelessWidget {
                 ),
               );
             }),
+            // ── Phase 14.0 — cheque due date (only shown for cheque) ──
+            if (state.refundMethod == 'cheque') ...[
+              const SizedBox(height: 6),
+              _buildChequeDueDatePicker(context, state, theme, cs),
+            ],
             Divider(height: 20, color: cs.outlineVariant.withValues(alpha: 0.4)),
             // ── Disposition Type ──
             Row(
@@ -609,6 +615,85 @@ class _SaleReturnFormView extends StatelessWidget {
             child: Text('common.close'.tr()),
           ),
         ],
+      ),
+    );
+  }
+
+  /// Phase 14.0 — cheque due-date picker shown when refund method is cheque.
+  /// Required-to-submit; an error border highlights the field until set.
+  Widget _buildChequeDueDatePicker(
+    BuildContext context,
+    SaleReturnFormState state,
+    ThemeData theme,
+    ColorScheme cs,
+  ) {
+    final missing = state.dueDate == null;
+    return InkWell(
+      borderRadius: BorderRadius.circular(10),
+      onTap: () async {
+        final picked = await showDatePicker(
+          context: context,
+          initialDate: state.dueDate ??
+              DateTime.now().add(const Duration(days: 30)),
+          firstDate: DateTime.now(),
+          lastDate: DateTime.now().add(const Duration(days: 365)),
+        );
+        if (picked != null && context.mounted) {
+          context
+              .read<SaleReturnFormBloc>()
+              .add(SaleReturnDueDateChanged(picked));
+        }
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        decoration: BoxDecoration(
+          color: missing
+              ? cs.errorContainer.withValues(alpha: 0.18)
+              : cs.surfaceContainerHighest.withValues(alpha: 0.3),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: missing
+                ? cs.error.withValues(alpha: 0.5)
+                : cs.outlineVariant,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              LucideIcons.calendar,
+              size: 18,
+              color: missing ? cs.error : cs.primary,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'sales.cheque_due_date'.tr(),
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: missing ? cs.error : cs.onSurfaceVariant,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    state.dueDate != null
+                        ? '${state.dueDate!.year}-'
+                            '${state.dueDate!.month.toString().padLeft(2, '0')}-'
+                            '${state.dueDate!.day.toString().padLeft(2, '0')}'
+                        : 'sales.select_due_date'.tr(),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: state.dueDate != null ? null : cs.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(LucideIcons.chevronDown, size: 18, color: cs.onSurfaceVariant),
+          ],
+        ),
       ),
     );
   }
@@ -966,7 +1051,10 @@ class _SaleReturnFormView extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             FilledButton.icon(
-              onPressed: state.isSubmitting || state.isSuccess || state.returnItems.isEmpty
+              onPressed: state.isSubmitting ||
+                      state.isSuccess ||
+                      state.returnItems.isEmpty ||
+                      state.isChequeMissingDueDate
                   ? null
                   : () => context
                       .read<SaleReturnFormBloc>()
@@ -1198,6 +1286,7 @@ class _ReturnItemTileState extends State<_ReturnItemTile> {
                                 style: theme.textTheme.labelLarge?.copyWith(
                                     fontWeight: FontWeight.bold,
                                     color: colorScheme.error),
+                                onTap: () => selectAllText(_qtyCtrl),
                                 decoration: const InputDecoration(
                                   border: InputBorder.none,
                                   isDense: true,

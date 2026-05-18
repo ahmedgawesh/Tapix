@@ -2,6 +2,7 @@ import 'package:drift/drift.dart' hide Column;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart';
+import '../../../../core/services/ledger/ledger_running_balance.dart';
 import '../widgets/report_date_range.dart';
 
 // ==================== EVENTS ====================
@@ -115,11 +116,13 @@ class CustomerStatementData {
 class CustomerOption {
   final int id;
   final String name;
+  final String? phone;
   final int balanceCents;
 
   const CustomerOption({
     required this.id,
     required this.name,
+    this.phone,
     required this.balanceCents,
   });
 }
@@ -177,7 +180,7 @@ class CustomerStatementReportBloc extends RealtimeBloc<CustomerStatementData,
     // Load customer list for the selector
     final customerRows = await _db.customSelect(
       '''
-      SELECT c.id, c.name, c.balance_cents
+      SELECT c.id, c.name, c.phone, c.balance_cents
       FROM customers c
       WHERE c.is_active = 1
       ORDER BY c.name ASC
@@ -189,6 +192,7 @@ class CustomerStatementReportBloc extends RealtimeBloc<CustomerStatementData,
         .map((row) => CustomerOption(
               id: row.read<int>('id'),
               name: row.read<String>('name'),
+              phone: row.readNullable<String>('phone'),
               balanceCents: row.read<int>('balance_cents'),
             ))
         .toList();
@@ -289,14 +293,15 @@ class CustomerStatementReportBloc extends RealtimeBloc<CustomerStatementData,
       readsFrom: {_db.customerTransactions},
     ).get();
 
-    int runningBalance = openingBalanceCents;
+    // Phase 7 — running balance via SoT helper.
+    final running = LedgerRunningBalance(openingBalanceCents);
     int totalDebits = 0;
     int totalCredits = 0;
     final transactions = <StatementTransaction>[];
 
     for (final row in txnRows) {
       final amountCents = row.read<int>('amount_cents');
-      runningBalance += amountCents;
+      final runningBalance = running.apply(amountCents);
 
       if (amountCents > 0) {
         totalDebits += amountCents;

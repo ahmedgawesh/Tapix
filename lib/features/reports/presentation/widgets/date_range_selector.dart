@@ -105,28 +105,45 @@ class DateRangeSelector extends StatelessWidget {
   }
 
   Future<void> _showCustomDatePicker(BuildContext context) async {
-    final picked = await showDateRangePicker(
-      context: context,
-      firstDate: DateTime(2000),
-      lastDate: DateTime.now(),
-      initialDateRange: DateTimeRange(
-        start: dateRange.startDate,
-        end: dateRange.endDate,
-      ),
-      helpText: 'reports.date_range.select_period'.tr(),
-      saveText: 'common.save'.tr(),
-      cancelText: 'common.cancel'.tr(),
-    );
+    // Two sequential single-date pickers in calendar-only mode.
+    // `showDatePicker` exposes a tap-to-select year header, making it far
+    // faster to jump years back than `showDateRangePicker` (which only scrolls
+    // month-by-month) — and it also avoids the "invalid format" text-entry
+    // validation bug present in RTL locales.
+    final firstDate = DateTime(2000);
+    final lastDate = DateTime.now();
 
-    if (picked != null) {
-      onChanged(ReportDateRange(
-        startDate: picked.start,
-        endDate: DateTime(
-          picked.end.year, picked.end.month, picked.end.day, 23, 59, 59,
-        ),
-        preset: ReportPeriodPreset.custom,
-      ));
-    }
+    final start = await showDatePicker(
+      context: context,
+      firstDate: firstDate,
+      lastDate: lastDate,
+      initialDate: dateRange.startDate.isAfter(lastDate)
+          ? lastDate
+          : dateRange.startDate,
+      helpText: 'sales.date_pick_start'.tr(),
+      cancelText: 'common.cancel'.tr(),
+      confirmText: 'common.save'.tr(),
+      initialEntryMode: DatePickerEntryMode.calendarOnly,
+    );
+    if (start == null || !context.mounted) return;
+
+    final end = await showDatePicker(
+      context: context,
+      firstDate: start,
+      lastDate: lastDate,
+      initialDate: dateRange.endDate.isBefore(start) ? start : dateRange.endDate,
+      helpText: 'sales.date_pick_end'.tr(),
+      cancelText: 'common.cancel'.tr(),
+      confirmText: 'common.save'.tr(),
+      initialEntryMode: DatePickerEntryMode.calendarOnly,
+    );
+    if (end == null) return;
+
+    onChanged(ReportDateRange(
+      startDate: start,
+      endDate: DateTime(end.year, end.month, end.day, 23, 59, 59),
+      preset: ReportPeriodPreset.custom,
+    ));
   }
 }
 

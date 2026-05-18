@@ -197,6 +197,35 @@ class SupplierRepositoryImpl implements SupplierRepository {
   }
 
   @override
+  Future<int?> adjustOpeningBalance({
+    required int supplierId,
+    required int desiredBalanceCents,
+    String? description,
+  }) async {
+    // Mirror of CustomerRepositoryImpl.adjustOpeningBalance — wrap the
+    // read + post in a single DB transaction to eliminate the TOCTOU race
+    // window between reading the current balance and posting the
+    // adjustment.
+    return _db.transaction(() async {
+      final existing = await _datasource.getSupplier(supplierId);
+      if (existing == null) {
+        throw StateError('Supplier $supplierId not found');
+      }
+      final currentCents = existing.balanceCents.toBigInt().toInt();
+      final deltaCents = desiredBalanceCents - currentCents;
+      if (deltaCents == 0) return null;
+
+      return await recordTransaction(
+        supplierId: supplierId,
+        transactionType: 'adjustment',
+        amountCents: deltaCents,
+        currencyId: existing.currencyId,
+        description: description,
+      );
+    });
+  }
+
+  @override
   Future<SupplierTransaction?> getTransaction(int transactionId) {
     return _datasource.getTransaction(transactionId);
   }

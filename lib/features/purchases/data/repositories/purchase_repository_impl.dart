@@ -3,8 +3,10 @@ import 'dart:developer' as developer;
 import 'package:decimal/decimal.dart';
 import 'package:drift/drift.dart';
 import '../../../../core/database/app_database.dart' as db;
+import '../../../../core/pricing/pricing_snapshot.dart';
 import '../../../../core/services/audit_log_service.dart';
 import '../../../../core/services/journal_entry_service.dart';
+import '../../../../core/services/void_impact_analyzer.dart';
 import '../../../auth/data/services/session_service.dart';
 import '../../domain/entities/purchase_entity.dart';
 import '../../domain/repositories/purchase_repository.dart';
@@ -79,6 +81,7 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
     String? notes,
     DateTime? purchaseDate,
     DateTime? dueDate,
+    bool taxInclusiveAtPost = false,
   }) async {
     // Purchase number is generated INSIDE the transaction (see below)
     // to prevent race conditions when two purchases are created concurrently.
@@ -98,7 +101,7 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
       notes: Value(notes),
       purchaseDate: Value(purchaseDate ?? DateTime.now()),
       dueDate: Value(dueDate),
-    );
+    ).withPricingSnapshot(taxInclusive: taxInclusiveAtPost);
 
     final itemCompanions = items.map((item) => db.PurchaseItemsCompanion(
           productId: Value(item.productId),
@@ -182,6 +185,7 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
     String? notes,
     DateTime? purchaseDate,
     DateTime? dueDate,
+    bool taxInclusiveAtPost = false,
   }) async {
     // Guard: only draft/pending purchases can be edited.
     // Posted/voided purchases have journal entries that would become stale.
@@ -192,6 +196,8 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
       );
     }
 
+    // Phase 11.2 — the snapshot is re-stamped on edit because the
+    // engine just recomputed the totals.
     final purchase = db.PurchasesCompanion(
       supplierId: Value(supplierId),
       currencyId: Value(currencyId),
@@ -205,7 +211,7 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
       notes: Value(notes),
       purchaseDate: Value(purchaseDate ?? DateTime.now()),
       dueDate: Value(dueDate),
-    );
+    ).withPricingSnapshot(taxInclusive: taxInclusiveAtPost);
 
     final itemCompanions = items.map((item) => db.PurchaseItemsCompanion(
           productId: Value(item.productId),
@@ -297,6 +303,18 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
 
   @override
   Future<void> voidPurchase(int purchaseId) async {
+    // 2026-05-13 — pre-flight integrity guard. The analyzer is the single
+    // source of truth for "what breaks if we void this purchase?". On a
+    // hard blocker (entangled adjustment returns or projected negative
+    // stock) we throw `VoidBlockedByImpactException` carrying the full
+    // report so the UI can render an actionable dialog instead of
+    // silently producing AP / Inventory drift like the one diagnosed in
+    // `tapix_backup_20260513_121448.db`.
+    final report = await VoidImpactAnalyzer(_db).analyzePurchaseVoid(purchaseId);
+    if (report.hasBlockers) {
+      throw VoidBlockedByImpactException(report);
+    }
+
     // Void journal entries BEFORE voiding the purchase.
     // This MUST succeed — if it fails the entire void is aborted to prevent GL drift.
     await _journalService.voidJournalEntriesForSource(
@@ -306,7 +324,13 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
       userId: await _currentUserId(),
     );
 
-    await _datasource.voidPurchase(purchaseId);
+    // 2026-05-13 — pass the journal service so the DAO's cascade-void of
+    // linked purchase_returns also reverses their JEs (root-cause #3).
+    await _datasource.voidPurchase(
+      purchaseId,
+      journalEntryService: _journalService,
+      userId: await _currentUserId(),
+    );
 
     // Audit: log purchase voiding (stock was reversed)
     await _auditService.logVoid(
@@ -333,6 +357,7 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
     String? notes,
     DateTime? purchaseDate,
     DateTime? dueDate,
+    bool taxInclusiveAtPost = false,
   }) async {
     // 1. Fetch original purchase to validate
     final originalPurchase = await getPurchaseById(originalPurchaseId);
@@ -397,6 +422,7 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
           : '[Edited from ${originalPurchase.purchaseNumber}]',
       purchaseDate: purchaseDate ?? originalPurchase.purchaseDate,
       dueDate: dueDate,
+      taxInclusiveAtPost: taxInclusiveAtPost,
     );
 
     // 6. Post the new purchase to apply stock and accounting
@@ -506,8 +532,16 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
     String refundMethod = 'credit',
     String? reason,
     DateTime? returnDate,
+    DateTime? dueDate,
+    bool allowNegativeStock = false,
+    String? idempotencyKey,
+    bool taxInclusiveAtPost = false,
   }) async {
     final returnNumber = await generateReturnNumber();
+
+    // Phase 14.0 — only persist dueDate when refund method is cheque.
+    final effectiveDueDate =
+        refundMethod == 'cheque' ? dueDate : null;
 
     final returnData = db.PurchaseReturnsCompanion(
       purchaseId: Value(purchaseId),
@@ -522,7 +556,9 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
       refundMethod: Value(refundMethod),
       reason: Value(reason),
       returnDate: Value(returnDate ?? DateTime.now()),
-    );
+      dueDate: Value(effectiveDueDate),
+      idempotencyKey: Value(idempotencyKey),
+    ).withPricingSnapshot(taxInclusive: taxInclusiveAtPost);
 
     final itemCompanions = items.map((item) => db.PurchaseReturnItemsCompanion(
           purchaseItemId: Value(item.purchaseItemId),
@@ -542,15 +578,26 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
       final id = await _datasource.createPurchaseReturn(returnData, itemCompanions);
 
       // Auto-post the return (update stock)
-      await _datasource.postPurchaseReturn(id);
+      await _datasource.postPurchaseReturn(id, allowNegativeStock: allowNegativeStock);
 
-      // Create journal entries — MANDATORY
+      // Create journal entries — MANDATORY.
+      //
+      // taxCents MUST be passed: it generates the Cr 1300 VAT Receivable
+      // line that reverses the input VAT we claimed when we received the
+      // goods. Omitting it (the previous bug) left the tax stuck on the
+      // VAT-receivable account forever and caused regulator-facing tax
+      // returns to over-claim refunds.
+      // `postingDate` flows through to `ReturnPostingService` so the
+      // Phase 2.5 fiscal-period guard rejects any post landing inside a
+      // closed period — centrally, for every return flow.
       await _journalService.recordPurchaseReturnJournalEntry(
         returnId: id,
         totalCents: totalCents.toBigInt().toInt(),
+        taxCents: taxCents.toBigInt().toInt(),
         currencyId: currencyId,
         refundMethod: refundMethod,
         userId: userId,
+        postingDate: returnDate ?? DateTime.now(),
       );
 
       return id;
@@ -575,8 +622,8 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
   }
 
   @override
-  Future<void> postPurchaseReturn(int returnId) async {
-    await _datasource.postPurchaseReturn(returnId);
+  Future<void> postPurchaseReturn(int returnId, {bool allowNegativeStock = false}) async {
+    await _datasource.postPurchaseReturn(returnId, allowNegativeStock: allowNegativeStock);
 
     await _auditService.log(
       entityType: 'purchase_return',
@@ -704,4 +751,12 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
   @override
   Stream<Set<int>> watchPurchaseIdsWithReturns() =>
       _datasource.watchPurchaseIdsWithReturns();
+
+  @override
+  Stream<Map<int, List<String>>> watchPurchaseProductSearchTerms() =>
+      _datasource.watchPurchaseProductSearchTerms();
+
+  @override
+  Stream<Map<String, List<String>>> watchPurchaseReturnProductSearchTerms() =>
+      _datasource.watchPurchaseReturnProductSearchTerms();
 }

@@ -167,17 +167,11 @@ class AccountingCloseService {
     }
 
     // ── Compute net income for the period ──
-    final revenueItems = trialBalance.getItemsByType('revenue');
-    final expenseItems = trialBalance.getItemsByType('expense');
-    final equityItems = trialBalance.getItemsByType('equity');
-
-    final totalRevenue = revenueItems.fold<int>(
-        0, (sum, item) => sum + item.creditCents - item.debitCents);
-    final totalExpenses = expenseItems.fold<int>(
-        0, (sum, item) => sum + item.debitCents - item.creditCents);
+    // Phase 7 — natural-balance signing via TrialBalance SoT.
+    final totalRevenue = trialBalance.totalForType('revenue');
+    final totalExpenses = trialBalance.totalForType('expense');
     final netIncome = totalRevenue - totalExpenses;
-    final ownerCapital = equityItems.fold<int>(
-        0, (sum, item) => sum + item.creditCents - item.debitCents);
+    final ownerCapital = trialBalance.totalForType('equity');
 
     // ── Warning 1: Negative equity after close ──
     if (ownerCapital + netIncome < 0) {

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:easy_localization/easy_localization.dart';
 
+import '../../domain/entities/expiry_summary.dart';
 import '../../domain/entities/product_entity.dart';
 import '../../domain/entities/product_variant_entity.dart';
 import '../../domain/entities/product_color_entity.dart';
@@ -13,6 +14,7 @@ import '../../domain/repositories/product_color_repository.dart';
 import '../../domain/repositories/size_repository.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../../../core/widgets/marquee_text.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/bloc/currency_bloc.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
@@ -21,6 +23,7 @@ class ProductTileWidget extends StatelessWidget {
   final Product product;
   final void Function(Product)? onTap;
   final void Function(Product)? onLongPress;
+  final void Function(Product)? onCheckboxChanged;
   final bool? isSelected;
   
   /// For products with variants: number of variants and total stock across all variants.
@@ -33,16 +36,26 @@ class ProductTileWidget extends StatelessWidget {
   final String? previewSizeName;
   final String? previewColorHex;
 
+  /// Optional batch-expiry health summary supplied by the parent list. When
+  /// non-null and its derived status is [ExpiryStatus.nearExpiry] or
+  /// [ExpiryStatus.expired], a yellow / red pill is rendered next to the
+  /// stock indicator. Tile is intentionally data-driven: it never queries
+  /// the database itself — Phase E will reuse the same primitive for the
+  /// dashboard alert widget.
+  final ExpirySummary? expirySummary;
+
   const ProductTileWidget({
     super.key,
     required this.product,
     this.onTap,
     this.onLongPress,
+    this.onCheckboxChanged,
     this.isSelected,
     this.variantCount,
     this.totalVariantStock,
     this.previewSizeName,
     this.previewColorHex,
+    this.expirySummary,
   });
 
   Color? _tryParseHexColor(String? hex) {
@@ -293,7 +306,7 @@ class ProductTileWidget extends StatelessWidget {
                   padding: const EdgeInsets.only(right: 12),
                   child: Checkbox(
                     value: selected,
-                    onChanged: (_) => onTap?.call(product),
+                    onChanged: (_) => (onCheckboxChanged ?? onTap)?.call(product),
                   ),
                 ),
               _buildProductImage(colorScheme),
@@ -394,7 +407,15 @@ class ProductTileWidget extends StatelessWidget {
                             );
                           },
                         ),
-                        const Spacer(),
+                        const SizedBox(width: 8),
+                        if (expirySummary != null) ...[
+                          Flexible(
+                            fit: FlexFit.loose,
+                            child: _buildExpiryBadge(context),
+                          ),
+                          const SizedBox(width: 6),
+                        ] else
+                          const Spacer(),
                         product.hasVariants
                             ? _buildVariantsIndicator(context)
                             : _buildStockIndicator(context),
@@ -477,6 +498,88 @@ class ProductTileWidget extends StatelessWidget {
               color: colorScheme.onSurfaceVariant,
             )
           : null,
+    );
+  }
+
+  /// Compact expiry pill rendered next to the stock indicator. Returns an
+  /// empty `SizedBox` when the derived [ExpiryStatus] is `healthy` so the
+  /// badge is essentially free for non-urgent rows.
+  ///
+  /// Visual semantics (matches Material's red/amber tonal slots so the badge
+  /// reads correctly against both light and dark surfaces):
+  ///   * `expired`    → `errorContainer` background, `alert-octagon` icon.
+  ///   * `nearExpiry` → `tertiaryContainer` background (amber tone),
+  ///                    `alert-triangle` icon, label = "X days left" or
+  ///                    "Expires today".
+  ///
+  /// The full label is in the tooltip so the pill stays narrow on small
+  /// screens — this is the same trade-off Odoo and Cin7 take in their list
+  /// views.
+  Widget _buildExpiryBadge(BuildContext context) {
+    final summary = expirySummary;
+    if (summary == null) return const SizedBox.shrink();
+    final status = summary.statusFor();
+    if (status == ExpiryStatus.healthy) return const SizedBox.shrink();
+
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    final isExpired = status == ExpiryStatus.expired;
+    final bg =
+        isExpired ? colorScheme.errorContainer : colorScheme.tertiaryContainer;
+    final fg = isExpired
+        ? colorScheme.onErrorContainer
+        : colorScheme.onTertiaryContainer;
+    final icon =
+        isExpired ? LucideIcons.alertOctagon : LucideIcons.alertTriangle;
+
+    final String shortLabel;
+    final String tooltip;
+    if (isExpired) {
+      shortLabel = 'products.expiry_badge_expired_label'.tr();
+      tooltip = 'products.expiry_badge_expired_qty'
+          .tr(args: ['${summary.expiredQuantity}']);
+    } else {
+      final days = summary.daysUntilNearestExpiry ?? 0;
+      if (days == 0) {
+        shortLabel = 'products.expiry_badge_today'.tr();
+      } else if (days == 1) {
+        shortLabel = 'products.expiry_badge_days_left_one'.tr();
+      } else {
+        shortLabel =
+            'products.expiry_badge_days_left_other'.tr(args: ['$days']);
+      }
+      tooltip = 'products.expiry_badge_near_label'.tr();
+    }
+
+    return Tooltip(
+      message: tooltip,
+      child: Container(
+        key: Key(
+          isExpired ? 'expiry_badge_expired' : 'expiry_badge_near',
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: fg),
+            const SizedBox(width: 4),
+            Flexible(
+              child: MarqueeText(
+                text: shortLabel,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: fg,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

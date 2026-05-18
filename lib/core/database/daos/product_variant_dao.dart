@@ -12,8 +12,15 @@ class ProductVariantDao extends DatabaseAccessor<AppDatabase> with _$ProductVari
     return select(productVariants).watch();
   }
 
+  /// Streams the active variants of [productId]. Soft-deleted variants
+  /// (`is_active = 0`) are intentionally excluded so smart-deleted SKUs
+  /// disappear from management/POS UIs while still being preserved in
+  /// historical sale/purchase items, returns and journal entries.
   Stream<List<ProductVariant>> watchVariantsByProduct(int productId) {
-    return (select(productVariants)..where((v) => v.productId.equals(productId))).watch();
+    return (select(productVariants)
+          ..where((v) => v.productId.equals(productId))
+          ..where((v) => v.isActive.equals(true)))
+        .watch();
   }
 
   Future<List<ProductVariant>> getVariantsByProduct(int productId) {
@@ -233,6 +240,38 @@ class ProductVariantDao extends DatabaseAccessor<AppDatabase> with _$ProductVari
     });
   }
 
+  /// Count active variants that carry an explicit color or size (i.e. true
+  /// dimensional variants), excluding the single anonymous default variant
+  /// used to back non-variant products. Used when the user toggles
+  /// "Has Variants" off — so we can warn them about the exact number that
+  /// will be deactivated.
+  Future<int> countActiveDimensionalVariants(int productId) async {
+    final row = await customSelect(
+      'SELECT COUNT(*) AS cnt FROM product_variants '
+      'WHERE product_id = ? AND is_active = 1 '
+      'AND (color_id IS NOT NULL OR size_id IS NOT NULL)',
+      variables: [Variable.withInt(productId)],
+    ).getSingle();
+    return row.read<int>('cnt');
+  }
+
+  /// Deactivate every variant of [productId] that has a color or size
+  /// dimension (keeping the anonymous default variant intact so non-variant
+  /// sales can continue). Called when "Has Variants" is toggled from
+  /// true -> false. We never hard-delete — those variants may appear on
+  /// historical invoices/returns and must stay for audit + COGS integrity.
+  Future<int> deactivateDimensionalVariants(int productId) async {
+    return customUpdate(
+      'UPDATE product_variants SET is_active = 0, updated_at = ? '
+      'WHERE product_id = ? AND (color_id IS NOT NULL OR size_id IS NOT NULL)',
+      variables: [
+        Variable.withDateTime(DateTime.now()),
+        Variable.withInt(productId),
+      ],
+      updates: {productVariants},
+    );
+  }
+
   Future<int> deleteVariant(int id) {
     return transaction(() async {
       final variant = await (select(productVariants)..where((v) => v.id.equals(id)))
@@ -262,6 +301,94 @@ class ProductVariantDao extends DatabaseAccessor<AppDatabase> with _$ProductVari
       }
 
       return affected;
+    });
+  }
+
+  /// Count historical references to [variantId] across all transactional and
+  /// audit tables. Mirrors `ProductDao.countProductReferences` but at variant
+  /// granularity. A non-zero count means the variant cannot be hard-deleted
+  /// without breaking audit trail / accounting integrity (FK restrict on
+  /// `sale_items`, `purchase_items`, `inventory_adjustments`, return adjs).
+  /// Batches and price-history are technically cascade in the schema, but
+  /// they carry COGS / pricing lineage we must preserve, so they count too.
+  Future<int> countVariantReferences(int variantId) async {
+    final row = await customSelect(
+      '''
+      SELECT
+        (SELECT COUNT(*) FROM sale_items WHERE variant_id = ?1)
+        + (SELECT COUNT(*) FROM purchase_items WHERE variant_id = ?1)
+        + (SELECT COUNT(*) FROM purchase_return_adjustment_items WHERE variant_id = ?1)
+        + (SELECT COUNT(*) FROM sale_return_adjustment_items WHERE variant_id = ?1)
+        + (SELECT COUNT(*) FROM inventory_adjustments WHERE variant_id = ?1)
+        + (SELECT COUNT(*) FROM product_batches WHERE variant_id = ?1)
+        + (SELECT COUNT(*) FROM product_price_histories WHERE variant_id = ?1)
+        AS ref_count
+      ''',
+      variables: [Variable.withInt(variantId)],
+    ).getSingle();
+    return row.read<int>('ref_count');
+  }
+
+  /// Smart delete that mirrors QuickBooks/Xero/Odoo behaviour for variants:
+  /// variants with historical references are deactivated (`is_active = 0`)
+  /// to preserve audit trail and journal/COGS integrity; variants with no
+  /// references are hard-deleted. Always runs in a single transaction so
+  /// the parent product's `has_variants` flag stays consistent.
+  ///
+  /// Returns `(wasDeleted, referenceCount)`.
+  ///   - `wasDeleted = true`  -> row removed from product_variants
+  ///   - `wasDeleted = false` -> row deactivated (had `referenceCount` refs)
+  Future<({bool wasDeleted, int referenceCount})> smartDeleteVariant(int variantId) {
+    return transaction(() async {
+      final variant = await (select(productVariants)..where((v) => v.id.equals(variantId)))
+          .getSingleOrNull();
+      if (variant == null) {
+        return (wasDeleted: false, referenceCount: 0);
+      }
+
+      final refCount = await countVariantReferences(variantId);
+      final productId = variant.productId;
+
+      if (refCount > 0) {
+        // Soft delete: deactivate the variant. Stock and cost are preserved
+        // so reports / cost-of-goods stay reproducible. The user can still
+        // run an inventory write-off through the adjustment service if they
+        // want to zero on-hand value (this routes through the GL properly).
+        await (update(productVariants)..where((v) => v.id.equals(variantId))).write(
+          ProductVariantsCompanion(
+            isActive: const Value(false),
+            updatedAt: Value(DateTime.now()),
+          ),
+        );
+      } else {
+        await (delete(productVariants)..where((v) => v.id.equals(variantId))).go();
+      }
+
+      // Keep products.has_variants in sync with the count of remaining
+      // active dimensional variants (color or size != null), matching the
+      // semantics used in `deactivateDimensionalVariants`.
+      final row = await customSelect(
+        'SELECT COUNT(*) as cnt FROM product_variants '
+        'WHERE product_id = ? AND is_active = 1 '
+        'AND (color_id IS NOT NULL OR size_id IS NOT NULL)',
+        variables: [Variable.withInt(productId)],
+      ).getSingle();
+      final remainingDimensional = row.read<int>('cnt');
+      if (remainingDimensional == 0) {
+        await customUpdate(
+          'UPDATE products SET has_variants = 0, updated_at = ? WHERE id = ?',
+          variables: [Variable.withDateTime(DateTime.now()), Variable.withInt(productId)],
+          updates: {products},
+        );
+      } else {
+        await customUpdate(
+          'UPDATE products SET updated_at = ? WHERE id = ?',
+          variables: [Variable.withDateTime(DateTime.now()), Variable.withInt(productId)],
+          updates: {products},
+        );
+      }
+
+      return (wasDeleted: refCount == 0, referenceCount: refCount);
     });
   }
 }

@@ -2,6 +2,7 @@ import 'package:drift/drift.dart' hide Column;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart';
+import '../../../../core/services/reporting/ratio_helper.dart';
 import '../widgets/report_date_range.dart';
 
 // ==================== EVENTS ====================
@@ -216,7 +217,11 @@ class DiscountReportsBloc
       if (inv.discountCents > 0) discountedCount++;
     }
 
-    final avgDiscount = totalSales > 0 ? (totalDiscount / totalSales) * 100 : 0.0;
+    // Phase 7 — percentage via RatioHelper SoT.
+    final avgDiscount = RatioHelper.percent(
+      numeratorCents: totalDiscount,
+      denominatorCents: totalSales,
+    );
 
     return DiscountReportsData(
       summary: DiscountReportsSummary(
@@ -277,7 +282,10 @@ class DiscountReportsBloc
         totalSalesCents: sales,
         totalDiscountCents: discount,
         invoiceCount: row.read<int>('invoice_count'),
-        discountPercent: sales > 0 ? (discount / sales) * 100 : 0.0,
+        discountPercent: RatioHelper.percent(
+          numeratorCents: discount,
+          denominatorCents: sales,
+        ),
       );
     }).toList();
   }
@@ -325,7 +333,10 @@ class DiscountReportsBloc
         totalSalesCents: sales,
         totalDiscountCents: discount,
         invoiceCount: row.read<int>('invoice_count'),
-        discountPercent: sales > 0 ? (discount / sales) * 100 : 0.0,
+        discountPercent: RatioHelper.percent(
+          numeratorCents: discount,
+          denominatorCents: sales,
+        ),
       );
     }).toList();
   }
@@ -367,7 +378,10 @@ class DiscountReportsBloc
         totalSalesCents: sales,
         totalDiscountCents: discount,
         invoiceCount: row.read<int>('invoice_count'),
-        discountPercent: sales > 0 ? (discount / sales) * 100 : 0.0,
+        discountPercent: RatioHelper.percent(
+          numeratorCents: discount,
+          denominatorCents: sales,
+        ),
       );
     }).toList();
   }
@@ -414,7 +428,10 @@ class DiscountReportsBloc
         totalCents: row.read<int>('total_cents'),
         saleDate: DateTime.parse(row.read<String>('sale_date')),
         paymentMethod: row.read<String>('payment_method'),
-        discountPercent: subtotal > 0 ? (discount / subtotal) * 100 : 0.0,
+        discountPercent: RatioHelper.percent(
+          numeratorCents: discount,
+          denominatorCents: subtotal,
+        ),
       );
     }).toList();
   }

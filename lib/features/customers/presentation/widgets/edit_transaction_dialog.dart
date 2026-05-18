@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../../../core/widgets/inputs/select_all_on_focus.dart';
 import '../../../auth/auth.dart';
 
 /// A reusable dialog for editing payment or discount transaction amounts.
@@ -163,6 +164,7 @@ class _EditTransactionDialogState extends State<EditTransactionDialog> {
                 ),
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 autofocus: true,
+                onTap: () => selectAllText(_amountController),
               ),
               const SizedBox(height: 16),
               TextField(

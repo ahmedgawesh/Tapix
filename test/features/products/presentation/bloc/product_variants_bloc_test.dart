@@ -159,8 +159,14 @@ void main() {
         // Wait for initial data load
         await bloc.stream.firstWhere((state) => state is RealtimeSuccess);
 
-        when(() => repository.deleteVariant(1))
-            .thenAnswer((_) async => 1);
+        // The bloc routes deletes through smartDeleteVariant so referenced
+        // variants get deactivated rather than FK-failing. Cf. audit issue #16.
+        when(() => repository.smartDeleteVariant(1)).thenAnswer(
+          (_) async => const VariantDeletionResult(
+            wasDeleted: true,
+            referenceCount: 0,
+          ),
+        );
 
         bloc.add(const VariantDeleteRequested(1));
 
@@ -170,7 +176,8 @@ void main() {
               .having((s) => s.optimisticData, 'optimisticData', isEmpty)),
         );
 
-        verify(() => repository.deleteVariant(1)).called(1);
+        verify(() => repository.smartDeleteVariant(1)).called(1);
+        verifyNever(() => repository.deleteVariant(1));
       });
     });
   });

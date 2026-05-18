@@ -66,6 +66,19 @@ class ProductDeleteRequested extends ProductsEvent {
   const ProductDeleteRequested(this.productId);
 }
 
+/// Stock-aware delete: posts a balanced Shrinkage adjustment for every
+/// variant carrying on-hand stock (Dr 5800 / Cr 1200) BEFORE running smart
+/// delete, so the 1200 Inventory ledger always equals Σ(stock × cost).
+class ProductWriteOffAndDeleteRequested extends ProductsEvent {
+  final int productId;
+  final String reason;
+
+  const ProductWriteOffAndDeleteRequested({
+    required this.productId,
+    required this.reason,
+  });
+}
+
 /// Event to search products
 class ProductSearchRequested extends ProductsEvent {
   final String query;
@@ -152,6 +165,7 @@ class ProductsBloc extends RealtimeBloc<List<Product>, ProductsEvent> {
     on<ProductCreateRequested>(_onProductCreate);
     on<ProductUpdateRequested>(_onProductUpdate);
     on<ProductDeleteRequested>(_onProductDelete);
+    on<ProductWriteOffAndDeleteRequested>(_onProductWriteOffAndDelete);
     on<ProductSearchRequested>(_onProductSearch);
     on<ProductFilterRequested>(_onProductFilter);
     on<ProductFilterCleared>(_onFilterCleared);
@@ -219,10 +233,47 @@ class ProductsBloc extends RealtimeBloc<List<Product>, ProductsEvent> {
         .where((p) => p.id != event.productId)
         .toList();
 
+    // Route through smart-delete so referenced products are deactivated
+     // (soft-delete) rather than triggering a SQL FK restrict failure. This
+     // matches the UI flow in `product_form_screen._handleSmartDelete` and
+     // mirrors QuickBooks/Xero/Odoo: history-bearing rows must never be
+     // hard-deleted because audit trail and journal entries depend on them.
     await performOptimisticUpdate(
       operationId: 'delete_${event.productId}_${DateTime.now().millisecondsSinceEpoch}',
       optimisticData: optimisticProducts,
-      operation: () => _repository.deleteProduct(event.productId),
+      operation: () => _repository.smartDeleteProduct(event.productId),
+    );
+  }
+
+  Future<void> _onProductWriteOffAndDelete(
+    ProductWriteOffAndDeleteRequested event,
+    Emitter<RealtimeState<List<Product>>> emit,
+  ) async {
+    final currentProducts = currentData;
+    if (currentProducts == null) {
+      try {
+        await _repository.writeOffAndDeleteProduct(
+          productId: event.productId,
+          reason: event.reason,
+        );
+      } catch (e, st) {
+        add(RealtimeErrorOccurred(e, st));
+      }
+      return;
+    }
+
+    final optimisticProducts = currentProducts
+        .where((p) => p.id != event.productId)
+        .toList();
+
+    await performOptimisticUpdate(
+      operationId:
+          'writeoff_${event.productId}_${DateTime.now().millisecondsSinceEpoch}',
+      optimisticData: optimisticProducts,
+      operation: () => _repository.writeOffAndDeleteProduct(
+        productId: event.productId,
+        reason: event.reason,
+      ),
     );
   }
 

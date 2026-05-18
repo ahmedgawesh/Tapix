@@ -9,8 +9,10 @@ import 'package:go_router/go_router.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart';
-import '../../../../core/services/currency_service.dart';
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/money/money_input_parser.dart';
+import '../../../../core/services/currency_service.dart';
+import '../../../../core/widgets/inputs/select_all_on_focus.dart';
 import '../../domain/repositories/expense_repository.dart';
 import '../bloc/expense_form_bloc.dart';
 import '../bloc/expense_categories_bloc.dart';
@@ -87,8 +89,11 @@ class _ExpenseFormContentState extends State<_ExpenseFormContent> {
       return;
     }
 
-    final cs = sl<CurrencyService>();
-    final amountCentsInt = cs.decimalStringToCents(_amountController.text);
+    // Phase 8 — MoneyInputParser is the SoT for text→cents conversion;
+    // currency-aware (e.g. 3-digit JOD/KWD) and Decimal-based (no
+    // IEEE-754 cent-drop on edges like `99999.99 * 100`).
+    final amountCentsInt =
+        sl<MoneyInputParser>().parseOrZero(_amountController.text);
     final amountCents = Decimal.fromInt(amountCentsInt);
 
     context.read<ExpenseFormBloc>().add(
@@ -312,6 +317,7 @@ class _ExpenseFormContentState extends State<_ExpenseFormContent> {
         ),
       ),
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      onTap: () => selectAllText(_amountController),
       inputFormatters: [
         FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
       ],

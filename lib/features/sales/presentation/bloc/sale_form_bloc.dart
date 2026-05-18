@@ -3,6 +3,10 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 
 import '../../../../core/database/app_database.dart' show LoyaltySettings;
+import '../../../../core/money/money.dart';
+import '../../../../core/pricing/discount.dart';
+import '../../../../core/pricing/invoice_pricing_engine.dart';
+import '../../../../core/pricing/line_item_pricing_engine.dart';
 import '../../../../core/services/audit_log_service.dart';
 import '../../../../core/services/below_cost_sale_service.dart';
 import '../../../../core/services/crashlytics_service.dart';
@@ -68,10 +72,19 @@ class SaleFormState extends Equatable {
   // Global tax settings
   final bool enableTaxCalculations;
   final int defaultSalesTaxRateBps;
+  final bool taxInclusivePricing;
   // Global inventory settings
   final bool allowNegativeStock;
+  // Global sales settings
+  final bool allowPartialPayments;
+  final bool allowDiscounts;
+  final double maxDiscountPercent;
+  final bool requireCustomerForSales;
+  final bool enableLoyaltyPoints;
   // Editing posted sale flag
   final bool isEditingPosted;
+  // Tracks if user has made unsaved changes
+  final bool hasUnsavedChanges;
 
   SaleFormState({
     this.saleId,
@@ -104,46 +117,123 @@ class SaleFormState extends Equatable {
     this.loyaltyRedemptionEnabled = false,
     this.enableTaxCalculations = true,
     this.defaultSalesTaxRateBps = 0,
+    this.taxInclusivePricing = false,
     this.allowNegativeStock = false,
+    this.allowPartialPayments = false,
+    this.allowDiscounts = true,
+    this.maxDiscountPercent = 100.0,
+    this.requireCustomerForSales = false,
+    this.enableLoyaltyPoints = false,
     this.isEditingPosted = false,
+    this.hasUnsavedChanges = false,
   }) : invoiceDiscountCents = invoiceDiscountCents ?? Decimal.zero,
        taxRatePercent = taxRatePercent ?? Decimal.zero,
        paidAmountCents = paidAmountCents ?? Decimal.zero;
 
-  Decimal get subtotalCents => items.fold(
-        Decimal.zero,
-        (sum, item) => sum + item.subtotalCents,
-      );
+  // ── Engine-backed pricing layer (single source of truth) ───────────────
+  //
+  // Every monetary getter that represents an invoice-level pricing figure
+  // (subtotal, item-discount, overall-discount, tax, pre-loyalty total)
+  // is derived from exactly one call to [InvoicePricingEngine.compute].
+  // Memoized once per immutable state instance so the UI's many rebuilds
+  // amortize the cost.
+  //
+  // The TENDER layer (loyalty redemption, paid, remaining, change) is
+  // intentionally NOT part of the engine — see ADR
+  // `docs/adr/0002-engine-readiness-audit.md` §4 Q2: loyalty redemption is
+  // a contra-AR settlement (GAAP/IFRS-15), NOT a reduction of taxable
+  // revenue. The engine's `pricing.total` IS the pre-loyalty figure; the
+  // bloc's `totalCents` subtracts the loyalty deduction afterwards.
 
+  /// Lazy memoized engine result. Built on first access and reused for
+  /// the lifetime of this immutable state instance.
+  ///
+  /// Phase-5 close-out: the Phase-4 dual-compute `kDebugMode` assertion
+  /// has been removed after a full phase of green Phase-0 goldens and
+  /// Phase-4 regression tests. The engine is now the unconditional SoT
+  /// for every pricing figure; the tender layer below remains bloc-owned.
+  late final InvoicePricingResult pricing = _computePricing();
+
+  InvoicePricingResult _computePricing() {
+    // Discount-mode bridge (ADR 0002 §G7):
+    //   * `perItem`  → per-line discount preserved, overall = none.
+    //   * `invoice`  → per-line discount suppressed (Q3 mode-exclusivity),
+    //                  overall = invoice-level discount.
+    // This matches the long-standing `TaxCalculationService.calculateInvoiceTax`
+    // submission contract (which also zeroed per-line discounts in invoice
+    // mode), so engine output stays identical to what the bloc previously
+    // persisted — see Phase-0 goldens.
+    final inInvoiceMode = discountMode == SaleDiscountMode.invoice;
+    final lineInputs = items
+        .map((i) => i.toPricingInput(
+              overrideDiscount: inInvoiceMode ? Discount.none : null,
+            ))
+        .toList(growable: false);
+
+    return InvoicePricingEngine.compute(InvoicePricingInput(
+      lines: lineInputs,
+      overallDiscount:
+          inInvoiceMode ? _buildOverallDiscount() : Discount.none,
+      enableTaxCalculations: enableTaxCalculations,
+      defaultTaxRateBps: defaultSalesTaxRateBps,
+      taxInclusivePricing: taxInclusivePricing,
+    ));
+  }
+
+  Discount _buildOverallDiscount() {
+    if (invoiceDiscountCents > Decimal.zero) {
+      return Discount.fixed(Money.fromDecimalCents(invoiceDiscountCents));
+    }
+    return Discount.none;
+  }
+
+  Decimal get subtotalCents => pricing.subtotal.decimalCents;
+
+  /// Sum of user-entered per-line discounts as displayed in the UI.
+  /// In `invoice` mode this is always zero because `_onDiscountModeChanged`
+  /// (Phase-14) wipes every line's `discountCents` on mode switch, and the
+  /// per-line discount input is gated to `perItem` mode. The engine also
+  /// masks per-line discounts at compute time for defence-in-depth (per
+  /// Q3 mode-exclusivity) — but state is the single SoT.
   Decimal get itemDiscountCents => items.fold(
         Decimal.zero,
         (sum, item) => sum + item.discountCents,
       );
 
-  Decimal get totalDiscountCents {
-    if (discountMode == SaleDiscountMode.invoice) {
-      return invoiceDiscountCents;
-    }
-    return itemDiscountCents;
+  /// Invoice-level discount actually applied. The engine clamps to
+  /// `[0, subtotal]` so this value can never exceed subtotal.
+  Decimal get effectiveInvoiceDiscountCents {
+    if (discountMode != SaleDiscountMode.invoice) return invoiceDiscountCents;
+    return pricing.overallDiscount.decimalCents;
   }
 
-  Decimal get itemTaxCents => items.fold(
-        Decimal.zero,
-        (sum, item) => sum + item.taxCentsWithSettings(
-          enableTaxCalculations: enableTaxCalculations,
-          defaultTaxRateBps: defaultSalesTaxRateBps,
-        ),
-      );
+  Decimal get totalDiscountCents => pricing.totalDiscount.decimalCents;
+
+  Decimal get itemTaxCents => pricing.tax.decimalCents;
 
   Decimal get taxCents => itemTaxCents;
 
-  Decimal get totalBeforeLoyaltyCents {
-    final net = subtotalCents - totalDiscountCents + taxCents;
-    return net < Decimal.zero ? Decimal.zero : net;
-  }
+  /// Pre-loyalty invoice total — IS the engine's `total`.
+  ///
+  /// This is the figure that posts to `sales.total_cents` and feeds revenue
+  /// recognition. Loyalty redemption does NOT reduce it (GAAP/IFRS-15:
+  /// revenue = gross transaction price; redemption = contra-AR settlement).
+  Decimal get totalBeforeLoyaltyCents => pricing.total.decimalCents;
 
+  // ── Tender layer (NOT part of the pricing engine by design) ────────────
+  //
+  // Loyalty redemption, paid amount, remaining, and change all live here.
+  // They consume `pricing.total` but never feed back into it.
+
+  /// Net amount the customer owes/pays at the till.
+  ///
+  /// `max(0, pricing.total − loyaltyDiscountCents)`. The journal-entry
+  /// pipeline already knows to debit the contra-AR loyalty account by
+  /// `loyaltyDiscountCents` and credit Sales Revenue by the full
+  /// `pricing.total`.
   Decimal get totalCents {
-    final net = totalBeforeLoyaltyCents - Decimal.fromInt(loyaltyDiscountCents);
+    final net = pricing.total.decimalCents -
+        Decimal.fromInt(loyaltyDiscountCents);
     return net < Decimal.zero ? Decimal.zero : net;
   }
 
@@ -193,8 +283,15 @@ class SaleFormState extends Equatable {
     bool clearLoyalty = false,
     bool? enableTaxCalculations,
     int? defaultSalesTaxRateBps,
+    bool? taxInclusivePricing,
     bool? allowNegativeStock,
+    bool? allowPartialPayments,
+    bool? allowDiscounts,
+    double? maxDiscountPercent,
+    bool? requireCustomerForSales,
+    bool? enableLoyaltyPoints,
     bool? isEditingPosted,
+    bool? hasUnsavedChanges,
   }) {
     return SaleFormState(
       saleId: saleId ?? this.saleId,
@@ -228,7 +325,13 @@ class SaleFormState extends Equatable {
       enableTaxCalculations: enableTaxCalculations ?? this.enableTaxCalculations,
       defaultSalesTaxRateBps: defaultSalesTaxRateBps ?? this.defaultSalesTaxRateBps,
       allowNegativeStock: allowNegativeStock ?? this.allowNegativeStock,
+      allowPartialPayments: allowPartialPayments ?? this.allowPartialPayments,
+      allowDiscounts: allowDiscounts ?? this.allowDiscounts,
+      maxDiscountPercent: maxDiscountPercent ?? this.maxDiscountPercent,
+      requireCustomerForSales: requireCustomerForSales ?? this.requireCustomerForSales,
+      enableLoyaltyPoints: enableLoyaltyPoints ?? this.enableLoyaltyPoints,
       isEditingPosted: isEditingPosted ?? this.isEditingPosted,
+      hasUnsavedChanges: hasUnsavedChanges ?? this.hasUnsavedChanges,
     );
   }
 
@@ -240,7 +343,9 @@ class SaleFormState extends Equatable {
         isSubmitting, error, isSuccess, belowCostWarning, belowCostOverrides,
         loyaltyPointsBalance, loyaltyPointsToRedeem, loyaltyDiscountCents,
         loyaltySettings, loyaltyRedemptionEnabled,
-        enableTaxCalculations, defaultSalesTaxRateBps, allowNegativeStock, isEditingPosted,
+        enableTaxCalculations, defaultSalesTaxRateBps, allowNegativeStock,
+        allowPartialPayments, allowDiscounts, maxDiscountPercent, requireCustomerForSales,
+        isEditingPosted, hasUnsavedChanges,
       ];
 }
 
@@ -298,44 +403,67 @@ class SaleLineItem extends Equatable {
     this.itemNote,
   })  : discountCents = discountCents ?? Decimal.zero;
 
-  Decimal get subtotalCents => unitPriceCents * Decimal.fromInt(quantity);
-  Decimal get netCents => subtotalCents - discountCents;
+  // ── Engine-backed line math ────────────────────────────────────────────
+  // Per-line totals flow through [LineItemPricingEngine] so there is
+  // exactly one place where `subtotal → discount → net → tax → total`
+  // is computed. Decimal return types are preserved for UI/PDF/repo
+  // compatibility (consumers call `.toBigInt().toInt()` on the result).
 
-  /// Tax is computed from the product's sales tax rate.
-  /// Uses proper rounding (round half-up) instead of truncation.
-  /// This getter uses product settings - use taxCentsWithSettings for global settings support.
-  Decimal get taxCents => taxCentsWithSettings(enableTaxCalculations: true, defaultTaxRateBps: 0);
+  /// Build the engine input for this line. [overrideDiscount] lets the
+  /// owning state suppress the per-line discount when invoice-level
+  /// discount mode is active (ADR 0002 §G7 mode-exclusivity bridge).
+  LineItemPricingInput toPricingInput({Discount? overrideDiscount}) {
+    return LineItemPricingInput(
+      unitPrice: Money.fromDecimalCents(unitPriceCents),
+      quantity: quantity,
+      discount: overrideDiscount ??
+          (discountCents > Decimal.zero
+              ? Discount.fixed(Money.fromDecimalCents(discountCents))
+              : Discount.none),
+      isTaxable: product.isTaxable,
+      productTaxRateBps: product.salesTaxRateBps,
+    );
+  }
 
-  /// Calculate tax respecting global settings.
-  /// If enableTaxCalculations is false, returns zero.
-  /// If product has its own tax rate (isTaxable && salesTaxRateBps > 0), uses that.
-  /// Otherwise, uses the defaultTaxRateBps from global settings.
+  /// Local (line-scoped) engine result. Uses the same contract as the
+  /// historical getters: tax always enabled, no global default rate, no
+  /// tax-inclusive pricing. The state-level engine in [SaleFormState] is
+  /// where global settings are honored.
+  LineItemPricingResult _localCompute() => LineItemPricingEngine.compute(
+        input: toPricingInput(),
+        enableTaxCalculations: true,
+        defaultTaxRateBps: 0,
+        taxInclusivePricing: false,
+      );
+
+  Decimal get subtotalCents => _localCompute().subtotal.decimalCents;
+
+  Decimal get netCents => _localCompute().net.decimalCents;
+
+  /// Tax computed from the product's sales tax rate (engine-resolved).
+  /// This getter intentionally hard-codes `enableTaxCalculations=true,
+  /// defaultTaxRateBps=0` to preserve the historical line-level contract
+  /// (the invoice-level state respects global settings via `pricing`).
+  Decimal get taxCents => _localCompute().tax.decimalCents;
+
+  /// Calculate tax respecting global settings (engine-resolved).
+  /// If [enableTaxCalculations] is false, returns zero.
+  /// If product has its own rate (isTaxable && salesTaxRateBps > 0), uses
+  /// that. Otherwise, falls back to [defaultTaxRateBps].
   Decimal taxCentsWithSettings({
     required bool enableTaxCalculations,
     required int defaultTaxRateBps,
+    bool taxInclusivePricing = false,
   }) {
-    if (!enableTaxCalculations) return Decimal.zero;
-    
-    final taxable = netCents;
-    if (taxable <= Decimal.zero) return Decimal.zero;
-    
-    // Determine which tax rate to use
-    int taxRateBps;
-    if (product.isTaxable && product.salesTaxRateBps > 0) {
-      // Product has its own tax rate - use it
-      taxRateBps = product.salesTaxRateBps;
-    } else if (defaultTaxRateBps > 0) {
-      // Use global default tax rate
-      taxRateBps = defaultTaxRateBps;
-    } else {
-      return Decimal.zero;
-    }
-    
-    final raw = taxable * Decimal.fromInt(taxRateBps) / Decimal.fromInt(10000);
-    return Decimal.fromBigInt(raw.round());
+    return LineItemPricingEngine.compute(
+      input: toPricingInput(),
+      enableTaxCalculations: enableTaxCalculations,
+      defaultTaxRateBps: defaultTaxRateBps,
+      taxInclusivePricing: taxInclusivePricing,
+    ).tax.decimalCents;
   }
 
-  Decimal get totalCents => netCents + taxCents;
+  Decimal get totalCents => _localCompute().total.decimalCents;
 
   String get displayName {
     final parts = <String>[];
@@ -388,6 +516,8 @@ class SaleLineItem extends Equatable {
         colorName, colorHex, sizeName,
         employeeId, employeeName, itemNote,
       ];
+
+  Decimal get netCentsWithInvoiceDiscount => netCents; // Will be handled by Bloc for invoice-level rounding
 }
 
 // ==================== EVENTS ====================
@@ -404,19 +534,38 @@ class SaleFormInitialized extends SaleFormEvent {
   final int currencyId;
   final bool enableTaxCalculations;
   final int defaultSalesTaxRateBps;
+  final bool taxInclusivePricing;
   final bool allowNegativeStock;
+  final bool allowPartialPayments;
+  final bool allowDiscounts;
+  final double maxDiscountPercent;
+  final bool requireCustomerForSales;
+  final bool enableLoyaltyPoints;
+  final String defaultPaymentMethodStr;
   final bool isEditingPosted;
   const SaleFormInitialized({
     this.saleId,
     required this.currencyId,
     this.enableTaxCalculations = true,
     this.defaultSalesTaxRateBps = 0,
+    this.taxInclusivePricing = false,
     this.allowNegativeStock = false,
+    this.allowPartialPayments = false,
+    this.allowDiscounts = true,
+    this.maxDiscountPercent = 100.0,
+    this.requireCustomerForSales = false,
+    this.enableLoyaltyPoints = false,
+    this.defaultPaymentMethodStr = 'cash',
     this.isEditingPosted = false,
   });
 
   @override
-  List<Object?> get props => [saleId, currencyId, enableTaxCalculations, defaultSalesTaxRateBps, allowNegativeStock, isEditingPosted];
+  List<Object?> get props => [
+        saleId, currencyId, enableTaxCalculations, defaultSalesTaxRateBps,
+        allowNegativeStock, allowPartialPayments, allowDiscounts,
+        maxDiscountPercent, requireCustomerForSales, defaultPaymentMethodStr,
+        isEditingPosted,
+      ];
 }
 
 class SaleTaxSettingsChanged extends SaleFormEvent {
@@ -696,6 +845,14 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
   ) async {
     await _loadColorSizeLookups();
 
+    SalePaymentMethod parseMethod(String m) {
+      if (m == 'card') return SalePaymentMethod.card;
+      if (m == 'bank_transfer') return SalePaymentMethod.cheque;
+      return SalePaymentMethod.cash;
+    }
+    
+    final initialPaymentMethod = parseMethod(event.defaultPaymentMethodStr);
+
     if (event.saleId == null) {
       // New sale: generate next invoice number
       try {
@@ -706,13 +863,26 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
           enableTaxCalculations: event.enableTaxCalculations,
           defaultSalesTaxRateBps: event.defaultSalesTaxRateBps,
           allowNegativeStock: event.allowNegativeStock,
+          allowPartialPayments: event.allowPartialPayments,
+          allowDiscounts: event.allowDiscounts,
+          maxDiscountPercent: event.maxDiscountPercent,
+          requireCustomerForSales: event.requireCustomerForSales,
+          enableLoyaltyPoints: event.enableLoyaltyPoints,
+          paymentMethod: initialPaymentMethod,
         ));
       } catch (_) {
         emit(state.copyWith(
           currencyId: event.currencyId,
           enableTaxCalculations: event.enableTaxCalculations,
           defaultSalesTaxRateBps: event.defaultSalesTaxRateBps,
+          taxInclusivePricing: event.taxInclusivePricing,
           allowNegativeStock: event.allowNegativeStock,
+          allowPartialPayments: event.allowPartialPayments,
+          allowDiscounts: event.allowDiscounts,
+          maxDiscountPercent: event.maxDiscountPercent,
+          requireCustomerForSales: event.requireCustomerForSales,
+          enableLoyaltyPoints: event.enableLoyaltyPoints,
+          paymentMethod: initialPaymentMethod,
         ));
       }
       return;
@@ -723,8 +893,14 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
       currencyId: event.currencyId,
       enableTaxCalculations: event.enableTaxCalculations,
       defaultSalesTaxRateBps: event.defaultSalesTaxRateBps,
+      taxInclusivePricing: event.taxInclusivePricing,
       allowNegativeStock: event.allowNegativeStock,
+      allowPartialPayments: event.allowPartialPayments,
+      allowDiscounts: event.allowDiscounts,
+      maxDiscountPercent: event.maxDiscountPercent,
+      requireCustomerForSales: event.requireCustomerForSales,
       isEditingPosted: event.isEditingPosted,
+      paymentMethod: initialPaymentMethod,
     ));
 
     try {
@@ -885,9 +1061,29 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
     SaleDiscountModeChanged event,
     Emitter<SaleFormState> emit,
   ) {
+    // Phase-14 mode-exclusivity (state-level): mirror the purchase-side
+    // fix in `PurchaseFormBloc._onDiscountModeChanged` and the original
+    // `SaleAdjReturnFormBloc._onDiscountModeChanged` reference. The
+    // engine already masks the unused mode at compute time, but stale
+    // per-line `discountCents` on `state.items` would silently re-activate
+    // on a back-toggle to `perItem`, causing a "double-discount the user
+    // can't notice" — exactly the symmetry bug the user reported on
+    // purchases and asked us to verify on sales.
+    //
+    // Switching INTO `invoice` mode -> wipe per-line `discountCents`.
+    // Switching INTO `perItem`  mode -> wipe invoice-level discount
+    //                                    (already done; kept for symmetry).
+    final isInvoice = event.mode == SaleDiscountMode.invoice;
+    final clearedItems = isInvoice
+        ? state.items
+            .map((i) => i.copyWith(discountCents: Decimal.zero))
+            .toList()
+        : state.items;
     emit(state.copyWith(
       discountMode: event.mode,
+      items: clearedItems,
       invoiceDiscountCents: Decimal.zero,
+      hasUnsavedChanges: true,
     ));
   }
 
@@ -938,9 +1134,10 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
       emit(state.copyWith(
         items: [...state.items, newItem],
         belowCostWarning: check,
+        hasUnsavedChanges: true,
       ));
     } else {
-      emit(state.copyWith(items: [...state.items, newItem]));
+      emit(state.copyWith(items: [...state.items, newItem], hasUnsavedChanges: true));
     }
   }
 
@@ -962,7 +1159,7 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
       }
       return item;
     }).toList();
-    emit(state.copyWith(items: updatedItems));
+    emit(state.copyWith(items: updatedItems, hasUnsavedChanges: true));
 
     // Re-check below-cost if price was changed
     if (event.unitPriceCents != null) {
@@ -1001,7 +1198,7 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
     Emitter<SaleFormState> emit,
   ) {
     final updatedItems = state.items.where((item) => item.tempId != event.tempId).toList();
-    emit(state.copyWith(items: updatedItems));
+    emit(state.copyWith(items: updatedItems, hasUnsavedChanges: true));
   }
 
   Future<void> _onSubmitted(
@@ -1013,13 +1210,33 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
       return;
     }
 
-    // Below-cost final gate: check all items for unresolved below-cost violations
+    // 1. Require Customer Validation
+    if (state.requireCustomerForSales && state.customerId == null) {
+      emit(state.copyWith(error: 'sales.customer_required'));
+      return;
+    }
+
+    // 2. Discount Validations
+    if (state.totalDiscountCents > Decimal.zero) {
+      if (!state.allowDiscounts) {
+        emit(state.copyWith(error: 'sales.discounts_disabled'));
+        return;
+      }
+      if (state.maxDiscountPercent < 100 && state.subtotalCents > Decimal.zero) {
+        final currentDiscountPercent = (state.totalDiscountCents.toDouble() / state.subtotalCents.toDouble()) * 100;
+        if (currentDiscountPercent > state.maxDiscountPercent) {
+          emit(state.copyWith(error: 'sales.discount_exceeds_max'));
+          return;
+        }
+      }
+    }
+
+    // 3. Below-cost final gate
     final overriddenTempIds = state.belowCostOverrides.map((o) => o.tempId).toSet();
     for (final item in state.items) {
       final costCents = item.variant?.costCents ?? item.product.costCents;
       if (costCents > Decimal.zero && item.unitPriceCents < costCents) {
         if (!overriddenTempIds.contains(item.tempId)) {
-          // This item is below cost and has no override — re-trigger warning
           final check = _belowCostService.check(
             costCents: costCents,
             sellingPriceCents: item.unitPriceCents,
@@ -1033,53 +1250,42 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
       }
     }
 
-    // Cash validation: paid amount must be >= total
-    if (state.paymentMethod == SalePaymentMethod.cash &&
-        state.paidAmountCents < state.totalCents) {
-      emit(state.copyWith(error: 'sales.cash_insufficient'));
-      return;
+    // 4. Payment / Partial Payment Validation
+    // Card is auto-settled in full (effectivePaidCents = totalCents).
+    // Cheque is deferred payment (same as credit — balance goes to customer account).
+    // Only cash needs the partial-payment / insufficient-funds check.
+    if (state.remainingCents > Decimal.zero && state.paymentMethod == SalePaymentMethod.cash) {
+      if (!state.allowPartialPayments) {
+        emit(state.copyWith(error: 'sales.cash_insufficient'));
+        return;
+      }
     }
 
     emit(state.copyWith(isSubmitting: true, error: null));
 
     try {
-      // Distribute invoice-level discount and tax proportionally to each line
-      // so that each item in the DB carries its correct share (needed for returns).
-      final invoiceDiscount = state.discountMode == SaleDiscountMode.invoice
-          ? state.invoiceDiscountCents.toBigInt().toInt()
-          : 0;
-      final invoiceTax = state.taxRatePercent > Decimal.zero
-          ? state.taxCents.toBigInt().toInt()
-          : 0;
-      final totalSubtotal = state.subtotalCents.toBigInt().toInt();
-
+      // SoT for the per-line breakdown is the state-level pricing engine
+      // result: it has already done subtotal → discount → net → invoice-
+      // discount allocation (largest-remainder) → tax-on-adjusted-net.
+      // No parallel arithmetic path lives here, by design (ADR 0002 §2).
       final lineItems = state.items;
-      final distributedDiscounts = _distributeProportionally(
-        invoiceDiscount, lineItems.map((i) => i.subtotalCents.toBigInt().toInt()).toList(), totalSubtotal,
-      );
-      final distributedTaxes = _distributeProportionally(
-        invoiceTax, lineItems.map((i) => i.subtotalCents.toBigInt().toInt()).toList(), totalSubtotal,
-      );
+      final pricing = state.pricing;
 
       final items = <SaleItemInput>[];
       for (int idx = 0; idx < lineItems.length; idx++) {
         final item = lineItems[idx];
-        final effectiveDiscount = invoiceDiscount > 0
-            ? Decimal.fromInt(distributedDiscounts[idx])
-            : item.discountCents;
-        final effectiveTax = invoiceTax > 0
-            ? Decimal.fromInt(distributedTaxes[idx])
-            : item.taxCents;
-        final effectiveTotal = item.subtotalCents - effectiveDiscount + effectiveTax;
+        final line = pricing.lines[idx];
         items.add(SaleItemInput(
           productId: item.product.id,
           variantId: item.variant?.id,
           quantity: item.quantity,
           unitPriceCents: item.unitPriceCents,
-          subtotalCents: item.subtotalCents,
-          discountCents: effectiveDiscount,
-          taxCents: effectiveTax,
-          totalCents: effectiveTotal,
+          subtotalCents: Decimal.fromInt(line.subtotal.cents),
+          // Total per-line discount = entered line discount + share of
+          // the invoice-level discount (zero in `perItem` mode).
+          discountCents: Decimal.fromInt(line.totalLineDiscount.cents),
+          taxCents: Decimal.fromInt(line.tax.cents),
+          totalCents: Decimal.fromInt(line.total.cents),
           employeeId: item.employeeId,
           employeeName: item.employeeName,
         ));
@@ -1124,6 +1330,7 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
           saleDate: state.saleDate,
           dueDate: state.dueDate,
           allowNegativeStock: state.allowNegativeStock,
+          taxInclusiveAtPost: state.taxInclusivePricing,
         );
 
         // Redeem loyalty points if applicable (non-critical, outside transaction)
@@ -1153,6 +1360,7 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
           saleId: saleId,
           isSubmitting: false,
           isSuccess: true,
+          hasUnsavedChanges: false,
         ));
       } else if (state.isEditingPosted) {
         // Editing a posted sale: void original and create new
@@ -1172,6 +1380,7 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
           saleDate: state.saleDate,
           dueDate: state.dueDate,
           allowNegativeStock: state.allowNegativeStock,
+          taxInclusiveAtPost: state.taxInclusivePricing,
         );
 
         CrashlyticsService.instance.logAction('sale_edited_posted', {
@@ -1182,6 +1391,7 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
           saleId: newSaleId,
           isSubmitting: false,
           isSuccess: true,
+          hasUnsavedChanges: false,
         ));
       } else {
         final ok = await _repository.updateSale(
@@ -1199,6 +1409,7 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
           notes: state.notes,
           saleDate: state.saleDate,
           dueDate: state.dueDate,
+          taxInclusiveAtPost: state.taxInclusivePricing,
         );
 
         if (!ok) throw Exception('Failed to update sale');
@@ -1209,6 +1420,7 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
         emit(state.copyWith(
           isSubmitting: false,
           isSuccess: true,
+          hasUnsavedChanges: false,
         ));
       }
     } catch (e, st) {
@@ -1352,6 +1564,10 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
     Emitter<SaleFormState> emit,
   ) async {
     if (_loyaltyRepository == null) return;
+    if (!state.enableLoyaltyPoints) {
+      emit(state.copyWith(clearLoyalty: true));
+      return;
+    }
 
     try {
       final settings = await _loyaltyRepository.getLoyaltySettings();
@@ -1423,31 +1639,7 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
     ));
   }
 
-  /// Distribute [total] proportionally across items based on [weights].
-  /// Uses largest-remainder method so the distributed values sum exactly to [total].
-  List<int> _distributeProportionally(int total, List<int> weights, int weightSum) {
-    if (weights.isEmpty || weightSum <= 0 || total == 0) {
-      return List.filled(weights.length, 0);
-    }
-    final result = List<int>.filled(weights.length, 0);
-    int allocated = 0;
-    final remainders = <int, double>{};
-    for (int i = 0; i < weights.length; i++) {
-      final exact = (total * weights[i]) / weightSum;
-      result[i] = exact.floor();
-      remainders[i] = exact - result[i];
-      allocated += result[i];
-    }
-    // Distribute the remainder (total - allocated) to items with largest fractional parts
-    var remaining = total - allocated;
-    final sorted = remainders.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
-    for (final entry in sorted) {
-      if (remaining <= 0) break;
-      result[entry.key]++;
-      remaining--;
-    }
-    return result;
-  }
+  // _distributeProportionally removed — use TaxCalculationService.distributeProportionally()
 
   void _onTaxSettingsChanged(
     SaleTaxSettingsChanged event,

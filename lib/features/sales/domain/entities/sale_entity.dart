@@ -6,6 +6,7 @@ class SaleEntity extends Equatable {
   final String invoiceNumber;
   final int? customerId;
   final String? customerName;
+  final String? customerPhone;
   final int? employeeId;
   final String? employeeName;
   final Decimal subtotalCents;
@@ -27,6 +28,7 @@ class SaleEntity extends Equatable {
     required this.invoiceNumber,
     this.customerId,
     this.customerName,
+    this.customerPhone,
     this.employeeId,
     this.employeeName,
     required this.subtotalCents,
@@ -55,7 +57,7 @@ class SaleEntity extends Equatable {
 
   @override
   List<Object?> get props => [
-        id, invoiceNumber, customerId, customerName, employeeId,
+        id, invoiceNumber, customerId, customerName, customerPhone, employeeId,
         subtotalCents, taxCents, discountCents, totalCents, paidAmountCents,
         currencyId, paymentMethod, status, notes, saleDate, dueDate,
         createdAt, updatedAt,
@@ -130,6 +132,8 @@ class SaleReturnEntity extends Equatable {
   final int saleId;
   final String? saleInvoiceNumber;
   final String? customerName;
+  final String? customerPhone;
+  final int? customerId;
   final String returnNumber;
   final Decimal subtotalCents;
   final Decimal discountCents;
@@ -143,11 +147,20 @@ class SaleReturnEntity extends Equatable {
   final DateTime returnDate;
   final DateTime createdAt;
 
+  /// True if this return is an adjustment (not linked to an invoice).
+  final bool isAdjustment;
+
+  /// Unique identifier across both linked and adjustment returns.
+  /// Format: "SR-{id}" for linked, "SRA-{id}" for adjustment.
+  final String unifiedId;
+
   SaleReturnEntity({
     required this.id,
     required this.saleId,
     this.saleInvoiceNumber,
     this.customerName,
+    this.customerPhone,
+    this.customerId,
     required this.returnNumber,
     Decimal? subtotalCents,
     Decimal? discountCents,
@@ -160,9 +173,12 @@ class SaleReturnEntity extends Equatable {
     this.reason,
     required this.returnDate,
     required this.createdAt,
+    this.isAdjustment = false,
+    String? unifiedId,
   }) : subtotalCents = subtotalCents ?? Decimal.zero,
        discountCents = discountCents ?? Decimal.zero,
-       taxCents = taxCents ?? Decimal.zero;
+       taxCents = taxCents ?? Decimal.zero,
+       unifiedId = unifiedId ?? (isAdjustment ? 'SRA-$id' : 'SR-$id');
 
   bool get isDraft => status == 'draft';
   bool get isPosted => status == 'posted';
@@ -170,10 +186,11 @@ class SaleReturnEntity extends Equatable {
 
   @override
   List<Object?> get props => [
-        id, saleId, saleInvoiceNumber, customerName, returnNumber,
+        id, saleId, saleInvoiceNumber, customerName, customerPhone,
+        customerId, returnNumber,
         subtotalCents, discountCents, taxCents, totalCents,
         currencyId, status, dispositionType, refundMethod, reason,
-        returnDate, createdAt,
+        returnDate, createdAt, isAdjustment, unifiedId,
       ];
 }
 

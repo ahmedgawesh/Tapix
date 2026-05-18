@@ -11,8 +11,10 @@ import '../../../../core/widgets/theme_toggle_button.dart';
 import '../../domain/entities/product_entity.dart';
 import '../../domain/repositories/product_repository.dart';
 import '../bloc/products_bloc.dart';
+import '../bloc/expiry_summaries_bloc.dart';
 import '../bloc/variant_previews_bloc.dart';
 import '../bloc/variant_summaries_bloc.dart';
+import '../../domain/entities/expiry_summary.dart';
 import '../widgets/product_tile_widget.dart';
 import '../widgets/product_search_widget.dart';
 import '../widgets/product_filter_widget.dart';
@@ -27,6 +29,7 @@ class ProductListScreen extends StatelessWidget {
         BlocProvider(create: (context) => sl<ProductsBloc>()),
         BlocProvider(create: (context) => sl<VariantSummariesBloc>()),
         BlocProvider(create: (context) => sl<VariantPreviewsBloc>()),
+        BlocProvider(create: (context) => sl<ExpirySummariesBloc>()),
       ],
       child: const _ProductListView(),
     );
@@ -344,8 +347,33 @@ class _ProductListViewState extends State<_ProductListView> {
 
     if (confirmed != true) return;
 
+    // Stock-aware smart bulk delete: for any product whose on-hand stock is
+    // > 0 we route through `writeOffAndDeleteProduct` so a balanced Shrinkage
+    // entry (Dr 5800 / Cr 1200) is posted before the row is removed/deactivated.
+    // This keeps Σ(stock × cost) ≡ balance of 1200 Inventory in the GL.
+    // Products with zero stock fall back to the plain `smartDeleteProduct`
+    // path. We tally hard / soft / written-off counts for the summary
+    // snackbar so the operator sees exactly what was booked.
+    var hardDeleted = 0;
+    var deactivated = 0;
+    var writtenOff = 0;
     try {
-      await repository.bulkDeleteProducts(_selectedProductIds.toList());
+      for (final id in _selectedProductIds.toList()) {
+        final p = await repository.getProductById(id);
+        final hadStock = (p?.stockQuantity ?? 0) > 0;
+        final result = hadStock
+            ? await repository.writeOffAndDeleteProduct(
+                productId: id,
+                reason: 'product_form.writeoff_reason'.tr(),
+              )
+            : await repository.smartDeleteProduct(id);
+        if (hadStock) writtenOff++;
+        if (result.wasDeleted) {
+          hardDeleted++;
+        } else {
+          deactivated++;
+        }
+      }
     } catch (_) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -358,9 +386,20 @@ class _ProductListViewState extends State<_ProductListView> {
     }
 
     if (!context.mounted) return;
+    final cs = Theme.of(context).colorScheme;
+    final base = deactivated == 0
+        ? 'products.delete_success'.tr()
+        : (hardDeleted == 0
+            ? 'product_form.deactivated_success'.tr(args: [deactivated.toString()])
+            : '${'products.delete_success'.tr()} '
+                '(${'product_form.deactivated_success'.tr(args: [deactivated.toString()])})');
+    final summary = writtenOff > 0
+        ? '$base · ${'product_form.writeoff_bulk_summary'.tr(args: [writtenOff.toString()])}'
+        : base;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('products.delete_success'.tr()),
+        content: Text(summary),
+        backgroundColor: deactivated > 0 ? cs.tertiary : cs.primary,
       ),
     );
 
@@ -676,6 +715,22 @@ class _ProductListViewState extends State<_ProductListView> {
                           previews = previewsState.previousData ?? const {};
                         }
 
+                        // Phase C — expiry-tracked products surface a
+                        // near-expiry / expired badge in their tile. The map
+                        // is keyed by `productId`; absence means "no badge".
+                        final expiryState = context
+                            .watch<ExpirySummariesBloc>()
+                            .state;
+                        Map<int, ExpirySummary> expirySummaries = const {};
+                        if (expiryState
+                            is RealtimeSuccess<Map<int, ExpirySummary>>) {
+                          expirySummaries = expiryState.data;
+                        } else if (expiryState
+                            is RealtimeLoading<Map<int, ExpirySummary>>) {
+                          expirySummaries =
+                              expiryState.previousData ?? const {};
+                        }
+
                         return ListView.builder(
                           controller: _scrollController,
                           padding: const EdgeInsets.only(bottom: 80),
@@ -710,6 +765,22 @@ class _ProductListViewState extends State<_ProductListView> {
                                 totalVariantStock: totalStock,
                                 previewSizeName: preview?.sizeName,
                                 previewColorHex: preview?.colorHex,
+                                expirySummary: expirySummaries[p.id],
+                                onCheckboxChanged: (_) {
+                                  setState(() {
+                                    if (!_isSelectionMode) {
+                                      _isSelectionMode = true;
+                                    }
+                                    if (_selectedProductIds.contains(p.id)) {
+                                      _selectedProductIds.remove(p.id);
+                                    } else {
+                                      _selectedProductIds.add(p.id);
+                                    }
+                                    if (_selectedProductIds.isEmpty) {
+                                      _isSelectionMode = false;
+                                    }
+                                  });
+                                },
                                 onTap: (_) async {
                                   if (_isSelectionMode) {
                                     setState(() {
@@ -730,6 +801,7 @@ class _ProductListViewState extends State<_ProductListView> {
                                   context.read<ProductsBloc>().refresh();
                                   context.read<VariantSummariesBloc>().refresh();
                                   context.read<VariantPreviewsBloc>().refresh();
+                                  context.read<ExpirySummariesBloc>().refresh();
                                 },
                                 onLongPress: (_) {
                                   if (!_isSelectionMode) {

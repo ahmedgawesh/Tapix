@@ -119,6 +119,18 @@ class _ReportsHubView extends StatelessWidget {
                 subtitle: 'reports.category_movement_report_desc'.tr(),
                 onTap: () => context.push('/reports/category-movement'),
               ),
+              _ReportTile(
+                icon: LucideIcons.calendarClock,
+                title: 'reports.expiry_report_title'.tr(),
+                subtitle: 'reports.expiry_report_subtitle'.tr(),
+                onTap: () => context.push('/reports/expiry'),
+              ),
+              _ReportTile(
+                icon: LucideIcons.package,
+                title: 'batch_management.title'.tr(),
+                subtitle: 'batch_management.subtitle'.tr(),
+                onTap: () => context.push('/reports/batches'),
+              ),
               const SizedBox(height: 24),
 
               // Customer Reports Section

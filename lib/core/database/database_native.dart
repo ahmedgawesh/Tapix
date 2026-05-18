@@ -3,8 +3,6 @@ import 'package:drift/native.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
-import 'package:sqlcipher_flutter_libs/sqlcipher_flutter_libs.dart';
-import 'package:sqlite3/open.dart';
 import 'dart:io';
 import 'dart:developer' as developer;
 
@@ -14,18 +12,15 @@ import 'database_encryption.dart';
 ///
 /// Encryption flow:
 /// 1. Check if encryption is enabled via [DatabaseEncryptionKeyManager].
-/// 2. If enabled, open with `PRAGMA key` using SQLCipher / SQLite3MultipleCiphers.
+/// 2. If enabled, open with `PRAGMA key` using SQLite3MultipleCiphers.
 /// 3. If an existing unencrypted database exists and encryption is newly enabled,
 ///    migrate it by exporting and re-keying.
 /// 4. If encryption is not enabled, open normally (backward compatible).
 ///
 /// Existing unencrypted databases continue to work without any change.
+/// SQLite3MultipleCiphers is compatible with existing SQLCipher databases.
 Future<QueryExecutor> openDatabase() async {
-  // Initialize SQLCipher on Android (must be called before any sqlite3 operations)
-  if (Platform.isAndroid) {
-    await applyWorkaroundToOpenSqlCipherOnOldAndroidVersions();
-    open.overrideFor(OperatingSystem.android, openCipherOnAndroid);
-  }
+  // sqlite3 v3 uses build hooks — no manual library loading needed.
 
   // Use getApplicationSupportDirectory instead of getApplicationDocumentsDirectory
   // so the database is deleted when the app is uninstalled on Android
@@ -68,6 +63,9 @@ Future<QueryExecutor> openDatabase() async {
     return NativeDatabase(
       dbFile,
       setup: (rawDb) {
+        // SQLite3MultipleCiphers: set cipher to sqlcipher-compatible mode
+        rawDb.execute("PRAGMA cipher = 'sqlcipher';");
+        rawDb.execute('PRAGMA legacy = 4;');
         rawDb.execute("PRAGMA key = '$escapedKey';");
       },
     );

@@ -5,6 +5,9 @@ import 'package:go_router/go_router.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 
 import '../../../../core/bloc/realtime_bloc.dart';
+import '../../../../core/di/injection_container.dart';
+import '../../../../core/services/biometric_service.dart';
+import '../../../settings/presentation/bloc/app_settings_bloc.dart';
 import '../../domain/entities/user_entity.dart';
 import '../bloc/auth_bloc.dart';
 import '../widgets/auth_text_field.dart';
@@ -22,6 +25,22 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
   bool _rememberMe = false;
   bool _obscurePassword = true;
+  bool _biometricAvailable = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkBiometricAvailability();
+  }
+
+  Future<void> _checkBiometricAvailability() async {
+    try {
+      final settings = context.read<AppSettingsBloc>().state.settings;
+      if (!settings.enableBiometricLogin) return;
+      final available = await sl<BiometricService>().isBiometricAvailable();
+      if (mounted) setState(() => _biometricAvailable = available);
+    } catch (_) {}
+  }
 
   @override
   void dispose() {
@@ -198,6 +217,20 @@ class _LoginScreenState extends State<LoginScreen> {
                           );
                         },
                       ),
+                      if (_biometricAvailable) ...[                        const SizedBox(height: 16),
+                        OutlinedButton.icon(
+                          onPressed: () {
+                            context.read<AuthBloc>().add(
+                              const AuthBiometricLoginRequested(),
+                            );
+                          },
+                          icon: const Icon(LucideIcons.fingerprint),
+                          label: Text('auth.biometric_login'.tr()),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),

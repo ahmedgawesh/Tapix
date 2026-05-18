@@ -49,6 +49,7 @@ class AppSettings {
   // ── Security ──
   final bool enableSessionTimeout; // Enable/disable session timeout
   final int sessionTimeoutMinutes;
+  final int rememberMeDurationHours; // How long "Remember Me" keeps user logged in (max 168h = 7 days)
   final bool requirePinForVoidRefund;
   final bool enableBiometricLogin;
   final bool enableDatabaseEncryption;
@@ -109,6 +110,7 @@ class AppSettings {
     // Security
     this.enableSessionTimeout = true,
     this.sessionTimeoutMinutes = 30,
+    this.rememberMeDurationHours = 72,
     this.requirePinForVoidRefund = false,
     this.enableBiometricLogin = false,
     this.enableDatabaseEncryption = false,
@@ -161,6 +163,7 @@ class AppSettings {
     int? pointsPerCurrencyUnit,
     bool? enableSessionTimeout,
     int? sessionTimeoutMinutes,
+    int? rememberMeDurationHours,
     bool? requirePinForVoidRefund,
     bool? enableBiometricLogin,
     bool? enableDatabaseEncryption,
@@ -209,6 +212,7 @@ class AppSettings {
       pointsPerCurrencyUnit: pointsPerCurrencyUnit ?? this.pointsPerCurrencyUnit,
       enableSessionTimeout: enableSessionTimeout ?? this.enableSessionTimeout,
       sessionTimeoutMinutes: sessionTimeoutMinutes ?? this.sessionTimeoutMinutes,
+      rememberMeDurationHours: rememberMeDurationHours ?? this.rememberMeDurationHours,
       requirePinForVoidRefund: requirePinForVoidRefund ?? this.requirePinForVoidRefund,
       enableBiometricLogin: enableBiometricLogin ?? this.enableBiometricLogin,
       enableDatabaseEncryption: enableDatabaseEncryption ?? this.enableDatabaseEncryption,
@@ -259,6 +263,7 @@ class AppSettings {
         'pointsPerCurrencyUnit': pointsPerCurrencyUnit,
         'enableSessionTimeout': enableSessionTimeout,
         'sessionTimeoutMinutes': sessionTimeoutMinutes,
+        'rememberMeDurationHours': rememberMeDurationHours,
         'requirePinForVoidRefund': requirePinForVoidRefund,
         'enableBiometricLogin': enableBiometricLogin,
         'enableDatabaseEncryption': enableDatabaseEncryption,
@@ -311,6 +316,7 @@ class AppSettings {
       pointsPerCurrencyUnit: (m['pointsPerCurrencyUnit'] as int?) ?? 1,
       enableSessionTimeout: (m['enableSessionTimeout'] as bool?) ?? true,
       sessionTimeoutMinutes: (m['sessionTimeoutMinutes'] as int?) ?? 30,
+      rememberMeDurationHours: (m['rememberMeDurationHours'] as int?) ?? 72,
       requirePinForVoidRefund: (m['requirePinForVoidRefund'] as bool?) ?? false,
       enableBiometricLogin: (m['enableBiometricLogin'] as bool?) ?? false,
       enableDatabaseEncryption: (m['enableDatabaseEncryption'] as bool?) ?? false,

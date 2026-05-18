@@ -17,7 +17,7 @@ void main() {
 
   group('Database Migration', () {
     test('creates all tables successfully', () async {
-      final tables = await database.customSelect('SELECT name FROM sqlite_master WHERE type="table"').get();
+      final tables = await database.customSelect("SELECT name FROM sqlite_master WHERE type = 'table'").get();
       final tableNames = tables.map((row) => row.read<String>('name')).toList();
       
       expect(tableNames, contains('currencies'));
@@ -29,7 +29,7 @@ void main() {
     });
 
     test('creates indexes successfully', () async {
-      final indexes = await database.customSelect('SELECT name FROM sqlite_master WHERE type="index"').get();
+      final indexes = await database.customSelect("SELECT name FROM sqlite_master WHERE type = 'index'").get();
       final indexNames = indexes.map((row) => row.read<String>('name')).toList();
       
       expect(indexNames, contains('idx_sales_customer_date'));
@@ -91,7 +91,7 @@ void main() {
       await database.createIndexesForTest();
       await database.createIndexesForTest();
 
-      final indexes = await database.customSelect('SELECT name FROM sqlite_master WHERE type="index"').get();
+      final indexes = await database.customSelect("SELECT name FROM sqlite_master WHERE type = 'index'").get();
       final indexNames = indexes.map((row) => row.read<String>('name')).toList();
 
       expect(indexNames, contains('idx_sales_customer_date'));

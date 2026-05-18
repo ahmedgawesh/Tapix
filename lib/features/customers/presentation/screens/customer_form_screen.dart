@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/widgets/inputs/select_all_on_focus.dart';
 import '../../domain/repositories/customer_repository.dart';
 import '../bloc/customer_form_bloc.dart';
 
@@ -316,6 +317,7 @@ class _CustomerFormContentState extends State<_CustomerFormContent> {
                     ),
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                     textInputAction: TextInputAction.done,
+                    onTap: () => selectAllText(_balanceController),
                     onChanged: (value) => context.read<CustomerFormBloc>().add(
                           CustomerFormBalanceChanged(value),
                         ),

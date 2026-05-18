@@ -12,7 +12,7 @@ class _ExportFileSaverIo implements ExportFileSaver {
     required String filename,
     required String mimeType,
   }) async {
-    final path = await FilePicker.platform.saveFile(
+    final path = await FilePicker.saveFile(
       dialogTitle: filename,
       fileName: filename,
       bytes: bytes,

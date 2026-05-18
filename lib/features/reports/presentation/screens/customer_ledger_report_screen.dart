@@ -9,6 +9,7 @@ import '../../../../core/services/currency_service.dart';
 import '../../services/customer_ledger_pdf_service.dart';
 import '../bloc/customer_ledger_report_bloc.dart';
 import '../widgets/date_range_selector.dart';
+import '../widgets/searchable_party_selector.dart';
 
 class CustomerLedgerReportScreen extends StatelessWidget {
   const CustomerLedgerReportScreen({super.key});
@@ -193,48 +194,19 @@ class _CustomerSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final cs = sl<CurrencyService>();
-
-    return DropdownButtonFormField<int>(
-      // ignore: deprecated_member_use
-      value: selectedId,
-      decoration: InputDecoration(
-        labelText: 'reports.select_customer_ledger'.tr(),
-        prefixIcon: Icon(LucideIcons.user, color: colorScheme.primary),
-        border: const OutlineInputBorder(),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      ),
-      isExpanded: true,
-      items: customers.map((c) {
-        return DropdownMenuItem<int>(
-          value: c.id,
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  c.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                cs.formatCents(c.balanceCents),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: c.balanceCents > 0
-                      ? colorScheme.error
-                      : colorScheme.primary,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        );
-      }).toList(),
-      onChanged: (value) => onChanged(value),
+    return SearchablePartySelector(
+      labelText: 'reports.select_customer_ledger'.tr(),
+      prefixIcon: LucideIcons.user,
+      selectedId: selectedId,
+      onChanged: onChanged,
+      options: customers
+          .map((c) => SearchablePartyOption(
+                id: c.id,
+                name: c.name,
+                phone: c.phone,
+                balanceCents: c.balanceCents,
+              ))
+          .toList(),
     );
   }
 }

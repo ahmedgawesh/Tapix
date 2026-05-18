@@ -9,6 +9,10 @@ abstract class ProductRepository {
   Future<Product?> findBySku(String sku);
   Future<Product?> findByBarcode(String barcode);
   Future<Product?> findByName(String name);
+  /// One-shot fetch of a product by primary key. Used by guards that need a
+  /// synchronous server-authoritative snapshot (e.g. preserving ledger-
+  /// controlled fields like `stockQuantity` and `costCents` across edits).
+  Future<Product?> getProductById(int id);
   
   Future<List<Product>> filterProducts({
     int? categoryId,
@@ -62,11 +66,68 @@ abstract class ProductRepository {
     int salesTaxRateBps = 0,
     bool isActive = true,
     bool trackInventory = true,
+    String costingMethod = 'wac',
+    // Layer 2 of the two-layer inventory architecture. Must be one of
+    // 'standard' | 'batch' | 'batch_expiry'. Threaded through create so the
+    // user-selected tracking type lands in the initial INSERT rather than
+    // falling back to the DB default — the previous omission caused the
+    // first-save-loses-selection bug. Layer 1 (`costingMethod`) is kept in
+    // sync by the caller for the expand-migrate-contract window.
+    String inventoryTrackingType = 'standard',
   });
 
   Future<bool> updateProduct(Product product);
+
+  /// Returns a non-null reason ('has_stock' or 'has_consumptions') when the
+  /// product's costing method is locked, or `null` when it is editable.
+  /// See `ProductDao.getCostingMethodLockReason` for full semantics.
+  Future<String?> getCostingMethodLockReason(int productId);
+
+  /// Persists a new costing method ('wac' or 'fifo') for [productId].
+  /// Refuses the change when the product is locked, returning the lock
+  /// reason so the UI can surface a precise message. Returns `null` on
+  /// success.
+  Future<String?> setCostingMethod({
+    required int productId,
+    required String method,
+  });
+
+  /// Returns the per-product inventory tracking type — Layer 2 of the
+  /// two-layer inventory architecture. One of `'standard'` | `'batch'` |
+  /// `'batch_expiry'`. Defaults to `'standard'` when the row is missing.
+  Future<String> getInventoryTrackingType(int productId);
+
+  /// Persists a new inventory tracking type ('standard' | 'batch' |
+  /// 'batch_expiry') for [productId]. Re-uses the same lock semantics as
+  /// [setCostingMethod] (locked once stock or batch consumptions exist).
+  /// Returns `null` on success or a non-null lock-reason string on refusal.
+  Future<String?> setInventoryTrackingType({
+    required int productId,
+    required String trackingType,
+  });
   Future<int> deleteProduct(int id);
   Future<int> bulkDeleteProducts(List<int> ids);
+
+  /// Count how many historical references exist for [productId] across
+  /// sale_items / purchase_items / adjustment-return items. Used to drive
+  /// the smart-delete decision in the UI before confirming.
+  Future<int> countProductReferences(int productId);
+
+  /// Deletes the product if there are no historical references (invoices,
+  /// returns, etc.); otherwise deactivates it (soft-delete) — preserving
+  /// audit trail in line with QuickBooks/Xero/Odoo behaviour.
+  /// Returns whether the row was hard-deleted and the reference count.
+  Future<ProductDeletionResult> smartDeleteProduct(int productId);
+
+  /// Atomic "write-off-and-delete" for a product that still carries on-hand
+  /// stock. Posts one Shrinkage adjustment per variant with stock>0
+  /// (Dr 5800 / Cr 1200), then runs [smartDeleteProduct]. Mirrors the
+  /// variant-level helper and keeps Σ(stock×cost) ≡ balance of 1200 in the
+  /// general ledger after the row is removed/deactivated.
+  Future<ProductDeletionResult> writeOffAndDeleteProduct({
+    required int productId,
+    required String reason,
+  });
 
   Future<int> deactivateProduct(int id);
   Future<int> bulkDeactivateProducts(List<int> ids);
@@ -93,6 +154,37 @@ abstract class ProductRepository {
 
   /// Create a price history record
   Future<void> createPriceHistory(PriceHistory history);
+
+  /// Runs [action] inside a single DB transaction. Used by the product form
+  /// bloc to atomically perform the sequence (update product → ensure default
+  /// variant → update variant → optionally deactivate dimensional variants)
+  /// so a partial failure never leaves the product and its variants out of
+  /// sync — which would corrupt stock totals and journal references.
+  Future<T> runInTransaction<T>(Future<T> Function() action);
+
+  /// Per-product batch-expiry health summary. Emits a map keyed by
+  /// `productId` covering only products that are tracked as `batch_expiry`
+  /// **and** carry on-hand stock with at least one dated batch. Each value
+  /// reports the quantity already past expiry and the nearest upcoming
+  /// expiry date (or `null` when every remaining batch is expired).
+  ///
+  /// Drives the product list near-expiry / expired badges (Phase C) and
+  /// will be re-used by the Phase E expiry alert dashboard.
+  Stream<Map<int, ({int expiredQty, DateTime? nextExpiry})>>
+      watchExpirySummaries();
+}
+
+/// Result of a smart-delete attempt: either the product was hard-deleted
+/// (no historical references) or it was deactivated because it is referenced
+/// by invoices / returns and must be kept for audit / accounting integrity.
+class ProductDeletionResult {
+  final bool wasDeleted;
+  final int referenceCount;
+  const ProductDeletionResult({
+    required this.wasDeleted,
+    required this.referenceCount,
+  });
+  bool get wasDeactivated => !wasDeleted;
 }
 
 /// Data class for bulk product creation

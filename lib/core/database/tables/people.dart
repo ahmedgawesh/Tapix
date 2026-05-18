@@ -26,6 +26,7 @@ class Employees extends Table {
   /// Unique employee code (e.g., EMP001)
   TextColumn get employeeCode => text().unique().nullable()();
   /// Link to users table for system access
+  @ReferenceName('employeeUser')
   IntColumn get userId => integer().nullable().references(Users, #id, onDelete: KeyAction.setNull)();
   TextColumn get name => text()();
   TextColumn get nameAr => text().nullable()();
@@ -97,6 +98,7 @@ class Commissions extends Table {
 @DataClassName('Attendance')
 class Attendances extends Table {
   IntColumn get id => integer().autoIncrement()();
+  @ReferenceName('attendances')
   IntColumn get employeeId => integer().references(Employees, #id, onDelete: KeyAction.cascade)();
   /// Date of attendance (stored as date only)
   DateTimeColumn get attendanceDate => dateTime()();
@@ -114,6 +116,7 @@ class Attendances extends Table {
   IntColumn get overtimeMinutes => integer().withDefault(const Constant(0))();
   TextColumn get notes => text().nullable()();
   /// Approved by manager
+  @ReferenceName('approvedAttendances')
   IntColumn get approvedBy => integer().nullable().references(Employees, #id, onDelete: KeyAction.setNull)();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
@@ -128,6 +131,7 @@ class Attendances extends Table {
 @DataClassName('LeaveRequest')
 class LeaveRequests extends Table {
   IntColumn get id => integer().autoIncrement()();
+  @ReferenceName('leaveRequests')
   IntColumn get employeeId => integer().references(Employees, #id, onDelete: KeyAction.cascade)();
   /// Leave type: annual, sick, personal, unpaid, maternity, paternity
   TextColumn get leaveType => text()();
@@ -137,6 +141,7 @@ class LeaveRequests extends Table {
   TextColumn get reason => text().nullable()();
   /// Status: pending, approved, rejected, cancelled
   TextColumn get status => text().withDefault(const Constant('pending'))();
+  @ReferenceName('approvedLeaveRequests')
   IntColumn get approvedBy => integer().nullable().references(Employees, #id, onDelete: KeyAction.setNull)();
   DateTimeColumn get approvedAt => dateTime().nullable()();
   TextColumn get rejectionReason => text().nullable()();
@@ -225,6 +230,7 @@ class EmployeeDocuments extends Table {
   TextColumn get mimeType => text().nullable()();
   DateTimeColumn get expiryDate => dateTime().nullable()();
   BoolColumn get isActive => boolean().withDefault(const Constant(true))();
+  @ReferenceName('uploadedDocuments')
   IntColumn get uploadedBy => integer().nullable().references(Users, #id, onDelete: KeyAction.setNull)();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 }
@@ -267,6 +273,7 @@ class PerformanceMetrics extends Table {
   /// Period identifier (e.g., "2026-01" for monthly, "2026-Q1" for quarterly)
   TextColumn get periodIdentifier => text()();
   DateTimeColumn get recordedAt => dateTime().withDefault(currentDateAndTime)();
+  @ReferenceName('recordedPerformanceMetrics')
   IntColumn get recordedBy => integer().nullable().references(Users, #id, onDelete: KeyAction.setNull)();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 }

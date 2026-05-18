@@ -18,10 +18,16 @@ enum JournalEntryTypeEnum {
   saleReturn,  // Auto-generated from sale return
   purchase,    // Auto-generated from purchase
   purchaseReturn, // Auto-generated from purchase return
+  purchaseReturnAdjustment, // Auto-generated from purchase adjustment return (unlinked)
+  saleReturnAdjustment,     // Auto-generated from sale adjustment return (unlinked)
   payment,     // Auto-generated from payment
   expense,     // Auto-generated from expense
   reversal,    // Reversal of another entry (void)
   adjustment,  // Balance adjustment
+  inventoryShrinkage,     // Manual stock loss (theft / damage / expiry)
+  inventoryGain,          // Manual stock surplus (found stock / count correction)
+  inventoryRevaluation,   // Unit-cost change without physical movement
+  inventoryOpeningBalance,// Starting stock for a newly-created product/variant
 }
 
 /// Journal entry status
@@ -70,7 +76,9 @@ class JournalEntries extends Table {
   IntColumn get totalDebitCents => integer().map(const MoneyConverter()).withDefault(const Constant(0))();
   IntColumn get totalCreditCents => integer().map(const MoneyConverter()).withDefault(const Constant(0))();
   
+  @ReferenceName('createdJournalEntries')
   IntColumn get createdBy => integer().nullable().references(Users, #id)();
+  @ReferenceName('postedJournalEntries')
   IntColumn get postedBy => integer().nullable().references(Users, #id)();
   DateTimeColumn get postedAt => dateTime().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
@@ -98,6 +106,7 @@ class AccountingPeriods extends Table {
   DateTimeColumn get endDate => dateTime()();
   BoolColumn get isClosed => boolean().withDefault(const Constant(false))();
   DateTimeColumn get closedAt => dateTime().nullable()();
+  @ReferenceName('closedAccountingPeriods')
   IntColumn get closedBy => integer().nullable().references(Users, #id)();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();

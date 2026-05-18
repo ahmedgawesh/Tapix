@@ -9,10 +9,18 @@ import 'package:decimal/decimal.dart';
 
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../../../core/services/void_impact_analyzer.dart';
+import '../../../../core/database/app_database.dart';
+import '../../../../core/widgets/pin_verification_dialog.dart';
+import '../../../../core/widgets/void_impact_dialog.dart';
 import '../../../auth/auth.dart';
+import '../../../settings/presentation/bloc/app_settings_bloc.dart';
 import '../../domain/entities/sale_entity.dart';
 import '../../domain/repositories/sale_repository.dart';
 import '../services/sale_pdf_service.dart';
+import '../../../shared/widgets/unified_return_search_sheet.dart';
+import '../../../../core/services/unified_return_service.dart';
+import '../../../inventory/presentation/widgets/batch_flow_widget.dart';
 
 class SaleDetailScreen extends StatefulWidget {
   final int saleId;
@@ -133,7 +141,17 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
     if (sale.isCompleted) {
       actions.add(
         FilledButton.tonalIcon(
-          onPressed: () => context.push('/sales/returns/new?saleId=${sale.id}'),
+          onPressed: () async {
+            if (!mounted) return;
+            showUnifiedReturnSearchSheet(
+              context,
+              side: ReturnSide.sale,
+              partyId: sale.customerId,
+              partyName: sale.customerName,
+              invoiceId: sale.id,
+              invoiceNumber: sale.invoiceNumber,
+            );
+          },
           icon: const Icon(LucideIcons.undo2, size: 16),
           label: Text('sales.create_return'.tr()),
         ),
@@ -226,29 +244,55 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
         context.push('/sales/${widget.saleId}/edit?posted=true');
         break;
       case 'void':
-        final confirmed = await showDialog<bool>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: Text('sales.void_confirm_title'.tr()),
-            content: Text('sales.void_confirm_message'.tr()),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: Text('common.cancel'.tr()),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                style: FilledButton.styleFrom(
-                  backgroundColor: Theme.of(ctx).colorScheme.error,
-                ),
-                child: Text('sales.void_sale'.tr()),
-              ),
-            ],
-          ),
-        );
-        if (confirmed == true) {
+        // Check if PIN is required for void/refund
+        final settings = context.read<AppSettingsBloc>().state.settings;
+        if (settings.requirePinForVoidRefund) {
+          final pinOk = await showPinVerificationDialog(context);
+          if (!pinOk || !context.mounted) return;
+        }
+        if (!context.mounted) return;
+        // 2026-05-13 — pre-flight integrity check via VoidImpactAnalyzer.
+        // Surfaces entangled adjustment returns, projected negative stock,
+        // and estimated GL impact (AR/Inventory) BEFORE the void runs.
+        final report = await VoidImpactAnalyzer(sl<AppDatabase>())
+            .analyzeSaleVoid(widget.saleId);
+        if (!context.mounted) return;
+        final confirmed = await VoidImpactDialog.show(context, report);
+        if (!confirmed) break;
+        if (!context.mounted) return;
+        final messenger = ScaffoldMessenger.of(context);
+        try {
           await repo.voidSale(widget.saleId);
           await _loadSale();
+          if (!mounted) return;
+          messenger.showSnackBar(
+            SnackBar(
+              content: Text('sales.void_success'.tr()),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        } on VoidBlockedByImpactException catch (e) {
+          // Defensive: blocker added between analyze and confirm.
+          if (!context.mounted) return;
+          await VoidImpactDialog.show(context, e.report);
+        } catch (e) {
+          if (!context.mounted) return;
+          final errorMsg = e.toString().replaceFirst('Exception: ', '');
+          await showDialog<void>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              icon: Icon(LucideIcons.alertTriangle,
+                  color: Theme.of(ctx).colorScheme.error, size: 32),
+              title: Text('sales.void_failed_title'.tr()),
+              content: Text(errorMsg),
+              actions: [
+                FilledButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: Text('common.ok'.tr()),
+                ),
+              ],
+            ),
+          );
         }
         break;
     }
@@ -284,6 +328,8 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
                 const SizedBox(height: 16),
                 _buildReturnsCard(context, cs),
               ],
+              const SizedBox(height: 16),
+              BatchFlowWidget(saleId: widget.saleId),
             ],
           ),
         ),
@@ -304,6 +350,8 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
           const SizedBox(height: 16),
           _buildReturnsCard(context, cs),
         ],
+        const SizedBox(height: 16),
+        BatchFlowWidget(saleId: widget.saleId),
         const SizedBox(height: 16),
         _buildTotalsCard(context, sale, cs),
         if (sale.notes != null && sale.notes!.isNotEmpty) ...[          const SizedBox(height: 16),
@@ -757,6 +805,14 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
                                 '-${cs.format(item.discountCents.toBigInt().toInt())}',
                                 style: theme.textTheme.bodySmall?.copyWith(
                                   color: colorScheme.tertiary,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            if (item.taxCents > Decimal.zero)
+                              Text(
+                                '+${cs.format(item.taxCents.toBigInt().toInt())}',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: colorScheme.secondary,
                                   fontSize: 11,
                                 ),
                               ),

@@ -1,7 +1,9 @@
 import 'package:decimal/decimal.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
+import 'package:uuid/uuid.dart';
 
+import '../../../../core/services/return_calculation_service.dart';
 import '../../domain/entities/sale_entity.dart';
 import '../../domain/repositories/sale_repository.dart';
 
@@ -60,30 +62,23 @@ class SaleReturnLineItem extends Equatable {
 }
 
 /// ERP Golden Rule: Proportional reversal of original sale transaction.
+/// Delegates to [ReturnCalculationService.computeProportionalReturn].
 SaleReturnLineItem _computeProportionalSaleReturn(
     SaleItemEntity original, int returnQty) {
-  final origQty = original.quantity;
-  if (origQty <= 0) {
-    return SaleReturnLineItem(
-      originalItem: original,
-      returnQuantity: returnQty,
-      subtotalCents: Decimal.zero,
-      discountCents: Decimal.zero,
-      taxCents: Decimal.zero,
-      refundCents: Decimal.zero,
-    );
-  }
-  final subtotalInt = (original.subtotalCents.toBigInt().toInt() * returnQty) ~/ origQty;
-  final discountInt = (original.discountCents.toBigInt().toInt() * returnQty) ~/ origQty;
-  final taxInt = (original.taxCents.toBigInt().toInt() * returnQty) ~/ origQty;
-  final refundInt = subtotalInt - discountInt + taxInt;
+  final result = ReturnCalculationService.computeProportionalReturn(
+    originalQuantity: original.quantity,
+    returnQuantity: returnQty,
+    originalSubtotalCents: original.subtotalCents.toBigInt().toInt(),
+    originalDiscountCents: original.discountCents.toBigInt().toInt(),
+    originalTaxCents: original.taxCents.toBigInt().toInt(),
+  );
   return SaleReturnLineItem(
     originalItem: original,
     returnQuantity: returnQty,
-    subtotalCents: Decimal.fromInt(subtotalInt),
-    discountCents: Decimal.fromInt(discountInt),
-    taxCents: Decimal.fromInt(taxInt),
-    refundCents: Decimal.fromInt(refundInt),
+    subtotalCents: Decimal.fromInt(result.subtotalCents),
+    discountCents: Decimal.fromInt(result.discountCents),
+    taxCents: Decimal.fromInt(result.taxCents),
+    refundCents: Decimal.fromInt(result.refundCents),
   );
 }
 
@@ -95,6 +90,9 @@ class SaleReturnFormState extends Equatable {
   final String? reason;
   final String dispositionType;
   final String refundMethod;
+  /// Phase 14.0 — cheque due date. Required by `_onSubmitted` when
+  /// [refundMethod] == 'cheque'. Ignored (persisted as NULL) otherwise.
+  final DateTime? dueDate;
   final int currencyId;
   final bool isLoading;
   final bool isSubmitting;
@@ -102,7 +100,7 @@ class SaleReturnFormState extends Equatable {
   final bool isSuccess;
   final Map<int, int> alreadyReturnedQty;
 
-  const SaleReturnFormState({
+  SaleReturnFormState({
     this.saleId,
     this.sale,
     this.availableItems = const [],
@@ -110,6 +108,7 @@ class SaleReturnFormState extends Equatable {
     this.reason,
     this.dispositionType = 'restock',
     this.refundMethod = 'cash',
+    this.dueDate,
     this.currencyId = 1,
     this.isLoading = false,
     this.isSubmitting = false,
@@ -118,6 +117,11 @@ class SaleReturnFormState extends Equatable {
     this.alreadyReturnedQty = const {},
   });
 
+  /// True when refund-method = cheque but the operator has not yet picked
+  /// a due date. The form's confirm button reads this directly.
+  bool get isChequeMissingDueDate =>
+      refundMethod == 'cheque' && dueDate == null;
+
   bool get hasUnsavedChanges => returnItems.isNotEmpty;
 
   int maxReturnableQty(int itemId, int originalQty) {
@@ -125,28 +129,33 @@ class SaleReturnFormState extends Equatable {
     return (originalQty - alreadyReturned).clamp(0, originalQty);
   }
 
-  Decimal get totalRefundCents => returnItems.fold(
-        Decimal.zero,
-        (sum, item) => sum + item.refundCents,
-      );
+  // ── Rollup layer (single source of truth) ──────────────────────────────
+  //
+  // Phase-5 of the scattered-calculation migration (see
+  // `docs/adr/0001-pricing-engines-as-sot.md`) collapses the four parallel
+  // `fold(Decimal.zero, +)` loops into a single call to
+  // `ReturnCalculationService.aggregate`. Memoized once per immutable
+  // state instance; every `total*Cents` / `totalReturnQuantity` getter
+  // reads from the same rollup so they can never disagree.
+  late final ReturnRollup _rollup = ReturnCalculationService.aggregate(
+    returnItems.map((i) => (
+          subtotalCents: i.subtotalCents.toBigInt().toInt(),
+          discountCents: i.discountCents.toBigInt().toInt(),
+          taxCents: i.taxCents.toBigInt().toInt(),
+          refundCents: i.refundCents.toBigInt().toInt(),
+          quantity: i.returnQuantity,
+        )),
+  );
 
-  Decimal get totalSubtotalCents => returnItems.fold(
-        Decimal.zero,
-        (sum, item) => sum + item.subtotalCents,
-      );
+  Decimal get totalRefundCents => Decimal.fromInt(_rollup.refundCents);
 
-  Decimal get totalDiscountCents => returnItems.fold(
-        Decimal.zero,
-        (sum, item) => sum + item.discountCents,
-      );
+  Decimal get totalSubtotalCents => Decimal.fromInt(_rollup.subtotalCents);
 
-  Decimal get totalTaxCents => returnItems.fold(
-        Decimal.zero,
-        (sum, item) => sum + item.taxCents,
-      );
+  Decimal get totalDiscountCents => Decimal.fromInt(_rollup.discountCents);
 
-  int get totalReturnQuantity =>
-      returnItems.fold(0, (sum, item) => sum + item.returnQuantity);
+  Decimal get totalTaxCents => Decimal.fromInt(_rollup.taxCents);
+
+  int get totalReturnQuantity => _rollup.totalQuantity;
 
   SaleReturnFormState copyWith({
     int? saleId,
@@ -156,6 +165,7 @@ class SaleReturnFormState extends Equatable {
     String? reason,
     String? dispositionType,
     String? refundMethod,
+    Object? dueDate = _sentinel,
     int? currencyId,
     bool? isLoading,
     bool? isSubmitting,
@@ -171,6 +181,7 @@ class SaleReturnFormState extends Equatable {
       reason: reason ?? this.reason,
       dispositionType: dispositionType ?? this.dispositionType,
       refundMethod: refundMethod ?? this.refundMethod,
+      dueDate: identical(dueDate, _sentinel) ? this.dueDate : dueDate as DateTime?,
       currencyId: currencyId ?? this.currencyId,
       isLoading: isLoading ?? this.isLoading,
       isSubmitting: isSubmitting ?? this.isSubmitting,
@@ -183,10 +194,13 @@ class SaleReturnFormState extends Equatable {
   @override
   List<Object?> get props => [
         saleId, sale, availableItems, returnItems,
-        reason, dispositionType, refundMethod, currencyId,
+        reason, dispositionType, refundMethod, dueDate, currencyId,
         isLoading, isSubmitting, error, isSuccess, alreadyReturnedQty,
       ];
 }
+
+/// Sentinel for `copyWith` to distinguish "don't touch" from "set to null".
+const Object _sentinel = Object();
 
 // ==================== EVENTS ====================
 
@@ -255,6 +269,15 @@ class SaleReturnRefundMethodChanged extends SaleReturnFormEvent {
   List<Object?> get props => [refundMethod];
 }
 
+/// Phase 14.0 — cheque due date selection.
+class SaleReturnDueDateChanged extends SaleReturnFormEvent {
+  final DateTime? dueDate;
+  const SaleReturnDueDateChanged(this.dueDate);
+
+  @override
+  List<Object?> get props => [dueDate];
+}
+
 class SaleReturnFormSubmitted extends SaleReturnFormEvent {
   const SaleReturnFormSubmitted();
 }
@@ -266,7 +289,7 @@ class SaleReturnFormBloc
   final SaleRepository _repository;
 
   SaleReturnFormBloc(this._repository)
-      : super(const SaleReturnFormState()) {
+      : super(SaleReturnFormState()) {
     on<SaleReturnFormInitialized>(_onInitialized);
     on<SaleReturnItemToggled>(_onItemToggled);
     on<SaleReturnItemQuantityChanged>(_onQuantityChanged);
@@ -274,6 +297,7 @@ class SaleReturnFormBloc
     on<SaleReturnReasonChanged>(_onReasonChanged);
     on<SaleReturnDispositionChanged>(_onDispositionChanged);
     on<SaleReturnRefundMethodChanged>(_onRefundMethodChanged);
+    on<SaleReturnDueDateChanged>(_onDueDateChanged);
     on<SaleReturnFormSubmitted>(_onSubmitted);
   }
 
@@ -380,7 +404,20 @@ class SaleReturnFormBloc
     SaleReturnRefundMethodChanged event,
     Emitter<SaleReturnFormState> emit,
   ) {
-    emit(state.copyWith(refundMethod: event.refundMethod));
+    // When switching away from cheque, clear the due date so a stale
+    // value cannot be persisted.
+    final clearDueDate = event.refundMethod != 'cheque';
+    emit(state.copyWith(
+      refundMethod: event.refundMethod,
+      dueDate: clearDueDate ? null : state.dueDate,
+    ));
+  }
+
+  void _onDueDateChanged(
+    SaleReturnDueDateChanged event,
+    Emitter<SaleReturnFormState> emit,
+  ) {
+    emit(state.copyWith(dueDate: event.dueDate));
   }
 
   Future<void> _onSubmitted(
@@ -394,6 +431,15 @@ class SaleReturnFormBloc
     }
     if (state.returnItems.isEmpty) {
       emit(state.copyWith(error: 'Please select at least one item to return'));
+      return;
+    }
+    // Phase 14.0 — cheque must always carry a due date so it surfaces
+    // on the dashboard reminder. Caught here defensively even though
+    // the UI also disables the confirm button.
+    if (state.isChequeMissingDueDate) {
+      emit(state.copyWith(
+        error: 'Please select a due date for the cheque refund.',
+      ));
       return;
     }
 
@@ -412,6 +458,11 @@ class SaleReturnFormBloc
               ))
           .toList();
 
+      // Idempotency token: caught by UNIQUE on sale_returns.idempotency_key
+      // so a duplicate insert (double-tap, retried call) cannot reach
+      // post / JE / commission / loyalty side effects.
+      final idempotencyKey = const Uuid().v4();
+
       await _repository.createSaleReturn(
         saleId: state.saleId!,
         currencyId: state.currencyId,
@@ -424,6 +475,8 @@ class SaleReturnFormBloc
         dispositionType: state.dispositionType,
         refundMethod: state.refundMethod,
         returnDate: DateTime.now(),
+        dueDate: state.dueDate,
+        idempotencyKey: idempotencyKey,
       );
 
       emit(state.copyWith(isSubmitting: false, isSuccess: true));

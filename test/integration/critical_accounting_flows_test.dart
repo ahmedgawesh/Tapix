@@ -693,4 +693,194 @@ void main() {
           reason: 'Trial balance must always sum to zero (total debits == total credits)');
     });
   });
+
+  // =========================================================================
+  // REGRESSION: Inventory GL must equal Σ(stock × cost) when purchase lines
+  //             carry trade discounts.
+  //
+  //   Field scenario (DB tapix_backup_20260513_014004.db):
+  //   Inventory GL = 247000, Σ(stock × cost) = 250000, delta = -3000.
+  //
+  //   Root cause:
+  //     `purchase_dao.postPurchase` stored `variant.cost_cents = gross
+  //     unitCostCents` (the typed-in list cost), while the JE correctly
+  //     debited 1200 Inventory at (subtotal − discount). Every line
+  //     discount therefore inflated Σ(stock × cost) by the discount total
+  //     and broke the Inventory-GL == stock-value invariant. The 3000
+  //     delta was exactly Σ(line_discount).
+  //
+  //   Fix:
+  //     `purchase_dao.dart:370` now records the EFFECTIVE per-unit cost
+  //     `(grossUnit − round(lineDiscount / qty))` on the variant.
+  // =========================================================================
+  group('REGRESSION: purchase line discount → variant cost net of discount',
+      () {
+    late int currencyId;
+    late int productId;
+    late int variantId;
+    late int supplierId;
+
+    setUp(() async {
+      final usd = await (db.select(db.currencies)
+            ..where((c) => c.code.equals('USD')))
+          .getSingle();
+      currencyId = usd.id;
+
+      productId = await db.into(db.products).insert(
+        ProductsCompanion.insert(
+          sku: const Value<String?>('REG-DISC-001'),
+          name: 'Discount Regression Product',
+          costCents: Decimal.fromInt(0),
+          priceCents: Decimal.fromInt(0),
+          currencyId: Value(currencyId),
+          stockQuantity: const Value(0),
+        ),
+      );
+
+      variantId = await db.into(db.productVariants).insert(
+        ProductVariantsCompanion.insert(
+          productId: productId,
+          stockQuantity: const Value(0),
+          costCents: Decimal.fromInt(0),
+          priceCents: Decimal.fromInt(0),
+        ),
+      );
+
+      supplierId = await db.into(db.suppliers).insert(
+        SuppliersCompanion.insert(
+          name: 'Discount Regression Supplier',
+          currencyId: currencyId,
+          balanceCents: Value(Decimal.zero),
+        ),
+      );
+    });
+
+    test('purchase with line discount: variant cost = (gross − discount/qty); '
+        'Σ(stock × cost) == Inventory GL Dr', () async {
+      // 10 units @ gross 10000 cents, line discount 1000 → net per unit
+      // = 10000 − (1000 / 10) = 9900.
+      const lineQty = 10;
+      const grossUnit = 10000;
+      const lineDiscount = 1000;
+      const subtotal = lineQty * grossUnit; // 100000
+      const lineNet = subtotal - lineDiscount; // 99000
+      const expectedNetUnit = 9900; // 10000 − 100
+
+      final purchaseId = await db.into(db.purchases).insert(
+        PurchasesCompanion.insert(
+          purchaseNumber: 'PO-REG-DISC-001',
+          supplierId: supplierId,
+          subtotalCents: Decimal.fromInt(subtotal),
+          discountCents: Value(Decimal.fromInt(lineDiscount)),
+          taxCents: Decimal.zero,
+          totalCents: Decimal.fromInt(lineNet),
+          paidAmountCents: Value(Decimal.zero),
+          currencyId: currencyId,
+          status: const Value('draft'),
+          paymentMethod: const Value('credit'),
+        ),
+      );
+
+      await db.into(db.purchaseItems).insert(
+        PurchaseItemsCompanion.insert(
+          purchaseId: purchaseId,
+          productId: productId,
+          variantId: Value(variantId),
+          quantity: lineQty,
+          unitCostCents: Decimal.fromInt(grossUnit), // typed-in list cost
+          discountCents: Value(Decimal.fromInt(lineDiscount)),
+          subtotalCents: Decimal.fromInt(subtotal),
+          totalCents: Decimal.fromInt(lineNet),
+        ),
+      );
+
+      await db.purchaseDao.postPurchase(purchaseId);
+
+      // Mirror what the repository does: post the JE at NET (= subtotal − discount).
+      await journalService.recordPurchaseJournalEntry(
+        purchaseId: purchaseId,
+        totalCents: lineNet,
+        paidAmountCents: 0,
+        currencyId: currencyId,
+        paymentMethod: 'credit',
+      );
+
+      // ── Variant: cost is the NET-of-discount unit cost ──
+      final variant = await (db.select(db.productVariants)
+            ..where((v) => v.id.equals(variantId)))
+          .getSingle();
+      expect(variant.stockQuantity, equals(lineQty));
+      expect(variant.costCents.toBigInt().toInt(), equals(expectedNetUnit),
+          reason: 'Variant cost MUST be the discounted unit cost. '
+              'Field bug: was the gross 10000 → produced 3000-cent inventory '
+              'GL drift.');
+
+      // ── Inventory GL == Σ(stock × cost) ──
+      final invAccountId = await (db.select(db.accounts)
+            ..where((a) => a.accountCode.equals('1200')))
+          .getSingle();
+      final invDr = await db.customSelect(
+        'SELECT COALESCE(SUM(jel.debit_cents - jel.credit_cents), 0) AS net '
+        'FROM journal_entry_lines jel '
+        'INNER JOIN journal_entries je ON je.id = jel.journal_entry_id '
+        'WHERE jel.account_id = ? AND je.status = ?',
+        variables: [
+          Variable.withInt(invAccountId.id),
+          Variable.withString('posted'),
+        ],
+      ).getSingle();
+      final inventoryGl = invDr.read<int>('net');
+      final stockValue = variant.stockQuantity *
+          variant.costCents.toBigInt().toInt();
+      expect(inventoryGl, equals(stockValue),
+          reason: 'Σ(stock × cost) must equal Inventory GL. '
+              'Field bug observed: GL=$lineNet, stock×cost=${lineQty * grossUnit}, '
+              'delta=$lineDiscount.');
+      expect(inventoryGl, equals(lineNet)); // 99000
+      expect(stockValue, equals(lineNet)); // 99000 (was 100000 with bug)
+    });
+
+    test('purchase with NO line discount: variant cost == gross unit cost '
+        '(no behavioral change for the common case)', () async {
+      const lineQty = 4;
+      const grossUnit = 5000;
+      const subtotal = lineQty * grossUnit;
+
+      final purchaseId = await db.into(db.purchases).insert(
+        PurchasesCompanion.insert(
+          purchaseNumber: 'PO-REG-DISC-002',
+          supplierId: supplierId,
+          subtotalCents: Decimal.fromInt(subtotal),
+          taxCents: Decimal.zero,
+          totalCents: Decimal.fromInt(subtotal),
+          paidAmountCents: Value(Decimal.zero),
+          currencyId: currencyId,
+          status: const Value('draft'),
+          paymentMethod: const Value('credit'),
+        ),
+      );
+
+      await db.into(db.purchaseItems).insert(
+        PurchaseItemsCompanion.insert(
+          purchaseId: purchaseId,
+          productId: productId,
+          variantId: Value(variantId),
+          quantity: lineQty,
+          unitCostCents: Decimal.fromInt(grossUnit),
+          subtotalCents: Decimal.fromInt(subtotal),
+          totalCents: Decimal.fromInt(subtotal),
+        ),
+      );
+
+      await db.purchaseDao.postPurchase(purchaseId);
+
+      final variant = await (db.select(db.productVariants)
+            ..where((v) => v.id.equals(variantId)))
+          .getSingle();
+      // WAC averages to grossUnit since previous stock was 0.
+      expect(variant.costCents.toBigInt().toInt(), equals(grossUnit),
+          reason: 'No discount: variant cost stays at gross unit cost '
+              '(zero-discount fast-path is identity).');
+    });
+  });
 }

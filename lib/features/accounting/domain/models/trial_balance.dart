@@ -31,6 +31,19 @@ class TrialBalance {
 
   int getTotalCreditsByType(String accountType) =>
       getItemsByType(accountType).fold(0, (sum, item) => sum + item.creditCents);
+
+  /// Phase 7 — Reporting consolidation SoT.
+  ///
+  /// Returns the **natural (normal) balance total** for a given account type:
+  ///   - Asset / Expense    → Σ(debit − credit)
+  ///   - Liability / Equity / Revenue → Σ(credit − debit)
+  ///
+  /// This collapses the `fold((sum, i) => sum + i.creditCents - i.debitCents)`
+  /// / `(sum + i.debitCents - i.creditCents)` patterns that were duplicated
+  /// across P&L, balance-sheet, financial-management-hub and
+  /// accounting-close-service. Sole owner of account-type signing for reports.
+  int totalForType(String accountType) => getItemsByType(accountType)
+      .fold(0, (sum, item) => sum + item.naturalBalanceCents);
 }
 
 /// Individual item in trial balance
@@ -53,6 +66,25 @@ class TrialBalanceItem {
 
   /// Get net balance (debit - credit)
   int get netBalanceCents => debitCents - creditCents;
+
+  /// Phase 7 — Returns the **natural (normal) balance** for this row:
+  ///   - Asset / Expense    → debit − credit
+  ///   - Liability / Equity / Revenue → credit − debit
+  ///
+  /// Unknown types fall back to `debit − credit` (safe default; matches
+  /// `netBalanceCents`). Sole owner of per-row account-type signing.
+  int get naturalBalanceCents {
+    switch (accountType.toLowerCase()) {
+      case 'liability':
+      case 'equity':
+      case 'revenue':
+        return creditCents - debitCents;
+      case 'asset':
+      case 'expense':
+      default:
+        return debitCents - creditCents;
+    }
+  }
 
   /// Check if this is a debit balance
   bool get isDebitBalance => debitCents > creditCents;

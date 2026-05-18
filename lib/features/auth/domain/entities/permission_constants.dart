@@ -54,6 +54,25 @@ class Permissions {
   // Audit & Security
   static const String viewAuditLogs = 'view_audit_logs';
 
+  // ── Phase 11.3b — granular accounting controls ─────────────────────────
+  // The existing `voidTransactions` permission only covers user-visible
+  // documents (sale / purchase / return invoices). The three constants
+  // below isolate the three accounting operations whose financial blast
+  // radius is the entire GL — they MUST be approvable independently of
+  // sale/purchase voids and independently of generic `manageAccounting`.
+  //
+  //   • voidJournalEntry  — reverse a posted JE (creates a counter-JE).
+  //   • closeFiscalPeriod — freeze GL postings for a YYYY-MM month.
+  //   • reopenFiscalPeriod — undo a close; logged as a critical audit event.
+  //
+  // Default assignment: owner-only. Managers retain `voidTransactions`
+  // (invoice voids) and accountants retain `manageAccounting` (general
+  // GL access) — but neither role can void a JE, close, or reopen a
+  // fiscal period without an explicit grant.
+  static const String voidJournalEntry = 'void_journal_entry';
+  static const String closeFiscalPeriod = 'close_fiscal_period';
+  static const String reopenFiscalPeriod = 'reopen_fiscal_period';
+
   static const List<String> all = [
     manageUsers,
     promoteUsers,
@@ -88,5 +107,8 @@ class Permissions {
     viewPurchases,
     editTransactions,
     viewAuditLogs,
+    voidJournalEntry,
+    closeFiscalPeriod,
+    reopenFiscalPeriod,
   ];
 }

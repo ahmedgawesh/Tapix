@@ -84,10 +84,9 @@ class _ProfitLossView extends StatelessWidget {
             final revenueItems = tb.getItemsByType('revenue');
             final expenseItems = tb.getItemsByType('expense');
 
-            final totalRevenue = revenueItems.fold<int>(
-                0, (sum, item) => sum + item.creditCents - item.debitCents);
-            final totalExpenses = expenseItems.fold<int>(
-                0, (sum, item) => sum + item.debitCents - item.creditCents);
+            // Phase 7 — natural-balance signing via TrialBalance SoT.
+            final totalRevenue = tb.totalForType('revenue');
+            final totalExpenses = tb.totalForType('expense');
             final netProfit = totalRevenue - totalExpenses;
 
             return ListView(
@@ -145,8 +144,9 @@ class _ProfitLossView extends StatelessWidget {
                     .map((item) => _LineItem(
                           name: item.accountName,
                           code: item.accountCode,
-                          amount: cs.formatCents(
-                              item.creditCents - item.debitCents),
+                          // Phase 8 — natural-balance routing via the
+                          // [TrialBalanceItem.naturalBalanceCents] SoT.
+                          amount: cs.formatCents(item.naturalBalanceCents),
                         )),
                 const Divider(height: 32),
 
@@ -162,8 +162,7 @@ class _ProfitLossView extends StatelessWidget {
                     .map((item) => _LineItem(
                           name: item.accountName,
                           code: item.accountCode,
-                          amount: cs.formatCents(
-                              item.debitCents - item.creditCents),
+                          amount: cs.formatCents(item.naturalBalanceCents),
                         )),
                 const Divider(height: 32),
 
@@ -211,10 +210,8 @@ class _ProfitLossView extends StatelessWidget {
     final tb = data.trialBalance;
     final revenueItems = tb.getItemsByType('revenue');
     final expenseItems = tb.getItemsByType('expense');
-    final totalRevenue = revenueItems.fold<int>(
-        0, (sum, item) => sum + item.creditCents - item.debitCents);
-    final totalExpenses = expenseItems.fold<int>(
-        0, (sum, item) => sum + item.debitCents - item.creditCents);
+    final totalRevenue = tb.totalForType('revenue');
+    final totalExpenses = tb.totalForType('expense');
 
     await JournalPdfService.printProfitLoss(
       context: context,
@@ -226,7 +223,7 @@ class _ProfitLossView extends StatelessWidget {
               .map((i) => PnlLineItem(
                     code: i.accountCode,
                     name: i.accountName,
-                    amountCents: i.creditCents - i.debitCents,
+                    amountCents: i.naturalBalanceCents,
                   ))
               .toList(),
           totalCents: totalRevenue,
@@ -238,7 +235,7 @@ class _ProfitLossView extends StatelessWidget {
               .map((i) => PnlLineItem(
                     code: i.accountCode,
                     name: i.accountName,
-                    amountCents: i.debitCents - i.creditCents,
+                    amountCents: i.naturalBalanceCents,
                   ))
               .toList(),
           totalCents: totalExpenses,
@@ -260,10 +257,8 @@ class _ProfitLossView extends StatelessWidget {
     final tb = data.trialBalance;
     final revenueItems = tb.getItemsByType('revenue');
     final expenseItems = tb.getItemsByType('expense');
-    final totalRevenue = revenueItems.fold<int>(
-        0, (sum, item) => sum + item.creditCents - item.debitCents);
-    final totalExpenses = expenseItems.fold<int>(
-        0, (sum, item) => sum + item.debitCents - item.creditCents);
+    final totalRevenue = tb.totalForType('revenue');
+    final totalExpenses = tb.totalForType('expense');
 
     await JournalPdfService.shareProfitLoss(
       context: context,
@@ -275,7 +270,7 @@ class _ProfitLossView extends StatelessWidget {
               .map((i) => PnlLineItem(
                     code: i.accountCode,
                     name: i.accountName,
-                    amountCents: i.creditCents - i.debitCents,
+                    amountCents: i.naturalBalanceCents,
                   ))
               .toList(),
           totalCents: totalRevenue,
@@ -287,7 +282,7 @@ class _ProfitLossView extends StatelessWidget {
               .map((i) => PnlLineItem(
                     code: i.accountCode,
                     name: i.accountName,
-                    amountCents: i.debitCents - i.creditCents,
+                    amountCents: i.naturalBalanceCents,
                   ))
               .toList(),
           totalCents: totalExpenses,

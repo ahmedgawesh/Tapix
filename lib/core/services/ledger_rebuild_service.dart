@@ -420,13 +420,50 @@ class LedgerRebuildService {
         final totalCents = ret.totalCents.toBigInt().toInt();
         final taxCents = ret.taxCents.toBigInt().toInt();
 
+        // Resolve partyId (customer_id) from the parent sale so the policy
+        // can satisfy the credit-refund defense-in-depth check.
+        final saleRow = await (_db.select(_db.sales)
+              ..where((s) => s.id.equals(ret.saleId)))
+            .getSingleOrNull();
+        final partyId = saleRow?.customerId;
+
         await _journalService.recordSaleReturnJournalEntry(
           returnId: ret.id,
           totalCents: totalCents,
           currencyId: ret.currencyId,
           taxCents: taxCents,
           refundMethod: ret.refundMethod,
+          partyId: partyId,
         );
+
+        // ── COGS reversal leg (Dr 1200 Inventory, Cr 5300 COGS) ──
+        // Pre-existing gap in rebuild: the inventory side of linked sale
+        // returns used to be omitted, leaving a net positive impact on
+        // COGS after a rebuild. We restore it here using the frozen cost
+        // snapshot on `sale_return_items.unit_cost_cents` (falls back to
+        // the parent sale item's unit_cost_cents when NULL).
+        final costRow = await _db.customSelect(
+          '''
+          SELECT COALESCE(SUM(
+                   COALESCE(sri.unit_cost_cents, si.unit_cost_cents, 0)
+                   * sri.quantity
+                 ), 0) AS cost_cents
+          FROM sale_return_items sri
+          INNER JOIN sale_items si ON si.id = sri.sale_item_id
+          WHERE sri.sale_return_id = ?
+          ''',
+          variables: [Variable.withInt(ret.id)],
+          readsFrom: {_db.saleReturnItems, _db.saleItems},
+        ).getSingleOrNull();
+        final returnCostCents = costRow?.read<int>('cost_cents') ?? 0;
+        if (returnCostCents > 0) {
+          await _journalService.recordSaleReturnCOGSReversalJournalEntry(
+            returnId: ret.id,
+            costCents: returnCostCents,
+            currencyId: ret.currencyId,
+          );
+        }
+
         report.saleReturnsReplayed++;
       } catch (e) {
         report.errors.add('Sale Return #${ret.id}: $e');
@@ -446,10 +483,12 @@ class LedgerRebuildService {
     for (final ret in returns) {
       try {
         final totalCents = ret.totalCents.toBigInt().toInt();
+        final taxCents = ret.taxCents.toBigInt().toInt();
 
         await _journalService.recordPurchaseReturnJournalEntry(
           returnId: ret.id,
           totalCents: totalCents,
+          taxCents: taxCents,
           currencyId: ret.currencyId,
           refundMethod: ret.refundMethod,
         );

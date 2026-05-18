@@ -5,7 +5,6 @@ import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/currency_service.dart';
 import '../bloc/reports_bloc.dart';
-import '../widgets/date_range_selector.dart';
 
 class AccountingHealthScreen extends StatelessWidget {
   const AccountingHealthScreen({super.key});
@@ -62,14 +61,14 @@ class _AccountingHealthView extends StatelessWidget {
             return ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                // Date range selector
-                DateRangeSelector(
-                  dateRange: state.data.dateRange,
-                  onChanged: (range) => context
-                      .read<ReportsBloc>()
-                      .add(ReportsDateRangeChanged(range)),
-                ),
-                const SizedBox(height: 12),
+                // NOTE: No DateRangeSelector here by design.
+                // reconcileBalances() compares control accounts (1100 AR /
+                // 2000 AP / 1200 Inventory) against subledger sums
+                // (Σ customers.balance / Σ suppliers.balance / Σ stock×cost).
+                // Both sides are lifetime-cumulative; scoping by date would
+                // break the invariant and mislead the user. The trial-balance
+                // check below loads as-of the bloc's default range, which is
+                // the correct semantic for a health snapshot.
 
                 // Overall health card
                 Card(

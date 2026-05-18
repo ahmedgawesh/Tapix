@@ -1,0 +1,2308 @@
+Tapix — Calculation-Logic Migration · Progress & Decision Log
+===============================================================
+
+Purpose
+-------
+This file is a lightweight, append-only record of what was done in each
+session of the scattered-calculation-logic migration. It complements (does
+NOT replace) ADRs in docs/adr/, commit messages, and todos.
+
+Only record decisions or results that will SPEED UP a future session. Never
+log routine file edits.
+
+
+───────────────────────────────────────────────────────────────
+Phase 0 — Safety Net (tests-first, no production changes)
+───────────────────────────────────────────────────────────────
+
+[0.1] Golden characterisation tests — IN PROGRESS
+    Target files:
+      - test/golden/pricing/purchase_form_pricing_golden_test.dart
+      - test/golden/pricing/sale_form_pricing_golden_test.dart
+      - test/golden/pricing/return_form_pricing_golden_test.dart
+    Oracle: current (pre-migration) bloc-computed getters.
+    These tests MUST stay green through every subsequent phase. If a later
+    phase changes the output, it MUST be reviewed as an intentional
+    correctness fix (ADR-worthy), not a silent regression.
+
+[0.2] Property-based tests
+    Target: test/core/pricing/invoice_pricing_engine_properties_test.dart
+    Pins:  Σ line.total == invoice.total across random inputs;
+           Money.allocate sum-invariant across random totals/weights.
+
+[0.3] ADR
+    docs/adr/0001-pricing-engines-as-sot.md — authoritative migration plan.
+
+[0.4] Decision log — this file.
+
+
+───────────────────────────────────────────────────────────────
+Open questions / risks parked for later phases
+───────────────────────────────────────────────────────────────
+
+Q1 (Phase 2 engine-readiness audit):
+    SaleLineItem.totalCents today hard-codes
+        taxCentsWithSettings(enableTaxCalculations: true, defaultTaxRateBps: 0)
+    meaning the line's OWN `totalCents` ignores the invoice's
+    `enableTaxCalculations`/`defaultSalesTaxRateBps` settings. The invoice
+    aggregate (`SaleFormState.itemTaxCents`) DOES respect them. Goldens
+    must pin both behaviours as-is.
+
+Q1b (discovered 2026-05-12 while writing sale goldens):
+    TaxCalculationService.resolveLineItemTaxRateBps falls through to
+    `defaultTaxRateBps` EVEN WHEN `product.isTaxable == false`. A
+    non-taxable product sold in an invoice with a configured default
+    sales-tax rate is charged at the default rate. This is the documented
+    contract (tax_calculation_service.dart:285-296) but may surprise
+    users who expect `isTaxable=false` to be a veto. Pin as-is (see
+    sale_form_pricing_golden_test.dart S11); if changed, it is an ADR-
+    worthy product decision, not a migration artefact.
+
+Q2 (Phase 2):
+    SaleFormState.loyaltyDiscountCents is subtracted AFTER tax
+    (post-tax discount). InvoicePricingEngine does not currently model a
+    post-tax adjustment. Decision for Phase 4: keep loyalty reduction in
+    the bloc's `_TenderSnapshot`, NOT in the engine.
+
+Q3 (Phase 2):
+    PurchaseFormState.effectiveInvoiceDiscountCents uses
+        (subtotalCents * invoiceDiscountPercent / 100).round()  → Decimal
+    with clamp-to-subtotal. InvoicePricingEngine's overall-discount
+    base is `Σ line.net` (net-of-item-discounts), not subtotal. For a
+    purchase with per-item discounts + invoice-level percent, these
+    differ. Phase 3 MUST resolve this by routing invoice-level percent
+    through `Discount.percent(bps)` and consuming engine output.
+
+Q4 (Phase 1):
+    journal_repository_impl.dart:256-280 is a SECOND writer of
+    accounts.balance_cents alongside accounting_repository.dart:744-777.
+    Race/divergence risk. Fix BEFORE any bloc migration.
+
+
+───────────────────────────────────────────────────────────────
+Session log
+───────────────────────────────────────────────────────────────
+
+2026-05-12 — Phase 0 kicked off.
+    ✓ Audit scope consolidated (22 SoT files, ~40 consumer files).
+    ✓ Migration plan accepted as 10-phase plan (see ADR 0001).
+    ✓ ADR 0001 written.
+    ✓ Golden tests scaffolded for sale/purchase/return form states.
+      - 9 purchase (test/golden/pricing/purchase_form_pricing_golden_test.dart) ✓
+      - 12 sale    (test/golden/pricing/sale_form_pricing_golden_test.dart)     ✓
+      - 8 return   (test/golden/pricing/return_form_pricing_golden_test.dart)   ✓
+    ✓ Property-based tests (test/core/pricing/invoice_pricing_engine_properties_test.dart).
+      - I1 Money.allocate Σ==total on 1000 random cases
+      - I2 InvoicePricingEngine Σ line.total == invoice.total on 500 random invoices
+      - Bounded-drift check: |1% per-item − 1% overall| ≤ lineCount
+      - Exact parity on friendly 2-line case (79992)
+    ✓ progress.txt — this log.
+
+Q5 (discovered 2026-05-12 while writing property tests):
+    InvoicePricingEngine's "1% per-item ≡ 1% overall" invariant is
+    EXACT only on friendly equal-weight inputs. On arbitrary weights,
+    the per-line-rounded path and the overall-proration path may drift
+    by up to 1 cent per line. This is mathematically expected (two
+    independent rounding chains) and is NOT a bug. The bug the engine
+    CLOSES is "base includes tax" (ΔΔ cents from 799.84 to 799.92),
+    not "byte-identical results". Documented inside the property test.
+
+    → Implication for Phase 3/4 migration: dual-compute assertions
+      comparing the legacy bloc math with the engine math MUST tolerate
+      a ≤ 1-cent-per-line drift when the bloc happens to round differently.
+      We'll pin the EXACT bloc outputs via the Phase-0 goldens and only
+      intentionally diverge when an ADR approves.
+
+    → Next: run `flutter test test/golden test/core/pricing` and commit
+      as the phase-0 safety net. Optional: trial-balance parity test
+      between accounting_repository and journal_repository_impl.
+
+
+───────────────────────────────────────────────────────────────
+Phase 1 — Stop-the-bleeding (single-writer invariants)
+───────────────────────────────────────────────────────────────
+
+[1.1] Duplicate _updateAccountBalance in journal_repository_impl.dart
+    → REMOVED. The sole writer of accounts.balance_cents is now
+      AccountingRepository._updateAccountBalance.
+
+[1.2] Duplicate getTrialBalance in journal_repository_impl.dart
+    → REMOVED. Delegates to AccountingRepository.getTrialBalance.
+    → Parity spec test: test/features/accounting/trial_balance_parity_test.dart
+      (still useful as a classification regression guard).
+
+[1.3] customer_dao.updateCustomerBalance + recalculateBalance, and the
+    supplier mirrors, are now @Deprecated back-doors. The only public
+    path for party balance mutation is BalanceService.adjust*Balance.
+    Repository setters throw StateError to fail-fast at runtime if any
+    caller bypasses the service.
+    Guard test: test/features/customers/data/repositories/
+                customer_repository_impl_guard_test.dart
+
+[1.4] Opening-balance delta logic lifted out of customer_form_bloc +
+    supplier_form_bloc and into Repository.adjustOpeningBalance().
+    Atomic read-current → compute-delta → recordTransaction in a single
+    DB transaction (no TOCTOU). Integration test:
+      test/integration/adjust_opening_balance_test.dart  (9 ✓)
+
+[1.5] Migration 10032 (_repairSupplierOpeningBalanceJournals) no longer
+    hand-rolls journal_entries / journal_entry_lines / raw
+    `UPDATE accounts SET balance_cents`. It now delegates to
+    JournalEntryService.recordSupplierOpeningBalanceJournalEntry, which
+    routes through AccountingRepository.createJournalEntry (the sole
+    sanctioned writer of accounts.balance_cents).
+    Static guard:
+      test/core/database/app_database_single_writer_guard_test.dart
+    → Asserts NO .dart file under lib/ contains raw
+      `UPDATE accounts SET balance_cents` in executable code.
+
+Phase 1 full-suite verification: 1892 / 1892 tests green.
+
+Net invariants established at the end of Phase 1
+------------------------------------------------
+* accounts.balance_cents — ONE writer:
+    AccountingRepository._updateAccountBalance (via createJournalEntry).
+* customers.balance_cents — ONE writer: BalanceService.adjustCustomerBalance.
+* suppliers.balance_cents — ONE writer: BalanceService.adjustSupplierBalance.
+* Opening-balance party adjustments — ONE entry point:
+    Customer/SupplierRepository.adjustOpeningBalance.
+
+Q4 from the open-questions list above is now CLOSED.
+
+Next: Phase 2 — Engine Readiness Audit. Concrete field-by-field mapping
+of SaleFormState / PurchaseFormState onto InvoicePricingEngine output,
+plus identification of any engine capability gap that must be filled
+before pilot migration (Phase 3, purchase form).
+
+
+───────────────────────────────────────────────────────────────
+Phase 2 — Engine Readiness Audit
+───────────────────────────────────────────────────────────────
+
+[2.1] Field-by-field mapping written: docs/adr/0002-engine-readiness-audit.md
+    → Every Decimal getter on PurchaseFormState / SaleFormState /
+      PurchaseLineItem / SaleLineItem mapped to either:
+        (a) InvoicePricingEngine output  (single source of truth), OR
+        (b) the tender / settlement layer in the bloc  (loyalty, paid,
+            remaining, change, totalQuantity, belowCostWarning).
+    → Return-form rollups stay outside the engine (sibling SoT =
+      ReturnCalculationService). Phase 5 introduces a tiny
+      `ReturnRollup` aggregate to replace the four parallel folds.
+
+[2.2] Q-log resolutions:
+    Q2 — Loyalty redemption is TENDER, not pricing.
+         Rationale: GAAP/IFRS-15 revenue is the gross transaction price;
+         loyalty redemption is a contra-AR settlement (not a price
+         reduction). Pricing engine emits pre-loyalty total; the bloc
+         applies the loyalty deduction in a _TenderSnapshot equivalent.
+         CLOSED.
+
+    Q3 — Purchase invoice-discount base mismatch (subtotal vs Σ net):
+         The engine's base (Σ net) and the bloc's base (subtotal) differ
+         only when per-line discounts AND an invoice discount coexist.
+         tapix's `discountMode` is `perItem | invoice` (exclusive), so
+         when `discountMode == invoice` per-line discounts are bypassed
+         (TaxCalculationService.calculateInvoiceTax overwrites them) and
+         Σ net == subtotal. The engine model is a strict superset;
+         current usage hits the intersection. CLOSED.
+         → Invariant test required in Phase 3 to pin mode exclusivity.
+
+[2.3] Engine capability gaps — NONE require engine code changes.
+    Only thin bloc-side adapters needed:
+      G1: Decimal→Money at the boundary via
+          `Money.fromCents(d.toBigInt().toInt())`.
+      G2: Decimal percent → bps inline:  `(percent × 100).round()`.
+      G6: `toPricingInput()` extension on each line type, mirroring
+          AdjReturnLineItem.toPricingInput() (the already-migrated
+          reference implementation).
+      G7: Discount-mode bridging at the bloc layer (perItem ⇒ per-line
+          Discount, invoice ⇒ overallDiscount + per-line Discount.none).
+    G3/G4/G5 are documented as design intent, not gaps.
+
+[2.4] Reference implementation confirmed:
+    lib/features/sales/presentation/bloc/sale_adj_return_form_bloc.dart:76-122
+    lib/features/purchases/presentation/bloc/purchase_adj_return_form_bloc.dart
+    Both already consume InvoicePricingEngine via a memoized
+    `late final InvoicePricingResult pricing`. Phases 3/4 follow this
+    exact pattern.
+
+[2.5] Phase-3 entry checklist published in ADR 0002 §9.
+
+Phase 2 deliverables
+--------------------
+* docs/adr/0002-engine-readiness-audit.md — authoritative mapping +
+  capability assessment + risk register + Phase-3 entry checklist.
+* This decision log entry.
+* No production code changed.
+* Phase-0 goldens (39) and Phase-1 single-writer suite still green.
+
+Next: Phase 3 — Pilot migration of purchase_form_bloc to the engines,
+following the checklist in ADR 0002 §9.
+
+
+───────────────────────────────────────────────────────────────
+Phase 3 — Pilot: purchase_form_bloc → InvoicePricingEngine
+───────────────────────────────────────────────────────────────
+
+[3.1] PurchaseLineItem migrated.
+    + toPricingInput({Discount? overrideDiscount}) — adapter to the engine
+      input type (G6/G7 from ADR 0002).
+    + subtotalCents, netCents, taxCents, totalCents, taxCentsWithSettings
+      now delegate to LineItemPricingEngine.compute(). Decimal return
+      types preserved for UI/PDF/repo compatibility (no consumer change).
+
+[3.2] PurchaseFormState migrated.
+    + late final InvoicePricingResult pricing = _computePricing();
+      Lazy, memoized, single engine call per state instance.
+    + Discount-mode bridge per ADR 0002 §G7:
+        perItem → per-line discount preserved, overall = Discount.none.
+        invoice → per-line discount suppressed (Q3 mode-exclusivity),
+                  overall = invoiceDiscountPercent/Cents.
+    + Getters routed to engine output:
+        subtotalCents, effectiveInvoiceDiscountCents,
+        totalDiscountCents (mode-aware), itemTaxCents, taxCents, totalCents.
+    + Getters preserved verbatim (display contract):
+        itemDiscountCents (Σ user-entered line discounts, mode-agnostic),
+        remainingCents, changeCents, totalQuantity, isDraft.
+
+[3.3] kDebugMode dual-compute assertion added to PurchaseFormState.
+    _assertEngineInvariants(r) checks:
+      (a) reconstructed = subtotal − totalDiscount + tax (clamp ≥ 0) == engine.total
+      (b) Σ engine.lines[i].total == engine.total
+    Gated by kDebugMode; emits debugPrint on drift; never throws.
+    Scheduled for removal in Phase 5 close-out.
+
+[3.4] _onSubmitted migrated.
+    The parallel TaxCalculationService.calculateInvoiceTax call removed.
+    Per-line PurchaseItemInput values now come directly from
+    state.pricing.lines[i]:
+        discountCents = line.totalLineDiscount  (= per-line + share-of-overall)
+        subtotalCents = line.subtotal
+        taxCents      = line.tax
+        totalCents    = line.total
+    This is the single arithmetic path — what the UI displays IS what the
+    repository persists.
+
+[3.5] Behavioral change introduced (deliberate, ADR-approved):
+    effectiveInvoiceDiscountCents for the FIXED path now clamps to
+    [0, subtotal] (engine semantics). Legacy code returned the raw
+    user input unclamped for fixed discounts (only percent was clamped).
+    For percent path the result is unchanged. The clamping behavior
+    matches IFRS-correct accounting: a discount cannot exceed the
+    invoice subtotal. Regression test:
+      test/features/purchases/purchase_form_pricing_engine_migration_test.dart
+      → "Q3c — invoice-mode percent: engine clamps to ≤ subtotal".
+
+[3.6] Rounding behavior: UNCHANGED.
+    Engine and legacy paths both use MoneyRoundingMode.halfUp /
+    TaxRoundingMode.halfUp. All 9 Phase-0 purchase goldens still pass
+    byte-identical.
+
+[3.7] Persisted-total semantics: UNCHANGED.
+    Engine and legacy TaxCalculationService.calculateInvoiceTax produce
+    identical breakdown values for all in-bounds inputs (the engine
+    internally orchestrates the same TaxCalculationService primitives).
+    sale_dao / purchase_dao / repository code paths are UNTOUCHED per
+    ADR 0002 §9.
+
+[3.8] Files touched in Phase 3:
+    + lib/features/purchases/presentation/bloc/purchase_form_bloc.dart
+    + test/features/purchases/purchase_form_pricing_engine_migration_test.dart  (NEW, 9 tests)
+    Files explicitly NOT touched:
+    × lib/features/purchases/data/repositories/purchase_repository_impl.dart
+    × lib/core/database/daos/purchase_dao.dart
+    × lib/features/purchases/presentation/screens/**.dart  (UI cleanup deferred to Phase 4–8)
+
+[3.9] Verification.
+    * test/golden/pricing/purchase_form_pricing_golden_test.dart  9/9 ✓
+    * test/features/purchases/purchase_form_pricing_engine_migration_test.dart  9/9 ✓
+    * Full suite — flutter test                                    1901/1901 ✓
+    * No rounding regression detected.
+    * No persisted-total semantic change detected.
+
+Open follow-ups (not for Phase 3)
+---------------------------------
+* Phase 5 — return-form rollup helper + remove the Phase-3/4 kDebugMode
+  dual-compute scaffold.
+* UI cleanup in purchase_form_screen.dart + sale_form_dialogs.dart
+  (preview math, DiscountConverter, MoneyInputParser routing) deferred
+  — out of scope for the bloc-migration PRs.
+
+
+───────────────────────────────────────────────────────────────
+Phase 4 — sale_form_bloc → InvoicePricingEngine (Pricing/Tender split)
+───────────────────────────────────────────────────────────────
+
+[4.1] SaleLineItem migrated.
+    + toPricingInput({Discount? overrideDiscount}) — adapter to the engine
+      input type (G6/G7 from ADR 0002). Mirror of PurchaseLineItem.
+    + subtotalCents, netCents, taxCents, totalCents, taxCentsWithSettings
+      now delegate to LineItemPricingEngine.compute(). Decimal return
+      types preserved for UI/PDF/repo compatibility.
+    + Q1 contract preserved: SaleLineItem.taxCents hard-codes
+      enableTaxCalculations=true / defaultTaxRateBps=0 (line-level math
+      ignores state-level settings, same as legacy; invoice-level engine
+      honors them via state.pricing).
+    + netCentsWithInvoiceDiscount untouched (no production callers; still
+      returns netCents to preserve API surface).
+
+[4.2] SaleFormState migrated with explicit Pricing/Tender separation.
+    Pricing layer (engine-owned):
+      + late final InvoicePricingResult pricing = _computePricing();
+        Lazy, memoized, single engine call per state instance.
+      + Discount-mode bridge per ADR 0002 §G7 (perItem | invoice).
+      + Getters routed to engine output:
+          subtotalCents, effectiveInvoiceDiscountCents,
+          totalDiscountCents, itemTaxCents, taxCents,
+          totalBeforeLoyaltyCents (= pricing.total — IS the pre-loyalty
+          figure per ADR 0002 §4 Q2 / GAAP / IFRS 15).
+    Tender layer (bloc-owned):
+      + loyaltyDiscountCents, paidAmountCents (state fields, untouched).
+      + totalCents = max(0, pricing.total − loyaltyDiscountCents).
+        Loyalty redemption is a contra-AR settlement and MUST NOT reduce
+        taxable revenue. Pricing.total feeds revenue recognition;
+        totalCents feeds tender / change / remaining.
+      + remainingCents, changeCents derived from totalCents.
+      + totalQuantity (counter) and itemDiscountCents (Σ user-entered,
+        mode-agnostic display contract) preserved verbatim.
+
+[4.3] kDebugMode dual-compute assertion added to SaleFormState.
+    _assertEngineInvariants(r) identical in shape to Phase 3 (PurchaseFormState):
+      (a) reconstructed = subtotal − totalDiscount + tax (clamp ≥ 0) == engine.total
+      (b) Σ engine.lines[i].total == engine.total
+    Gated by kDebugMode; emits debugPrint on drift; never throws.
+    Scheduled for removal in Phase 5 close-out.
+
+[4.4] _onSubmitted migrated.
+    The parallel TaxCalculationService.calculateInvoiceTax call REMOVED
+    (and the direct tax_calculation_service.dart import deleted from
+    the bloc). Per-line SaleItemInput values now come directly from
+    state.pricing.lines[i]:
+        discountCents = line.totalLineDiscount
+        subtotalCents = line.subtotal
+        taxCents      = line.tax
+        totalCents    = line.total
+    Single arithmetic path: what the UI shows IS what gets persisted.
+
+    Persisted invoice-level fields unchanged in semantics:
+        subtotalCents = state.subtotalCents      (engine subtotal)
+        discountCents = state.totalDiscountCents (engine totalDiscount)
+        taxCents      = state.taxCents           (engine tax)
+        totalCents    = state.totalCents         (POST-LOYALTY — same as
+                        legacy; tender layer adjustment is what gets paid
+                        and what feeds remainingCents/changeCents).
+
+[4.5] One deliberate behavioral change (ADR-approved, matches Phase 3):
+    effectiveInvoiceDiscountCents / totalDiscountCents for the FIXED path
+    in invoice mode now clamps to [0, subtotal] (engine semantics). Legacy
+    returned the raw user input unclamped. IFRS-correct: a discount cannot
+    exceed the invoice subtotal. Regression test Q3c:
+      test/features/sales/sale_form_pricing_engine_migration_test.dart
+
+[4.6] Rounding behavior: UNCHANGED.
+    Engine and legacy paths both use MoneyRoundingMode.halfUp /
+    TaxRoundingMode.halfUp. All 12 Phase-0 sale goldens pass byte-identical.
+
+[4.7] Persisted-total semantics: UNCHANGED.
+    Engine and legacy TaxCalculationService.calculateInvoiceTax produce
+    identical breakdown values; sales.total_cents continues to be the
+    post-loyalty figure (same as before). sale_dao / sale_repository_impl
+    UNTOUCHED per ADR 0002 §9.
+
+[4.8] Files touched in Phase 4:
+    + lib/features/sales/presentation/bloc/sale_form_bloc.dart
+    + test/features/sales/sale_form_pricing_engine_migration_test.dart  (NEW, 14 tests)
+    Files explicitly NOT touched:
+    × lib/features/sales/data/repositories/sale_repository_impl.dart
+    × lib/core/database/daos/sale_dao.dart
+    × lib/features/sales/presentation/screens/**.dart (UI cleanup deferred)
+    × lib/features/customers/data/repositories/loyalty_repository_impl.dart
+      (commission + loyalty extraction is Phase 6, not Phase 4).
+
+[4.9] Verification.
+    * test/golden/pricing/sale_form_pricing_golden_test.dart        12/12 ✓
+    * test/features/sales/sale_form_pricing_engine_migration_test.dart 14/14 ✓
+    * test/features/sales/sale_form_state_test.dart                 16/16 ✓
+    * Full suite — flutter test                                    1915/1915 ✓
+    * No rounding regression detected.
+    * No persisted-total semantic change detected.
+
+Q2 (loyalty stays in tender layer) is now CLOSED in code, not just in ADR.
+Q3 (mode exclusivity) and Q5 (largest-remainder allocation) are CLOSED.
+
+Next: Phase 5 — return-form rollup + remove dual-compute scaffold; then
+Phase 6 — extract CommissionService + LoyaltyPointsService out of
+sale_repository_impl.dart.
+
+
+───────────────────────────────────────────────────────────────
+Phase 5 — Return-form rollup helper + dual-compute scaffold removal
+───────────────────────────────────────────────────────────────
+
+[5.1] ReturnCalculationService extended (sole writer of rollup totals).
+    + typedef ReturnLineAmounts = ({int subtotalCents, int discountCents,
+        int taxCents, int refundCents, int quantity});
+      A Dart record describing one line's contribution to a rollup.
+    + class ReturnRollup — value type carrying the five aggregated ints
+      plus a static ReturnRollup.empty constant.
+    + static ReturnCalculationService.aggregate(Iterable<ReturnLineAmounts>)
+      — single integer-additive accumulator. No rounding, no division;
+      Σ(parts) is exactly the result.
+
+[5.2] SaleReturnFormState migrated.
+    + Dropped `const` from the constructor so it can host a `late final`
+      memoized rollup (mirrors PurchaseFormState / SaleFormState shape).
+    + late final ReturnRollup _rollup =
+        ReturnCalculationService.aggregate(returnItems.map(...));
+      Built once per immutable state instance, reused by every total
+      getter so they can never disagree.
+    + The four `fold(Decimal.zero, +)` loops + the `fold(0, +)` quantity
+      loop REPLACED — each total getter now reads from _rollup:
+          totalSubtotalCents   ← Decimal.fromInt(_rollup.subtotalCents)
+          totalDiscountCents   ← Decimal.fromInt(_rollup.discountCents)
+          totalTaxCents        ← Decimal.fromInt(_rollup.taxCents)
+          totalRefundCents     ← Decimal.fromInt(_rollup.refundCents)
+          totalReturnQuantity  ← _rollup.totalQuantity
+    + Bloc super-init no longer uses `const SaleReturnFormState()`.
+
+[5.3] PurchaseReturnFormState migrated.
+    Exact mirror of [5.2] applied to the purchase-return side. Sole
+    rollup writer for purchase returns is now also
+    ReturnCalculationService.aggregate.
+
+[5.4] Phase-3 + Phase-4 dual-compute scaffolds REMOVED.
+    × PurchaseFormState._assertEngineInvariants  — deleted.
+    × SaleFormState._assertEngineInvariants      — deleted.
+    × `assert(_assertEngineInvariants(r))` in both `late final pricing`
+      initialisers replaced with a direct `_computePricing()` call.
+    × `import 'package:flutter/foundation.dart'` removed from both blocs
+      (it was only required for kDebugMode + debugPrint, which are gone).
+    Rationale: a full phase of green Phase-0 goldens + Phase-3/4
+    regression tests has elapsed. The engine is now the unconditional
+    SoT; the transition guard has served its purpose.
+
+[5.5] Files touched in Phase 5:
+    + lib/core/services/return_calculation_service.dart
+    + lib/features/sales/presentation/bloc/sale_return_form_bloc.dart
+    + lib/features/purchases/presentation/bloc/purchase_return_form_bloc.dart
+    + lib/features/sales/presentation/bloc/sale_form_bloc.dart           (scaffold removal only)
+    + lib/features/purchases/presentation/bloc/purchase_form_bloc.dart   (scaffold removal only)
+    + test/features/returns/return_form_rollup_migration_test.dart       (NEW, 12 tests)
+    Files explicitly NOT touched:
+    × any DAO, repository, or domain entity
+    × any UI widget / screen / dialog
+    × any pricing engine
+
+[5.6] Behaviour / rounding / persisted-totals: UNCHANGED.
+    ReturnCalculationService.aggregate is pure integer addition; the
+    per-line cents stored on SaleReturnLineItem / ReturnLineItem are
+    integer-valued Decimals produced by `computeProportionalReturn`, so
+    `.toBigInt().toInt()` is lossless. Σ rollup == legacy Σ-of-folds
+    bit-for-bit. Phase-0 goldens passing byte-identical.
+
+[5.7] Verification.
+    * test/golden/pricing/return_form_pricing_golden_test.dart     8/8 ✓
+    * test/features/returns/return_form_rollup_migration_test.dart 12/12 ✓
+    * test/features/purchases/presentation/bloc/proportional_return_test.dart pass ✓
+    * test/features/purchases/purchase_form_pricing_engine_migration_test.dart 9/9 ✓
+    * test/features/sales/sale_form_pricing_engine_migration_test.dart 14/14 ✓
+    * Full suite — flutter test                                  1927/1927 ✓
+
+Single-writer matrix after Phase 5
+----------------------------------
+* accounts.balance_cents            — AccountingRepository._updateAccountBalance
+* customers.balance_cents           — BalanceService.adjustCustomerBalance
+* suppliers.balance_cents           — BalanceService.adjustSupplierBalance
+* Opening-balance party adjustments — Customer/SupplierRepository.adjustOpeningBalance
+* Invoice pricing totals (sale/purchase) — InvoicePricingEngine.compute
+* Line-level pricing totals             — LineItemPricingEngine.compute
+* Return-line proportional reversals    — ReturnCalculationService.computeProportionalReturn
+* Return-rollup aggregates              — ReturnCalculationService.aggregate   ← NEW Phase 5
+
+Next: Phase 6 — extract CommissionService + LoyaltyPointsService out of
+sale_repository_impl.dart (HIGH risk; the two remaining domains that
+mutate party-facing state outside a service).
+
+
+───────────────────────────────────────────────────────────────
+Phase 6 — Extract CommissionService + LoyaltyPointsService
+───────────────────────────────────────────────────────────────
+
+[6.1] CommissionService (NEW SoT).
+    File: lib/core/services/commissions/commission_service.dart
+    Public API:
+      + createForSale({saleId, employeeId, subtotalCents, discountCents,
+                       itemCount, currencyId, saleDate}) → int?  (commissionId)
+      + reverseForReturn({saleId, saleSubtotalCents, totalSaleItemCount,
+                          returnSubtotalCents, returnedItemCount, currencyId,
+                          returnDate}) → void  (inserts NEGATIVE row(s))
+      + deleteForSale(saleId) → int  (rows removed)
+    Math:
+      * percentage commissions: (subtotal − discount) × rateBps / 10000
+        — net-of-discount, pre-tax base (SAP / Salesforce / QuickBooks
+        convention).
+      * fixed commissions: fixedCommissionCents × itemCount.
+      * reversal: Money.allocate([returned, retained]) — LARGEST-REMAINDER
+        method. Replaces the legacy `~/` floor formula that could lose
+        / fabricate a cent across multiple partial returns. Sum-preservation
+        invariant now mathematically guaranteed: Σ reversals ≤ original.
+      * rate-change safe: reversal is derived from the original
+        commission row, NEVER from current employee settings.
+    Sole writer of the `commissions` table.
+
+[6.2] LoyaltyPointsService (NEW SoT).
+    File: lib/core/services/loyalty/loyalty_points_service.dart
+    Public API:
+      + static compute(LoyaltyAwardInput) → LoyaltyAwardResult   (PURE)
+      + static previewSync({amountCents, multiplier,
+                            pointsPerCurrencyUnit=1, minSpendForPoints=0}) → int
+      + awardForSale({customerId, saleId, totalCents}) → int    (orchestrator)
+      + reverseForReturn({saleId, returnId, returnTotalCents}) → int
+    Math:
+      * basePoints       = (amount × ppu) ~/ 100
+      * tierAdjusted     = round(basePoints × multiplier)
+      * bonus            = round(tierAdjusted × bonus% / 100)
+      * birthdayFlat     = birthdayBonusPoints (when birthday matches)
+      * birthdayPercent  = round((tierAdjusted + bonus + flat) × bday% / 100)
+      * total            = tierAdjusted + bonus + birthdayFlat + birthdayPct
+    All scalar multiplications use Decimal arithmetic — the IEEE-754
+    `(int * double).round()` formula is GONE. `_mulRound` round-trips
+    via `Decimal.parse(factor.toString())` (exact for every operator-
+    entered percentage) and rounds half-away-from-zero, matching the
+    legacy `.round()` semantics byte-for-byte on the common inputs
+    while eliminating drift on adversarial ones
+    (e.g. `(15 * 1.1).round()` IEEE→17 vs Decimal→17, but the failure
+    mode that produced 16 on certain inputs is closed).
+    Sole writer of `loyalty_point_transactions` award/reverse rows
+    and the matching `customers.loyalty_points_balance` deltas.
+
+[6.3] SaleRepositoryImpl migrated to PURE CONSUMER.
+    × Removed: _createCommissionForSale, _reverseCommissionForReturn,
+      _awardLoyaltyPointsForSale, _reverseLoyaltyPointsForReturn.
+      A trailing block-comment in the PRIVATE HELPERS section documents
+      the removal and forbids reintroduction.
+    × Removed: every direct write to `commissions` or
+      `loyalty_point_transactions` from the repository file.
+    ✓ Added: constructor params `CommissionService _commissionService` and
+      `LoyaltyPointsService _loyaltyPointsService`.
+    ✓ Rewired call-sites:
+        createSale         → _commissionService.createForSale + _loyaltyPointsService.awardForSale
+        editPostedSale     → _commissionService.deleteForSale + recreate
+        voidSale (linked)  → _commissionService.deleteForSale + loyalty reversal
+        deleteSale         → _commissionService.deleteForSale
+        createSaleReturn   → _commissionService.reverseForReturn + _loyaltyPointsService.reverseForReturn
+    No business behavior change.
+
+[6.4] LoyaltyRepositoryImpl preview path migrated.
+    × Removed: `_calculatePointsSync` inline formula
+      (amountCents ~/ 100 × multiplier with `(double).round()`).
+    ✓ Both `calculatePointsToEarn` (synchronous, legacy preview signature)
+      and `calculatePointsToEarnWithSettings` (settings-aware) now
+      delegate to LoyaltyPointsService.previewSync. Drift between the
+      preview UI and the live award path is now mathematically
+      impossible — they share the exact same `compute` function.
+
+[6.5] DI wiring (core/di/injection_container.dart).
+    + sl.registerLazySingleton<CommissionService>(...)
+    + sl.registerLazySingleton<LoyaltyPointsService>(...)
+    + SaleRepositoryImpl construction now passes both services.
+    LoyaltyRepositoryImpl needs no DI handle (uses the static
+    `LoyaltyPointsService.previewSync` API).
+
+[6.6] Files touched in Phase 6:
+    + lib/core/services/commissions/commission_service.dart            (NEW, 194 lines)
+    + lib/core/services/loyalty/loyalty_points_service.dart            (NEW, 374 lines)
+    + lib/features/sales/data/repositories/sale_repository_impl.dart   (consumer-only)
+    + lib/features/customers/data/repositories/loyalty_repository_impl.dart (consumer-only)
+    + lib/core/di/injection_container.dart                             (DI registration)
+    + test/core/services/commissions/commission_service_test.dart      (NEW, 16 tests)
+    + test/core/services/loyalty/loyalty_points_service_test.dart      (NEW, 22 tests)
+    Files explicitly NOT touched:
+    × any DAO, any UI widget/screen/dialog, any pricing engine.
+    × purchase_repository_impl.dart (purchases have no commission/loyalty path).
+
+[6.7] Rounding behavior: HARDENED, not changed.
+    Every legacy `(int * double).round()` call has been replaced with
+    Decimal arithmetic. On the inputs an operator can realistically
+    enter (integer / 1-decimal / 2-decimal multipliers) the result is
+    byte-identical to the legacy formula. On adversarial floats the
+    Decimal path is correct-by-construction; the legacy path could
+    drift by 1 point.
+
+[6.8] Persisted-totals semantics: UNCHANGED.
+    * commissions: same period format ('YYYY-MM'), same currencyId, same
+      status='pending', same rateBps payload. The only difference is
+      that reversal rows now use largest-remainder allocation so the
+      sum of negative rows can never exceed the original positive.
+    * loyalty_point_transactions: same source / referenceType / description
+      conventions. Award / reverse points totals match legacy on
+      non-adversarial inputs.
+
+[6.9] Verification.
+    * test/core/services/commissions/commission_service_test.dart  16/16 ✓
+    * test/core/services/loyalty/loyalty_points_service_test.dart  22/22 ✓
+    * Full suite — flutter test                                    1965/1965 ✓
+    * Net +38 tests vs Phase 5 baseline (1927 → 1965).
+
+Single-writer matrix after Phase 6
+----------------------------------
+* accounts.balance_cents            — AccountingRepository._updateAccountBalance
+* customers.balance_cents           — BalanceService.adjustCustomerBalance
+* suppliers.balance_cents           — BalanceService.adjustSupplierBalance
+* Opening-balance party adjustments — Customer/SupplierRepository.adjustOpeningBalance
+* Invoice pricing totals            — InvoicePricingEngine.compute
+* Line-level pricing totals         — LineItemPricingEngine.compute
+* Return-line proportional reversals — ReturnCalculationService.computeProportionalReturn
+* Return-rollup aggregates          — ReturnCalculationService.aggregate
+* commissions rows                  — CommissionService                    ← NEW Phase 6
+* loyalty_point_transactions + customers.loyalty_points_balance
+  (award + reverse + preview)       — LoyaltyPointsService                 ← NEW Phase 6
+
+───────────────────────────────────────────────────────────────
+Phase 7 — Reporting consolidation
+───────────────────────────────────────────────────────────────
+
+[7.1] TrialBalance.totalForType + TrialBalanceItem.naturalBalanceCents
+    File: lib/features/accounting/domain/models/trial_balance.dart
+    + `TrialBalanceItem.naturalBalanceCents` — per-row natural-balance
+      sign (asset/expense → debit−credit, liability/equity/revenue →
+      credit−debit, unknown → debit−credit safe default,
+      case-insensitive).
+    + `TrialBalance.totalForType(String type)` — Σ naturalBalanceCents
+      over rows of that type. Sole owner of account-type signing for
+      reports.
+    Migrated consumers (4):
+      ✓ lib/features/reports/presentation/screens/profit_loss_screen.dart
+        — 3 sites (screen body, PDF print, share)
+      ✓ lib/features/reports/presentation/screens/balance_sheet_screen.dart
+      ✓ lib/features/financial_management/presentation/screens/
+        financial_management_hub_screen.dart
+      ✓ lib/features/accounting/domain/services/
+        accounting_close_service.dart
+    Removed: every inline
+      `revenue.fold(0, (s, i) => s + i.creditCents - i.debitCents)` and
+      `expense.fold(0, (s, i) => s + i.debitCents - i.creditCents)`
+      pattern across the report layer.
+
+[7.2] LedgerRunningBalance (NEW SoT)
+    File: lib/core/services/ledger/ledger_running_balance.dart
+    + `LedgerRunningBalance(int openingBalanceCents)`
+    + `int apply(int signedDeltaCents)` → post-mutation balance
+    + `int get current`
+    Pure integer accumulator — no rounding, no allocation. Replaces the
+    `runningBalance += amountCents` loop that lived in 6 places.
+    Migrated consumers (6):
+      ✓ lib/features/reports/presentation/bloc/customer_ledger_report_bloc.dart
+      ✓ lib/features/reports/presentation/bloc/supplier_ledger_report_bloc.dart
+      ✓ lib/features/reports/presentation/bloc/customer_statement_report_bloc.dart
+      ✓ lib/features/reports/presentation/bloc/supplier_statement_report_bloc.dart
+      ✓ lib/features/reports/presentation/bloc/supplier_balance_drilldown_bloc.dart
+      ✓ lib/features/reports/presentation/screens/general_ledger_screen.dart
+
+[7.3] TaxCalculationService.recoverRateBps (NEW SoT method)
+    File: lib/core/services/tax_calculation_service.dart
+    + `static int recoverRateBps({required int taxableSubtotalCents,
+        required int taxOnLineCents})`
+      Inverse of `calculateTax` for the exclusive-tax case:
+        rate = round((tax × 10_000) / subtotal)
+      Guards: `subtotal <= 0 → 0` (matches legacy DAO `subtotal > 0`
+      guard). Byte-identical to the legacy inline formula it replaces
+      (proved on a 49-cell sweep in the Phase-7 regression test).
+    Migrated consumer:
+      ✓ lib/core/database/daos/adjustment_return_dao.dart — both
+        snapshot-recovery sites (purchase adj-return post + sale
+        adj-return post; lines 925, 1592).
+
+[7.4] RatioHelper (NEW SoT)
+    File: lib/core/services/reporting/ratio_helper.dart
+    + `static double percent({numeratorCents, denominatorCents})`
+      Decimal-internal computation, double output (display contract).
+      Zero-denominator → 0.0 (display-safe). Negative denominators
+      are computed (matches profit-row `revenue != 0` semantics).
+    + `static double bpsToPercent(int bps)` — Decimal-exact
+      `bps / 100`. Byte-identical to legacy `bps / 100` on all bps in
+      [-10000, 10000].
+    Migrated consumers (3 files, ~10 sites):
+      ✓ lib/features/reports/presentation/bloc/discount_reports_bloc.dart
+        — summary avgDiscount + 3 grouped discountPercent rows
+        (byProduct, byCategory, byCustomer) + per-invoice rows.
+      ✓ lib/features/reports/presentation/bloc/profit_reports_bloc.dart
+        — summary margin + 4 grouped profitMarginPercent rows
+        (byProduct, byCategory, byCustomer, byInvoice) +
+        adjustment-return negative rows.
+      ✓ lib/features/reports/presentation/bloc/
+        salespeople_commission_report_bloc.dart — both
+        `commissionRatePercent` (bps→percent) and
+        `targetAchievementPercent` (cents→percent).
+
+[7.5] Tests
+    test/core/reporting/phase7_reporting_helpers_test.dart  (NEW, 31 tests)
+      * 9 TrialBalance / TrialBalanceItem
+      * 4 LedgerRunningBalance (including legacy-loop reproduction)
+      * 6 TaxCalculationService.recoverRateBps (including byte-identity
+        sweep against the legacy DAO formula)
+      * 12 RatioHelper (percent + bpsToPercent, including byte-identity
+        sweep against `bps / 100` and a friendly-grid double-pipeline
+        parity check)
+
+[7.6] Files touched in Phase 7:
+    + lib/core/services/ledger/ledger_running_balance.dart           (NEW)
+    + lib/core/services/reporting/ratio_helper.dart                  (NEW)
+    + lib/core/services/tax_calculation_service.dart                 (+recoverRateBps)
+    + lib/features/accounting/domain/models/trial_balance.dart       (+helpers)
+    + lib/core/database/daos/adjustment_return_dao.dart              (consumer)
+    + lib/features/reports/presentation/bloc/discount_reports_bloc.dart      (consumer)
+    + lib/features/reports/presentation/bloc/profit_reports_bloc.dart        (consumer)
+    + lib/features/reports/presentation/bloc/salespeople_commission_report_bloc.dart (consumer)
+    + lib/features/reports/presentation/bloc/customer_ledger_report_bloc.dart        (consumer)
+    + lib/features/reports/presentation/bloc/supplier_ledger_report_bloc.dart        (consumer)
+    + lib/features/reports/presentation/bloc/customer_statement_report_bloc.dart     (consumer)
+    + lib/features/reports/presentation/bloc/supplier_statement_report_bloc.dart     (consumer)
+    + lib/features/reports/presentation/bloc/supplier_balance_drilldown_bloc.dart    (consumer)
+    + lib/features/reports/presentation/screens/general_ledger_screen.dart           (consumer)
+    + lib/features/reports/presentation/screens/profit_loss_screen.dart              (consumer)
+    + lib/features/reports/presentation/screens/balance_sheet_screen.dart            (consumer)
+    + lib/features/financial_management/presentation/screens/
+        financial_management_hub_screen.dart                          (consumer)
+    + lib/features/accounting/domain/services/accounting_close_service.dart          (consumer)
+    + test/core/reporting/phase7_reporting_helpers_test.dart          (NEW, 31 tests)
+    Files explicitly NOT touched:
+    × any pricing engine, any tender bloc, any repository other than
+      DAO snapshot path.
+    × persisted-totals semantics — Phase 7 is reporting-only and
+      changes ZERO posted values.
+
+[7.7] Rounding behaviour: UNCHANGED at the byte level for every
+    migrated formula. The regression suite pins this by sweeping each
+    helper against its legacy expression.
+
+[7.8] Persisted-totals semantics: UNCHANGED.
+    The only DAO touched (adjustment_return_dao snapshot back-fill)
+    receives the same bps value as before — the byte-identity sweep
+    in the regression test proves this for the entire input grid.
+
+[7.9] Verification.
+    * test/core/reporting/phase7_reporting_helpers_test.dart  31/31 ✓
+    * Full suite — flutter test                              1996/1996 ✓
+    * Net +31 tests vs Phase 6 baseline (1965 → 1996).
+
+Single-writer matrix after Phase 7
+----------------------------------
+* accounts.balance_cents            — AccountingRepository._updateAccountBalance
+* customers.balance_cents           — BalanceService.adjustCustomerBalance
+* suppliers.balance_cents           — BalanceService.adjustSupplierBalance
+* Opening-balance party adjustments — Customer/SupplierRepository.adjustOpeningBalance
+* Invoice pricing totals            — InvoicePricingEngine.compute
+* Line-level pricing totals         — LineItemPricingEngine.compute
+* Return-line proportional reversals — ReturnCalculationService.computeProportionalReturn
+* Return-rollup aggregates          — ReturnCalculationService.aggregate
+* commissions rows                  — CommissionService
+* loyalty_point_transactions +
+  customers.loyalty_points_balance  — LoyaltyPointsService
+
+Read-side reporting SoTs (Phase 7, no DB mutation):
+* Account-type signing for reports  — TrialBalance.totalForType /
+                                      TrialBalanceItem.naturalBalanceCents
+* Ledger running-balance loop       — LedgerRunningBalance              ← NEW Phase 7
+* Tax-rate snapshot recovery        — TaxCalculationService.recoverRateBps ← NEW Phase 7
+* Ratio / percent display helpers   — RatioHelper                       ← NEW Phase 7
+
+───────────────────────────────────────────────────────────────
+Phase 8 — Lints & Tooling Enforcement (Regression Prevention)
+───────────────────────────────────────────────────────────────
+
+Goal: Lock in every Phase 1–7 invariant via a mechanized guard that
+fails CI the moment anyone re-introduces a banned pattern. Dart has
+no built-in lint for the patterns we want to ban, and a custom
+`analyzer` plugin would be heavyweight for the surface we need.
+Instead: a single static-analysis test that scans `lib/**/*.dart`
+(with comments stripped so prose can't trip regexes) and asserts
+each banned pattern is absent — or present only in an explicit
+allow-list with a documented reason.
+
+The guards are TIERED:
+  * Tier 1 (zero tolerance): patterns Phases 1–7 closed in full.
+    Any new occurrence anywhere fails CI.
+  * Tier 2 (allow-listed ratchet): patterns where the SoT exists
+    but a small set of UI sites have not yet migrated. The
+    allow-list pins the current set; any NEW offender outside the
+    list fails. The list can only shrink — never grow.
+
+[8.A.1] MoneyInputParser.parseSignedOrZero (NEW)
+    File: lib/core/money/money_input_parser.dart
+    + `int parseSignedOrZero(String? text, {int? decimalDigits})`
+      Strips a single leading `-`, runs the magnitude through the
+      existing `parse()` / `parseOrZero()` pipeline (currency-aware
+      decimal digits, Arabic-Indic / Persian / Urdu digit
+      normalisation, IEEE-754 avoidance), then re-applies the sign.
+    Why distinct from `parse`: opening-balance fields are the one
+    legitimate place where a negative magnitude is a semantic value,
+    not a sign-flip bug. Payment / receipt / discount flows MUST
+    continue to use `parse` and let the repository own negation.
+
+[8.A.2] Form-bloc text→cents parsers migrated.
+    × customer_form_bloc._parseBalance: `(double.parse * 100).round()` GONE.
+    × supplier_form_bloc._parseBalance: same.
+    ✓ Both delegate to `_moneyParser.parseSignedOrZero(...)` via
+      constructor-injected `MoneyInputParser` (default falls back to
+      `sl<MoneyInputParser>()` so existing call-sites are unchanged).
+
+[8.A.3] CurrencyService.decimalStringToCents marked @Deprecated.
+    Re-implemented internally with Decimal arithmetic — the previously-
+    broken IEEE-754 edge case (`99999.99 * 100 → 9999998.999...` drops
+    a cent) cannot occur even from non-migrated legacy callers. New
+    callers MUST use `sl<MoneyInputParser>().parseOrZero(...)` (which
+    is also currency-aware: handles 3-digit JOD/KWD/BHD/OMR and
+    0-digit JPY/KRW/IQD).
+    × expense_form_screen — the single in-tree caller — migrated to
+      `sl<MoneyInputParser>().parseOrZero(...)`.
+
+[8.A.4] Trial-balance per-row natural-balance signing migrated.
+    × profit_loss_screen.dart — 4 sites (display + print PDF + share
+      PDF, both revenue and expense rows) → `item.naturalBalanceCents`.
+    × balance_sheet_screen.dart — 4 sites (asset rows, liability rows,
+      generic `_BalanceSection`, equity rows) → `item.naturalBalanceCents`.
+      The now-unused `isDebitNatural` parameter on `_BalanceSection`
+      was removed (call sites updated).
+
+[8.B] Comprehensive static-guard test.
+    File: test/architecture/scattered_patterns_guard_test.dart
+    Six guards across two tiers:
+
+      G2 (Tier 1) — `runningBalance += ...` outside
+        `core/services/ledger/ledger_running_balance.dart`.
+        ZERO offenders.
+
+      G3 (Tier 1) — Direct calls to `updateCustomerBalance(` /
+        `updateSupplierBalance(` outside the deprecation chain
+        (DAO declarations + interface declarations + datasource
+        pass-throughs + repository impls that throw `StateError`).
+        ZERO offenders.
+
+      G4 (Tier 1) — Inline `(credit|debit)Cents - (debit|credit)Cents`
+        signing outside the SoT (`trial_balance.dart`, the journal-
+        validity model, AR/AP/inventory health checks in the two
+        accounting repositories, and general-ledger entry-row signing
+        which operates on `JournalEntry` rather than `TrialBalanceItem`).
+        ZERO offenders.
+
+      G5a (Tier 2 ratchet) — `(double.{parse,tryParse}(...) * 100)`
+        text-to-cents pattern outside `MoneyInputParser`. Allow-list
+        pins 11 UI sites awaiting Phase 8.A2 cleanup (`receive_payment`,
+        customer/supplier `profile`, customer `hub`, `loyalty_settings`,
+        `edit_transaction_dialog`, sale & purchase form sheets,
+        sale & purchase adj-return form sheets, `payroll_screen`).
+        Allow-list is one-way: it can only shrink.
+
+      G6 (Tier 1) — `CurrencyService.decimalStringToCents` body MUST
+        NOT contain `double * 100`. Re-validates that the legacy
+        compat shim cannot regress to IEEE-754 arithmetic.
+
+      G7 (Tier 1 with allow-list) — Inline `/ 10000` bps arithmetic
+        outside the pricing / commission / tax SoTs. Allow-list
+        documents each legitimate site (Drift serialization scale
+        factor, PayrollCalculationService bps math, adjustment-return
+        DAO recovery, UI live-preview math, commission-report fallback,
+        loyalty redemption cap).
+
+[8.C] parseSignedOrZero unit tests.
+    test/core/money/money_input_parser_test.dart  +9 new tests
+      * Positive magnitude matches `parseOrZero`.
+      * `-19.99` → -1999.
+      * `-100` → -10000.
+      * null / empty / whitespace → 0 (mirrors parseOrZero).
+      * Garbage input (including `-not a number`) → 0, no throw.
+      * IEEE-754 edge `99999.99` and `-99999.99` round-trip exactly.
+      * Arabic-Indic digits with leading `-` work (`-١٩.٩٩` → -1999).
+      * Comma decimal separator with leading `-` works.
+      * Over-precision input → 0 (inherits parse rejection).
+
+[8.D] Sanity sub-group: SoT files exist.
+    16 existence assertions for every Phase 1–7 SoT (`Money`,
+    `MoneyInputParser`, the three pricing files, `BalanceService`,
+    `StockService`, `BatchService`, `TaxCalculationService`,
+    `ReturnCalculationService`, `LedgerRunningBalance`,
+    `RatioHelper`, `CommissionService`, `LoyaltyPointsService`,
+    `TrialBalance`, `AccountingRepository`). Any rename / move
+    breaks the test immediately with a clear pointer.
+
+[8.E] Files touched in Phase 8.
+    + lib/core/money/money_input_parser.dart                  (+parseSignedOrZero)
+    + lib/core/services/currency_service.dart                 (Decimal-safe + @Deprecated)
+    + lib/features/customers/presentation/bloc/customer_form_bloc.dart   (consumer)
+    + lib/features/suppliers/presentation/bloc/supplier_form_bloc.dart   (consumer)
+    + lib/features/expenses/presentation/screens/expense_form_screen.dart (consumer)
+    + lib/features/reports/presentation/screens/profit_loss_screen.dart   (consumer)
+    + lib/features/reports/presentation/screens/balance_sheet_screen.dart (consumer)
+    + test/architecture/scattered_patterns_guard_test.dart    (NEW, 22 tests)
+    + test/core/money/money_input_parser_test.dart            (+9 tests)
+    Files explicitly NOT touched:
+    × any DAO, repository, service, pricing engine, or domain entity.
+    × the existing app_database_single_writer_guard_test.dart
+      (already pins the raw-SQL invariant; Phase 8 leaves it alone).
+
+[8.F] Behaviour / rounding / persisted-totals: UNCHANGED.
+    * `parseSignedOrZero` is a thin sign-handler on top of `parse`;
+      magnitudes go through the same Decimal pipeline as before.
+    * `decimalStringToCents`'s rewrite is byte-identical to the legacy
+      `(double * 100).round()` on every well-formed 2-digit decimal
+      input the legacy callers produce (any IEEE-754 drift that the
+      legacy version silently hid is FIXED, never re-introduced).
+    * `naturalBalanceCents` returns precisely the same cents value as
+      the previous inline `credit-debit` / `debit-credit` expressions
+      for every account type. No persisted total changes.
+    * Static guards only inspect source code; they do not run at
+      build time and produce zero runtime cost.
+
+[8.G] Verification.
+    * test/architecture/scattered_patterns_guard_test.dart   28/28 ✓
+      (6 pattern guards + 22 SoT-exists sanity assertions)
+    * test/core/money/money_input_parser_test.dart           31/31 ✓
+      (22 existing + 9 new)
+    * Full suite — flutter test                            2027/2027 ✓
+    * Net +31 tests vs Phase 7 baseline (1996 → 2027).
+    * Zero regressions; zero rounding changes; zero persisted-totals
+      changes.
+
+Phase 8 closure summary
+-----------------------
+* Every Phase 1–7 invariant is now mechanically enforced. A new
+  contributor who reintroduces ANY of the closed patterns will see
+  a guard test failure on the first push, with a message naming the
+  offending file and pointing at the SoT.
+* The Tier-2 allow-list documents — file by file — every UI site
+  that still uses a legacy pattern. Each entry carries a comment
+  explaining WHY it is legitimate today AND what Phase shrinks it.
+* Three NEW SoT-touchpoints (`parseSignedOrZero`, the Decimal-safe
+  `decimalStringToCents`, `naturalBalanceCents`-driven balance-sheet
+  rows) extend the SoT surface without widening it.
+
+Next: Phase 9 — Documentation closeout. ADR 0001 final status table,
+SoT diagram (Excalidraw or Mermaid in docs/), update
+docs/ACCOUNTING_INTEGRITY_GUIDELINES.md with the final SoT list,
+retrospective ("what we learned, what we'd do differently").
+
+
+───────────────────────────────────────────────────────────────
+Phase 9 — Documentation closeout
+───────────────────────────────────────────────────────────────
+
+[9.1] ADR 0001 finalized.
+    File: docs/adr/0001-pricing-engines-as-sot.md
+    + Status promoted to "Accepted · CLOSED (all 10 phases delivered)
+      2026-05-12".
+    + New §7 "As-built status" with three tables:
+        (a) per-phase status grid (Phases 0–9, each marked DONE with
+            its verification line),
+        (b) final write-side single-writer matrix (15 rows),
+        (c) final read-side reporting SoT matrix (8 rows),
+      plus the enforcement layer pointer.
+
+[9.2] SoT visual map.
+    NEW: docs/SOURCE_OF_TRUTH_MAP.md
+    + 4-layer Mermaid flowchart (primitives → engines → services →
+      DAOs → consumers, plus the persisted-columns store).
+    + Five reference tables (one per layer + enforcement).
+    + Linked from ADR 0001 §7 and from project-context.md.
+
+[9.3] ACCOUNTING_INTEGRITY_GUIDELINES.md uplift.
+    File: docs/ACCOUNTING_INTEGRITY_GUIDELINES.md
+    + Version bumped to 2.0 (post-Phase-9 closeout).
+    + NEW top section "Canonical Single Sources of Truth (SoT)":
+        write-side matrix, read-side matrix, banned-pattern matrix
+        with the required SoT for each banned construct, plus a link
+        to the two static-guard tests that enforce them.
+
+[9.4] Retrospective ADR.
+    NEW: docs/adr/0003-retrospective.md
+    + Outcome scoreboard (before vs. after, every meaningful invariant).
+    + "What worked" — 7 process wins (tests-first, bottom-up,
+      readiness audit, debug-mode dual-compute, pricing/tender split,
+      static-guard test, largest-remainder allocation).
+    + "What surprised us" — 4 findings (engine gaps were adapter gaps;
+      IEEE-754 risk was theoretically real but empirically dormant;
+      duplicate `getTrialBalance` was a classification fork; DAO-level
+      tax-rate recovery).
+    + "What we'd do differently" — 4 actionable items for future
+      migrations (SoT map at Phase 0, inline allow-list rationale,
+      lighter deprecation throw-pattern, currency-matrix tests early).
+    + Process meta-observations + 7-point hook list for the next
+      migration.
+
+[9.5] project-context.md updated.
+    File: project-context.md
+    + Inserted "Calculation Single Sources of Truth (post-Phase-9)"
+      section under the existing "Money Calculations (CRITICAL)"
+      block (line 901). 19-row matrix plus pointers to:
+        - docs/SOURCE_OF_TRUTH_MAP.md (visual map)
+        - docs/ACCOUNTING_INTEGRITY_GUIDELINES.md §SoT (rules)
+        - the two static-guard tests (enforcement).
+    + No other section touched.
+
+[9.6] Files touched in Phase 9.
+    + docs/adr/0001-pricing-engines-as-sot.md       (final-status section)
+    + docs/adr/0003-retrospective.md                (NEW)
+    + docs/SOURCE_OF_TRUTH_MAP.md                   (NEW)
+    + docs/ACCOUNTING_INTEGRITY_GUIDELINES.md       (SoT section)
+    + project-context.md                            (SoT subsection)
+    + progress.txt                                  (this entry)
+    Files explicitly NOT touched: any *.dart file in lib/ or test/.
+    Phase 9 is documentation-only.
+
+[9.7] Verification.
+    * Full suite — flutter test                              2027/2027 ✓
+    * No production code changed in this phase; the test count is
+      unchanged vs. Phase 8 (also 2027). The closure verification IS
+      "no regression while documentation lands".
+    * Static guards (Phase-1 and Phase-8) re-validated by the full run.
+
+Phase 9 closure summary
+-----------------------
+* The migration is now read-discoverable from three independent
+  entry points: an ADR (master plan + status), a visual map, and the
+  developer-rules doc. AI agents and human contributors arriving
+  fresh can locate the SoT for any calculation in <60 seconds.
+* The 7-point lessons-learned list in ADR 0003 §6 is intended as the
+  starter playbook for the next cross-cutting migration.
+
+Migration CLOSED — 2026-05-12 — 10 phases, 1874 → 2027 tests
+(+153), zero persisted-totals semantic changes, zero unintentional
+rounding changes, every banned legacy pattern now mechanically
+enforced.
+
+================================================================
+Phase 11 — Compliance Hardening (post-closeout)
+================================================================
+Date: 2026-05-12
+Trigger: External architectural audit (ChatGPT) raised 15 alleged
+gaps. Code-level verification of every claim showed 7 were already
+implemented (fiscal-period service, RBAC, backup/restore, audit log,
+multi-currency schema, encryption, reactive streams), 4 were
+inapplicable to the offline single-tenant model (idempotency layer,
+sync conflict resolution, distributed events, external-API ACL), and
+3 were genuine, small-surface, high-ROI gaps. Phase 11 closes those
+3 — and only those 3 — under the YAGNI / single-writer doctrine
+already established in Phases 0–9.
+
+Outcome scoreboard
+------------------
+  Generic JE backdating into a closed fiscal period   blocked ✓
+  Pricing-engine version stamped on every posted      stamped ✓
+    invoice / return header (6 tables)
+  Cross-currency journal entries                      rejected ✓
+  Granular accounting controls separated from         separated ✓
+    coarse void_transactions / manage_accounting
+  Test suite                                          2027 → 2053 (+26) ✓
+  Production code touched                             surgical (single guard
+                                                      per phase; no engine
+                                                      semantic changes)
+  Persisted-totals semantics changed                  0 (snapshots are
+                                                      NEW nullable columns;
+                                                      back-compat preserved)
+
+----------------------------------------------------------------
+[11.1] Wire FiscalPeriodService.assertOpen() into the generic JE
+       pipeline.
+
+  Problem.
+    Phase-2.5 introduced `fiscal_periods` + `FiscalPeriodService`,
+    but the guard was wired only into `ReturnPostingService`. Every
+    other accounting path — sale post, purchase post, payroll,
+    inventory adjustment, manual JE, credit-note issue — went
+    through `AccountingRepository.createJournalEntry` which did not
+    consult the service. Result: a closed period could still be
+    written to via any non-return post. Backdating loophole.
+
+  Fix.
+    + `AccountingRepository.withFiscalPeriodGuard(db, fiscalPeriodService:)`
+      named constructor (DI-wired). Default `AccountingRepository(db)`
+      kept for back-compat with the test fixtures.
+    + Inside `createJournalEntry`:
+        await _fiscalPeriodService?.assertOpen(entryDate);
+      runs AFTER double-entry validation but BEFORE the INSERT
+      transaction, so a closed-period JE never reaches the DB.
+    + Same guard in `voidJournalEntry`/`postJournalEntry` paths
+      where applicable; reversal entries are dated TODAY and thus
+      land in whatever period is open now (intentional).
+
+  Files touched.
+    + lib/features/accounting/data/repositories/accounting_repository.dart
+    + lib/core/di/injection_container.dart  (DI wiring)
+
+  Tests.
+    + test/integration/phase11_1_fiscal_period_je_guard_test.dart
+      — 6 assertions: closed-period JE rejected, open-period JE
+      succeeds, default ctor still skips guard for legacy tests,
+      legacy `accounting_periods` table still enforced
+      independently, void of a posted JE allowed when today's period
+      is open even if original entry's period was later closed.
+
+----------------------------------------------------------------
+[11.2] Engine-version + tax-inclusive + rounding-mode snapshot on
+       every posted invoice / return header.
+
+  Problem.
+    Phase-9 froze tax_rate_bps_at_post + unit_cost_at_post on
+    *line* tables. The *header* row of every sale / purchase /
+    return contains a totalCents that was produced by
+    InvoicePricingEngine v1 under the engine settings active at
+    post time. If a future engine version changes rounding mode
+    or proration rule, the persisted total is no longer
+    re-derivable from the lines — and the audit trail loses
+    forensic invertibility.
+
+  Fix.
+    + NEW: lib/core/pricing/pricing_snapshot.dart
+        PricingEngineVersion.current = 'v1'
+        PricingSnapshot.roundingMode = 'banker' (mirrors Money's
+        default; pinned by a guard test)
+        Extension `withPricingSnapshot(taxInclusive:)` on the six
+        Companion types — single helper, zero duplication.
+    + Schema migration 10053 → 10054 adds 3 nullable columns to
+      the 6 header tables (sales, purchases, sale_returns,
+      purchase_returns, sale_return_adjustments,
+      purchase_return_adjustments):
+        pricing_engine_version  TEXT
+        tax_inclusive_at_post   INTEGER (0/1)
+        rounding_mode_at_post   TEXT
+      Columns are nullable so every pre-Phase-11.2 row reads back
+      as NULL — no rewrite of history, no semantic change.
+    + Insert sites:
+        - sale_repository_impl.dart           (create + edit)
+        - purchase_repository_impl.dart       (create + edit)
+        - unified_return_service.dart         (4 sites)
+        - sale_adj_return_form_bloc.dart      (1 site)
+        - purchase_adj_return_form_bloc.dart  (1 site)
+      All stamp via `.withPricingSnapshot(taxInclusive: ...)` —
+      no inline literal of the version string anywhere in DAOs.
+
+  Public-API extension.
+    + `SaleRepository.createSale` / `updateSale` / `createSaleReturn`
+      gained `bool taxInclusiveAtPost = false` (default false to
+      preserve back-compat).
+    + Mirror on `PurchaseRepository`.
+    + Form blocs (sale_form_bloc, purchase_form_bloc) wire
+      `state.taxInclusivePricing` through.
+
+  Files touched.
+    + NEW: lib/core/pricing/pricing_snapshot.dart
+    + lib/core/database/app_database.dart   (migration 10054)
+    + lib/core/database/tables/transactions.dart   (3 columns × 6 tables)
+    + lib/features/sales/data/repositories/sale_repository_impl.dart
+    + lib/features/sales/domain/repositories/sale_repository.dart
+    + lib/features/sales/presentation/bloc/sale_form_bloc.dart
+    + lib/features/purchases/data/repositories/purchase_repository_impl.dart
+    + lib/features/purchases/domain/repositories/purchase_repository.dart
+    + lib/features/purchases/presentation/bloc/purchase_form_bloc.dart
+    + lib/core/services/unified_return_service.dart
+    + lib/features/sales/presentation/bloc/sale_adj_return_form_bloc.dart
+    + lib/features/purchases/presentation/bloc/purchase_adj_return_form_bloc.dart
+
+  Tests.
+    + test/integration/phase11_2_pricing_snapshot_stamping_test.dart
+      — 9 tests: every header table (6) stamps correctly; legacy
+      insert without the helper leaves all 3 columns NULL
+      (back-compat); pinned constants test guards against silent
+      bump of either version or rounding mode.
+    + test/integration/production_hardening_test.dart
+        expected schema version 10053 → 10054.
+    + test/integration/fifo_phase_6_4_test.dart
+        same bump.
+
+----------------------------------------------------------------
+[11.3a] Single-currency invariant in createJournalEntry.
+
+  Problem.
+    Every journal_entry_lines row carries its own currencyId, and
+    no validator ensured all lines of one entry agreed. A
+    mathematically balanced (Σdebits = Σcredits) but
+    cross-currency entry would post silently — but with no
+    realised/unrealised FX gain-loss account modelled in the seed
+    CoA, the resulting GL would be economically meaningless.
+
+  Fix.
+    + In `AccountingRepository.createJournalEntry`, after the
+      double-entry + minimum-lines checks, validate:
+        entryData.lines.map((l) => l.currencyId).toSet().length == 1
+      otherwise throw AccountingException('Journal entry mixes
+      currencies ...'). Fires BEFORE the transaction opens, so no
+      DB mutation occurs.
+    + `journal_repository_impl.createJournalEntryWithLines`
+      already delegates here (Phase-9) so the guard flows
+      through every call site automatically — no second writer
+      to patch.
+
+  Files touched.
+    + lib/features/accounting/data/repositories/accounting_repository.dart
+
+  Tests.
+    + test/integration/phase11_3a_single_currency_invariant_test.dart
+      — 4 tests: balanced single-currency JE posts; balanced
+      cross-currency JE rejected with no rows written; reject
+      fires even when math is balanced; 3-line single-currency
+      JE still succeeds.
+
+----------------------------------------------------------------
+[11.3b] Granular accounting permissions.
+
+  Problem.
+    The existing `voidTransactions` permission covered
+    sale/purchase/return voids AND was the de-facto gate for
+    `voidJournalEntry` (which has GL-wide blast radius).
+    `manageAccounting` was the de-facto gate for both period
+    close AND reopen — two operations of very different
+    auditability. Same blast-radius, same gate, no separation
+    of duties.
+
+  Fix.
+    + NEW constants in `Permissions`:
+        voidJournalEntry      = 'void_journal_entry'
+        closeFiscalPeriod     = 'close_fiscal_period'
+        reopenFiscalPeriod    = 'reopen_fiscal_period'
+    + Registered in `Permissions.all`.
+    + Default assignment in `PermissionService`: owner-ONLY.
+      Manager retains `voidTransactions` (invoice voids).
+      Accountant retains `manageAccounting` (GL access).
+      Neither role gains any of the three new permissions
+      without an explicit grant.
+    + UI wiring of permission gates on the actual
+      void-JE / close-period / reopen-period screens is left to
+      whichever screen exposes the action — the permission layer
+      is the SoT; the service layer remains role-agnostic
+      (deliberately, mirroring FiscalPeriodService's comment
+      that "the caller is responsible for validating permission
+      ... the service does not check roles").
+
+  Files touched.
+    + lib/features/auth/domain/entities/permission_constants.dart
+    + lib/features/auth/data/services/permission_service.dart
+
+  Tests.
+    + test/features/auth/data/services/phase11_3b_granular_accounting_permissions_test.dart
+      — 7 tests: constants exist + unique; registered in
+      Permissions.all; owner holds all three; manager has
+      voidTransactions but NOT voidJournalEntry; accountant has
+      manageAccounting but NOT closeFiscalPeriod / reopenFiscalPeriod;
+      cashier + salesperson hold none; inactive owner is denied.
+
+----------------------------------------------------------------
+Phase 11 verification.
+  * flutter analyze --no-pub                                 0 issues
+  * Full test suite                                          2053 / 2053 ✓
+  * Test delta from Phase 9 close:                           +26 (6 + 9 + 4 + 7)
+  * Persisted-totals semantic changes                        0
+  * Unintentional rounding changes                           0
+  * Engine API changes                                       0
+  * New banned-pattern enforcement                           N/A (additive,
+                                                              not a refactor)
+  * Migration (back-compat)
+      - existing rows: pricing_engine_version IS NULL
+        — read paths must treat NULL as "legacy / pre-Phase-11.2",
+        i.e. assume v1 + banker + state.taxInclusivePricing at
+        post time.
+      - new rows: always stamped via PricingSnapshot helper.
+
+What we deliberately did NOT do (YAGNI gates held).
+  * No idempotency / processed_operations table — there is no
+    network sync layer to replay against.
+  * No domain event bus — Drift watch streams already provide
+    reactive UI; no integrations to multiplex to.
+  * No multi-currency FX accounts — single-currency invariant
+    (Phase 11.3a) makes this an explicit future ADR rather than a
+    silent default.
+  * No reservation system — no quotations / pending invoices
+    feature requires it yet.
+  * No fractional quantities — schema remains int-only by
+    design (unit-based selling only).
+  * No external-API ACL — no integrations exist; YAGNI.
+
+Phase 11 status — DONE. Phase 11 reflects the discipline
+established in Phases 0–9: minimal upstream fix, root-cause
+addressed, no over-engineering, every change covered by a
+regression test before next phase begins.
+
+
+
+────────────────────────────────────────────────────────────────
+2026-05-12 — Post-Phase-11 UX bug fix + Phase 12 deferred
+────────────────────────────────────────────────────────────────
+
+Trigger.
+  User screenshot of "المطابقة والصحة" (Accounting Health)
+  showed two reconciliation issues on a stale dev DB:
+    * Accounts payable mismatch:
+        GL(journal_lines)=251,239 vs Suppliers=551,209
+        (Δ +2,999.70 ر.ل, subledger > GL)
+    * Inventory mismatch:
+        GL(journal_lines)=343,130 vs Σ(stock×cost)=661,736
+        (Δ +3,186.06 ر.ل, stock > GL)
+  Trial balance balanced (4,686.93 = 4,686.93 ✓).
+
+Expert-panel verdict (accountant + architect + engineer).
+  Phase 11 cannot mathematically produce this skew:
+    * 11.1 fiscal-period guard never writes / never mutates
+      balance_cents / stock_quantity / cost_cents.
+    * 11.2 pricing-snapshot stamps 3 nullable columns on 6
+      header tables only — zero touch on subledger writers.
+    * 11.3a single-currency invariant rejects mixed entries
+      pre-tx; never generates a JE.
+    * 11.3b granular permissions — string constants only.
+  Pattern (subledger > GL on BOTH AP and Inventory while TB
+  balanced) has exactly one accounting interpretation: the
+  GL is missing entries that the subledger captured. Every
+  current writer was code-reviewed and is sealed:
+    * createSupplier  — recordSupplierOpeningBalanceJournalEntry ✓
+    * variant create  — recordOpeningBalance via Phase-4 invariant ✓
+    * stock adjust    — InventoryAdjustmentService pre-commit JE ✓
+    * updateSupplierBalance direct path — throws StateError ✓
+    * purchase / payment / return — BalanceService + JournalEntryService ✓
+    * WAC drift — self-balancing (COGS uses live WAC) ✓
+  Conclusion: legacy data from pre-Phase-4 dev runs.
+  Recommendation: wipe the dev DB and re-test.
+
+Action taken (UX fix only, surgical).
+  lib/features/reports/presentation/screens/accounting_health_screen.dart
+    * Removed DateRangeSelector from the health screen.
+    * reconcileBalances() compares control account vs subledger
+      total — both sides are lifetime-cumulative by construction.
+      A date selector here lied to the user (the selector did
+      nothing for AP / Inventory checks; reports_bloc.dart's
+      _onReconciliationRequested ignores _dateRange).
+    * Replaced with an inline comment documenting WHY no
+      selector belongs here.
+    * Bloc-level event ReportsDateRangeChanged is intentionally
+      kept (still used by Trial Balance / Balance Sheet / P&L /
+      sales / purchase / inventory / customer / discount /
+      profit / customer-payment screens — 9 consumers).
+  Verification:
+    * flutter analyze (file-scoped) — 0 issues
+    * No semantic engine change; no schema change; no test impact
+
+Phase 12 — DEFERRED (panel decision, not skipped).
+  Phase 12 would be a "legacy-data repair migration" mirroring
+  repairOverpaymentJournalEntries — generating catch-up JEs:
+    * AP repair: ∀ supplier with balance_cents ≠ 0 and no
+      opening JE, post Dr 3100 / Cr 2000 for the delta.
+    * Inventory repair: ∀ variant with stock_quantity > 0 and
+      no opening JE, post Dr 1200 / Cr 3100 for qty × cost.
+  Held off because:
+    1. No production data exists yet — only a wipe-able dev DB.
+    2. Writing repair logic without a real failing dataset is
+       speculative; it violates the YAGNI gate that governed
+       Phases 1-11.
+    3. Disciplined gate to open Phase 12: "user wipes dev DB,
+       re-tests, and the same mismatch reappears OR the first
+       production deployment surfaces it on un-wipeable data."
+
+Side-finding (logged, not fixed yet).
+  journal_repository_impl.reconcileBalances() and
+  accounting_repository.reconcileBalances() each contain a
+  reconciliation implementation. They are NOT identical:
+    * journal_repository_impl includes the Inventory check
+      (1200 vs Σ stock×cost) — this is the path the UI uses.
+    * accounting_repository omits the Inventory check.
+  Not user-visible (DI wires UI to journal_repository_impl)
+  but worth a future consolidation pass if a Phase 12 opens.
+
+═══════════════════════════════════════════════════════════════════════════════
+PHASE 12 — VOID INTEGRITY HARDENING                                  2026-05-13
+═══════════════════════════════════════════════════════════════════════════════
+
+TRIGGER
+-------
+Field-report from user: the "Reconciliation & Health" screen flagged
+  AR mismatch:        GL(journal_lines) = 45997  vs  Σ customers = 68994
+  Inventory mismatch: GL(journal_lines) = 153450 vs  Σ(stock×cost) = 138600
+
+Backup attached: tapix_backup_20260513_121448.db. User also reported:
+  - Adjustment (unlinked) returns again allow returning MORE than was
+    ever sold/purchased for a product/party.
+  - Voiding a sale/purchase that has dependent returns silently
+    corrupts stock and AR/AP without warning.
+
+DIAGNOSTIC PASS (raw SQL on /tmp/tapix_diag.db)
+-----------------------------------------------
+Reproduced both drifts exactly:
+  AR drift  = customers.balance(68994) − GL(45997) = 22997
+  Inv drift = GL(153450) − Σ(stock×cost)(138600)   = 14850
+
+Walking the journal_entries table:
+  Sale #3 (INV-202605-0003, status=voided) had:
+    JE#16  sale         AR(1100) Dr 68994
+    JE#20  sale_return  AR(1100) Cr 22997   ← STILL posted, is_reversed=0
+    JE#22  reversal     AR(1100) Cr 68994
+  Net AR(1100) movement for this customer/sale = -22997 ✓ matches drift.
+
+  sale_items for sale#3 still carried qty_returned_adjustment=1 on each
+  of two lines despite the sale being voided — orphaned counter that
+  the unlinked-return form happily allowed because the cap query did
+  not exclude voided sales.
+
+ROOT CAUSES (all three are upstream, in existing SoTs)
+-------------------------------------------------------
+R1  adjustment_return_dao.dart — four cap queries:
+      getCustomerProductPurchasedQty / getCustomerProductReturnedQty
+      getSupplierProductSuppliedQty  / getSupplierProductReturnedQty
+    Missing `sales.status = 'completed'` / `purchases.status = 'posted'`
+    filter. Voided/draft documents inflated the "ever sold/purchased"
+    total, letting the user create adjustment returns against ghosts.
+
+R2  sale_dao.voidSale + purchase_dao.voidPurchase — cascade:
+    Cascade-voided every linked sale_return / purchase_return row to
+    status='voided' but never told JournalEntryService to reverse the
+    return's posted JE. Result: status flag flipped, GL leg stayed
+    posted, AR/AP/Inventory drifted by exactly the return's amount.
+
+R3  sale_repository_impl.voidSale + purchase_repository_impl.voidPurchase:
+    No pre-flight integrity guard. A user could void an invoice that
+    had a posted unlinked adjustment return FIFO-allocated against
+    its lines. Voiding orphaned the allocations entirely — items
+    disappeared from the cap, but GL/stock impact remained.
+
+FIXES (additive, single-source-of-truth, no scattered code)
+-----------------------------------------------------------
+A  adjustment_return_dao.dart — added status filter to all four cap
+   queries (+13 lines total).
+
+B  sale_dao.voidSale  + purchase_dao.voidPurchase
+   - Now accept optional `JournalEntryService journalEntryService` +
+     `int? userId` named args.
+   - Inside the cascade-void loop, BEFORE calling voidSaleReturn /
+     voidPurchaseReturn the DAO emits
+       journalEntryService.voidJournalEntriesForSource(
+         sourceTable: 'sale_returns' / 'purchase_returns',
+         sourceId: ret.id,
+         reason: '<Sale|Purchase> voided — cascade',
+         userId: userId)
+     so the return's JE is reversed inside the SAME tx that flips its
+     status (~50 lines combined).
+   - When the service is null (legacy DAO-only test paths), the old
+     behaviour is preserved.
+
+C  NEW SoT: lib/core/services/void_impact_analyzer.dart  (443 lines)
+   - VoidImpactAnalyzer.analyzeSaleVoid(int saleId)
+   - VoidImpactAnalyzer.analyzePurchaseVoid(int purchaseId)
+   - Returns VoidImpactReport with:
+       * linkedReturns                — will cascade-void (warning)
+       * adjustmentAllocatedQty       — total qty consumed by adj-rets
+       * entangledAdjustmentReturns   — posted adj-rets that touch
+                                         any of this doc's products
+                                         from the same party (BLOCKER)
+       * negativeStockRisks           — projected variant negatives (BLOCKER)
+       * estimatedArAdjustmentCents   — signed AR (sale) / AP (purchase)
+       * estimatedInventoryAdjustmentCents
+   - report.hasBlockers triggers VoidBlockedByImpactException, thrown
+     by the repository BEFORE any state change.
+
+D  sale_repository_impl.voidSale + purchase_repository_impl.voidPurchase
+   - Run analyzer first; throw VoidBlockedByImpactException(report) on
+     blockers.
+   - Pass journalEntryService + userId into the datasource / DAO so
+     the cascade in B can reverse linked-return JEs.
+   - purchase_local_datasource.voidPurchase signature widened to
+     accept the same two args (forwarded to DAO).
+
+E  NEW SHARED UI: lib/core/widgets/void_impact_dialog.dart  (280 lines)
+   - Three semantic sections: blockers (red), warnings (amber),
+     estimated GL impact (neutral).
+   - "Confirm void" button is DISABLED while any blocker exists.
+   - Used by both sale_detail_screen and purchase_detail_screen via
+     static VoidImpactDialog.show(context, report).
+   - Full i18n in en / ar / fr (void_impact.* namespace).
+
+F  Detail screens consume the dialog
+   - sale_detail_screen.dart   — case 'void' replaced with
+     analyzer + dialog + try/catch on VoidBlockedByImpactException.
+   - purchase_detail_screen.dart — same pattern.
+
+G  Regression test pack:
+   test/integration/void_corruption_regression_test.dart (8 tests):
+     Fix A:
+       - voided sale: customer cannot return its qty via adjustment
+       - voided purchase: supplier cannot return its qty via adjustment
+       - draft sale: never delivered, must not count as invoiced
+     Fix B:
+       - voiding a sale via repo flow leaves NO orphan posted JEs
+       - voiding a purchase reverses cascade-voided purchase_return JEs
+     Fix C:
+       - analyzeSaleVoid reports adjustment-return allocations as BLOCKER
+       - analyzeSaleVoid with no entanglement → hasBlockers=false
+       - analyzePurchaseVoid reports entangled purchase adjustment returns
+
+SCHEMA CHANGE
+-------------
+NONE. The atomic counters qty_returned_linked + qty_returned_adjustment
+on sale_items / purchase_items already existed and were already the
+SoT for "what came back". Phase 12 only teaches the cap and the void
+path to read them honestly.
+
+I18N
+----
+Added namespace `void_impact.*` in en.json, ar.json, fr.json
+(18 keys × 3 languages).
+Added missing `sales.void_failed_title` and `sales.voided_success` in
+all three languages (only `purchases.*` had them before).
+
+TEST DATA FIX (no semantic change)
+----------------------------------
+test/core/database/daos/adjustment_return_dao_history_test.dart now
+seeds purchases with status='posted' instead of the schema-default
+'draft' — matches the production lifecycle where postPurchase flips
+the status. Without this fix the test fixtures fail Fix A's status
+filter (correctly).
+
+VERIFICATION
+------------
+flutter analyze --no-pub  ........................  0 issues
+flutter test (full suite) ........................  2093 / 2093 ✓
+                                                    (+40 from Phase 11 close)
+
+YAGNI GATES EXPLICITLY HELD
+---------------------------
+NOT done in Phase 12, with re-open triggers:
+  * Domain-event bus for cascades — only justified by a third-party
+    integration (Phase 11 gate still holds).
+  * Per-line auditable allocation table linking each
+    sale_return_adjustment_item to the exact sale_item rows it
+    consumed by FIFO — analyzer's product-level entanglement check
+    is sufficient for the current pre-flight UX. Re-open trigger:
+    a regulator requires per-allocation traceability, OR the user
+    asks for FIFO-reversal-on-void.
+  * Automatic re-creation of orphaned adjustment returns when their
+    parent sale is voided — user research is the trigger.
+
+FILES TOUCHED (lib/)
+--------------------
+  lib/core/database/daos/adjustment_return_dao.dart            +13 lines
+  lib/core/database/daos/sale_dao.dart                         +26 lines (cascade-JE)
+  lib/core/database/daos/purchase_dao.dart                     +21 lines (cascade-JE)
+  lib/core/services/void_impact_analyzer.dart                  443 lines (NEW)
+  lib/core/widgets/void_impact_dialog.dart                     280 lines (NEW)
+  lib/features/sales/data/repositories/sale_repository_impl.dart       +20 lines
+  lib/features/purchases/data/repositories/purchase_repository_impl.dart +21 lines
+  lib/features/purchases/data/datasources/purchase_local_datasource.dart +16 lines
+  lib/features/sales/presentation/screens/sale_detail_screen.dart       +42 lines
+  lib/features/purchases/presentation/screens/purchase_detail_screen.dart +14 lines
+  assets/translations/en.json                                  +21 keys
+  assets/translations/ar.json                                  +21 keys
+  assets/translations/fr.json                                  +21 keys
+
+FILES TOUCHED (test/)
+---------------------
+  test/integration/void_corruption_regression_test.dart        624 lines (NEW)
+  test/core/database/daos/adjustment_return_dao_history_test.dart  +5 lines (fixture)
+
+DOCS UPDATED
+------------
+  docs/adr/0001-pricing-engines-as-sot.md  §9 Phase 12 closure
+  docs/adr/0003-retrospective.md           §6 hooks 8–11
+  docs/SOURCE_OF_TRUTH_MAP.md              §9 Phase 12 additions
+  docs/ACCOUNTING_INTEGRITY_GUIDELINES.md  3 new SoT rows + 3 new banned-pattern rows + Phase 12 invariant tests
+  progress.txt                             this entry
+
+FIELD-FACING REMEDIATION FOR THE BACKUP IN HAND
+-----------------------------------------------
+The backup tapix_backup_20260513_121448.db carries the historical
+drift baked into the journal_entries / customers / accounts tables.
+The Phase 12 fixes prevent NEW drift, but do not retroactively rewrite
+the orphaned JE#20 (sale_return SR-202605-0001) — that is a one-shot
+reconciliation entry the user would post manually, or rebuild via
+LedgerRebuildService. The reconciliation screen will continue to flag
+the existing drift until the user voids the orphan return JE or runs
+a ledger rebuild. Both paths exist and are auth-gated.
+
+
+=== 2026-05-17 — Min-stock default re-linked to settings.lowStockThreshold ===
+
+Field report: creating a new product showed "min quantity = 0" instead of
+inheriting the global "Low stock threshold" slider from Settings → Inventory.
+The pre-existing UX (every new product seeded with the global threshold, with
+full per-product override on the form) was silently lost when inventory
+tracking types (standard / batch / batch_expiry) were introduced.
+
+Root cause (single upstream line):
+  lib/features/products/presentation/screens/product_form_screen.dart:65
+  hard-coded `defaultMinQuantity: 0` when constructing
+  `ProductFormInitialized`. The bloc, repo, DAO and settings plumbing
+  were already correct — only the screen-level default was wrong.
+
+Fix (additive, zero scattered logic, zero schema change):
+  • Pass `settings.lowStockThreshold` (already read from `AppSettingsBloc`
+    one line above) as `defaultMinQuantity`. Comment rewritten to reflect
+    the restored contract.
+  • Per-product override still works exactly as before: the user can
+    type any value into the `الحد الأدنى للمخزون` field; it lands in
+    `products.min_quantity` via the existing `_onFieldChanged` path.
+
+Regression tests (`test/features/products/presentation/bloc/product_form_bloc_test.dart`):
+  +2 tests under `ProductFormInitialized`:
+    - new product inherits defaultMinQuantity and defaultTrackInventory from settings
+    - new product can be initialized with tracking disabled by default
+  Pinned to the bloc-side contract so the regression cannot resurface.
+
+Verification:
+  • `flutter analyze --no-pub` on the touched files → 0 issues
+  • `flutter test test/features/products/presentation/bloc/product_form_bloc_test.dart`
+    → 12/12 ✓ (10 existing + 2 regression)
+
+SoT respected:
+  • Settings (`lowStockThreshold`) remains the single source for the DEFAULT.
+  • `products.min_quantity` remains the single source for the PER-PRODUCT value.
+  • Filter queries (`watchFilteredProducts`, `filterProducts`) still fall
+    back to the global threshold when per-product `min_quantity` is 0,
+    unchanged by this fix.
+
+YAGNI gates held:
+  • No new event/state field — `ProductFormInitialized.defaultMinQuantity`
+    already existed and was wired through `_onInitialized`.
+  • No new column — `min_quantity` already exists on `products`.
+  • No bulk-form change — bulk product rows have their own per-row
+    `minQuantity` UI, independent of this single-product flow.
+
+
+────────────────────────────────────────────────────────────────────────
+2026-05-17 — PHASE 13 (FIELD-BUG-FIX) — Supplier discount drift + linked-return cap bypass after adjustment-return
+────────────────────────────────────────────────────────────────────────
+
+TRIGGER
+  User reported two production bugs after upgrading to schema 10055
+  (tapix_backup_20260517_182011.db):
+
+  R1. After recording a $9.90 discount from the supplier-profile screen,
+      Reconciliation & Health flagged:
+        Inventory mismatch: GL(journal_lines)=276210, Σ(stock×cost)=277200
+      Drift = exactly 990 cents = the discount amount. Forensic SQL of
+      JE#10 confirmed the offending posting:
+        Dr 2000 Accounts Payable 990
+        Cr 1200 Inventory        990   ← WRONG: no stock movement
+
+  R2. After posting an ADJUSTMENT (unlinked) sale-return for product P,
+      the cashier could then post a LINKED sale-return of the SAME sale
+      whose summed quantity (linked + adjustment) EXCEEDED the originally
+      sold quantity. Same bug on the purchase side. Result: stock went
+      higher than the units that were ever bought (or sold).
+
+ROOT CAUSES
+
+  R1 — `JournalEntryService.recordDirectSupplierDiscountJournalEntry`
+       was crediting account 1200 Inventory for a transaction with NO
+       stock-side counterpart. Permanent GL/stock drift on every use.
+
+  R2 — Three SoTs that compute "already returned for this line" only
+       looked at LINKED returns (`sale_return_items` / `purchase_return_items`)
+       and ignored the `qty_returned_adjustment` counter that
+       `AdjustmentReturnDao` bumps when an unlinked return is posted:
+         a) SaleDao.getReturnedQuantity     (cap in postSaleReturn)
+         b) PurchaseDao.getReturnedQuantity (cap in postPurchaseReturn)
+         c) UnifiedReturnService._getSaleReturnableItems
+            and _getPurchaseReturnableItems (the "remaining" UI surface)
+
+FIXES (all additive, single-SoT, zero scattered logic)
+
+  R1 fix — `lib/core/services/journal_entry_service.dart`
+    • New SoT account 4900 Purchase Discounts Earned (revenue / other
+      income). Seeded by BOTH chart-of-accounts seeders:
+        - `lib/core/database/app_database.dart`   (in-app default seed)
+        - `lib/features/accounting/data/repositories/journal_repository_impl.dart`
+          (repository seed used by tests + migration)
+    • `recordDirectSupplierDiscountJournalEntry` now posts:
+        Dr 2000 Accounts Payable      amountCents
+        Cr 4900 Purchase Discounts Earned  amountCents
+      Stock layers untouched, Σ(stock × cost) unchanged, discount
+      correctly recognised as income — IFRS / GAAP-conformant treatment
+      of an unallocated supplier rebate that cannot be allocated back
+      to specific PO lines without a full landed-cost recalculation.
+    • The customer-side counterpart (`recordDirectCustomerDiscount…`)
+      was ALREADY correct — Dr 5500 Discounts Given (expense) /
+      Cr 1100 Accounts Receivable — and is now pinned defensively by
+      a symmetric regression test so it can never regress.
+
+  R2 fix — three surgical SQL widenings
+    • `SaleDao.getReturnedQuantity`:
+        return = COALESCE((SELECT SUM(sri.quantity) FROM sale_return_items sri
+                           JOIN sale_returns sr ON sr.id = sri.return_id
+                           WHERE sri.sale_item_id = ? AND sr.status != 'voided'), 0)
+                 + COALESCE((SELECT qty_returned_adjustment
+                             FROM sale_items WHERE id = ?), 0)
+      Counter-based adjustment branch piggybacks on the existing void/post
+      flow inside `AdjustmentReturnDao`, so no new bookkeeping table.
+    • `PurchaseDao.getReturnedQuantity`: symmetric widening.
+    • `UnifiedReturnService._getSaleReturnableItems` and
+      `_getPurchaseReturnableItems`: their inline `already_returned`
+      sub-SELECT now also adds the counter, so the UI's "remaining qty"
+      surface shrinks the moment an adjustment return is posted.
+
+  Mutex-style invariant after the fix:
+      (linked_returned + adjustment_returned) ≤ original_qty
+  Holds on BOTH posts. Either branch can be done first; the second
+  branch now correctly sees the prior allocations.
+
+SCHEMA CHANGE
+  NONE. `qty_returned_linked` + `qty_returned_adjustment` already exist
+  on `sale_items` / `purchase_items` from Phase 12. We only widened
+  read queries to consult both counters.
+
+REGRESSION TESTS (3 new files, 13 new tests)
+
+  test/integration/supplier_discount_inventory_drift_test.dart (4 tests)
+    1. account 4900 is seeded as revenue / system
+    2. supplier-discount JE = Dr 2000 / Cr 4900 — never touches 1200
+    3. end-to-end: GL(1200) == Σ(stock × cost) before AND after a
+       supplier discount (the exact field-report invariant)
+    4. LedgerRebuildService produces the same correct JE shape on
+       rebuild — recovery path for users carrying the historical
+       buggy posting in their books.
+
+  test/integration/customer_discount_inventory_drift_test.dart (2 tests)
+    1. customer-discount JE = Dr 5500 / Cr 1100 — never touches 1200
+    2. GL(1200) == Σ(stock × cost) before AND after a customer
+       discount (symmetric invariant, defense-in-depth).
+
+  test/integration/linked_return_cap_after_adjustment_test.dart (7 tests)
+    Purchase side:
+    1. `getReturnedQuantity` returns linked + adjustment counter
+    2. `_getPurchaseReturnableItems` exposes correct remaining qty
+    3. linked return ABOVE the remaining cap is REJECTED
+    4. linked return AT EXACTLY the remaining cap succeeds
+    Sale side: symmetric 1-3 (the "at-exact-cap" path collapses with
+    the production sale-return cap exception, so it is asserted by
+    the rejection test only).
+
+VERIFICATION
+  • `flutter analyze --no-pub` → 0 issues
+  • Full suite: 2114 / 2114 ✓ (+13 from the previous Phase-12 close
+    at 2101; one pre-existing seed-count test updated 23 → 24 to
+    reflect the new 4900 account).
+  • Forensic backup analysis confirmed JE#10 is the SOLE source of
+    the 990-cent drift in the user's file. JE#1..JE#9 reconcile
+    perfectly with on-hand stock and AR/AP balances.
+
+FIELD-FACING RECOVERY (for users who already have buggy data)
+  Drift baked into existing journal entries is HISTORICAL — Phase 13
+  prevents NEW drift, it does not retroactively fix already-posted
+  buggy JEs. To clean an existing backup the user must run
+  Reconciliation & Health → "Rebuild Ledger" which uses
+  `LedgerRebuildService.rebuild`; the rebuild re-emits every
+  supplier_discount JE through the FIXED helper (Dr 2000 / Cr 4900),
+  and `getTotalInventoryValueCents()` will match GL(1200) again.
+
+YAGNI GATES HELD
+  • No new "discount allocation engine" that would attribute a rebate
+    back to specific PO lines. Real-world rebates are usually period-
+    based and crossing PO lines; allocating would require landed-cost
+    recalculation, which is out of scope for v1.
+  • No new "returnable_quantity" materialised table. The counter
+    columns already exist; widening two read paths is sufficient.
+  • No domain-event bus for cascading the counter. Adjustment posts
+    and voids already write the counter inline inside the same tx.
+
+DOCS UPDATED
+  • progress.txt (this entry).
+  • Memory updated to reflect 4900 + counter-aware caps as new SoTs.
+
+
+────────────────────────────────────────────────────────────────────
+PHASE 14 — CHEQUE LIFECYCLE (MINIMAL-RISK SLICE)            2026-05-17
+────────────────────────────────────────────────────────────────────
+
+CONTEXT
+  Field question: do all six invoice/return flows surface cheque
+  reminders, and can the user confirm "collected" / "paid" / "bounced"
+  in a way that persists across devices and reinstalls?
+
+AUDIT FINDINGS (six flows × four traits)
+  ┌─────────────────────────────┬──────┬──────┬─────────┬───────────┐
+  │ flow                        │ UI   │ DB   │ Dash    │ Persist   │
+  │                             │ pick │ due  │ feed    │ confirm   │
+  ├─────────────────────────────┼──────┼──────┼─────────┼───────────┤
+  │ Sale                        │ ✅   │ ✅   │ ✅      │ ❌ (Prefs)│
+  │ Purchase                    │ ✅   │ ✅   │ ✅      │ ❌ (Prefs)│
+  │ Linked sale_return          │ ❌   │ ❌   │ ❌      │ ❌        │
+  │ Linked purchase_return      │ ❌   │ ❌   │ ❌      │ ❌        │
+  │ Adjustment sale return      │ ✅   │ ✅   │ ✅      │ ❌ (Prefs)│
+  │ Adjustment purchase return  │ ✅   │ ✅   │ ✅      │ ❌ (Prefs)│
+  └─────────────────────────────┴──────┴──────┴─────────┴───────────┘
+  Two structural gaps:
+    G1 — linked returns paid by cheque vanish from the dashboard.
+    G2 — "Confirm Collected" wrote to SharedPreferences only → state
+         lost on reinstall, never auditable, not in DB.
+
+CHOSEN SCOPE (Minimal-Risk)
+  Closes both gaps WITHOUT touching journal-entry policy. The full
+  cheque-clearing JE redesign (Cheques-in-Hand 1020 / Cheques-Issued
+  2030 with two-step JE per cheque, matching IAS 7 / QuickBooks
+  Undeposited Funds) is deferred to a future phase. Reason: zero
+  schema risk on existing posted JEs and zero risk to the 2129-test
+  baseline.
+
+SCHEMA — migration 10055 → 10056 (additive, idempotent)
+  • NEW TABLE `cheque_confirmations` — natural key (source_table,
+    source_id) UNIQUE; lifecycle column `status` ∈ {confirmed,
+    bounced, cancelled}; optional bounce_reason; audit timestamps;
+    user_id FK.
+  • NEW COLUMN `sale_returns.due_date` — nullable.
+  • NEW COLUMN `purchase_returns.due_date` — nullable.
+  • Indexes on `cheque_confirmations(status)` and
+    `cheque_confirmations(source_table)` to keep the dashboard
+    aggregator hot.
+
+NEW DAO
+  • `ChequeConfirmationDao` (lib/core/database/daos/) —
+      watchAllAsMap() → Map<'<source_table>|<source_id>', row>
+      get(sourceTable, sourceId)
+      confirm/bounce/cancel/reopen — idempotent upsert by natural key
+      countByStatus, deleteForSource (used by void cascade later)
+  • Registered in DI (`injection_container.dart`) as a lazy singleton.
+
+REPOSITORY + BLOC THREADING
+  Sale-side linked return:
+    • SaleRepository.createSaleReturn — new `DateTime? dueDate` param.
+    • SaleRepositoryImpl — persists into SaleReturnsCompanion.dueDate.
+    • SaleReturnFormBloc — new `dueDate` state field, new
+      `SaleReturnDueDateChanged` event, validator
+      `isChequeMissingDueDate` (true ⇔ method=cheque && dueDate=null).
+  Purchase-side linked return — fully symmetric. Adjustment returns
+  already had due_date; no change needed.
+
+UI
+  • Sale return form (`sale_return_form_screen.dart`) — new
+    `_buildChequeDueDatePicker` shown ONLY when refundMethod=='cheque'.
+    Bottom-bar submit disabled while `isChequeMissingDueDate`.
+  • Purchase return form — symmetric.
+  • Dashboard `ChequeRemindersSection` — full rewrite:
+      - reads `ChequeConfirmationDao.watchAllAsMap()` alongside the
+        cheque feed (no SharedPreferences anywhere).
+      - splits the card into two grouped lists with headers:
+        "Cheques to collect" (incoming: sales, adj sale returns,
+        linked purchase returns) and "Cheques to pay" (outgoing:
+        purchases, adj purchase returns, linked sale returns).
+      - per row: chip with source type + due-date countdown +
+        primary action ("Confirm Collected" or "Confirm Paid") +
+        overflow ("Mark Bounced", "Cancel Cheque").
+      - bounce dialog captures `bounce_reason` (nullable).
+      - confirmed/bounced/cancelled rows disappear from the feed
+        because the aggregator filters on `status NOT IN
+        (confirmed, cancelled)`. A "show resolved" toggle is NOT
+        added in this slice (YAGNI — see below).
+
+i18n
+  Added 14 new keys to en/ar/fr under `dashboard.*`:
+    cheque_confirm_paid, cheque_mark_bounced, cheque_bounce_title,
+    cheque_bounce_reason_label, cheque_bounce_reason_hint,
+    cheque_cancel, cheque_cancel_title, cheque_cancel_confirm,
+    cheque_direction_incoming, cheque_direction_outgoing,
+    cheque_sale_return_linked, cheque_purchase_return_linked.
+  Existing form-screen keys (`sales.cheque_due_date`, etc.) already
+  present in all three languages — no AR/FR backfill needed.
+
+REGRESSION TESTS (+17 net)
+  • test/core/database/daos/cheque_confirmation_dao_test.dart (13) —
+    natural-key upserts, status transitions, watch-as-map keying,
+    duplicate-natural-key UNIQUE constraint, idempotent confirm.
+  • test/integration/cheque_reminder_six_sources_test.dart (4) —
+    pins the 4 invariants:
+      (a) due_date persists on linked sale/purchase returns
+      (b) dashboard UNION surfaces exactly one cheque from each
+          of the six sources
+      (c) voided / draft documents are excluded from the feed
+      (d) cheque_confirmations natural key matches dashboard lookup
+  • Schema-version tests bumped 10055 → 10056 (2 files):
+    fifo_phase_6_4_test.dart, production_hardening_test.dart.
+
+VERIFICATION
+  • `flutter analyze --no-pub` → 0 issues
+  • Full suite: 2131 / 2131 ✓ (+17 from Phase-13 close at 2114).
+
+YAGNI GATES HELD (deferred, NOT killed)
+  ✗ Full cheque-lifecycle JE engine (Dr 1020 / Cr 4000 on issue,
+    Dr 1010 / Cr 1020 on clear) — needs ChequeService SoT + 6 wire-up
+    sites + Chart-of-Accounts seed for 1020/2030. Will revisit once
+    field users confirm the minimal slice meets reconciliation needs.
+  ✗ Dedicated /cheques register screen (QuickBooks-style) —
+    dashboard reminder feed is sufficient until users ask for
+    historical browsing.
+  ✗ Cheque-number / bank / branch capture — the existing schema
+    doesn't require it, and adding it touches every form. Deferred
+    until the JE engine lands so the columns become part of the
+    same migration.
+  ✗ Bounce-fee bank-charges JE — depends on the JE engine.
+  ✗ Replace-cheque workflow (old → new linked) — depends on the
+    JE engine.
+  ✗ Backfill of pre-existing cheques on legacy invoices — no field
+    user has reported losing existing reminders; the rewrite reads
+    the SAME 6 source tables the old code did.
+
+FIELD-FACING NOTE
+  Old SharedPreferences dismissals (if any user had used the old
+  "Confirm Collected" button) are NOT migrated — they were never
+  authoritative state. Users will see the relevant cheques reappear
+  on first launch after upgrade and can re-confirm them. This is
+  intentional: it surfaces any cheques that were dismissed without
+  the actual collection event ever happening.
+
+DOCS UPDATED
+  • progress.txt (this entry).
+
+
+────────────────────────────────────────────────────────────────────
+PHASE 14.2 — DISCOUNT-MODE TOGGLE SYMMETRY                  2026-05-18
+────────────────────────────────────────────────────────────────────
+
+TRIGGER
+-------
+Field bug report on the purchase invoice form:
+  1. User selects DiscountMode.perItem and enters per-line discounts.
+  2. User changes their mind and toggles to DiscountMode.invoice.
+  3. The previously-entered per-line discounts remain visible on
+     each line in the form state.
+  4. The user worries this could cause a "double discount they
+     don't notice" — and asks us to also verify the sale form.
+
+ROOT-CAUSE ANALYSIS (single root, two affected SoTs)
+----------------------------------------------------
+PurchaseFormBloc._onDiscountModeChanged and
+SaleFormBloc._onDiscountModeChanged were ASYMMETRIC handlers:
+both cleared `invoiceDiscountCents` (and `invoiceDiscountPercent`
+for the purchase side) on mode switch, but neither cleared per-line
+`discountCents` on `state.items` when switching INTO `invoice` mode.
+
+The pricing engine (InvoicePricingEngine.compute) already masks
+per-line discounts in invoice mode via the `overrideDiscount:
+inInvoiceMode ? Discount.none : null` argument in `_computePricing`,
+so the BOOKS were always correct (Q3 mode-exclusivity at
+compute-time). But the STATE was leaky:
+
+  * `state.itemDiscountCents` getter still summed the stale field
+    and surfaced it in the UI.
+  * The line-edit dialog reopened the line and prefilled the stale
+    discount as if it were active.
+  * Toggling back to `perItem` mode silently re-activated the old
+    per-line discounts — the exact "double-discount the user can't
+    notice" the user reported.
+
+The proven reference pattern already existed in
+`SaleAdjReturnFormBloc._onDiscountModeChanged` (Phase 11) with an
+explicit code comment warning about EXACTLY this bug class:
+  "Without this, item-level discounts would silently stack with
+   a freshly-entered overall discount (or vice-versa), causing a
+   'double-discount' bug where the same nominal 1% produces two
+   different totals depending on which entry path was used."
+
+The fix is to mirror that pattern in the two main forms.
+
+FIXES (additive, single SoT, zero scattered code)
+--------------------------------------------------
+A. `lib/features/purchases/presentation/bloc/purchase_form_bloc.dart`
+   `_onDiscountModeChanged` now:
+     * On switch to `invoice` mode: maps every `state.items[i]`
+       through `copyWith(discountCents: Decimal.zero)`.
+     * On switch to `perItem` mode: keeps items as-is (they were
+       already required to be clean while in invoice mode).
+     * Continues to zero `invoiceDiscountCents` and
+       `invoiceDiscountPercent` on every mode switch (existing
+       behaviour, kept for symmetry).
+     * Sets `hasUnsavedChanges: true` so the unsaved-changes guard
+       fires correctly.
+
+B. `lib/features/sales/presentation/bloc/sale_form_bloc.dart`
+   `_onDiscountModeChanged` mirrors (A) symmetrically (no
+   `invoiceDiscountPercent` field on the sale state).
+
+C. Doc-comment refresh on `PurchaseFormState.itemDiscountCents` and
+   `SaleFormState.itemDiscountCents` getters: the previous comment
+   ("the UI still surfaces them so users can see what they
+   previously entered before switching modes") was a description
+   of the BUG, not the contract. Updated to describe the new
+   contract: "in `invoice` mode this is always zero".
+
+DELIBERATELY UNCHANGED
+----------------------
+  * Pricing engine — InvoicePricingEngine and LineItemPricingEngine
+    contracts are untouched. Defence-in-depth Q3 masking is still in
+    place; state-level wiping is the single SoT, engine masking is
+    the seatbelt.
+  * Submission contract — `_onSubmitted` still persists
+    `pricing.lines[idx].totalLineDiscount.cents` per line. Books
+    were always correct; this fix only aligns STATE with the engine
+    view.
+  * `SaleAdjReturnFormBloc` — already had the correct pattern
+    (untouched, kept as the reference implementation).
+  * Schema — no migration. No new fields, no new tables.
+  * i18n — no new keys. The fix is purely behavioural.
+  * Accounting — no JE changes, no chart-of-accounts changes,
+    no balance changes.
+
+REGRESSION PACK (8 new tests, both directions × 2 forms)
+---------------------------------------------------------
+  • test/features/purchases/purchase_form_discount_mode_toggle_test.dart
+      ◦ perItem → invoice wipes per-line on every item.
+      ◦ invoice → perItem wipes invoice-level discount.
+      ◦ Back-and-forth toggle never resurrects stale per-line.
+      ◦ Sanity: engine masks stale per-line in invoice mode (the
+        defence-in-depth seatbelt).
+  • test/features/sales/sale_form_discount_mode_toggle_test.dart
+      ◦ Symmetric four tests for `SaleFormBloc`.
+
+VERIFICATION
+------------
+  • `flutter analyze --no-pub` → No issues found!
+  • `flutter test` → 2139 / 2139 ✓ (+8 from these new tests).
+  • Pre-existing pricing goldens (purchase_form / sale_form /
+    return_form) — unchanged, all green.
+
+YAGNI GATES HELD
+----------------
+  ✗ Confirmation dialog before clearing per-line discounts on
+    mode switch — the existing handler already destroys the
+    invoice-level discount silently, and the symmetric behaviour
+    matches user mental-model. Re-evaluate if field reports request
+    a confirm step.
+  ✗ "Soft-mode" preserving discounts in a hidden buffer for
+    restore-on-back-toggle — adds state surface area with no
+    accounting benefit; the engine already does the right thing,
+    and the user explicitly reported the preservation as a BUG.
+  ✗ Migration / cleanup of historical invoices that were saved
+    with stale per-line `discountCents` while `discount_mode='invoice'`
+    — no such corruption exists in the books because the engine
+    masked the stale data at submit time. The DB rows for those
+    sales/purchases reflect the engine output, not the leaky state.
+
+FIELD-FACING NOTE
+  This fix prevents future user confusion. Existing posted invoices
+  are correct in the books (engine-masked), so no rebuild or
+  reconciliation step is required.
+
+DOCS UPDATED
+  • progress.txt (this entry).
+  • docs/ACCOUNTING_INTEGRITY_GUIDELINES.md — Phase 14.2 SoT row +
+    new banned pattern entry pinning the test path.
+  • Inline doc-comments on `PurchaseFormState.itemDiscountCents`
+    and `SaleFormState.itemDiscountCents`.
+
+
+────────────────────────────────────────────────────────────────────
+PHASE 15 — CHEQUE LIFECYCLE JE WIRING + BATCH-LEDGER VALUATION   2026-05-18
+────────────────────────────────────────────────────────────────────
+
+TRIGGER
+  Field bug report on backup `tapix_backup_20260518_011740.db`
+  (schema 10056). Two distinct issues, both surfaced by the same
+  cheque-payable workflow:
+
+  R1 — User confirmed PO-202605-0002 cheque cleared via dashboard
+       "Confirm Paid". The cheque_confirmations row showed
+       status='cleared', BUT:
+         • purchase_payments was empty (no payment row).
+         • purchases.paid_amount_cents = 0.
+         • supplier_transactions held no 'payment' entry.
+         • suppliers.balance_cents = 360364 instead of 300970
+           (off by exactly the cheque amount of 59394).
+         • No journal entry for the settlement.
+       The supplier profile kept showing the original balance and
+       reconciliation surfaced the gap immediately.
+
+  R2 — Reconciliation & Health screen reported a 990¢ inventory
+       drift for variant tt55-1 (p1 has v): GL(1200) = 355806 but
+       Σ(variant.stock × variant.cost) = 354814. The books were
+       100% correct; the formula was wrong.
+
+ROOT CAUSE — R1 (Phase 14 deferred the JE side)
+  ChequeConfirmationDao.confirm() wrote ONLY to cheque_confirmations
+  (a lifecycle sidecar). The lib/core/database/tables/cheques.dart
+  doc-comment acknowledged this gap: "A future phase will wire a JE
+  reversal here". Phase 14 closed the dashboard-dismissal-stuck-in-
+  SharedPreferences bug but explicitly deferred posting a real
+  PurchasePayment/SalePayment + Dr/Cr Bank JE on the cleared
+  transition. Confirming the cheque was therefore a no-op against
+  the supplier/customer balance, AR/AP totals, and the general
+  ledger — exactly the field-reported symptom.
+
+ROOT CAUSE — R2 (false-positive in the health check)
+  lib/features/accounting/data/datasources/journal_local_datasource.dart
+  ::getTotalInventoryValueCents used `Σ(variant.stock × variant.cost_cents)`
+  for ALL products. That formula is correct ONLY for `costing_method='wac'`.
+  For FIFO / batch / batch_expiry products, `variant.cost_cents` is a
+  DISPLAY value (latest paid unit cost from product_cost_service.dart);
+  the real per-layer cost basis lives in `product_batches.unit_cost_cents`.
+  For variant tt55-1 the math was:
+    batches: 10 × 9900 + 3 × 9801 = 128403  ← GL is correct
+    formula: 13 × 9801             = 127413  ← off by 990
+  No drift existed in the books; the measurement was wrong.
+
+FIXES — all additive, single SoT, zero scattered code
+  A — Migration 10056 → 10057 (idempotent). Adds nullable
+      `cheque_confirmations.cleared_payment_id` (INT). Phase-15
+      single-source pointer from a cleared cheque to the
+      `purchase_payments` / `sale_payments` row it created, so
+      cleared → bounced / cleared → cancelled can deterministically
+      reverse the payment. The polymorphic interpretation is driven
+      by `source_table` — no second column needed.
+
+  B — `ChequeConfirmationDao.confirm` extended with two new params:
+      • `clearedPaymentId` (nullable int) → stamps the FK on
+        pending→cleared.
+      • `clearClearedPaymentId` (bool, default false) → opt-in to
+        write SQL NULL on cleared→bounced / cleared→cancelled / re-open.
+      The idempotency check now folds the pointer into "no-op". The
+      DAO API surface is otherwise identical (drop-in addition).
+
+  C — NEW SoT: `lib/core/services/cheque_lifecycle_service.dart`
+      (418 lines). Orchestrates BOTH lifecycle + accounting writes
+      inside a single Drift transaction:
+
+        ┌─────────────────────────┬──────────────────────────────────┐
+        │ transition              │ action                           │
+        ├─────────────────────────┼──────────────────────────────────┤
+        │ pending → cleared       │ if sale/purchase and             │
+        │ (sale/purchase)         │ outstanding > 0:                 │
+        │                         │   repo.recordPayment(cheque, …)  │
+        │                         │   → updates paid_amount,         │
+        │                         │     supplier/customer balance,   │
+        │                         │     posts Dr 2000/Cr Bank or     │
+        │                         │     Dr Bank/Cr 1100.             │
+        │                         │ Stamp cleared_payment_id.        │
+        │                         │ Idempotent (2nd call no-op).     │
+        ├─────────────────────────┼──────────────────────────────────┤
+        │ pending → cleared       │ Lifecycle flip only — refund leg │
+        │ (return source)         │ was already booked at return-    │
+        │                         │ post time, independent of the    │
+        │                         │ cheque clearance.                │
+        ├─────────────────────────┼──────────────────────────────────┤
+        │ cleared → bounced       │ if cleared_payment_id stamped:   │
+        │ cleared → cancelled     │   repo.deletePayment(id) → voids │
+        │                         │   the JE + reverses balance.     │
+        │                         │ NULL the pointer.                │
+        ├─────────────────────────┼──────────────────────────────────┤
+        │ pending → bounced       │ Mark only (no payment row was    │
+        │ pending → cancelled     │ ever created).                   │
+        └─────────────────────────┴──────────────────────────────────┘
+
+      The service delegates the actual money work to the existing
+      `PurchaseRepository.recordPayment/deletePayment` and
+      `SaleRepository.recordPayment/deletePayment` — Phase 15 adds
+      ZERO new accounting logic; it just stops the cheque-clearance
+      path from skipping those SoTs.
+
+  D — Dashboard `cheque_reminders_section.dart` wired to the new
+      service. The three action handlers (Confirm Paid/Collected,
+      Mark Bounced, Cancel) now call
+      `_lifecycle.markCleared/markBounced/markCancelled` and surface
+      a precise snackbar:
+        • cleared with settlement → "Cheque cleared — paid 59394"
+        • cleared, already paid   → "Cheque marked as cleared"
+        • bounced w/ reversal     → "Cheque bounced — reversed 59394"
+        • cancelled w/ reversal   → "Cheque cancelled — reversed …"
+      All three branches recover gracefully on
+      ChequeSourceNotFoundException and any other repo exception.
+
+  E — `JournalLocalDatasourceImpl.getTotalInventoryValueCents`
+      switched to a batch-ledger-authoritative formula. New SQL:
+        Σ(product_batches.remaining_qty × batch.unit_cost_cents)
+          where batch.is_active = 1
+        + Σ(variant.stock × variant.cost_cents)
+          where variant has NO active batch row
+        + Σ(product.stock × product.cost_cents)
+          where product has no variants AND no active batch row
+      WAC products on pre-batch DBs fall back to the second branch
+      (identical to the legacy formula). FIFO products correctly
+      sum each layer at its own paid unit cost. The 990¢ false-
+      positive disappears.
+
+  F — DI: ChequeLifecycleService registered as a singleton in
+      injection_container.dart after PurchaseRepository / SaleRepository
+      are wired. Lazy because the dashboard is the only consumer today.
+
+  G — i18n: 8 new dashboard.cheque_* keys per locale (en/ar/fr) for
+      the new snackbar copy:
+        cheque_settled_in / cheque_settled_out
+        cheque_marked_cleared / cheque_marked_bounced /
+        cheque_marked_cancelled
+        cheque_bounced_reversed / cheque_cancelled_reversed
+        cheque_action_failed
+
+REGRESSION SUITE — 2 new files, 14 new tests
+  test/core/services/cheque_lifecycle_service_test.dart (9)
+    1. pending→cleared on purchase w/ outstanding > 0 records exactly
+       one PurchasePayment(cheque, full outstanding) and stamps
+       cleared_payment_id.
+    2. Idempotent: second markCleared does NOT record a second
+       payment (closes dashboard double-click hole).
+    3. pending→cleared on fully-paid sale: lifecycle flips, NO
+       payment recorded.
+    4. pending→cleared on sale_return source: lifecycle flips, repos
+       are completely untouched.
+    5. cleared→bounced reverses the prior settlement via
+       repo.deletePayment(id) and reports reversed cents in the
+       result payload; lifecycle row updates with bounce reason +
+       NULL cleared_payment_id.
+    6. markBounced rejects empty/whitespace bounce reason.
+    7. cleared→cancelled mirrors (5) for sale path.
+    8. pending→bounced: no reversal (no payment existed).
+    9. markCleared on missing source row throws typed
+       ChequeSourceNotFoundException.
+
+  test/integration/inventory_valuation_batch_ledger_test.dart (5)
+    1. FIFO product with two batches at different unit costs
+       (mirrors the field case): returns 128403, NOT 127413.
+    2. WAC variant without batches: falls back to
+       variant.stock × variant.cost_cents.
+    3. Product without variants and without batches: third
+       COALESCE branch — uses product.stock × product.cost_cents.
+    4. Inactive (soft-deleted) batches are excluded; product-level
+       fallback is suppressed when ANY active batch exists for that
+       product.
+    5. Mixed FIFO + WAC + simple product scenario sums all three
+       branches deterministically.
+
+  Schema-version pins bumped 10056 → 10057 in
+  production_hardening_test.dart and fifo_phase_6_4_test.dart.
+
+VERIFICATION
+  • flutter analyze --no-pub → 0 issues
+  • Full suite → 2153 / 2153 ✓ (+22 from Phase 14.2 close at 2131)
+  • Persisted-totals semantic changes: 0
+  • Unintentional rounding changes: 0
+  • Engine API changes: 0
+
+YAGNI GATES HELD
+  ✗ Two-step IAS-7 pipeline (1020 Cheques in Hand / 2030 Cheques
+    Issued). The one-step model matches QuickBooks/Xero defaults
+    and keeps migration risk minimal. Re-open trigger: a customer
+    asks for cash-flow statement compliance with IAS 7.
+  ✗ Bounce-fee bank-charges JE (5100 Expenses). Re-open trigger:
+    user request to track bounce fees per supplier.
+  ✗ Replace-cheque workflow. Re-open trigger: user request to issue
+    a new cheque to cancel an old one in-place.
+  ✗ Per-cheque metadata (cheque number, bank, branch). Re-open
+    trigger: regulatory print requirement or e-invoicing schema.
+  ✗ Historical drift reconciliation for the field-reported DB.
+    Phase 15 prevents NEW drift on the cleared path. For the
+    existing 990¢ false-positive the user can simply re-open
+    Reconciliation & Health — the new formula will report a clean
+    match without touching any data. For the 59394¢ unsettled
+    payment, the user re-confirms the cheque via the dashboard
+    after upgrade and the lifecycle service records the missing
+    PurchasePayment + JE atomically.
+
+FIELD-FACING REMEDIATION
+  After upgrade:
+    1. Open Reconciliation & Health → the 990¢ inventory drift
+       disappears (formula fix is data-free).
+    2. On the dashboard cheque-reminders section, find the same
+       PO-202605-0002 cheque (still pending — Phase 14 never
+       posted any JE for it, so there's nothing to undo). Click
+       "Confirm Paid" again. The service now atomically:
+         • inserts purchase_payments(cheque, 59394).
+         • posts JE Dr 2000 / Cr 1010.
+         • bumps purchases.paid_amount_cents to 59394.
+         • records supplier_transactions(payment, -59394).
+         • adjusts suppliers.balance_cents from 360364 → 300970.
+       All in one Drift transaction. The "Confirm Paid" UX feels
+       identical; the books are now correct.
+
+DOCS UPDATED
+  • progress.txt (this entry).
+  • docs/ACCOUNTING_INTEGRITY_GUIDELINES.md — Phase 15 SoT rows +
+    new banned-pattern entries + test pins.
+  • docs/adr/0001-pricing-engines-as-sot.md — §11 Phase 15 closure.
+

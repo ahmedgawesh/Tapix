@@ -418,7 +418,19 @@ void main() {
   // ===========================================================================
   group('database migration safety', () {
     test('schema version is set correctly', () async {
-      expect(db.schemaVersion, equals(10034));
+      // Phase 11.2 bumped to 10054 (audit-snapshot columns): adds
+      // pricing_engine_version, tax_inclusive_at_post, rounding_mode_at_post
+      // to the 6 invoice/return header tables. Previous bump (10053)
+      // introduced the einvoice_documents artifact table.
+      // v10055 (May 2026) added `last_purchase_price_cents` to
+      // products/product_variants — the IAS-2 vs supplier-list-price split
+      // documented in `Products.lastPurchasePriceCents`.
+      // v10056 (Phase 14, May 2026) added `cheque_confirmations` and
+      // `due_date` on linked sale_returns / purchase_returns.
+      // v10057 (Phase 15, May 2026) added `cleared_payment_id` on
+      // `cheque_confirmations` so dashboard cheque-confirmation actually
+      // settles the AP/AR balance via a real PurchasePayment/SalePayment.
+      expect(db.schemaVersion, equals(10057));
     });
 
     test('foreign keys are enabled', () async {

@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:math';
 
 import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
@@ -10,14 +9,17 @@ import 'package:image_picker/image_picker.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:easy_localization/easy_localization.dart';
 
-import '../../../../core/database/daos/purchase_dao.dart';
+import '../../../../core/database/daos/product_dao.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/widgets/theme_toggle_button.dart';
+import '../../../../core/widgets/inputs/select_all_on_focus.dart';
+import '../../domain/entities/price_history_entity.dart';
 import '../../domain/entities/product_entity.dart';
 import '../../domain/entities/product_variant_entity.dart';
 import '../../domain/entities/category_entity.dart';
 import '../../domain/repositories/product_repository.dart';
+import '../../domain/repositories/product_variant_repository.dart';
 import '../bloc/product_form_bloc.dart';
 import '../bloc/product_variants_bloc.dart';
 import '../bloc/categories_bloc.dart';
@@ -28,9 +30,12 @@ import '../bloc/sizes_event.dart';
 import '../bloc/categories_event.dart';
 import '../widgets/money_input_widget.dart';
 import '../widgets/variant_management_widget.dart';
+import '../widgets/inventory_adjustment_dialog.dart';
 import '../../domain/entities/product_color_entity.dart';
 import '../../domain/entities/size_entity.dart';
 import '../../../settings/presentation/bloc/app_settings_bloc.dart';
+import '../../../barcode/services/barcode_generation_service.dart';
+import '../../../inventory/presentation/widgets/batches_section_widget.dart';
 
 class ProductFormScreen extends StatelessWidget {
   final int? productId;
@@ -52,6 +57,14 @@ class ProductFormScreen extends StatelessWidget {
               productId: productId,
               initialBarcode: initialBarcode,
               defaultTrackInventory: settings.defaultTrackInventory,
+              // New products inherit the global `lowStockThreshold` from
+              // settings as their initial per-product re-order point. The
+              // user can still override the value per-product in the form
+              // before saving. This restores the pre-Phase-B behaviour that
+              // was inadvertently changed when inventory tracking types
+              // were introduced — the global setting is the single source
+              // of truth for the *default*, while `products.min_quantity`
+              // remains the per-product authoritative value once saved.
               defaultMinQuantity: settings.lowStockThreshold,
             )),
         ),
@@ -113,24 +126,9 @@ class _ProductFormViewState extends State<_ProductFormView> {
     }
   }
 
-  String _generateBarcode() {
-    // Generate EAN-13 barcode
-    // Format: 2 (internal use prefix) + 10 random digits + checksum
-    final random = Random();
-    final prefix = '2'; // Internal use prefix for store-generated barcodes
-    final digits = List.generate(11, (_) => random.nextInt(10)).join();
-    final barcode12 = prefix + digits;
-    
-    // Calculate EAN-13 checksum
-    int sum = 0;
-    for (int i = 0; i < 12; i++) {
-      final digit = int.parse(barcode12[i]);
-      sum += (i % 2 == 0) ? digit : digit * 3;
-    }
-    final checksum = (10 - (sum % 10)) % 10;
-    
-    return barcode12 + checksum.toString();
-  }
+  /// Delegates EAN-13 generation to the shared [BarcodeGenerationService] so
+  /// every generation path produces a valid checksum (scanner-compatible).
+  String _generateBarcode() => sl<BarcodeGenerationService>().generateRandomEan13();
 
   void _showPrintModeChoice(BuildContext context, Product product) {
     final colorScheme = Theme.of(context).colorScheme;
@@ -349,44 +347,7 @@ class _ProductFormViewState extends State<_ProductFormView> {
                   icon: const Icon(LucideIcons.trash2),
                   onPressed: state.isSubmitting
                       ? null
-                      : () async {
-                          final ok = await showDialog<bool>(
-                            context: context,
-                            builder: (context) => AlertDialog(
-                              title: Text('common.confirm'.tr()),
-                              content: Text('product_form.delete'.tr()),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.of(context).pop(false),
-                                  child: Text('common.cancel'.tr()),
-                                ),
-                                FilledButton(
-                                  onPressed: () => Navigator.of(context).pop(true),
-                                  child: Text('common.delete'.tr()),
-                                ),
-                              ],
-                            ),
-                          );
-
-                          if (ok != true) return;
-
-                          final id = state.productId;
-                          if (id == null) return;
-
-                          try {
-                            await sl<ProductRepository>().deleteProduct(id);
-                            if (!context.mounted) return;
-                            context.go('/products');
-                          } catch (_) {
-                            if (!context.mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('product_form.error_saving'.tr()),
-                                backgroundColor: colorScheme.error,
-                              ),
-                            );
-                          }
-                        },
+                      : () => _handleSmartDelete(context, state),
                   tooltip: 'common.delete'.tr(),
                 ),
               ],
@@ -517,6 +478,76 @@ class _ProductFormViewState extends State<_ProductFormView> {
         ),
       ),
     );
+  }
+
+  /// Displays an informational warning (non-blocking) beneath a form field.
+  /// Used for soft validations like price-below-cost or zero-cost/price, in
+  /// the spirit of QuickBooks/Xero/Odoo which warn but do not reject.
+  Widget _buildWarningHint(BuildContext context, String translationKey) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: 6, left: 4, right: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            LucideIcons.alertTriangle,
+            size: 14,
+            color: theme.colorScheme.tertiary,
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              translationKey.tr(),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.tertiary,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Opens the accounting-safe Inventory Adjustment dialog for the default
+  /// variant of a simple (non-variant) product. Looks up the default
+  /// variant so the adjustment is booked against the correct SKU (cost
+  /// and stock live on the variant row, not the product row).
+  ///
+  /// Falls back to product-level values if the default variant cannot be
+  /// resolved — in that case the dialog still posts correctly because
+  /// the service reads on-hand / cost from the DB itself.
+  Future<void> _openInventoryAdjustmentForDefaultVariant(
+    BuildContext context, {
+    required int productId,
+    required int fallbackStock,
+    required int fallbackCostCents,
+  }) async {
+    final variantRepo = sl<ProductVariantRepository>();
+    // Use the repository helper which (a) prefers the strict default variant
+    // (color_id IS NULL AND size_id IS NULL) and (b) falls back to ANY
+    // variant of the product. Passing variantId=null to the adjustment
+    // service while no strict-default variant exists causes StockService to
+    // silently update zero variant rows, after which
+    // syncProductStockFromVariants rewrites products.stock_quantity back to
+    // its pre-adjustment value — producing a posted journal entry with no
+    // matching stock movement (accounting ↔ inventory desync).
+    final defaultVariant = await variantRepo.getDefaultVariantByProduct(productId);
+    if (!context.mounted) return;
+
+    final posted = await InventoryAdjustmentDialog.show(
+      context,
+      productId: productId,
+      variantId: defaultVariant?.id,
+      currentStock: defaultVariant?.stockQuantity ?? fallbackStock,
+      currentUnitCostCents: defaultVariant?.costCents.toBigInt().toInt() ??
+          fallbackCostCents,
+    );
+    if (posted == true && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('inventory_adjustment.posted_success'.tr())),
+      );
+    }
   }
 
   Future<void> _pickImage(ProductFormBloc bloc) async {
@@ -811,26 +842,51 @@ class _ProductFormViewState extends State<_ProductFormView> {
       icon: LucideIcons.dollarSign,
       children: [
         Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
-              child: MoneyInputWidget(
-                value: state.costCents,
-                label: 'product_form_cost'.tr(),
-                errorText: state.fieldErrors['costCents']?.tr(),
-                onChanged: (value) {
-                  bloc.add(ProductFormFieldChanged(field: 'costCents', value: value));
-                },
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  MoneyInputWidget(
+                    value: state.costCents,
+                    label: 'product_form_cost'.tr(),
+                    errorText: state.fieldErrors['costCents']?.tr(),
+                    // Cost is WAC-managed once the product exists: updated
+                    // only through purchases (moving average) and manual
+                    // Inventory Revaluation adjustments. Matches
+                    // QuickBooks / Xero / Odoo behaviour.
+                    enabled: !state.isEditing,
+                    hint: state.isEditing
+                        ? 'products.cost_readonly_hint'.tr()
+                        : null,
+                    onChanged: (value) {
+                      bloc.add(ProductFormFieldChanged(field: 'costCents', value: value));
+                    },
+                  ),
+                  if (state.fieldErrors['costCents'] == null &&
+                      state.fieldWarnings['costCents'] != null)
+                    _buildWarningHint(context, state.fieldWarnings['costCents']!),
+                ],
               ),
             ),
             const SizedBox(width: 16),
             Expanded(
-              child: MoneyInputWidget(
-                value: state.priceCents,
-                label: 'product_form_price'.tr(),
-                errorText: state.fieldErrors['priceCents']?.tr(),
-                onChanged: (value) {
-                  bloc.add(ProductFormFieldChanged(field: 'priceCents', value: value));
-                },
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  MoneyInputWidget(
+                    value: state.priceCents,
+                    label: 'product_form_price'.tr(),
+                    errorText: state.fieldErrors['priceCents']?.tr(),
+                    onChanged: (value) {
+                      bloc.add(ProductFormFieldChanged(field: 'priceCents', value: value));
+                    },
+                  ),
+                  if (state.fieldErrors['priceCents'] == null &&
+                      state.fieldWarnings['priceCents'] != null)
+                    _buildWarningHint(context, state.fieldWarnings['priceCents']!),
+                ],
               ),
             ),
           ],
@@ -875,8 +931,311 @@ class _ProductFormViewState extends State<_ProductFormView> {
             ),
           ],
         ),
+        // Price & cost *range* card + "Apply to all variants" button — for
+        // editing products with variants. Product-level cost/price act as a
+        // bulk template that the user can push down to every variant, while
+        // the actual ground-truth prices are shown as min–max ranges derived
+        // from the variants themselves (Shopify / WooCommerce behaviour).
+        if (state.hasVariants && state.isEditing && state.productId != null) ...[
+          const SizedBox(height: 16),
+          _VariantPriceRangeCard(productId: state.productId!),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () => _applyPriceToAllVariants(context, state),
+              icon: const Icon(LucideIcons.layers, size: 18),
+              label: Text('product_form_apply_to_variants'.tr()),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
+          ),
+        ],
+        if (state.isEditing && state.productId != null) ...[
+          const SizedBox(height: 16),
+          _PriceHistoryWidget(productId: state.productId!),
+        ],
       ],
     );
+  }
+
+  /// Smart-delete entry point. Pre-counts historical references and current
+  /// on-hand stock, then presents a dialog whose body and action change with
+  /// the four possible (refs, stock) combinations:
+  ///
+  ///   refs=0, stock=0 → hard delete         (no GL impact)
+  ///   refs>0, stock=0 → deactivate          (preserve audit trail)
+  ///   stock>0         → write-off + delete  (post Shrinkage Dr 5800 / Cr 1200)
+  ///
+  /// The write-off branch keeps the 1200 Inventory ledger in sync with
+  /// Σ(stock × cost), matching IFRS/GAAP expectations.
+  Future<void> _handleSmartDelete(
+    BuildContext context,
+    ProductFormState state,
+  ) async {
+    final id = state.productId;
+    if (id == null) return;
+    final repo = sl<ProductRepository>();
+    final colorScheme = Theme.of(context).colorScheme;
+
+    int refCount;
+    try {
+      refCount = await repo.countProductReferences(id);
+    } catch (_) {
+      refCount = -1; // unknown -> treat as "may have refs", proceed cautiously
+    }
+
+    // Always read stock fresh from DB so the dialog never lies based on
+    // stale form state (the form may have been opened before a recent
+    // purchase / sale changed on-hand).
+    int stockQty;
+    try {
+      final fresh = await repo.getProductById(id);
+      stockQty = fresh?.stockQuantity ?? 0;
+    } catch (_) {
+      stockQty = state.stockQuantity;
+    }
+    if (!context.mounted) return;
+
+    final willDeactivate = refCount != 0;
+    final hasStock = stockQty > 0;
+
+    // Branch 1: stock>0 → mandatory shrinkage write-off path.
+    if (hasStock) {
+      final body = willDeactivate
+          ? (refCount > 0
+              ? 'product_form.writeoff_deactivate_body'
+                  .tr(args: [stockQty.toString(), refCount.toString()])
+              : 'product_form.writeoff_deactivate_body_unknown'
+                  .tr(args: [stockQty.toString()]))
+          : 'product_form.writeoff_delete_body'
+              .tr(args: [stockQty.toString()]);
+
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          icon: Icon(LucideIcons.alertTriangle, color: colorScheme.error),
+          title: Text('product_form.writeoff_title'.tr()),
+          content: Text(body),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: Text('common.cancel'.tr()),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: colorScheme.error,
+              ),
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: Text('product_form.writeoff_action'.tr()),
+            ),
+          ],
+        ),
+      );
+      if (ok != true || !context.mounted) return;
+
+      try {
+        final result = await repo.writeOffAndDeleteProduct(
+          productId: id,
+          reason: 'product_form.writeoff_reason'.tr(),
+        );
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              result.wasDeleted
+                  ? 'product_form.writeoff_deleted_success'.tr()
+                  : 'product_form.writeoff_deactivated_success'
+                      .tr(args: [result.referenceCount.toString()]),
+            ),
+            backgroundColor: result.wasDeleted
+                ? colorScheme.primary
+                : colorScheme.tertiary,
+          ),
+        );
+        context.go('/products');
+      } catch (_) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('product_form.error_saving'.tr()),
+            backgroundColor: colorScheme.error,
+          ),
+        );
+      }
+      return;
+    }
+
+    // Branch 2: stock=0 → original smart-delete flow.
+    final title = willDeactivate
+        ? 'product_form.deactivate_title'.tr()
+        : 'product_form.delete_title'.tr();
+    final body = willDeactivate
+        ? 'product_form.deactivate_body'.tr(args: [refCount.toString()])
+        : 'product_form.delete_body'.tr();
+    final actionLabel = willDeactivate
+        ? 'product_form.deactivate_action'.tr()
+        : 'common.delete'.tr();
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: Icon(
+          willDeactivate ? LucideIcons.archive : LucideIcons.trash2,
+          color: willDeactivate ? colorScheme.tertiary : colorScheme.error,
+        ),
+        title: Text(title),
+        content: Text(body),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text('common.cancel'.tr()),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor:
+                  willDeactivate ? colorScheme.tertiary : colorScheme.error,
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(actionLabel),
+          ),
+        ],
+      ),
+    );
+
+    if (ok != true || !context.mounted) return;
+
+    try {
+      final result = await repo.smartDeleteProduct(id);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            result.wasDeleted
+                ? 'product_form.deleted_success'.tr()
+                : 'product_form.deactivated_success'
+                    .tr(args: [result.referenceCount.toString()]),
+          ),
+          backgroundColor: result.wasDeleted
+              ? colorScheme.primary
+              : colorScheme.tertiary,
+        ),
+      );
+      context.go('/products');
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('product_form.error_saving'.tr()),
+          backgroundColor: colorScheme.error,
+        ),
+      );
+    }
+  }
+
+  /// Confirmation dialog shown before turning "Has Variants" off while active
+  /// dimensional variants still exist. Displays the exact count so the user
+  /// understands the soft-delete scope.
+  Future<bool> _confirmDisableVariants(BuildContext context, int count) async {
+    final cs = Theme.of(context).colorScheme;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: Icon(LucideIcons.alertTriangle, color: cs.tertiary),
+        title: Text('product_form.hasVariants_disable_title'.tr()),
+        content: Text('product_form.hasVariants_disable_body'.tr(args: [count.toString()])),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text('common.cancel'.tr()),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: cs.tertiary),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text('product_form.hasVariants_disable_action'.tr()),
+          ),
+        ],
+      ),
+    );
+    return confirmed ?? false;
+  }
+
+  Future<void> _applyPriceToAllVariants(
+    BuildContext context,
+    ProductFormState state,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('edit_prices.apply_to_all_variants'.tr()),
+        content: Text('edit_prices.apply_to_variants_confirm'.tr()),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text('common.cancel'.tr()),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text('common.apply'.tr()),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !context.mounted) return;
+
+    try {
+      final variantRepo = sl<ProductVariantRepository>();
+      final variants = await variantRepo.getVariantsByProduct(state.productId!);
+
+      // IMPORTANT: only sale and wholesale prices propagate to variants.
+      // `costCents` is intentionally NOT applied here because changing a
+      // variant's cost without an inventory revaluation journal entry would
+      // break the GL ↔ stock invariant (the defense-in-depth layer in
+      // `VariantLocalDatasource.updateVariant` would silently revert it
+      // anyway). To change cost, the user must run an Inventory Revaluation
+      // adjustment which posts the proper Dr/Cr against 1200 / 5900.
+      for (final variant in variants) {
+        if (!variant.isActive) continue;
+        await variantRepo.updateVariant(variant.copyWith(
+          priceCents: state.priceCents,
+          wholesalePriceCents: state.wholesalePriceCents,
+        ));
+      }
+
+      if (!context.mounted) return;
+      final cs = Theme.of(context).colorScheme;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 5),
+          backgroundColor: cs.primary,
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('product_form_variants_price_updated'.tr()),
+              const SizedBox(height: 4),
+              Text(
+                'product_form.apply_to_variants_cost_note'.tr(),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: cs.onPrimary.withValues(alpha: 0.85),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('edit_prices.save_error'.tr()),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+    }
   }
 
   Widget _buildInventorySection(BuildContext context, ProductFormState state) {
@@ -950,12 +1309,29 @@ class _ProductFormViewState extends State<_ProductFormView> {
                       controller: _stockController,
                       focusNode: _stockFocusNode,
                       decoration: InputDecoration(
-                        labelText: 'product_form_quantity'.tr(),
+                        labelText: state.isEditing
+                            ? 'product_form_quantity'.tr()
+                            : 'product_form_quantity'.tr(),
+                        helperText: state.isEditing && state.trackInventory
+                            ? 'products.stock_readonly_hint'.tr()
+                            : null,
+                        helperMaxLines: 3,
                         errorText: state.fieldErrors['stockQuantity']?.tr(),
                         border: const OutlineInputBorder(),
+                        suffixIcon: state.isEditing && state.trackInventory
+                            ? const Icon(LucideIcons.lock)
+                            : null,
                       ),
+                      // Stock is a derived quantity once the product exists:
+                      // it may be changed only by purchases, sales, returns
+                      // and Inventory Adjustments — but ONLY when inventory
+                      // tracking is enabled. Non-tracked products (services,
+                      // labor, etc.) carry no inventory ledger so direct
+                      // editing is allowed.
+                      enabled: !state.isEditing || !state.trackInventory,
                       keyboardType: TextInputType.number,
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      onTap: () => selectAllText(_stockController),
                       onChanged: (value) {
                         bloc.add(ProductFormFieldChanged(
                           field: 'stockQuantity',
@@ -976,6 +1352,7 @@ class _ProductFormViewState extends State<_ProductFormView> {
                 ),
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                onTap: () => selectAllText(_minStockController),
                 onChanged: (value) {
                   bloc.add(ProductFormFieldChanged(
                     field: 'minQuantity',
@@ -986,6 +1363,25 @@ class _ProductFormViewState extends State<_ProductFormView> {
             ),
           ],
         ),
+        if (state.isEditing &&
+            !state.hasVariants &&
+            state.productId != null &&
+            state.trackInventory) ...[
+          const SizedBox(height: 8),
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: OutlinedButton.icon(
+              onPressed: () => _openInventoryAdjustmentForDefaultVariant(
+                context,
+                productId: state.productId!,
+                fallbackStock: state.stockQuantity,
+                fallbackCostCents: state.costCents.toBigInt().toInt(),
+              ),
+              icon: const Icon(LucideIcons.warehouse, size: 16),
+              label: Text('products.adjust_inventory'.tr()),
+            ),
+          ),
+        ],
         const SizedBox(height: 16),
         SwitchListTile(
           title: Text('product_form_trackInventory'.tr()),
@@ -994,9 +1390,153 @@ class _ProductFormViewState extends State<_ProductFormView> {
             bloc.add(ProductFormFieldChanged(field: 'trackInventory', value: value));
           },
         ),
+        const SizedBox(height: 16),
+        _buildInventoryTrackingSelector(context, state),
         if (productId != null) ...[
           const SizedBox(height: 16),
           _ExpiryInfoWidget(productId: productId),
+          const SizedBox(height: 16),
+          BatchesSectionWidget(productId: productId),
+        ],
+      ],
+    );
+  }
+
+  /// Per-product inventory tracking selector — Layer 2 of the two-layer
+  /// inventory architecture (Standard / Batch / Batch + Expiry).
+  ///
+  /// Replaces the legacy WAC/FIFO selector. The valuation method itself is
+  /// now a global setting (`InventoryValuationService`); per product, the
+  /// only meaningful question is *whether we track this item as discrete
+  /// batches with expiry dates*. Mirrors what Odoo, SAP B1, NetSuite and
+  /// Cin7 expose at the product level.
+  ///
+  /// Lock semantics are identical to the previous selector — once stock or
+  /// batch consumptions exist, the tracking type is frozen because flipping
+  /// it would leave existing batches and journal entries inconsistent.
+  Widget _buildInventoryTrackingSelector(
+    BuildContext context,
+    ProductFormState state,
+  ) {
+    final bloc = context.read<ProductFormBloc>();
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final isLocked = state.costingMethodLockReason != null;
+
+    String lockMessage() {
+      switch (state.costingMethodLockReason) {
+        case 'has_stock':
+          return 'products.tracking_locked_stock'.tr();
+        case 'has_consumptions':
+          return 'products.tracking_locked_consumptions'.tr();
+        default:
+          return '';
+      }
+    }
+
+    String helpText() {
+      switch (state.inventoryTrackingType) {
+        case 'batch':
+          return 'products.tracking_batch_help'.tr();
+        case 'batch_expiry':
+          return 'products.tracking_batch_expiry_help'.tr();
+        case 'standard':
+        default:
+          return 'products.tracking_standard_help'.tr();
+      }
+    }
+
+    final fieldError = state.fieldErrors['inventoryTrackingType'] ??
+        state.fieldErrors['costingMethod'];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(LucideIcons.boxes, size: 16, color: cs.onSurfaceVariant),
+            const SizedBox(width: 6),
+            Text(
+              'products.inventory_tracking'.tr(),
+              style: theme.textTheme.titleSmall,
+            ),
+            if (isLocked) ...[
+              const SizedBox(width: 6),
+              Icon(LucideIcons.lock, size: 14, color: cs.onSurfaceVariant),
+            ],
+          ],
+        ),
+        const SizedBox(height: 8),
+        SegmentedButton<String>(
+          segments: [
+            ButtonSegment<String>(
+              value: 'standard',
+              label: Text('products.tracking_standard'.tr()),
+              icon: const Icon(LucideIcons.package, size: 16),
+            ),
+            ButtonSegment<String>(
+              value: 'batch',
+              label: Text('products.tracking_batch'.tr()),
+              icon: const Icon(LucideIcons.layers, size: 16),
+            ),
+            ButtonSegment<String>(
+              value: 'batch_expiry',
+              label: Text('products.tracking_batch_expiry'.tr()),
+              icon: const Icon(LucideIcons.calendarClock, size: 16),
+            ),
+          ],
+          selected: {state.inventoryTrackingType},
+          onSelectionChanged: isLocked
+              ? null
+              : (set) => bloc.add(
+                    ProductFormFieldChanged(
+                      field: 'inventoryTrackingType',
+                      value: set.first,
+                    ),
+                  ),
+          showSelectedIcon: false,
+        ),
+        const SizedBox(height: 6),
+        Text(
+          helpText(),
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: cs.onSurfaceVariant,
+          ),
+        ),
+        if (isLocked) ...[
+          const SizedBox(height: 4),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(LucideIcons.info, size: 14, color: cs.tertiary),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  lockMessage(),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: cs.tertiary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+        if (fieldError != null) ...[
+          const SizedBox(height: 4),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(LucideIcons.alertTriangle, size: 14, color: cs.error),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  fieldError.tr(),
+                  style: theme.textTheme.bodySmall?.copyWith(color: cs.error),
+                ),
+              ),
+            ],
+          ),
         ],
       ],
     );
@@ -1027,6 +1567,7 @@ class _ProductFormViewState extends State<_ProductFormView> {
               suffixText: '%',
             ),
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            onTap: () => selectAllText(_purchaseTaxRateController),
             onChanged: (value) {
               final rate = double.tryParse(value) ?? 0;
               bloc.add(ProductFormFieldChanged(
@@ -1045,6 +1586,7 @@ class _ProductFormViewState extends State<_ProductFormView> {
               suffixText: '%',
             ),
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            onTap: () => selectAllText(_salesTaxRateController),
             onChanged: (value) {
               final rate = double.tryParse(value) ?? 0;
               bloc.add(ProductFormFieldChanged(
@@ -1069,7 +1611,19 @@ class _ProductFormViewState extends State<_ProductFormView> {
           title: Text('product_form_hasVariants'.tr()),
           subtitle: Text('product_form_hasVariants_hint'.tr()),
           value: state.hasVariants,
-          onChanged: (value) {
+          onChanged: (value) async {
+            // Turning variants OFF on an editing product is destructive:
+            // dimensional variants will be deactivated. Confirm with the
+            // exact count (Shopify / WooCommerce style) before applying.
+            if (!value && state.hasVariants && state.isEditing && state.productId != null) {
+              final count = await sl<ProductVariantRepository>()
+                  .countActiveDimensionalVariants(state.productId!);
+              if (!context.mounted) return;
+              if (count > 0) {
+                final confirmed = await _confirmDisableVariants(context, count);
+                if (!confirmed) return;
+              }
+            }
             bloc.add(ProductFormFieldChanged(field: 'hasVariants', value: value));
           },
         ),
@@ -1450,10 +2004,14 @@ class _ExpiryInfoWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final purchaseDao = sl<PurchaseDao>();
+    final productDao = sl<ProductDao>();
 
+    // FIFO-aware: read remaining_quantity from product_batches, not the
+    // original purchase line. Otherwise a 100-unit lot sold down to 12 would
+    // still be displayed as "100 expiring on …", which silently misrepresents
+    // shrinkage exposure. See ProductDao.getProductRemainingExpiryInfo.
     return FutureBuilder<List<({int quantity, DateTime expiryDate})>>(
-      future: purchaseDao.getProductExpiryInfo(productId),
+      future: productDao.getProductRemainingExpiryInfo(productId),
       builder: (context, snapshot) {
         if (!snapshot.hasData || snapshot.data!.isEmpty) {
           return const SizedBox.shrink();
@@ -1520,6 +2078,117 @@ class _ExpiryInfoWidget extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+}
+
+/// Shows the min–max cost and price derived from the product's active
+/// variants. Data is streamed so POS-driven stock / price edits reflect here
+/// in real time. The product-level cost/price inputs above keep acting as a
+/// bulk template ("Apply to all variants" button pushes them down).
+class _VariantPriceRangeCard extends StatelessWidget {
+  final int productId;
+  const _VariantPriceRangeCard({required this.productId});
+
+  String _fmt(Decimal cents) =>
+      (cents / Decimal.fromInt(100)).toDecimal(scaleOnInfinitePrecision: 2).toStringAsFixed(2);
+
+  String _range(Decimal min, Decimal max) {
+    if (min == max) return _fmt(min);
+    return '${_fmt(min)} – ${_fmt(max)}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+
+    return StreamBuilder<List<ProductVariant>>(
+      stream: sl<ProductVariantRepository>().watchVariantsByProduct(productId),
+      builder: (context, snapshot) {
+        final variants = (snapshot.data ?? const <ProductVariant>[])
+            .where((v) => v.isActive)
+            .toList();
+        if (variants.isEmpty) return const SizedBox.shrink();
+
+        final costs = variants.map((v) => v.costCents).toList()..sort();
+        final prices = variants.map((v) => v.priceCents).toList()..sort();
+        final costMin = costs.first;
+        final costMax = costs.last;
+        final priceMin = prices.first;
+        final priceMax = prices.last;
+
+        return Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: cs.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: cs.outline.withValues(alpha: 0.2)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(LucideIcons.layers, size: 16, color: cs.primary),
+                  const SizedBox(width: 8),
+                  Text(
+                    'product_form.price_range_badge'.tr(),
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      color: cs.onSurfaceVariant,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    '${variants.length}',
+                    style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: _rangeCell(
+                      theme,
+                      label: 'product_form_cost'.tr(),
+                      value: _range(costMin, costMax),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _rangeCell(
+                      theme,
+                      label: 'product_form_price'.tr(),
+                      value: _range(priceMin, priceMax),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _rangeCell(ThemeData theme, {required String label, required String value}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          value,
+          style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+        ),
+      ],
     );
   }
 }
@@ -1592,6 +2261,251 @@ class _PrintModeOptionCard extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Displays the most recent cost / retail / wholesale changes recorded for a
+/// product. Mirrors the audit trail shown in QuickBooks / Xero / Odoo: each
+/// row shows old → new amount and the timestamp.
+///
+/// Cost changes are now included because every sanctioned cost-mutating call
+/// site (purchase post → WAC/FIFO/last-cost, inventory revaluation, manual
+/// product-form save on first creation) funnels through
+/// `PriceHistoryService` — the SINGLE writer for `product_price_histories`.
+/// The bottom sheet shown inside purchase/sale invoices is a per-line
+/// snapshot, NOT a separate history; the corresponding row appears here as
+/// soon as the document is posted.
+///
+/// For products with dimensional variants, each row carries a
+/// color/size/SKU chip so the user can attribute the change to the right
+/// variant. Product-level rows (no variant id) render without a chip.
+class _PriceHistoryWidget extends StatelessWidget {
+  final int productId;
+  const _PriceHistoryWidget({required this.productId});
+
+  String _fmtCents(int cents) {
+    final d = Decimal.fromInt(cents) / Decimal.fromInt(100);
+    return d.toDecimal(scaleOnInfinitePrecision: 2).toStringAsFixed(2);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    return FutureBuilder<_PriceHistoryViewModel>(
+      future: _load(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const SizedBox(
+            height: 48,
+            child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+          );
+        }
+        final vm = snapshot.data ?? const _PriceHistoryViewModel.empty();
+        final entries = vm.entries;
+        return Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: cs.surfaceContainerHighest.withValues(alpha: 0.4),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: cs.outlineVariant),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(LucideIcons.history, size: 16, color: cs.primary),
+                  const SizedBox(width: 8),
+                  Text(
+                    'product_form.price_history_title'.tr(),
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    '${entries.length}',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: cs.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              if (entries.isEmpty)
+                Text(
+                  'product_form.price_history_empty'.tr(),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: cs.onSurfaceVariant,
+                    fontStyle: FontStyle.italic,
+                  ),
+                )
+              else
+                ...entries.take(10).map((h) {
+                  final costChanged = h.oldCostCents != h.newCostCents;
+                  final priceChanged = h.oldPriceCents != h.newPriceCents;
+                  final wholesaleChanged =
+                      h.oldWholesalePriceCents != h.newWholesalePriceCents;
+                  final variantLabel = h.variantId == null
+                      ? null
+                      : (vm.variantLabels[h.variantId!] ??
+                          'Variant #${h.variantId}');
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              DateFormat.yMMMd().add_Hm().format(h.createdAt),
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: cs.onSurfaceVariant,
+                              ),
+                            ),
+                            if (variantLabel != null) ...[
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: cs.primaryContainer
+                                      .withValues(alpha: 0.6),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  variantLabel,
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: cs.onPrimaryContainer,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                        if (costChanged)
+                          _PriceHistoryRow(
+                            label: 'product_form_cost'.tr(),
+                            from: _fmtCents(h.oldCostCents),
+                            to: _fmtCents(h.newCostCents),
+                            isIncrease: h.newCostCents > h.oldCostCents,
+                          ),
+                        if (priceChanged)
+                          _PriceHistoryRow(
+                            label: 'product_form_price'.tr(),
+                            from: _fmtCents(h.oldPriceCents),
+                            to: _fmtCents(h.newPriceCents),
+                            isIncrease: h.newPriceCents > h.oldPriceCents,
+                          ),
+                        if (wholesaleChanged)
+                          _PriceHistoryRow(
+                            label: 'product_form_wholesalePrice'.tr(),
+                            from: _fmtCents(h.oldWholesalePriceCents ?? 0),
+                            to: _fmtCents(h.newWholesalePriceCents ?? 0),
+                            isIncrease: (h.newWholesalePriceCents ?? 0) >
+                                (h.oldWholesalePriceCents ?? 0),
+                          ),
+                        const Divider(height: 12),
+                      ],
+                    ),
+                  );
+                }),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<_PriceHistoryViewModel> _load() async {
+    final entries = await sl<ProductRepository>().getPriceHistory(productId);
+    // Resolve variant labels for the chip. Best-effort: SKU first, else
+    // "Variant #id". Skipped entirely when no variant-scoped rows exist.
+    final variantIds = entries
+        .map((e) => e.variantId)
+        .whereType<int>()
+        .toSet();
+    final labels = <int, String>{};
+    if (variantIds.isNotEmpty) {
+      final variants =
+          await sl<ProductVariantRepository>().getVariantsByProduct(productId);
+      for (final v in variants) {
+        if (variantIds.contains(v.id)) {
+          labels[v.id] =
+              (v.sku?.trim().isNotEmpty ?? false) ? v.sku!.trim() : 'Variant #${v.id}';
+        }
+      }
+    }
+    return _PriceHistoryViewModel(entries: entries, variantLabels: labels);
+  }
+}
+
+class _PriceHistoryViewModel {
+  final List<PriceHistory> entries;
+  final Map<int, String> variantLabels;
+  const _PriceHistoryViewModel({
+    required this.entries,
+    required this.variantLabels,
+  });
+  const _PriceHistoryViewModel.empty()
+      : entries = const <PriceHistory>[],
+        variantLabels = const <int, String>{};
+}
+
+class _PriceHistoryRow extends StatelessWidget {
+  final String label;
+  final String from;
+  final String to;
+  final bool isIncrease;
+  const _PriceHistoryRow({
+    required this.label,
+    required this.from,
+    required this.to,
+    required this.isIncrease,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final color = isIncrease ? Colors.green.shade700 : cs.error;
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 110,
+            child: Text(
+              label,
+              style: theme.textTheme.bodySmall?.copyWith(
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          Text(
+            from,
+            style: theme.textTheme.bodySmall?.copyWith(
+              decoration: TextDecoration.lineThrough,
+              color: cs.onSurfaceVariant,
+            ),
+          ),
+          Icon(
+            isIncrease ? LucideIcons.arrowUpRight : LucideIcons.arrowDownRight,
+            size: 14,
+            color: color,
+          ),
+          Text(
+            to,
+            style: theme.textTheme.bodySmall?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: color,
+            ),
+          ),
+        ],
       ),
     );
   }

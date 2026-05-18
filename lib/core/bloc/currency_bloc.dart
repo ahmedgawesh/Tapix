@@ -13,6 +13,12 @@ class CurrencyChanged extends CurrencyEvent {
   const CurrencyChanged(this.code);
 }
 
+class CustomCurrencyAdded extends CurrencyEvent {
+  final Currency currency;
+  final bool setAsActive;
+  const CustomCurrencyAdded(this.currency, {this.setAsActive = true});
+}
+
 class CurrencyBloc extends RealtimeBloc<Currency, CurrencyEvent> {
   final CurrencyService _currencyService;
 
@@ -25,6 +31,7 @@ class CurrencyBloc extends RealtimeBloc<Currency, CurrencyEvent> {
   @override
   void registerEventHandlers() {
     on<CurrencyChanged>(_onCurrencyChanged);
+    on<CustomCurrencyAdded>(_onCustomCurrencyAdded);
   }
 
   Future<void> _onCurrencyChanged(
@@ -39,5 +46,19 @@ class CurrencyBloc extends RealtimeBloc<Currency, CurrencyEvent> {
       optimisticData: newCurrency,
       operation: () => _currencyService.setCurrency(event.code),
     );
+  }
+
+  Future<void> _onCustomCurrencyAdded(
+    CustomCurrencyAdded event,
+    Emitter<RealtimeState<Currency>> emit,
+  ) async {
+    await _currencyService.addCustomCurrency(event.currency);
+    if (event.setAsActive) {
+      await performOptimisticUpdate(
+        operationId: 'currency_custom_${DateTime.now().millisecondsSinceEpoch}',
+        optimisticData: event.currency,
+        operation: () => _currencyService.setCurrency(event.currency.code),
+      );
+    }
   }
 }

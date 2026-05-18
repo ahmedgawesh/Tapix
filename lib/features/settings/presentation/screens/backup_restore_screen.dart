@@ -9,6 +9,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../../core/database/app_database.dart';
+import '../../../../core/database/database_encryption.dart';
 import '../../../../core/di/injection_container.dart';
 
 /// Key used to store the last backup timestamp in SharedPreferences.
@@ -42,10 +44,34 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
     }
   }
 
+  /// Returns the path to the ACTUAL database file the app is using.
+  /// If encryption is enabled and the encrypted file exists, returns that path.
+  /// Otherwise returns the plain tapix.db path.
   Future<String> _getDatabasePath() async {
-    // Must match the path used in database_native.dart (getApplicationSupportDirectory)
     final dbFolder = await getApplicationSupportDirectory();
+    final keyManager = DatabaseEncryptionKeyManager();
+    final encryptionEnabled = await keyManager.isEncryptionEnabled();
+
+    if (encryptionEnabled) {
+      final encryptedPath = p.join(dbFolder.path, 'tapix_encrypted.db');
+      if (File(encryptedPath).existsSync()) {
+        return encryptedPath;
+      }
+    }
+
     return p.join(dbFolder.path, 'tapix.db');
+  }
+
+  /// Flushes WAL journal data into the main database file.
+  /// This ensures the .db file contains ALL committed data before we copy it.
+  Future<void> _flushWalJournal() async {
+    try {
+      final db = sl<AppDatabase>();
+      await db.customStatement('PRAGMA wal_checkpoint(TRUNCATE)');
+      debugPrint('[Backup] WAL checkpoint completed — all data flushed to main DB file');
+    } catch (e) {
+      debugPrint('[Backup] WAL checkpoint warning (non-fatal): $e');
+    }
   }
 
   // ─── Backup ───
@@ -71,6 +97,9 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
     setState(() => _isBusy = true);
 
     try {
+      // Flush WAL journal BEFORE copying the file
+      await _flushWalJournal();
+
       final dbPath = await _getDatabasePath();
       final dbFile = File(dbPath);
       if (!await dbFile.exists()) {
@@ -78,6 +107,8 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
         _showError('settings.backup.backup_error'.tr());
         return;
       }
+
+      debugPrint('[Backup] Backing up from: $dbPath (${await dbFile.length()} bytes)');
 
       final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
       final fileName = 'tapix_backup_$timestamp.db';
@@ -95,7 +126,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
         destPath = p.join(dir, fileName);
       } else {
         // On desktop, let user pick a folder
-        final dir = await FilePicker.platform.getDirectoryPath();
+        final dir = await FilePicker.getDirectoryPath();
         if (dir == null) {
           // User cancelled
           setState(() => _isBusy = false);
@@ -108,7 +139,30 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
       debugPrint('[Backup] Saved to: $destPath');
 
       await _recordBackupTimestamp();
-      _showSuccess('settings.backup.backup_success'.tr());
+
+      // Show success with the path so the user knows where to find the file
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('settings.backup.backup_success'.tr()),
+                const SizedBox(height: 4),
+                Text(
+                  destPath,
+                  style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
     } catch (e, st) {
       debugPrint('[Backup] Error: $e\n$st');
       _showError('settings.backup.backup_error'.tr());
@@ -122,12 +176,17 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
     setState(() => _isBusy = true);
 
     try {
+      // Flush WAL journal BEFORE copying the file
+      await _flushWalJournal();
+
       final dbPath = await _getDatabasePath();
       final dbFile = File(dbPath);
       if (!await dbFile.exists()) {
         _showError('settings.backup.backup_error'.tr());
         return;
       }
+
+      debugPrint('[Backup:Share] Sharing from: $dbPath (${await dbFile.length()} bytes)');
 
       // Copy to temp with a timestamped name
       final tempDir = await getTemporaryDirectory();
@@ -157,7 +216,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
   Future<void> _restoreFromFile() async {
     if (_isBusy) return;
 
-    final result = await FilePicker.platform.pickFiles(
+    final result = await FilePicker.pickFiles(
       type: FileType.any,
       allowMultiple: false,
     );
@@ -209,8 +268,29 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
     try {
       final dbPath = await _getDatabasePath();
 
-      // Overwrite the database file
+      // CRITICAL: Close the database connection BEFORE overwriting the file.
+      // This ensures no in-memory connection holds a lock on the file and
+      // prevents WAL journal replay from overwriting the restored data.
+      debugPrint('[Backup:Restore] Closing database connection before restore...');
+      final db = sl<AppDatabase>();
+      await db.close();
+      debugPrint('[Backup:Restore] Database connection closed.');
+
+      // Delete WAL and SHM journal files to prevent stale journal replay
+      final walFile = File('$dbPath-wal');
+      final shmFile = File('$dbPath-shm');
+      if (walFile.existsSync()) {
+        await walFile.delete();
+        debugPrint('[Backup:Restore] Deleted WAL journal: ${walFile.path}');
+      }
+      if (shmFile.existsSync()) {
+        await shmFile.delete();
+        debugPrint('[Backup:Restore] Deleted SHM file: ${shmFile.path}');
+      }
+
+      // Overwrite the database file with the backup
       await pickedFile.copy(dbPath);
+      debugPrint('[Backup:Restore] Restored database from: $pickedPath to: $dbPath');
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -222,6 +302,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
       }
 
       // Give time for snackbar to show, then exit the app so it restarts fresh
+      // with the restored database.
       await Future<void>.delayed(const Duration(seconds: 2));
       exit(0);
     } catch (e, st) {

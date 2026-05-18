@@ -898,6 +898,44 @@ Decimal total = subtotal - discount; // Exact precision
 - All money columns are `INTEGER` (cents)
 - Column naming: `price_cents`, `total_cents`, `balance_cents`
 
+### 🔒 Calculation Single Sources of Truth (post-Phase-9)
+
+The 10-phase scattered-calculation-logic migration is closed (see
+`docs/adr/0001-pricing-engines-as-sot.md` §7 + `docs/adr/0003-retrospective.md`).
+Before adding ANY arithmetic on money / qty / tax / discount / balance /
+cost / commission / loyalty / payroll / stock, **call the SoT — never
+re-implement it**.
+
+| Concern | Sole owner |
+|---|---|
+| Cents arithmetic / `percentage` / `allocate` | `lib/core/money/money.dart` |
+| Text → cents (sign-aware) | `MoneyInputParser.parseSignedOrZero` |
+| Text → cents (magnitude) | `MoneyInputParser.parseOrZero` |
+| `%` ↔ `¢` conversion | `DiscountConverter` |
+| Per-line totals | `LineItemPricingEngine.compute` |
+| Invoice totals + proration | `InvoicePricingEngine.compute` |
+| Tax (calc + recovery) | `TaxCalculationService` (`recoverRateBps` is the inverse) |
+| Return proportional reversal + rollup | `ReturnCalculationService` |
+| `accounts.balance_cents` | `AccountingRepository._updateAccountBalance` only |
+| `customers/suppliers.balance_cents` | `BalanceService` only |
+| Opening-balance party deltas | `Customer/SupplierRepository.adjustOpeningBalance` |
+| Stock columns | `StockService` |
+| Batch lifecycle | `BatchService` |
+| `*.cost_cents` (WAC) | `ProductCostService` |
+| `commissions` rows | `CommissionService` (largest-remainder reversal) |
+| `loyalty_point_transactions` + balance | `LoyaltyPointsService` |
+| Inventory adj. value | `InventoryAdjustmentService` |
+| Credit-note balance | `CustomerCreditNoteService` |
+| Payroll | `PayrollCalculationService` |
+| Account-type signing (reports) | `TrialBalance.totalForType` / `TrialBalanceItem.naturalBalanceCents` |
+| Ledger running balance | `LedgerRunningBalance` |
+| Ratio / percent for display | `RatioHelper.percent` / `RatioHelper.bpsToPercent` |
+
+**Visual map:** `docs/SOURCE_OF_TRUTH_MAP.md`
+**Banned patterns + tests:** `docs/ACCOUNTING_INTEGRITY_GUIDELINES.md` §SoT
+**Enforcement:** `test/architecture/scattered_patterns_guard_test.dart` +
+`test/core/database/app_database_single_writer_guard_test.dart`.
+
 ---
 
 ## 📦 Product Variants System (CRITICAL)

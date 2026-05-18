@@ -1,6 +1,7 @@
 import 'package:decimal/decimal.dart';
 import '../../../../core/database/app_database.dart' as db;
 import '../../../../core/database/daos/product_dao.dart';
+import '../../../../core/services/price_history_service.dart';
 import '../../domain/entities/price_history_entity.dart';
 import '../models/product_model.dart';
 
@@ -11,6 +12,7 @@ abstract class ProductLocalDatasource {
   Future<ProductModel?> findBySku(String sku);
   Future<ProductModel?> findByBarcode(String barcode);
   Future<ProductModel?> findByName(String name);
+  Future<ProductModel?> getProductById(int id);
   
   Future<List<ProductModel>> filterProducts({
     int? categoryId,
@@ -44,8 +46,31 @@ abstract class ProductLocalDatasource {
 
   Future<int> createProduct(db.ProductsCompanion product);
   Future<bool> updateProduct(ProductModel product);
+
+  /// See [ProductDao.getCostingMethodLockReason].
+  Future<String?> getCostingMethodLockReason(int productId);
+
+  /// See [ProductDao.setCostingMethod]. Returns `null` on success or a
+  /// non-null lock-reason string on refusal.
+  Future<String?> setCostingMethod({
+    required int productId,
+    required String method,
+  });
+
+  /// See [ProductDao.getInventoryTrackingType].
+  Future<String> getInventoryTrackingType(int productId);
+
+  /// See [ProductDao.setInventoryTrackingType]. Returns `null` on success or
+  /// a non-null lock-reason string on refusal.
+  Future<String?> setInventoryTrackingType({
+    required int productId,
+    required String trackingType,
+  });
   Future<int> deleteProduct(int id);
   Future<int> bulkDeleteProducts(List<int> ids);
+
+  Future<int> countProductReferences(int productId);
+  Future<({bool wasDeleted, int referenceCount})> smartDeleteProduct(int productId);
 
   Future<int> deactivateProduct(int id);
   Future<int> bulkDeactivateProducts(List<int> ids);
@@ -70,6 +95,16 @@ abstract class ProductLocalDatasource {
 
   /// Create a price history record
   Future<void> createPriceHistory(PriceHistory history);
+
+  /// See [ProductDao.watchExpirySummaries]. Streams per-product expiry
+  /// status (expired qty + next non-expired date) for products tracked as
+  /// `batch_expiry` only. Drives the product list near-expiry badges and
+  /// will be re-used by the Phase E expiry alert dashboard.
+  Stream<Map<int, ({int expiredQty, DateTime? nextExpiry})>>
+      watchExpirySummaries();
+
+  /// Runs [action] inside a single Drift transaction.
+  Future<T> runInTransaction<T>(Future<T> Function() action);
 }
 
 class ProductLocalDatasourceImpl implements ProductLocalDatasource {
@@ -112,6 +147,12 @@ class ProductLocalDatasourceImpl implements ProductLocalDatasource {
   @override
   Future<ProductModel?> findByName(String name) async {
     final product = await _productDao.findByName(name);
+    return product == null ? null : ProductModel.fromDrift(product);
+  }
+
+  @override
+  Future<ProductModel?> getProductById(int id) async {
+    final product = await _productDao.getProductById(id);
     return product == null ? null : ProductModel.fromDrift(product);
   }
 
@@ -191,7 +232,16 @@ class ProductLocalDatasourceImpl implements ProductLocalDatasource {
   }
 
   @override
-  Future<bool> updateProduct(ProductModel product) {
+  Future<bool> updateProduct(ProductModel product) async {
+    // Preserve createdAt and — as in the variant path — forbid manual edits
+    // to stock_quantity / cost_cents via this route. Those must go through
+    // InventoryAdjustmentService so the general ledger stays reconciled.
+    // See `variant_local_datasource.dart :: updateVariant` for the full
+    // Phase 4 rationale.
+    final existing = await _productDao.getProductById(product.id);
+    final int safeStock = existing?.stockQuantity ?? product.stockQuantity;
+    final Decimal safeCost = existing?.costCents ?? product.costCents;
+
     return _productDao.updateProduct(
        db.Product(
          id: product.id,
@@ -201,10 +251,15 @@ class ProductLocalDatasourceImpl implements ProductLocalDatasource {
          description: product.description,
          sku: product.sku,
          barcode: product.barcode,
-         costCents: product.costCents,
+         costCents: safeCost,
          priceCents: product.priceCents,
          wholesalePriceCents: product.wholesalePriceCents,
-         stockQuantity: product.stockQuantity,
+         // Supplier reference price (gross of trade discounts) — managed by
+         // purchase posting via `purchase_dao.postPurchase`. Preserved here
+         // so a generic product update (rename, recategorise, taxability
+         // toggle, etc.) cannot silently clobber it back to NULL.
+         lastPurchasePriceCents: existing?.lastPurchasePriceCents,
+         stockQuantity: safeStock,
          minQuantity: product.minQuantity,
          categoryId: product.categoryId,
          supplierId: product.supplierId,
@@ -216,15 +271,63 @@ class ProductLocalDatasourceImpl implements ProductLocalDatasource {
          salesTaxRateBps: product.salesTaxRateBps,
          isActive: product.isActive,
          trackInventory: product.trackInventory,
-         createdAt: DateTime.now(),
+         // costing_method is product-level configuration that should never
+         // be silently flipped by a generic update path — preserve the
+         // existing value (or fall back to the system default 'wac').
+         costingMethod: existing?.costingMethod ?? 'wac',
+         // inventory_tracking_type — same rule. Phase B (two-layer
+         // architecture): preserve the existing value, default 'standard'
+         // for fresh rows.
+         inventoryTrackingType:
+             existing?.inventoryTrackingType ?? 'standard',
+         createdAt: existing?.createdAt ?? DateTime.now(),
          updatedAt: DateTime.now(),
        )
     );
   }
 
   @override
+  Future<String?> getCostingMethodLockReason(int productId) {
+    return _productDao.getCostingMethodLockReason(productId);
+  }
+
+  @override
+  Future<String?> setCostingMethod({
+    required int productId,
+    required String method,
+  }) {
+    return _productDao.setCostingMethod(productId: productId, method: method);
+  }
+
+  @override
+  Future<String> getInventoryTrackingType(int productId) {
+    return _productDao.getInventoryTrackingType(productId);
+  }
+
+  @override
+  Future<String?> setInventoryTrackingType({
+    required int productId,
+    required String trackingType,
+  }) {
+    return _productDao.setInventoryTrackingType(
+      productId: productId,
+      trackingType: trackingType,
+    );
+  }
+
+  @override
   Future<int> deleteProduct(int id) {
     return _productDao.deleteProduct(id);
+  }
+
+  @override
+  Future<int> countProductReferences(int productId) {
+    return _productDao.countProductReferences(productId);
+  }
+
+  @override
+  Future<({bool wasDeleted, int referenceCount})> smartDeleteProduct(int productId) {
+    return _productDao.smartDeleteProduct(productId);
   }
 
   @override
@@ -333,12 +436,57 @@ class ProductLocalDatasourceImpl implements ProductLocalDatasource {
 
   @override
   Future<List<PriceHistory>> getPriceHistory(int productId) async {
-    // Placeholder: price_history table not yet implemented
-    return [];
+    final rows = await _productDao.getPriceHistoryForProduct(productId);
+    return rows
+        .map((r) => PriceHistory(
+              id: r.id,
+              productId: r.productId,
+              variantId: r.variantId,
+              oldCostCents: r.oldCostCents.shift(2).toBigInt().toInt(),
+              newCostCents: r.newCostCents.shift(2).toBigInt().toInt(),
+              oldPriceCents: r.oldPriceCents.shift(2).toBigInt().toInt(),
+              newPriceCents: r.newPriceCents.shift(2).toBigInt().toInt(),
+              oldWholesalePriceCents:
+                  r.oldWholesalePriceCents?.shift(2).toBigInt().toInt(),
+              newWholesalePriceCents:
+                  r.newWholesalePriceCents?.shift(2).toBigInt().toInt(),
+              userId: r.userId ?? 0,
+              changeReason: r.changeReason,
+              createdAt: r.createdAt,
+            ))
+        .toList();
   }
 
   @override
   Future<void> createPriceHistory(PriceHistory history) async {
-    // Placeholder: price_history table not yet implemented
+    // Funnel through the single sanctioned writer so the manual product-form
+    // edits, purchase-posting WAC/last-cost mutations, and inventory
+    // revaluations all share one append path. This guarantees the in-app
+    // "price history" surface stays the single source of truth — no scattered
+    // writers, no parallel histories.
+    await PriceHistoryService.recordIfChanged(
+      _productDao,
+      productId: history.productId,
+      variantId: history.variantId,
+      oldCostCents: history.oldCostCents,
+      newCostCents: history.newCostCents,
+      oldPriceCents: history.oldPriceCents,
+      newPriceCents: history.newPriceCents,
+      oldWholesalePriceCents: history.oldWholesalePriceCents,
+      newWholesalePriceCents: history.newWholesalePriceCents,
+      userId: history.userId == 0 ? null : history.userId,
+      changeReason: history.changeReason,
+    );
+  }
+
+  @override
+  Stream<Map<int, ({int expiredQty, DateTime? nextExpiry})>>
+      watchExpirySummaries() {
+    return _productDao.watchExpirySummaries();
+  }
+
+  @override
+  Future<T> runInTransaction<T>(Future<T> Function() action) {
+    return _productDao.runInTransaction(action);
   }
 }

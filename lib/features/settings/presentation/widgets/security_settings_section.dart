@@ -1,14 +1,42 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 
+import '../../../../core/database/database_encryption.dart';
+import '../../../../core/di/injection_container.dart';
+import '../../../../core/services/pin_service.dart';
+import '../../../auth/auth.dart';
 import '../../domain/entities/app_settings.dart';
 import '../bloc/app_settings_bloc.dart';
 import 'settings_widgets.dart';
 
-class SecuritySettingsSection extends StatelessWidget {
+class SecuritySettingsSection extends StatefulWidget {
   const SecuritySettingsSection({super.key});
+
+  @override
+  State<SecuritySettingsSection> createState() => _SecuritySettingsSectionState();
+}
+
+class _SecuritySettingsSectionState extends State<SecuritySettingsSection> {
+  bool _isPinSet = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkPinStatus();
+  }
+
+  Future<void> _checkPinStatus() async {
+    final pinSet = await sl<PinService>().isPinSet();
+    if (mounted) setState(() => _isPinSet = pinSet);
+  }
+
+  bool get _isOwner {
+    final authState = context.read<AuthBloc>().state;
+    return authState is AuthAuthenticated && authState.user.isOwner;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -35,12 +63,53 @@ class SecuritySettingsSection extends StatelessWidget {
                 labelSuffix: ' min',
                 onChanged: (v) => _patch(context, (c) => c.copyWith(sessionTimeoutMinutes: v.round())),
               ),
+            ListTile(
+              title: Text('app_settings.security.remember_me_duration'.tr()),
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'app_settings.security.remember_me_duration_desc'.tr(),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 4),
+                  Slider(
+                    value: s.rememberMeDurationHours.toDouble().clamp(1, 168),
+                    min: 1,
+                    max: 168,
+                    divisions: 167,
+                    label: _formatDuration(s.rememberMeDurationHours),
+                    onChanged: (v) => _patch(context, (c) => c.copyWith(rememberMeDurationHours: v.round())),
+                  ),
+                ],
+              ),
+              trailing: Text(
+                _formatDuration(s.rememberMeDurationHours),
+                style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold),
+              ),
+            ),
             SwitchListTile(
               title: Text('app_settings.security.pin_void_refund'.tr()),
               subtitle: Text('app_settings.security.pin_void_refund_desc'.tr()),
               value: s.requirePinForVoidRefund,
               onChanged: (v) => _patch(context, (c) => c.copyWith(requirePinForVoidRefund: v)),
             ),
+            // PIN setup/change - owner only
+            if (s.requirePinForVoidRefund && _isOwner)
+              ListTile(
+                leading: Icon(
+                  _isPinSet ? LucideIcons.keyRound : LucideIcons.keyRound,
+                  color: _isPinSet ? Colors.green : Theme.of(context).colorScheme.error,
+                ),
+                title: Text(_isPinSet
+                    ? 'app_settings.security.change_pin'.tr()
+                    : 'app_settings.security.set_pin'.tr()),
+                subtitle: Text(_isPinSet
+                    ? 'app_settings.security.pin_is_set'.tr()
+                    : 'app_settings.security.pin_not_set'.tr()),
+                trailing: const Icon(LucideIcons.chevronRight),
+                onTap: () => _showSetPinDialog(context),
+              ),
             SwitchListTile(
               title: Text('app_settings.security.biometric'.tr()),
               subtitle: Text('app_settings.security.biometric_desc'.tr()),
@@ -49,14 +118,187 @@ class SecuritySettingsSection extends StatelessWidget {
             ),
             SwitchListTile(
               title: Text('app_settings.security.encryption'.tr()),
-              subtitle: Text('app_settings.security.encryption_desc'.tr()),
+              subtitle: Text(s.enableDatabaseEncryption
+                  ? 'app_settings.security.encryption_enabled_note'.tr()
+                  : 'app_settings.security.encryption_desc'.tr()),
               value: s.enableDatabaseEncryption,
-              onChanged: (v) => _patch(context, (c) => c.copyWith(enableDatabaseEncryption: v)),
+              onChanged: (v) => _toggleEncryption(context, v),
             ),
           ],
         );
       },
     );
+  }
+
+  Future<void> _showSetPinDialog(BuildContext context) async {
+    final pinController = TextEditingController();
+    final confirmController = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        icon: Icon(LucideIcons.keyRound, color: Theme.of(ctx).colorScheme.primary, size: 32),
+        title: Text(_isPinSet
+            ? 'app_settings.security.change_pin'.tr()
+            : 'app_settings.security.set_pin'.tr()),
+        content: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('app_settings.security.set_pin_desc'.tr()),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: pinController,
+                obscureText: true,
+                keyboardType: TextInputType.number,
+                maxLength: 6,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                decoration: InputDecoration(
+                  labelText: 'app_settings.security.new_pin'.tr(),
+                  border: const OutlineInputBorder(),
+                  prefixIcon: const Icon(Icons.pin_outlined),
+                  counterText: '',
+                ),
+                validator: (v) {
+                  if (v == null || v.isEmpty) return 'security.pin_required'.tr();
+                  if (v.length < 4) return 'app_settings.security.pin_min_length'.tr();
+                  return null;
+                },
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: confirmController,
+                obscureText: true,
+                keyboardType: TextInputType.number,
+                maxLength: 6,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                decoration: InputDecoration(
+                  labelText: 'app_settings.security.confirm_pin'.tr(),
+                  border: const OutlineInputBorder(),
+                  prefixIcon: const Icon(Icons.pin_outlined),
+                  counterText: '',
+                ),
+                validator: (v) {
+                  if (v != pinController.text) {
+                    return 'app_settings.security.pin_mismatch'.tr();
+                  }
+                  return null;
+                },
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('common.cancel'.tr()),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (formKey.currentState?.validate() ?? false) {
+                Navigator.pop(ctx, true);
+              }
+            },
+            child: Text('common.save'.tr()),
+          ),
+        ],
+      ),
+    );
+
+    if (result == true) {
+      await sl<PinService>().setPin(pinController.text);
+      await _checkPinStatus();
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('app_settings.security.pin_saved'.tr()),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+
+    pinController.dispose();
+    confirmController.dispose();
+  }
+
+  Future<void> _toggleEncryption(BuildContext context, bool enable) async {
+    final keyManager = DatabaseEncryptionKeyManager();
+
+    if (enable) {
+      // Warn user: encryption requires app restart
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          icon: Icon(LucideIcons.shieldCheck, color: Theme.of(ctx).colorScheme.primary, size: 32),
+          title: Text('app_settings.security.encryption'.tr()),
+          content: Text('app_settings.security.encryption_enable_warning'.tr()),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text('common.cancel'.tr()),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text('common.confirm'.tr()),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+      await keyManager.enableEncryption();
+    } else {
+      // Warn user: disabling encryption requires restart too
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          icon: Icon(LucideIcons.shieldOff, color: Theme.of(ctx).colorScheme.error, size: 32),
+          title: Text('app_settings.security.encryption'.tr()),
+          content: Text('app_settings.security.encryption_disable_warning'.tr()),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text('common.cancel'.tr()),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(ctx).colorScheme.error,
+              ),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text('common.confirm'.tr()),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+      await keyManager.disableEncryption();
+    }
+
+    if (!context.mounted) return;
+    _patch(context, (c) => c.copyWith(enableDatabaseEncryption: enable));
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('app_settings.security.encryption_restart_required'.tr()),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 5),
+      ),
+    );
+  }
+
+  String _formatDuration(int hours) {
+    if (hours >= 24 && hours % 24 == 0) {
+      final days = hours ~/ 24;
+      return '$days d';
+    }
+    if (hours >= 24) {
+      final days = hours ~/ 24;
+      final remainingHours = hours % 24;
+      return '${days}d ${remainingHours}h';
+    }
+    return '$hours h';
   }
 
   void _patch(BuildContext context, AppSettings Function(AppSettings) fn) {

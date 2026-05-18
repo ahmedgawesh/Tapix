@@ -6,6 +6,8 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../../../core/widgets/inputs/select_all_on_focus.dart';
+import '../../domain/repositories/product_variant_repository.dart';
 import '../bloc/edit_prices_bloc.dart';
 import '../bloc/edit_prices_event.dart';
 import '../bloc/edit_prices_state.dart';
@@ -17,7 +19,7 @@ class EditPricesScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (context) => EditPricesBloc(sl()),
+      create: (context) => EditPricesBloc(sl(), sl()),
       child: const _EditPricesView(),
     );
   }
@@ -294,6 +296,24 @@ class _EditPricesViewState extends State<_EditPricesView> {
                             ),
                           );
                         },
+                        onVariantsRequested: product.hasVariants
+                            ? (productId) => sl<ProductVariantRepository>().getVariantsByProduct(productId)
+                            : null,
+                        onVariantPriceChanged: (updatedVariant) {
+                          context.read<EditPricesBloc>().add(
+                            EditPricesVariantPriceUpdated(updatedVariant),
+                          );
+                        },
+                        selectedVariantIds: state.data.selectedVariantIds,
+                        variantPriceChanges: state.data.variantPriceChanges,
+                        onVariantSelectionChanged: (variantId, isSelected) {
+                          context.read<EditPricesBloc>().add(
+                            EditPricesVariantSelectionToggled(
+                              variantId: variantId,
+                              isSelected: isSelected,
+                            ),
+                          );
+                        },
                       );
                     },
                   );
@@ -388,6 +408,7 @@ class _EditPricesViewState extends State<_EditPricesView> {
                   border: const OutlineInputBorder(),
                 ),
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                onTap: () => selectAllText(valueController),
               ),
             ],
           ),
@@ -403,7 +424,7 @@ class _EditPricesViewState extends State<_EditPricesView> {
               if (value != null && value > Decimal.zero) {
                 final currentState = bloc.state;
                 final hasSelection = currentState is RealtimeSuccess<EditPricesStateData> && 
-                    currentState.data.selectedProductIds.isNotEmpty;
+                    (currentState.data.selectedProductIds.isNotEmpty || currentState.data.selectedVariantIds.isNotEmpty);
                 
                 bloc.add(EditPricesBulkAdjustRequested(
                   adjustmentType: selectedType,
@@ -412,6 +433,9 @@ class _EditPricesViewState extends State<_EditPricesView> {
                   applyToAll: !hasSelection,
                   selectedProductIds: hasSelection ? 
                       currentState.data.selectedProductIds.toList() : 
+                      null,
+                  selectedVariantIds: hasSelection ?
+                      currentState.data.selectedVariantIds.toList() :
                       null,
                 ));
                 Navigator.of(dialogContext).pop();

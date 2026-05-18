@@ -17,7 +17,9 @@ import '../../domain/repositories/product_repository.dart';
 import '../bloc/product_variants_bloc.dart';
 import '../bloc/colors_bloc.dart';
 import '../bloc/sizes_bloc.dart';
+import '../../../../core/widgets/inputs/select_all_on_focus.dart';
 import 'money_input_widget.dart';
+import 'inventory_adjustment_dialog.dart';
 
 /// Reusable dialog for creating/editing a product variant.
 /// Full-featured with: Attributes, Identity (SKU/Barcode), Pricing, Inventory, Status, Print, Delete.
@@ -124,7 +126,6 @@ class _VariantEditDialogState extends State<VariantEditDialog> {
   final _skuController = TextEditingController();
   final _barcodeController = TextEditingController();
   final _stockController = TextEditingController();
-  final _adjustController = TextEditingController();
 
   
   int? _colorId;
@@ -153,7 +154,10 @@ class _VariantEditDialogState extends State<VariantEditDialog> {
       _stockController.text = v.stockQuantity.toString();
       _colorId = v.colorId;
       _sizeId = v.sizeId;
-      _costCents = v.costCents;
+      // Display the GROSS supplier reference price rather than the IAS-2
+      // net cost basis (see product_form_bloc for the full rationale).
+      // Fallback to costCents for legacy variants pre-migration 10055.
+      _costCents = v.lastPurchasePriceCents ?? v.costCents;
       _priceCents = v.priceCents;
       _wholesalePriceCents = v.wholesalePriceCents;
       _isActive = v.isActive;
@@ -161,7 +165,6 @@ class _VariantEditDialogState extends State<VariantEditDialog> {
       _stockController.text = '0';
       _loadDefaultsForNewVariant();
     }
-    _adjustController.text = '0';
   }
 
   Future<void> _loadDefaultsForNewVariant() async {
@@ -171,7 +174,7 @@ class _VariantEditDialogState extends State<VariantEditDialog> {
       if (!mounted || product == null) return;
 
       setState(() {
-        _costCents = product.costCents;
+        _costCents = product.lastPurchasePriceCents ?? product.costCents;
         _priceCents = product.priceCents;
         _wholesalePriceCents = product.wholesalePriceCents;
         _baseSku = (product.sku ?? '').trim();
@@ -191,7 +194,6 @@ class _VariantEditDialogState extends State<VariantEditDialog> {
     _skuController.dispose();
     _barcodeController.dispose();
     _stockController.dispose();
-    _adjustController.dispose();
     super.dispose();
   }
 
@@ -773,6 +775,11 @@ class _VariantEditDialogState extends State<VariantEditDialog> {
               child: MoneyInputWidget(
                 value: _costCents,
                 label: 'variant_dialog.cost'.tr(),
+                // Cost is WAC-managed: updated only by purchases and by
+                // Inventory Revaluation adjustments. Editable only when
+                // creating a brand-new variant (no stock history yet).
+                enabled: !_isEditing,
+                hint: _isEditing ? 'products.cost_readonly_hint'.tr() : null,
                 onChanged: (value) => setState(() => _costCents = value),
               ),
             ),
@@ -851,51 +858,22 @@ class _VariantEditDialogState extends State<VariantEditDialog> {
                 ],
               ),
             ),
-            const SizedBox(height: 16),
-            Text(
-              'variant_dialog.adjust_stock'.tr(),
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: colorScheme.outline,
-                  ),
-            ),
             const SizedBox(height: 8),
-            Row(
-              children: [
-                _buildQuickAdjustButton(-10, colorScheme),
-                const SizedBox(width: 8),
-                _buildQuickAdjustButton(-1, colorScheme),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: TextFormField(
-                    controller: _adjustController,
-                    textAlign: TextAlign.center,
-                    decoration: const InputDecoration(
-                      border: OutlineInputBorder(),
-                      isDense: true,
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Text(
+                'products.stock_readonly_hint'.tr(),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
                     ),
-                    keyboardType: const TextInputType.numberWithOptions(
-                        signed: true),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                _buildQuickAdjustButton(1, colorScheme),
-                const SizedBox(width: 8),
-                _buildQuickAdjustButton(10, colorScheme),
-              ],
+              ),
             ),
-            const SizedBox(height: 8),
-            Builder(builder: (context) {
-              final adj = int.tryParse(_adjustController.text) ?? 0;
-              final newStock = _currentStock + adj;
-              if (adj == 0) return const SizedBox.shrink();
-              return Text(
-                'variant_dialog.new_stock_preview'.tr(args: [newStock.toString()]),
-                style: TextStyle(
-                  color: newStock < 0 ? colorScheme.error : colorScheme.primary,
-                  fontWeight: FontWeight.w500,
-                ),
-              );
-            }),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: _isLoading ? null : _openInventoryAdjustment,
+              icon: const Icon(LucideIcons.warehouse, size: 16),
+              label: Text('products.adjust_inventory'.tr()),
+            ),
           ]
         else ...
           [
@@ -907,6 +885,7 @@ class _VariantEditDialogState extends State<VariantEditDialog> {
                 prefixIcon: const Icon(LucideIcons.package),
               ),
               keyboardType: TextInputType.number,
+              onTap: () => selectAllText(_stockController),
               validator: (value) {
                 if (value == null || value.isEmpty) {
                   return 'common.required'.tr();
@@ -923,35 +902,29 @@ class _VariantEditDialogState extends State<VariantEditDialog> {
     );
   }
 
-  Widget _buildQuickAdjustButton(int delta, ColorScheme colorScheme) {
-    final isPositive = delta > 0;
-    return Material(
-      color: isPositive
-          ? colorScheme.primaryContainer
-          : colorScheme.errorContainer,
-      borderRadius: BorderRadius.circular(8),
-      child: InkWell(
-        onTap: () {
-          final current = int.tryParse(_adjustController.text) ?? 0;
-          setState(() {
-            _adjustController.text = (current + delta).toString();
-          });
-        },
-        borderRadius: BorderRadius.circular(8),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Text(
-            '${isPositive ? '+' : ''}$delta',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: isPositive
-                  ? colorScheme.onPrimaryContainer
-                  : colorScheme.onErrorContainer,
-            ),
-          ),
-        ),
-      ),
+  /// Launches the accounting-safe Inventory Adjustment dialog for the
+  /// variant currently being edited. Any successful post is applied through
+  /// `InventoryAdjustmentService`, which updates stock, posts a balanced
+  /// journal entry, and records an `inventory_adjustments` audit row in
+  /// one transaction. On success we close this dialog so the caller sees
+  /// fresh data when it re-opens.
+  Future<void> _openInventoryAdjustment() async {
+    final v = widget.variant;
+    if (v == null) return;
+    final posted = await InventoryAdjustmentDialog.show(
+      context,
+      productId: v.productId,
+      variantId: v.id,
+      currentStock: v.stockQuantity,
+      currentUnitCostCents: v.costCents.toBigInt().toInt(),
+      subjectLabel: widget.productName,
     );
+    if (posted == true && mounted) {
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('inventory_adjustment.posted_success'.tr())),
+      );
+    }
   }
 
   Widget _buildStatusSection(ColorScheme colorScheme) {
@@ -1267,16 +1240,16 @@ class _VariantEditDialogState extends State<VariantEditDialog> {
     try {
 
       if (_isEditing) {
-        final adj = int.tryParse(_adjustController.text) ?? 0;
-        final newStock = _currentStock + adj;
-        if (newStock < 0) {
-          setState(() {
-            _errorMessage = 'variant_dialog.stock_negative'.tr();
-            _isLoading = false;
-          });
-          return;
-        }
-
+        // NOTE: stockQuantity is NEVER written from this form. The
+        // defense-in-depth guard in `VariantLocalDatasource.updateVariant`
+        // forcibly preserves the stored on-hand value. Stock mutations go
+        // exclusively through `InventoryAdjustmentService` via the
+        // "Adjust Inventory" button above.
+        //
+        // Similarly, `costCents` is retained (WAC-managed by purchases /
+        // revaluation adjustments). We still pass the current Decimal down
+        // because the entity requires it; the guard ensures the DB value
+        // cannot drift even if a malformed state gets through here.
         final updatedVariant = ProductVariant(
           id: widget.variant!.id,
           productId: widget.productId,
@@ -1290,7 +1263,7 @@ class _VariantEditDialogState extends State<VariantEditDialog> {
           priceCents: _priceCents,
           wholesalePriceCents: _wholesalePriceCents,
           priceAdjustmentCents: widget.variant!.priceAdjustmentCents,
-          stockQuantity: newStock,
+          stockQuantity: widget.variant!.stockQuantity,
           isActive: _isActive,
         );
         bloc.add(VariantUpdateRequested(updatedVariant));

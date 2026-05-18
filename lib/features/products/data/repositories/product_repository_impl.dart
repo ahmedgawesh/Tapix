@@ -2,11 +2,13 @@ import 'package:decimal/decimal.dart';
 import 'package:drift/drift.dart';
 import '../../../../core/database/app_database.dart' as db;
 import '../../../../core/services/audit_log_service.dart';
+import '../../../../core/services/inventory/inventory_adjustment_service.dart';
 import '../../../auth/data/services/session_service.dart';
 import '../../domain/entities/product_entity.dart';
 import '../../domain/entities/price_history_entity.dart';
 import '../../domain/repositories/product_repository.dart';
 import '../datasources/product_local_datasource.dart';
+import '../datasources/variant_local_datasource.dart';
 import '../models/product_model.dart';
 
 export '../../domain/repositories/product_repository.dart' show BulkProductData;
@@ -15,8 +17,17 @@ class ProductRepositoryImpl implements ProductRepository {
   final ProductLocalDatasource _datasource;
   final AuditLogService _audit;
   final SessionService _sessionService;
+  final VariantLocalDatasource? _variantDatasource;
+  final InventoryAdjustmentService? _adjustmentService;
 
-  ProductRepositoryImpl(this._datasource, this._audit, this._sessionService);
+  ProductRepositoryImpl(
+    this._datasource,
+    this._audit,
+    this._sessionService, {
+    VariantLocalDatasource? variantDatasource,
+    InventoryAdjustmentService? adjustmentService,
+  })  : _variantDatasource = variantDatasource,
+        _adjustmentService = adjustmentService;
 
   Future<int?> _currentUserId() => _sessionService.getCurrentUserId();
 
@@ -48,6 +59,11 @@ class ProductRepositoryImpl implements ProductRepository {
   @override
   Future<Product?> findByName(String name) {
     return _datasource.findByName(name);
+  }
+
+  @override
+  Future<Product?> getProductById(int id) {
+    return _datasource.getProductById(id);
   }
 
   @override
@@ -137,7 +153,15 @@ class ProductRepositoryImpl implements ProductRepository {
     int salesTaxRateBps = 0,
     bool isActive = true,
     bool trackInventory = true,
+    String costingMethod = 'wac',
+    String inventoryTrackingType = 'standard',
   }) async {
+    assert(
+      inventoryTrackingType == 'standard' ||
+          inventoryTrackingType == 'batch' ||
+          inventoryTrackingType == 'batch_expiry',
+      'inventoryTrackingType must be standard | batch | batch_expiry',
+    );
     final productId = await _datasource.createProduct(
       db.ProductsCompanion(
         name: Value(name),
@@ -161,6 +185,8 @@ class ProductRepositoryImpl implements ProductRepository {
         salesTaxRateBps: Value(salesTaxRateBps),
         isActive: Value(isActive),
         trackInventory: Value(trackInventory),
+        costingMethod: Value(costingMethod),
+        inventoryTrackingType: Value(inventoryTrackingType),
       ),
     );
 
@@ -203,9 +229,39 @@ class ProductRepositoryImpl implements ProductRepository {
           salesTaxRateBps: product.salesTaxRateBps,
           isActive: product.isActive,
           trackInventory: product.trackInventory,
+          costingMethod: product.costingMethod,
         ),
       );
     }
+  }
+
+  @override
+  Future<String?> getCostingMethodLockReason(int productId) {
+    return _datasource.getCostingMethodLockReason(productId);
+  }
+
+  @override
+  Future<String?> setCostingMethod({
+    required int productId,
+    required String method,
+  }) {
+    return _datasource.setCostingMethod(productId: productId, method: method);
+  }
+
+  @override
+  Future<String> getInventoryTrackingType(int productId) {
+    return _datasource.getInventoryTrackingType(productId);
+  }
+
+  @override
+  Future<String?> setInventoryTrackingType({
+    required int productId,
+    required String trackingType,
+  }) {
+    return _datasource.setInventoryTrackingType(
+      productId: productId,
+      trackingType: trackingType,
+    );
   }
 
   @override
@@ -213,6 +269,70 @@ class ProductRepositoryImpl implements ProductRepository {
     // Audit: log product deletion (CRITICAL)
     _audit.logProductDeleted(productId: id, productName: 'Product #$id', userId: await _currentUserId());
     return _datasource.deleteProduct(id);
+  }
+
+  @override
+  Future<int> countProductReferences(int productId) {
+    return _datasource.countProductReferences(productId);
+  }
+
+  @override
+  Future<ProductDeletionResult> smartDeleteProduct(int productId) async {
+    final result = await _datasource.smartDeleteProduct(productId);
+    if (result.wasDeleted) {
+      _audit.logProductDeleted(
+        productId: productId,
+        productName: 'Product #$productId',
+        userId: await _currentUserId(),
+      );
+    } else {
+      // Deactivation is audit-relevant but less severe than hard delete.
+      _audit.logProductUpdated(
+        productId: productId,
+        productName: 'Product #$productId (deactivated, ${result.referenceCount} refs)',
+        userId: await _currentUserId(),
+      );
+    }
+    return ProductDeletionResult(
+      wasDeleted: result.wasDeleted,
+      referenceCount: result.referenceCount,
+    );
+  }
+
+  @override
+  Future<ProductDeletionResult> writeOffAndDeleteProduct({
+    required int productId,
+    required String reason,
+  }) async {
+    // The accounting-safe write-off step requires both the variant
+    // datasource (to enumerate every variant carrying stock) and the
+    // adjustment service (to post the shrinkage JE per variant). They
+    // are optional in the constructor for backwards-compat; if either
+    // is missing we fall back to the plain smart-delete (the old behaviour
+    // — accepted only when the product carries no stock).
+    final variantDs = _variantDatasource;
+    final adjSvc = _adjustmentService;
+
+    if (variantDs != null && adjSvc != null) {
+      // Iterate active variants with stock>0 and shrink each to zero
+      // before touching the products table. Inactive variants already
+      // had their stock zeroed (or never had any) so we leave them be.
+      final variants = await variantDs.getVariantsByProduct(productId);
+      for (final v in variants) {
+        if (v.stockQuantity > 0) {
+          await adjSvc.adjustForProduct(
+            productId: productId,
+            variantId: v.id,
+            type: InventoryAdjustmentType.shrinkage,
+            quantityDelta: -v.stockQuantity,
+            reason: reason,
+          );
+        }
+      }
+    }
+
+    // Now delete (hard if no refs, soft if any).
+    return smartDeleteProduct(productId);
   }
 
   @override
@@ -292,5 +412,16 @@ class ProductRepositoryImpl implements ProductRepository {
   @override
   Future<void> createPriceHistory(PriceHistory history) {
     return _datasource.createPriceHistory(history);
+  }
+
+  @override
+  Future<T> runInTransaction<T>(Future<T> Function() action) {
+    return _datasource.runInTransaction(action);
+  }
+
+  @override
+  Stream<Map<int, ({int expiredQty, DateTime? nextExpiry})>>
+      watchExpirySummaries() {
+    return _datasource.watchExpirySummaries();
   }
 }

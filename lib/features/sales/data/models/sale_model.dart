@@ -1,5 +1,6 @@
 import '../../../../core/database/app_database.dart' as db;
 import '../../../../core/database/daos/sale_dao.dart';
+import '../../../../core/database/daos/adjustment_return_dao.dart';
 import '../../domain/entities/sale_entity.dart';
 
 class SaleModel extends SaleEntity {
@@ -8,6 +9,7 @@ class SaleModel extends SaleEntity {
     required super.invoiceNumber,
     super.customerId,
     super.customerName,
+    super.customerPhone,
     super.employeeId,
     super.employeeName,
     required super.subtotalCents,
@@ -53,6 +55,7 @@ class SaleModel extends SaleEntity {
       invoiceNumber: swc.sale.invoiceNumber,
       customerId: swc.sale.customerId,
       customerName: swc.customer?.name,
+      customerPhone: swc.customer?.phone,
       employeeId: swc.sale.employeeId,
       employeeName: swc.employee?.name,
       subtotalCents: swc.sale.subtotalCents,
@@ -140,6 +143,8 @@ class SaleReturnModel extends SaleReturnEntity {
     required super.saleId,
     super.saleInvoiceNumber,
     super.customerName,
+    super.customerPhone,
+    super.customerId,
     required super.returnNumber,
     super.subtotalCents,
     super.discountCents,
@@ -152,6 +157,8 @@ class SaleReturnModel extends SaleReturnEntity {
     super.reason,
     required super.returnDate,
     required super.createdAt,
+    super.isAdjustment,
+    super.unifiedId,
   });
 
   factory SaleReturnModel.fromDrift(db.SaleReturn ret) {
@@ -170,6 +177,66 @@ class SaleReturnModel extends SaleReturnEntity {
       reason: ret.reason,
       returnDate: ret.returnDate,
       createdAt: ret.createdAt,
+      isAdjustment: false,
+    );
+  }
+
+  factory SaleReturnModel.fromDriftWithParty(SaleReturnWithParty data) {
+    return SaleReturnModel(
+      id: data.saleReturn.id,
+      saleId: data.saleReturn.saleId,
+      saleInvoiceNumber: data.saleInvoiceNumber,
+      customerName: data.customerName,
+      customerPhone: data.customerPhone,
+      returnNumber: data.saleReturn.returnNumber,
+      subtotalCents: data.saleReturn.subtotalCents,
+      discountCents: data.saleReturn.discountCents,
+      taxCents: data.saleReturn.taxCents,
+      totalCents: data.saleReturn.totalCents,
+      currencyId: data.saleReturn.currencyId,
+      status: data.saleReturn.status,
+      dispositionType: data.saleReturn.dispositionType,
+      refundMethod: data.saleReturn.refundMethod,
+      reason: data.saleReturn.reason,
+      returnDate: data.saleReturn.returnDate,
+      createdAt: data.saleReturn.createdAt,
+      isAdjustment: false,
+    );
+  }
+
+  factory SaleReturnModel.fromAdjustment(db.SaleReturnAdjustment adj) {
+    return SaleReturnModel(
+      id: adj.id,
+      saleId: 0, // No linked sale
+      customerId: adj.customerId,
+      returnNumber: adj.returnNumber,
+      totalCents: adj.totalCents,
+      currencyId: adj.currencyId,
+      status: adj.status,
+      refundMethod: adj.refundMethod,
+      reason: adj.notes,
+      returnDate: adj.returnDate,
+      createdAt: adj.createdAt,
+      isAdjustment: true,
+    );
+  }
+
+  factory SaleReturnModel.fromAdjustmentWithParty(SaleAdjReturnWithParty data) {
+    return SaleReturnModel(
+      id: data.adjustment.id,
+      saleId: 0, // No linked sale
+      customerId: data.adjustment.customerId,
+      customerName: data.customerName,
+      customerPhone: data.customerPhone,
+      returnNumber: data.adjustment.returnNumber,
+      totalCents: data.adjustment.totalCents,
+      currencyId: data.adjustment.currencyId,
+      status: data.adjustment.status,
+      refundMethod: data.adjustment.refundMethod,
+      reason: data.adjustment.notes,
+      returnDate: data.adjustment.returnDate,
+      createdAt: data.adjustment.createdAt,
+      isAdjustment: true,
     );
   }
 }

@@ -92,6 +92,8 @@ void main() {
         .thenAnswer((_) => statsStreamController.stream);
     when(() => mockRepository.watchSaleIdsWithReturns())
         .thenAnswer((_) => returnIdsStreamController.stream);
+    when(() => mockRepository.watchSaleProductSearchTerms())
+        .thenAnswer((_) => Stream<Map<int, List<String>>>.value(const {}));
   });
 
   tearDown(() {

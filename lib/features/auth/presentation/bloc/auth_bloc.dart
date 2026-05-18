@@ -2,6 +2,8 @@ import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/bloc/realtime_bloc.dart';
+import '../../../../core/di/injection_container.dart';
+import '../../../../core/services/biometric_service.dart';
 import '../../../../core/services/crashlytics_service.dart';
 
 import '../../domain/entities/user_entity.dart';
@@ -28,6 +30,7 @@ class AuthBloc extends RealtimeBloc<UserEntity?, AuthEvent> {
     on<AuthFirstOwnerCreated>(_onFirstOwnerCreated);
     on<AuthSecurityQuestionRequested>(_onSecurityQuestionRequested);
     on<AuthPasswordResetRequested>(_onPasswordResetRequested);
+    on<AuthBiometricLoginRequested>(_onBiometricLoginRequested);
   }
 
   @override
@@ -82,7 +85,7 @@ class AuthBloc extends RealtimeBloc<UserEntity?, AuthEvent> {
     emit(const AuthLoading());
 
     try {
-      final user = await _repository.login(event.username, event.password);
+      final user = await _repository.login(event.username, event.password, rememberMe: event.rememberMe);
       if (user != null) {
         CrashlyticsService.instance.setUser(
           userId: user.id,
@@ -161,6 +164,42 @@ class AuthBloc extends RealtimeBloc<UserEntity?, AuthEvent> {
       }
     } catch (e) {
       emit(const AuthError(message: 'Failed to load security question'));
+    }
+  }
+
+  Future<void> _onBiometricLoginRequested(
+    AuthBiometricLoginRequested event,
+    Emitter<RealtimeState<UserEntity?>> emit,
+  ) async {
+    emit(const AuthLoading());
+
+    try {
+      final biometricService = sl<BiometricService>();
+      final authenticated = await biometricService.authenticate(
+        localizedReason: 'Authenticate to log in',
+      );
+
+      if (!authenticated) {
+        emit(const AuthUnauthenticated());
+        return;
+      }
+
+      final user = await _repository.loginWithBiometrics();
+      if (user != null) {
+        CrashlyticsService.instance.setUser(
+          userId: user.id,
+          role: user.role.name,
+        );
+        CrashlyticsService.instance.logAction('biometric_login', {
+          'user_id': user.id.toString(),
+          'role': user.role.name,
+        });
+        emit(AuthAuthenticated(user: user));
+      } else {
+        emit(const AuthError(message: 'Biometric login failed: no previous session'));
+      }
+    } catch (e) {
+      emit(const AuthError(message: 'Biometric authentication failed'));
     }
   }
 

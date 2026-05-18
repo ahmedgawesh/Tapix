@@ -7,13 +7,15 @@ import 'dart:typed_data';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 /// Callback type for getting session timeout settings dynamically
-typedef SessionTimeoutSettingsCallback = ({bool enabled, int timeoutMinutes}) Function();
+typedef SessionTimeoutSettingsCallback = ({bool enabled, int timeoutMinutes, int rememberMeDurationHours}) Function();
 
 class SessionService {
   final FlutterSecureStorage _storage;
   static const String _userIdKey = 'current_user_id';
   static const String _sessionTokenKey = 'session_token';
   static const String _lastActivityKey = 'last_activity';
+  static const String _rememberMeKey = 'remember_me';
+  static const String _rememberMeExpiryKey = 'remember_me_expiry';
 
   /// Callback to get current session timeout settings from AppSettings
   SessionTimeoutSettingsCallback? _getTimeoutSettings;
@@ -39,13 +41,22 @@ class SessionService {
 
   Stream<int?> get sessionStream => _sessionController.stream;
 
-  Future<void> saveSession(int userId) async {
+  Future<void> saveSession(int userId, {bool rememberMe = false}) async {
     _cachedUserId = userId;
     _cacheInitialized = true;
-    developer.log('SessionService.saveSession: userId=$userId', name: 'SessionService');
+    developer.log('SessionService.saveSession: userId=$userId, rememberMe=$rememberMe', name: 'SessionService');
     final token = _generateToken();
     await _storage.write(key: _userIdKey, value: userId.toString());
     await _storage.write(key: _sessionTokenKey, value: token);
+    await _storage.write(key: _rememberMeKey, value: rememberMe.toString());
+    if (rememberMe) {
+      final settings = _getTimeoutSettings?.call();
+      final durationHours = settings?.rememberMeDurationHours ?? 72;
+      final expiry = DateTime.now().add(Duration(hours: durationHours));
+      await _storage.write(key: _rememberMeExpiryKey, value: expiry.toIso8601String());
+    } else {
+      await _storage.delete(key: _rememberMeExpiryKey);
+    }
     await _updateLastActivity();
     _sessionController.add(userId);
   }
@@ -73,6 +84,20 @@ class SessionService {
     final token = await _storage.read(key: _sessionTokenKey);
     if (token == null) return false;
 
+    // Check if "Remember Me" is active
+    final rememberMeStr = await _storage.read(key: _rememberMeKey);
+    final isRememberMe = rememberMeStr == 'true';
+
+    if (isRememberMe) {
+      // Remember Me bypasses session timeout; check its own expiry instead
+      final expiryStr = await _storage.read(key: _rememberMeExpiryKey);
+      if (expiryStr == null) return false;
+      final expiry = DateTime.tryParse(expiryStr);
+      if (expiry == null) return false;
+      return DateTime.now().isBefore(expiry);
+    }
+
+    // Normal session timeout logic
     // Get timeout settings from AppSettings via callback
     final settings = _getTimeoutSettings?.call();
     
@@ -103,6 +128,8 @@ class SessionService {
     await _storage.delete(key: _userIdKey);
     await _storage.delete(key: _sessionTokenKey);
     await _storage.delete(key: _lastActivityKey);
+    await _storage.delete(key: _rememberMeKey);
+    await _storage.delete(key: _rememberMeExpiryKey);
     _sessionController.add(null);
   }
 

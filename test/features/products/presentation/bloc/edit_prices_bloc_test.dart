@@ -5,6 +5,7 @@ import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
 import 'package:tapix/core/bloc/realtime_bloc.dart';
 import 'package:tapix/features/products/domain/repositories/product_repository.dart';
+import 'package:tapix/features/products/domain/repositories/product_variant_repository.dart';
 import 'package:tapix/features/products/presentation/bloc/edit_prices_bloc.dart';
 import 'package:tapix/features/products/presentation/bloc/edit_prices_event.dart';
 import 'package:tapix/features/products/presentation/bloc/edit_prices_state.dart';
@@ -12,9 +13,10 @@ import 'package:tapix/features/products/domain/entities/product_entity.dart';
 
 import 'edit_prices_bloc_test.mocks.dart';
 
-@GenerateMocks([ProductRepository])
+@GenerateMocks([ProductRepository, ProductVariantRepository])
 void main() {
   late MockProductRepository mockRepository;
+  late MockProductVariantRepository mockVariantRepository;
 
   final tProduct = Product(
     id: 1,
@@ -33,6 +35,7 @@ void main() {
 
   setUp(() {
     mockRepository = MockProductRepository();
+    mockVariantRepository = MockProductVariantRepository();
     // Default stub for watchAllProducts
     when(mockRepository.watchAllProducts())
         .thenAnswer((_) => Stream.value([tProduct]));
@@ -44,14 +47,14 @@ void main() {
 
   group('EditPricesBloc', () {
     test('initial state is RealtimeLoading', () {
-      final bloc = EditPricesBloc(mockRepository);
+      final bloc = EditPricesBloc(mockRepository, mockVariantRepository);
       expect(bloc.state, isA<RealtimeLoading<EditPricesStateData>>());
       bloc.close();
     });
 
     blocTest<EditPricesBloc, RealtimeState<EditPricesStateData>>(
       'emits RealtimeSuccess when stream emits data',
-      build: () => EditPricesBloc(mockRepository),
+      build: () => EditPricesBloc(mockRepository, mockVariantRepository),
       wait: const Duration(milliseconds: 100),
       expect: () => [
         isA<RealtimeSuccess<EditPricesStateData>>(),
@@ -60,7 +63,7 @@ void main() {
 
     blocTest<EditPricesBloc, RealtimeState<EditPricesStateData>>(
       'emits RealtimeLoading then RealtimeSuccess when LoadProducts is added',
-      build: () => EditPricesBloc(mockRepository),
+      build: () => EditPricesBloc(mockRepository, mockVariantRepository),
       act: (bloc) => bloc.add(const EditPricesLoadProducts()),
       wait: const Duration(milliseconds: 100),
       expect: () => [
@@ -72,7 +75,7 @@ void main() {
 
     blocTest<EditPricesBloc, RealtimeState<EditPricesStateData>>(
       'updates price optimistically when EditPricesPriceUpdated is added',
-      build: () => EditPricesBloc(mockRepository),
+      build: () => EditPricesBloc(mockRepository, mockVariantRepository),
       act: (bloc) async {
         await Future<void>.delayed(const Duration(milliseconds: 50));
         bloc.add(EditPricesPriceUpdated(
@@ -89,7 +92,7 @@ void main() {
 
     blocTest<EditPricesBloc, RealtimeState<EditPricesStateData>>(
       'performs bulk price adjustment with percentage increase',
-      build: () => EditPricesBloc(mockRepository),
+      build: () => EditPricesBloc(mockRepository, mockVariantRepository),
       act: (bloc) async {
         await Future<void>.delayed(const Duration(milliseconds: 50));
         bloc.add(EditPricesBulkAdjustRequested(
@@ -106,7 +109,7 @@ void main() {
 
     blocTest<EditPricesBloc, RealtimeState<EditPricesStateData>>(
       'supports undo after price change',
-      build: () => EditPricesBloc(mockRepository),
+      build: () => EditPricesBloc(mockRepository, mockVariantRepository),
       act: (bloc) async {
         await Future<void>.delayed(const Duration(milliseconds: 50));
         bloc.add(EditPricesPriceUpdated(
@@ -125,7 +128,7 @@ void main() {
 
     blocTest<EditPricesBloc, RealtimeState<EditPricesStateData>>(
       'supports redo after undo',
-      build: () => EditPricesBloc(mockRepository),
+      build: () => EditPricesBloc(mockRepository, mockVariantRepository),
       act: (bloc) async {
         await Future<void>.delayed(const Duration(milliseconds: 50));
         bloc.add(EditPricesPriceUpdated(
@@ -146,7 +149,7 @@ void main() {
 
     blocTest<EditPricesBloc, RealtimeState<EditPricesStateData>>(
       'clears unsaved changes when discard is requested',
-      build: () => EditPricesBloc(mockRepository),
+      build: () => EditPricesBloc(mockRepository, mockVariantRepository),
       act: (bloc) async {
         await Future<void>.delayed(const Duration(milliseconds: 50));
         bloc.add(EditPricesPriceUpdated(
@@ -170,7 +173,7 @@ void main() {
       build: () {
         when(mockRepository.updateProduct(any))
             .thenAnswer((_) async => true);
-        return EditPricesBloc(mockRepository);
+        return EditPricesBloc(mockRepository, mockVariantRepository);
       },
       act: (bloc) async {
         await Future<void>.delayed(const Duration(milliseconds: 50));
@@ -190,7 +193,7 @@ void main() {
 
     blocTest<EditPricesBloc, RealtimeState<EditPricesStateData>>(
       'filters products by category',
-      build: () => EditPricesBloc(mockRepository),
+      build: () => EditPricesBloc(mockRepository, mockVariantRepository),
       act: (bloc) {
         bloc.add(const EditPricesFilterChanged(categoryId: 1));
       },
@@ -205,7 +208,7 @@ void main() {
 
     blocTest<EditPricesBloc, RealtimeState<EditPricesStateData>>(
       'filters products by stock status',
-      build: () => EditPricesBloc(mockRepository),
+      build: () => EditPricesBloc(mockRepository, mockVariantRepository),
       act: (bloc) {
         bloc.add(const EditPricesFilterChanged(stockStatus: 'low_stock'));
       },

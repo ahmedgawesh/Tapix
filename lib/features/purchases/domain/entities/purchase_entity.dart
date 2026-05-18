@@ -6,6 +6,7 @@ class PurchaseEntity extends Equatable {
   final String purchaseNumber;
   final int supplierId;
   final String? supplierName;
+  final String? supplierPhone;
   final Decimal subtotalCents;
   final Decimal discountCents;
   final Decimal taxCents;
@@ -26,6 +27,7 @@ class PurchaseEntity extends Equatable {
     required this.purchaseNumber,
     required this.supplierId,
     this.supplierName,
+    this.supplierPhone,
     required this.subtotalCents,
     Decimal? discountCents,
     required this.taxCents,
@@ -61,7 +63,7 @@ class PurchaseEntity extends Equatable {
 
   @override
   List<Object?> get props => [
-        id, purchaseNumber, supplierId, supplierName,
+        id, purchaseNumber, supplierId, supplierName, supplierPhone,
         subtotalCents, discountCents, taxCents, totalCents,
         paidAmountCents, currencyId, status, paymentMethod,
         supplierInvoiceRef, notes, purchaseDate, dueDate,
@@ -76,6 +78,13 @@ class PurchaseItemEntity extends Equatable {
   final int? variantId;
   final String? productName;
   final String? variantSku;
+  /// Per-variant attributes resolved at the DAO level. They MUST come from
+  /// joins on `productColors`/`sizes` keyed by the line's own `variantId`
+  /// — never from a productId-keyed lookup — so invoices that contain
+  /// multiple variants of the same product render each line correctly.
+  final String? colorName;
+  final String? colorHex;
+  final String? sizeName;
   final int quantity;
   final Decimal unitCostCents;
   final Decimal discountCents;
@@ -97,6 +106,9 @@ class PurchaseItemEntity extends Equatable {
     this.variantId,
     this.productName,
     this.variantSku,
+    this.colorName,
+    this.colorHex,
+    this.sizeName,
     required this.quantity,
     required this.unitCostCents,
     Decimal? discountCents,
@@ -115,6 +127,7 @@ class PurchaseItemEntity extends Equatable {
   @override
   List<Object?> get props => [
         id, purchaseId, productId, variantId, productName, variantSku,
+        colorName, colorHex, sizeName,
         quantity, unitCostCents, discountCents, subtotalCents, taxCents,
         totalCents, originalCostCents, originalPriceCents, originalWholesalePriceCents,
         newSellPriceCents, newWholesalePriceCents, expiryDate, createdAt,
@@ -126,6 +139,8 @@ class PurchaseReturnEntity extends Equatable {
   final int purchaseId;
   final String returnNumber;
   final String? supplierName;
+  final String? supplierPhone;
+  final int? supplierId;
   final Decimal subtotalCents;
   final Decimal discountCents;
   final Decimal taxCents;
@@ -139,11 +154,20 @@ class PurchaseReturnEntity extends Equatable {
   final DateTime returnDate;
   final DateTime createdAt;
 
+  /// True if this return is an adjustment (not linked to an invoice).
+  final bool isAdjustment;
+
+  /// Unique identifier across both linked and adjustment returns.
+  /// Format: "PR-{id}" for linked, "PRA-{id}" for adjustment.
+  final String unifiedId;
+
   PurchaseReturnEntity({
     required this.id,
     required this.purchaseId,
     required this.returnNumber,
     this.supplierName,
+    this.supplierPhone,
+    this.supplierId,
     Decimal? subtotalCents,
     Decimal? discountCents,
     Decimal? taxCents,
@@ -155,9 +179,12 @@ class PurchaseReturnEntity extends Equatable {
     this.reason,
     required this.returnDate,
     required this.createdAt,
+    this.isAdjustment = false,
+    String? unifiedId,
   }) : subtotalCents = subtotalCents ?? Decimal.zero,
        discountCents = discountCents ?? Decimal.zero,
-       taxCents = taxCents ?? Decimal.zero;
+       taxCents = taxCents ?? Decimal.zero,
+       unifiedId = unifiedId ?? (isAdjustment ? 'PRA-$id' : 'PR-$id');
 
   bool get isDraft => status == 'draft';
   bool get isPosted => status == 'posted';
@@ -165,10 +192,11 @@ class PurchaseReturnEntity extends Equatable {
 
   @override
   List<Object?> get props => [
-        id, purchaseId, returnNumber, supplierName,
+        id, purchaseId, returnNumber, supplierName, supplierId,
         subtotalCents, discountCents, taxCents, totalCents,
         currencyId, status, dispositionType,
         refundMethod, reason, returnDate, createdAt,
+        isAdjustment, unifiedId,
       ];
 }
 

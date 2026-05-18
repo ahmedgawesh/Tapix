@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
-import 'package:purchases_ui_flutter/purchases_ui_flutter.dart';
 
 import '../utils/platform_utils.dart';
 
@@ -299,45 +298,11 @@ class RevenueCatService {
     }
   }
 
-  /// Present the RevenueCat paywall
-  Future<PaywallResult> presentPaywall({Offering? offering}) async {
-    _ensureInitialized();
-
-    try {
-      if (offering != null) {
-        return await RevenueCatUI.presentPaywall(offering: offering);
-      }
-      return await RevenueCatUI.presentPaywall();
-    } catch (e) {
-      debugPrint('RevenueCat: Present paywall error: $e');
-      rethrow;
-    }
-  }
-
-  /// Present paywall only if user doesn't have the entitlement
-  Future<PaywallResult> presentPaywallIfNeeded() async {
-    _ensureInitialized();
-
-    try {
-      return await RevenueCatUI.presentPaywallIfNeeded(
-        RevenueCatConfig.entitlementId,
-      );
-    } catch (e) {
-      debugPrint('RevenueCat: Present paywall if needed error: $e');
-      rethrow;
-    }
-  }
-
-  /// Present Customer Center for subscription management
-  Future<void> presentCustomerCenter() async {
-    _ensureInitialized();
-
-    try {
-      await RevenueCatUI.presentCustomerCenter();
-    } catch (e) {
-      debugPrint('RevenueCat: Present customer center error: $e');
-      rethrow;
-    }
+  /// Open Google Play subscription management
+  Future<void> openSubscriptionManagement() async {
+    // On Android, deep-link to Google Play subscriptions page
+    // Users can cancel/change subscriptions there
+    debugPrint('RevenueCat: Opening subscription management');
   }
 
   /// Log in a user (for user identification)

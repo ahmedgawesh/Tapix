@@ -6,6 +6,7 @@ import '../../../../core/database/app_database.dart' hide Currency;
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/audit_log_service.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../../../core/services/ledger/ledger_running_balance.dart';
 import '../../../settings/presentation/bloc/app_settings_bloc.dart';
 import '../widgets/date_range_selector.dart';
 import '../widgets/report_date_range.dart';
@@ -479,7 +480,8 @@ class _GeneralLedgerViewState extends State<_GeneralLedgerView> {
       );
     }
 
-    int runningBalance = 0;
+    // Phase 7 — running balance via SoT helper.
+    final running = LedgerRunningBalance(0);
     final account = _selectedAccount!;
     final isDebitNormal =
         account.type == 'asset' || account.type == 'expense';
@@ -526,11 +528,10 @@ class _GeneralLedgerViewState extends State<_GeneralLedgerView> {
             DataColumn(label: Text('reports.balance'.tr()), numeric: true),
           ],
           rows: _entries!.map((entry) {
-            if (isDebitNormal) {
-              runningBalance += entry.debitCents - entry.creditCents;
-            } else {
-              runningBalance += entry.creditCents - entry.debitCents;
-            }
+            final signedDelta = isDebitNormal
+                ? entry.debitCents - entry.creditCents
+                : entry.creditCents - entry.debitCents;
+            final runningBalance = running.apply(signedDelta);
 
             return DataRow(cells: [
               DataCell(Text(

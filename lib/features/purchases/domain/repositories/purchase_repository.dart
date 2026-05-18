@@ -43,6 +43,9 @@ abstract class PurchaseRepository {
     String? notes,
     DateTime? purchaseDate,
     DateTime? dueDate,
+    /// Phase 11.2 — tax-inclusive flag the engine used to produce the
+    /// totals being persisted. Stamped on `purchases.tax_inclusive_at_post`.
+    bool taxInclusiveAtPost = false,
   });
 
   /// Update an existing purchase and replace its items
@@ -61,6 +64,9 @@ abstract class PurchaseRepository {
     String? notes,
     DateTime? purchaseDate,
     DateTime? dueDate,
+    /// Phase 11.2 — tax-inclusive flag the engine used to produce the
+    /// totals being persisted.
+    bool taxInclusiveAtPost = false,
   });
 
   /// Post purchase (update variant stocks and costs)
@@ -87,6 +93,9 @@ abstract class PurchaseRepository {
     String? notes,
     DateTime? purchaseDate,
     DateTime? dueDate,
+    /// Phase 11.2 — tax-inclusive flag the engine used to produce the
+    /// totals being persisted.
+    bool taxInclusiveAtPost = false,
   });
 
   /// Delete purchase (only if draft)
@@ -121,7 +130,10 @@ abstract class PurchaseRepository {
   /// Generate next return number
   Future<String> generateReturnNumber();
 
-  /// Create purchase return with items
+  /// Create purchase return with items.
+  ///
+  /// This creates AND auto-posts the return inside a single transaction, so
+  /// [allowNegativeStock] is forwarded to the internal post step.
   Future<int> createPurchaseReturn({
     required int purchaseId,
     required int currencyId,
@@ -134,10 +146,28 @@ abstract class PurchaseRepository {
     String refundMethod = 'credit',
     String? reason,
     DateTime? returnDate,
+    /// Phase 14.0 — cheque due date when `refundMethod` is `cheque`.
+    /// Required by the form bloc when refund method is cheque; ignored
+    /// (stored as NULL) otherwise. Surfaces on the dashboard reminder.
+    DateTime? dueDate,
+    bool allowNegativeStock = false,
+    /// Optional client-generated idempotency token. The unique constraint on
+    /// `purchase_returns.idempotency_key` rejects duplicate inserts so a
+    /// double-tap or retried network call cannot create two returns / GL
+    /// entries / stock movements.
+    String? idempotencyKey,
+    /// Phase 11.2 — tax-inclusive flag the engine used to produce the
+    /// totals being persisted. Stamped on
+    /// `purchase_returns.tax_inclusive_at_post`.
+    bool taxInclusiveAtPost = false,
   });
 
-  /// Post purchase return (update variant stock)
-  Future<void> postPurchaseReturn(int returnId);
+  /// Post purchase return (update variant stock).
+  ///
+  /// Posting a purchase return DECREASES stock (goods leaving the warehouse
+  /// back to the supplier). If [allowNegativeStock] is false and current
+  /// stock is insufficient, the operation is rejected.
+  Future<void> postPurchaseReturn(int returnId, {bool allowNegativeStock = false});
 
   /// Void purchase return (reverse stock if posted)
   Future<void> voidPurchaseReturn(int returnId);
@@ -169,6 +199,12 @@ abstract class PurchaseRepository {
 
   /// Watch set of purchase IDs that have at least one non-voided return
   Stream<Set<int>> watchPurchaseIdsWithReturns();
+
+  /// Watch product search terms (name, barcode, SKU) for all purchase items.
+  Stream<Map<int, List<String>>> watchPurchaseProductSearchTerms();
+
+  /// Watch product search terms for return items (unifiedId → terms)
+  Stream<Map<String, List<String>>> watchPurchaseReturnProductSearchTerms();
 }
 
 /// Input for creating/updating a purchase item

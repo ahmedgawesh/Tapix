@@ -9,6 +9,7 @@ class AuditLogs extends Table {
   IntColumn get recordId => integer()();
   TextColumn get action => text()();
   TextColumn get changes => text().map(const JsonMapConverter())();
+  @ReferenceName('auditLogUser')
   IntColumn get userId => integer().nullable().references(Users, #id)();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 }
@@ -19,6 +20,7 @@ class VoidLogs extends Table {
   TextColumn get targetTable => text()();
   IntColumn get recordId => integer()();
   TextColumn get reason => text()();
+  @ReferenceName('voidLogUser')
   IntColumn get voidedBy => integer().nullable().references(Users, #id)();
   DateTimeColumn get voidedAt => dateTime().withDefault(currentDateAndTime)();
 }
@@ -26,6 +28,7 @@ class VoidLogs extends Table {
 @DataClassName('Notification')
 class Notifications extends Table {
   IntColumn get id => integer().autoIncrement()();
+  @ReferenceName('notificationUser')
   IntColumn get userId => integer().nullable().references(Users, #id)();
   TextColumn get title => text()();
   TextColumn get message => text()();

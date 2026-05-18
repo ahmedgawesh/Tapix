@@ -4,10 +4,15 @@ import 'package:decimal/decimal.dart';
 import 'package:drift/drift.dart';
 
 import '../../../../core/database/app_database.dart' as db;
-import '../../../../core/database/daos/employee_dao.dart';
 import '../../../../core/database/daos/sale_dao.dart' hide SaleDashboardStats;
+import '../../../../core/pricing/pricing_snapshot.dart';
 import '../../../../core/services/audit_log_service.dart';
+import '../../../../core/services/commissions/commission_service.dart';
+import '../../../../core/services/einvoice/einvoice_dispatch_service.dart';
+import '../../../../core/services/einvoice/einvoice_document.dart';
 import '../../../../core/services/journal_entry_service.dart';
+import '../../../../core/services/loyalty/loyalty_points_service.dart';
+import '../../../../core/services/void_impact_analyzer.dart';
 import '../../../auth/data/services/session_service.dart';
 import '../../../customers/domain/repositories/loyalty_repository.dart';
 import '../../domain/entities/sale_entity.dart';
@@ -17,13 +22,31 @@ import '../datasources/sale_local_datasource.dart';
 class SaleRepositoryImpl implements SaleRepository {
   final SaleLocalDatasource _datasource;
   final SaleDao _dao;
-  final EmployeeDao _employeeDao;
   final JournalEntryService _journalService;
   final AuditLogService _audit;
   final SessionService _sessionService;
   final LoyaltyRepository _loyaltyRepository;
+  // Phase 6 — commission + loyalty math live in their own services.
+  // This repository is now a pure consumer; no inline arithmetic.
+  final CommissionService _commissionService;
+  final LoyaltyPointsService _loyaltyPointsService;
+  /// Optional — e-invoice dispatcher. Never throws; any failure is logged
+  /// and persisted on the `einvoice_documents` row (status=`rejected`)
+  /// so the sale/return is never rolled back for an e-invoicing issue.
+  /// When null (old tests) dispatch is a silent no-op.
+  final EInvoiceDispatchService? _einvoiceDispatch;
 
-  SaleRepositoryImpl(this._datasource, this._dao, this._employeeDao, this._journalService, this._audit, this._sessionService, this._loyaltyRepository);
+  SaleRepositoryImpl(
+    this._datasource,
+    this._dao,
+    this._journalService,
+    this._audit,
+    this._sessionService,
+    this._loyaltyRepository,
+    this._commissionService,
+    this._loyaltyPointsService, {
+    EInvoiceDispatchService? einvoiceDispatch,
+  }) : _einvoiceDispatch = einvoiceDispatch;
 
   Future<int?> _currentUserId() => _sessionService.getCurrentUserId();
 
@@ -64,6 +87,7 @@ class SaleRepositoryImpl implements SaleRepository {
     DateTime? saleDate,
     DateTime? dueDate,
     bool allowNegativeStock = false,
+    bool taxInclusiveAtPost = false,
   }) async {
     // Invoice number is generated INSIDE the transaction (see below)
     // to prevent race conditions when two sales are created concurrently.
@@ -83,7 +107,7 @@ class SaleRepositoryImpl implements SaleRepository {
       notes: notes != null ? Value(notes) : const Value.absent(),
       saleDate: saleDate != null ? Value(saleDate) : Value(DateTime.now()),
       dueDate: dueDate != null ? Value(dueDate) : const Value.absent(),
-    );
+    ).withPricingSnapshot(taxInclusive: taxInclusiveAtPost);
 
     final itemCompanions = items.map((i) => db.SaleItemsCompanion(
           productId: Value(i.productId),
@@ -138,36 +162,44 @@ class SaleRepositoryImpl implements SaleRepository {
         userId: userId,
       );
 
-      // Create commission records for assigned salesperson(s)
-      // Calculate total item count for fixed commission
+      // Create commission records for assigned salesperson(s) via the
+      // CommissionService (Phase 6 SoT).
       final totalItemCount = items.fold<int>(0, (sum, i) => sum + i.quantity);
       if (employeeId != null) {
-        await _createCommissionForSale(
+        await _commissionService.createForSale(
           saleId: id,
           employeeId: employeeId,
           subtotalCents: subtotalCents.toBigInt().toInt(),
+          discountCents: discountCents.toBigInt().toInt(),
           itemCount: totalItemCount,
           currencyId: currencyId,
           saleDate: effectiveSaleDate,
         );
       } else {
-        // Per-item salesperson commissions: aggregate subtotal and item count per employee
+        // Per-item salesperson commissions: aggregate subtotal, discount and
+        // item count per employee so percentage commission is computed on the
+        // post-discount base per salesperson.
         final perEmployeeSubtotals = <int, int>{};
+        final perEmployeeDiscounts = <int, int>{};
         final perEmployeeItemCounts = <int, int>{};
         for (final item in items) {
           if (item.employeeId != null) {
             perEmployeeSubtotals[item.employeeId!] =
                 (perEmployeeSubtotals[item.employeeId!] ?? 0) +
                     item.subtotalCents.toBigInt().toInt();
+            perEmployeeDiscounts[item.employeeId!] =
+                (perEmployeeDiscounts[item.employeeId!] ?? 0) +
+                    item.discountCents.toBigInt().toInt();
             perEmployeeItemCounts[item.employeeId!] =
                 (perEmployeeItemCounts[item.employeeId!] ?? 0) + item.quantity;
           }
         }
         for (final empId in perEmployeeSubtotals.keys) {
-          await _createCommissionForSale(
+          await _commissionService.createForSale(
             saleId: id,
             employeeId: empId,
             subtotalCents: perEmployeeSubtotals[empId]!,
+            discountCents: perEmployeeDiscounts[empId] ?? 0,
             itemCount: perEmployeeItemCounts[empId]!,
             currencyId: currencyId,
             saleDate: effectiveSaleDate,
@@ -192,9 +224,10 @@ class SaleRepositoryImpl implements SaleRepository {
       }
     }
 
-    // Award loyalty points outside transaction (non-critical)
+    // Award loyalty points outside transaction (non-critical) via
+    // the LoyaltyPointsService (Phase 6 SoT).
     if (customerId != null) {
-      await _awardLoyaltyPointsForSale(
+      await _loyaltyPointsService.awardForSale(
         customerId: customerId,
         saleId: saleId,
         totalCents: totalCents.toBigInt().toInt(),
@@ -208,6 +241,21 @@ class SaleRepositoryImpl implements SaleRepository {
       paymentMethod: paymentMethod,
       customerId: customerId,
       userId: userId,
+    );
+
+    // Phase 4 — e-invoice dispatch (fire-and-forget, swallows errors).
+    // Outside the accounting tx on purpose: a failed ZATCA/ETA/PEPPOL
+    // submission must never roll back a posted sale. The dispatcher
+    // records its own artifact row so operators can retry from the UI.
+    await _dispatchSaleEInvoice(
+      saleId: saleId,
+      customerId: customerId,
+      currencyId: currencyId,
+      subtotalCents: subtotalCents.toBigInt().toInt(),
+      taxCents: taxCents.toBigInt().toInt(),
+      totalCents: totalCents.toBigInt().toInt(),
+      issueDate: effectiveSaleDate,
+      items: items,
     );
 
     return saleId;
@@ -229,6 +277,7 @@ class SaleRepositoryImpl implements SaleRepository {
     String? notes,
     DateTime? saleDate,
     DateTime? dueDate,
+    bool taxInclusiveAtPost = false,
   }) async {
     // Guard: only draft/pending sales can be edited.
     // Posted/voided sales have journal entries that would become stale.
@@ -239,6 +288,9 @@ class SaleRepositoryImpl implements SaleRepository {
       );
     }
 
+    // Phase 11.2 — the snapshot is re-stamped on edit because the
+    // engine just recomputed the totals; the new triple is the
+    // authoritative record of the run that produced this row.
     final saleCompanion = db.SalesCompanion(
       customerId: customerId != null ? Value(customerId) : const Value.absent(),
       employeeId: employeeId != null ? Value(employeeId) : const Value.absent(),
@@ -252,7 +304,7 @@ class SaleRepositoryImpl implements SaleRepository {
       notes: notes != null ? Value(notes) : const Value.absent(),
       saleDate: saleDate != null ? Value(saleDate) : const Value.absent(),
       dueDate: dueDate != null ? Value(dueDate) : const Value.absent(),
-    );
+    ).withPricingSnapshot(taxInclusive: taxInclusiveAtPost);
 
     final itemCompanions = items.map((i) => db.SaleItemsCompanion(
           productId: Value(i.productId),
@@ -296,36 +348,43 @@ class SaleRepositoryImpl implements SaleRepository {
         );
 
         // 4. Re-create commissions: delete old, create new if employee assigned
-        await _employeeDao.deleteCommissionsBySaleId(saleId);
+        await _commissionService.deleteForSale(saleId);
         final effectiveSaleDate = saleDate ?? DateTime.now();
         final totalItemCount = items.fold<int>(0, (sum, i) => sum + i.quantity);
         if (employeeId != null) {
-          await _createCommissionForSale(
+          await _commissionService.createForSale(
             saleId: saleId,
             employeeId: employeeId,
             subtotalCents: subtotalCents.toBigInt().toInt(),
+            discountCents: discountCents.toBigInt().toInt(),
             itemCount: totalItemCount,
             currencyId: currencyId,
             saleDate: effectiveSaleDate,
           );
         } else {
-          // Per-item salesperson commissions: aggregate subtotal and item count per employee
+          // Per-item salesperson commissions: aggregate subtotal, discount and
+          // item count per employee.
           final perEmployeeSubtotals = <int, int>{};
+          final perEmployeeDiscounts = <int, int>{};
           final perEmployeeItemCounts = <int, int>{};
           for (final item in items) {
             if (item.employeeId != null) {
               perEmployeeSubtotals[item.employeeId!] =
                   (perEmployeeSubtotals[item.employeeId!] ?? 0) +
                       item.subtotalCents.toBigInt().toInt();
+              perEmployeeDiscounts[item.employeeId!] =
+                  (perEmployeeDiscounts[item.employeeId!] ?? 0) +
+                      item.discountCents.toBigInt().toInt();
               perEmployeeItemCounts[item.employeeId!] =
                   (perEmployeeItemCounts[item.employeeId!] ?? 0) + item.quantity;
             }
           }
           for (final empId in perEmployeeSubtotals.keys) {
-            await _createCommissionForSale(
+            await _commissionService.createForSale(
               saleId: saleId,
               employeeId: empId,
               subtotalCents: perEmployeeSubtotals[empId]!,
+              discountCents: perEmployeeDiscounts[empId] ?? 0,
               itemCount: perEmployeeItemCounts[empId]!,
               currencyId: currencyId,
               saleDate: effectiveSaleDate,
@@ -360,6 +419,18 @@ class SaleRepositoryImpl implements SaleRepository {
 
   @override
   Future<void> voidSale(int saleId) async {
+    // 2026-05-13 — pre-flight integrity guard. The analyzer is a side-
+    // effect-free SoT that surfaces every condition that would corrupt
+    // the books if the void went through (entangled adjustment returns,
+    // negative-stock projections). On a hard blocker we throw
+    // `VoidBlockedByImpactException` carrying the full report so the UI
+    // can render an actionable dialog instead of silently producing GL
+    // drift like the one diagnosed in `tapix_backup_20260513_121448.db`.
+    final report = await VoidImpactAnalyzer(_dao.db).analyzeSaleVoid(saleId);
+    if (report.hasBlockers) {
+      throw VoidBlockedByImpactException(report);
+    }
+
     // Void journal entries BEFORE voiding the sale (so we can still read the data).
     // This MUST succeed — if it fails the entire void is aborted to prevent GL drift.
     await _journalService.voidJournalEntriesForSource(
@@ -370,11 +441,63 @@ class SaleRepositoryImpl implements SaleRepository {
     );
 
     // Void commissions linked to this sale
-    await _employeeDao.deleteCommissionsBySaleId(saleId);
+    await _commissionService.deleteForSale(saleId);
 
-    await _dao.voidSale(saleId);
+    // Reverse loyalty points (earned + redeemed) for this sale
+    try {
+      final sale = await getSaleById(saleId);
+      if (sale != null && sale.customerId != null) {
+        await _reverseLoyaltyPointsForSale(saleId, sale.customerId!);
+      }
+    } catch (_) {
+      // Loyalty reversal failure should not block the void
+    }
+
+    // 2026-05-13 — pass the journal service so the DAO's cascade-void of
+    // linked sale_returns also reverses their JEs (root-cause #3 fix).
+    await _dao.voidSale(
+      saleId,
+      journalEntryService: _journalService,
+      userId: await _currentUserId(),
+    );
     // Audit: log sale void (CRITICAL)
     _audit.logSaleVoided(saleId: saleId, reason: 'voided', userId: await _currentUserId());
+  }
+
+  /// Reverse all loyalty point transactions linked to a sale
+  Future<void> _reverseLoyaltyPointsForSale(int saleId, int customerId) async {
+    final transactions = await _loyaltyRepository.getPointsTransactions(customerId);
+
+    for (final tx in transactions) {
+      if (tx.referenceId == saleId) {
+        if (tx.transactionType == 'earn' && tx.referenceType == 'sale') {
+          // Points were earned from this sale — deduct them
+          final pointsToDeduct = tx.points;
+          if (pointsToDeduct > 0) {
+            await _loyaltyRepository.redeemPoints(
+              customerId: customerId,
+              points: pointsToDeduct,
+              reason: 'Reversed earned points for voided sale #$saleId',
+              referenceId: saleId,
+              referenceType: 'sale_void',
+            );
+          }
+        } else if (tx.transactionType == 'redeem' && tx.referenceType == 'sale_redemption') {
+          // Points were redeemed during this sale — return them
+          final pointsToReturn = tx.points.abs();
+          if (pointsToReturn > 0) {
+            await _loyaltyRepository.addPoints(
+              customerId: customerId,
+              points: pointsToReturn,
+              source: 'sale_void',
+              referenceId: saleId,
+              referenceType: 'sale_void',
+              description: 'Returned redeemed points for voided sale #$saleId',
+            );
+          }
+        }
+      }
+    }
   }
 
   @override
@@ -394,6 +517,7 @@ class SaleRepositoryImpl implements SaleRepository {
     DateTime? saleDate,
     DateTime? dueDate,
     bool allowNegativeStock = false,
+    bool taxInclusiveAtPost = false,
   }) async {
     // 1. Fetch original sale to validate
     final originalSale = await getSaleById(originalSaleId);
@@ -459,6 +583,7 @@ class SaleRepositoryImpl implements SaleRepository {
       saleDate: saleDate ?? originalSale.saleDate,
       dueDate: dueDate,
       allowNegativeStock: allowNegativeStock,
+      taxInclusiveAtPost: taxInclusiveAtPost,
     );
 
     // 6. Audit log
@@ -494,7 +619,7 @@ class SaleRepositoryImpl implements SaleRepository {
     );
 
     // Delete commissions linked to this sale
-    await _employeeDao.deleteCommissionsBySaleId(saleId);
+    await _commissionService.deleteForSale(saleId);
 
     await _dao.deleteSale(saleId);
   }
@@ -532,8 +657,17 @@ class SaleRepositoryImpl implements SaleRepository {
     String? dispositionType,
     String? refundMethod,
     DateTime? returnDate,
+    DateTime? dueDate,
+    String? idempotencyKey,
+    bool taxInclusiveAtPost = false,
   }) async {
     final returnNumber = await _datasource.generateSaleReturnNumber();
+
+    // Phase 14.0 — only persist dueDate when refund method is cheque.
+    // For cash/credit refunds the column stays NULL so the dashboard
+    // reminder cannot accidentally surface a non-cheque refund.
+    final effectiveDueDate =
+        refundMethod == 'cheque' ? dueDate : null;
 
     final returnCompanion = db.SaleReturnsCompanion(
       saleId: Value(saleId),
@@ -547,7 +681,9 @@ class SaleRepositoryImpl implements SaleRepository {
       dispositionType: dispositionType != null ? Value(dispositionType) : const Value.absent(),
       refundMethod: refundMethod != null ? Value(refundMethod) : const Value.absent(),
       returnDate: returnDate != null ? Value(returnDate) : Value(DateTime.now()),
-    );
+      dueDate: Value(effectiveDueDate),
+      idempotencyKey: Value(idempotencyKey),
+    ).withPricingSnapshot(taxInclusive: taxInclusiveAtPost);
 
     final itemCompanions = items.map((i) => db.SaleReturnItemsCompanion(
           saleItemId: Value(i.saleItemId),
@@ -570,14 +706,21 @@ class SaleRepositoryImpl implements SaleRepository {
       // Auto-post return: restore stock immediately
       await _dao.postSaleReturn(id);
 
-      // Create journal entries — MANDATORY
+      // Create journal entries — MANDATORY.
+      // `postingDate` flows through so `ReturnPostingService` enforces
+      // the Phase 2.5 fiscal-period guard; `partyId` flows through so
+      // the credit-note sub-ledger (Phase 2.3) can auto-issue when the
+      // customer takes an on-account refund.
+      final sale = await _dao.getSaleById(saleId);
       await _journalService.recordSaleReturnJournalEntry(
         returnId: id,
         totalCents: totalCents.toBigInt().toInt(),
         currencyId: currencyId,
         taxCents: taxCents.toBigInt().toInt(),
         refundMethod: refundMethod ?? 'cash',
+        partyId: sale?.customerId,
         userId: userId,
+        postingDate: effectiveReturnDate,
       );
 
       // COGS reversal journal entry — MANDATORY (Dr Inventory, Cr COGS)
@@ -589,10 +732,21 @@ class SaleRepositoryImpl implements SaleRepository {
         userId: userId,
       );
 
-      // Reverse commission for the returned amount
+      // Reverse commission for the returned amount via the
+      // CommissionService (Phase 6 SoT). The service requires the
+      // original sale's subtotal + total item count so it can prorate
+      // against the ORIGINAL commission amount (rate-change safe).
       final returnedItemCount = items.fold<int>(0, (sum, i) => sum + i.quantity);
-      await _reverseCommissionForReturn(
+      final originalSale = await _datasource.getSaleById(saleId);
+      final saleSubtotalCents =
+          originalSale?.subtotalCents.toBigInt().toInt() ?? 0;
+      final originalSaleItems = await _datasource.getSaleItems(saleId);
+      final totalSaleItems =
+          originalSaleItems.fold<int>(0, (sum, i) => sum + i.quantity);
+      await _commissionService.reverseForReturn(
         saleId: saleId,
+        saleSubtotalCents: saleSubtotalCents,
+        totalSaleItemCount: totalSaleItems,
         returnSubtotalCents: subtotalCents.toBigInt().toInt(),
         returnedItemCount: returnedItemCount,
         currencyId: currencyId,
@@ -602,8 +756,9 @@ class SaleRepositoryImpl implements SaleRepository {
       return id;
     });
 
-    // Reverse loyalty points outside transaction (non-critical)
-    await _reverseLoyaltyPointsForReturn(
+    // Reverse loyalty points outside transaction (non-critical) via
+    // the LoyaltyPointsService (Phase 6 SoT).
+    await _loyaltyPointsService.reverseForReturn(
       saleId: saleId,
       returnId: returnId,
       returnTotalCents: totalCents.toBigInt().toInt(),
@@ -617,11 +772,26 @@ class SaleRepositoryImpl implements SaleRepository {
       userId: userId,
     );
 
+    // Phase 4 — e-invoice credit-note dispatch (fire-and-forget).
+    final sale = await _dao.getSaleById(saleId);
+    await _dispatchSaleReturnEInvoice(
+      sourceTable: 'sale_returns',
+      returnId: returnId,
+      customerId: sale?.customerId,
+      currencyId: currencyId,
+      subtotalCents: subtotalCents.toBigInt().toInt(),
+      taxCents: taxCents.toBigInt().toInt(),
+      totalCents: totalCents.toBigInt().toInt(),
+      issueDate: effectiveReturnDate,
+      items: items,
+      originalInvoiceNumber: sale?.invoiceNumber,
+    );
+
     return returnId;
   }
 
   @override
-  Future<void> voidSaleReturn(int returnId) async {
+  Future<void> voidSaleReturn(int returnId, {bool allowNegativeStock = false}) async {
     // Void journal entries BEFORE voiding the return.
     // This MUST succeed — if it fails the entire void is aborted to prevent GL drift.
     await _journalService.voidJournalEntriesForSource(
@@ -631,7 +801,7 @@ class SaleRepositoryImpl implements SaleRepository {
       userId: await _currentUserId(),
     );
 
-    await _datasource.voidSaleReturn(returnId);
+    await _datasource.voidSaleReturn(returnId, allowNegativeStock: allowNegativeStock);
     // Audit: log sale return void (CRITICAL)
     _audit.logVoid(entityType: 'sale_return', entityId: returnId, reason: 'voided', userId: await _currentUserId());
   }
@@ -708,287 +878,125 @@ class SaleRepositoryImpl implements SaleRepository {
   Stream<SaleDashboardStats> watchDashboardStats() =>
       _datasource.watchDashboardStats();
 
+  @override
+  Stream<Map<int, List<String>>> watchSaleProductSearchTerms() =>
+      _datasource.watchSaleProductSearchTerms();
+
+  @override
+  Stream<Map<String, List<String>>> watchSaleReturnProductSearchTerms() =>
+      _datasource.watchSaleReturnProductSearchTerms();
+
   // ==================== PRIVATE HELPERS ====================
+  //
+  // Phase 6 (May 2026) — commission + loyalty arithmetic has been
+  // extracted into `CommissionService` and `LoyaltyPointsService`. The
+  // legacy `_createCommissionForSale`, `_reverseCommissionForReturn`,
+  // `_awardLoyaltyPointsForSale`, and `_reverseLoyaltyPointsForReturn`
+  // helpers that used to live here are GONE. Do not reintroduce them.
+  // Any new commission/loyalty math belongs in the corresponding
+  // service; this repository stays a pure consumer.
 
-  /// Reverse (deduct) commission when a sale return is created.
-  ///
-  /// Reverses commissions for a sale return by looking up original positive
-  /// commission records for this sale and creating proportional negative entries.
-  ///
-  /// This handles both invoice-level and per-item salesperson commissions.
-  /// - For percentage commissions: reversal ratio = returnSubtotalCents / saleSubtotalCents
-  /// - For fixed commissions: reversal = fixedCommissionCents * returnedItemCount
-  Future<void> _reverseCommissionForReturn({
+  // ────────────────────────── Phase 4 — e-invoice ──────────────────────────
+  //
+  // The two helpers below are the ONLY place in this repository that knows
+  // anything about e-invoicing. They build an [EInvoiceSubject] snapshot
+  // from the freshly-posted sale/return and hand it to the dispatcher.
+  // All jurisdiction routing, chain context (ICV/PIH), signing and
+  // submission live behind [EInvoiceDispatchService] — keeping the
+  // accounting path free of country-specific logic.
+
+  Future<void> _dispatchSaleEInvoice({
     required int saleId,
-    required int returnSubtotalCents,
-    required int returnedItemCount,
+    int? customerId,
     required int currencyId,
-    required DateTime returnDate,
-  }) async {
-    final sale = await _datasource.getSaleById(saleId);
-    if (sale == null) return;
-
-    final saleSubtotalCents = sale.subtotalCents.toBigInt().toInt();
-    if (saleSubtotalCents <= 0) return;
-
-    // Find all positive (original) commissions for this sale
-    final commissions = await _employeeDao.getCommissionsBySaleId(saleId);
-    if (commissions.isEmpty) return;
-
-    final period =
-        '${returnDate.year}-${returnDate.month.toString().padLeft(2, '0')}';
-
-    for (final c in commissions) {
-      final originalAmount = c.commissionAmountCents.toBigInt().toInt();
-      if (originalAmount <= 0) continue; // skip already-reversed entries
-
-      int deduction;
-      final employee = await _employeeDao.getEmployee(c.employeeId);
-      
-      if (employee != null && employee.commissionType == 'fixed') {
-        // Fixed commission: deduct based on returned item count
-        final fixedCents = employee.fixedCommissionCents?.toBigInt().toInt() ?? 0;
-        deduction = fixedCents * returnedItemCount;
-      } else {
-        // Percentage commission: proportional reversal based on subtotal
-        if (saleSubtotalCents <= 0) continue;
-        deduction = (originalAmount * returnSubtotalCents) ~/ saleSubtotalCents;
-      }
-      
-      if (deduction <= 0) continue;
-
-      final companion = db.CommissionsCompanion(
-        employeeId: Value(c.employeeId),
-        saleId: Value(saleId),
-        commissionRateBps: Value(c.commissionRateBps),
-        commissionAmountCents: Value(Decimal.fromInt(-deduction)),
-        currencyId: Value(currencyId),
-        period: Value(period),
-        status: const Value('pending'),
-        createdAt: Value(DateTime.now()),
-      );
-
-      await _employeeDao.createCommission(companion);
-    }
-  }
-
-  /// Create a commission record for the assigned salesperson on a sale.
-  ///
-  /// Supports two commission types:
-  /// - **percentage**: commissionAmountCents = (subtotalCents * rateBps) / 10000
-  ///   Note: Uses subtotalCents (before tax) for percentage calculation
-  /// - **fixed**: commissionAmountCents = fixedCommissionCents * itemCount (per item)
-  ///
-  /// The period is derived from the sale date (YYYY-MM).
-  Future<void> _createCommissionForSale({
-    required int saleId,
-    required int employeeId,
     required int subtotalCents,
-    required int itemCount,
-    required int currencyId,
-    required DateTime saleDate,
+    required int taxCents,
+    required int totalCents,
+    required DateTime issueDate,
+    required List<SaleItemInput> items,
   }) async {
-    final employee = await _employeeDao.getEmployee(employeeId);
-    if (employee == null) return;
-
-    int commissionAmountCents;
-    int rateBps;
-
-    if (employee.commissionType == 'fixed') {
-      // Fixed commission per item (multiply by item count)
-      final fixedCents = employee.fixedCommissionCents?.toBigInt().toInt() ?? 0;
-      if (fixedCents <= 0) return;
-      commissionAmountCents = fixedCents * itemCount;
-      rateBps = 0; // Not applicable for fixed
-    } else {
-      // Percentage commission on subtotal (before tax)
-      rateBps = employee.defaultCommissionRateBps;
-      if (rateBps <= 0) return;
-      commissionAmountCents = (subtotalCents * rateBps) ~/ 10000;
-      if (commissionAmountCents <= 0) return;
+    final dispatcher = _einvoiceDispatch;
+    if (dispatcher == null) return;
+    try {
+      final sale = await _dao.getSaleById(saleId);
+      final subject = EInvoiceSubject(
+        sourceTable: 'sales',
+        sourceId: saleId,
+        documentNumber: sale?.invoiceNumber ?? 'SALE-$saleId',
+        documentType: 'invoice',
+        subtotalCents: subtotalCents,
+        taxCents: taxCents,
+        totalCents: totalCents,
+        currencyId: currencyId,
+        issueDate: issueDate,
+        lines: items
+            .map((i) => <String, Object?>{
+                  'productId': i.productId,
+                  'variantId': i.variantId,
+                  'quantity': i.quantity,
+                  'unitPriceCents': i.unitPriceCents.toBigInt().toInt(),
+                  'discountCents': i.discountCents.toBigInt().toInt(),
+                  'taxCents': i.taxCents.toBigInt().toInt(),
+                  'totalCents': i.totalCents.toBigInt().toInt(),
+                })
+            .toList(growable: false),
+      );
+      await dispatcher.dispatch(subject);
+    } catch (e, st) {
+      // E-invoicing must NEVER break a posted sale.
+      developer.log(
+        'E-invoice dispatch failed for sale #$saleId: $e',
+        name: 'SaleRepository',
+        error: e,
+        stackTrace: st,
+      );
     }
-
-    final period =
-        '${saleDate.year}-${saleDate.month.toString().padLeft(2, '0')}';
-
-    final companion = db.CommissionsCompanion(
-      employeeId: Value(employeeId),
-      saleId: Value(saleId),
-      commissionRateBps: Value(rateBps.toDouble()),
-      commissionAmountCents: Value(Decimal.fromInt(commissionAmountCents)),
-      currencyId: Value(currencyId),
-      period: Value(period),
-      status: const Value('pending'),
-      createdAt: Value(DateTime.now()),
-    );
-
-    await _employeeDao.createCommission(companion);
   }
 
-  /// Award loyalty points to a customer after a sale.
-  ///
-  /// Uses LoyaltySettings to determine:
-  /// - Whether loyalty is enabled
-  /// - Points per currency unit
-  /// - Minimum spend threshold
-  /// - Customer tier multiplier
-  Future<void> _awardLoyaltyPointsForSale({
-    required int customerId,
-    required int saleId,
+  Future<void> _dispatchSaleReturnEInvoice({
+    required String sourceTable,
+    required int returnId,
+    int? customerId,
+    required int currencyId,
+    required int subtotalCents,
+    required int taxCents,
     required int totalCents,
+    required DateTime issueDate,
+    required List<SaleReturnItemInput> items,
+    String? originalInvoiceNumber,
   }) async {
+    final dispatcher = _einvoiceDispatch;
+    if (dispatcher == null) return;
     try {
-      developer.log(
-        'Loyalty: Attempting to award points for sale #$saleId, customer=$customerId, totalCents=$totalCents',
-        name: 'SaleRepository',
+      final subject = EInvoiceSubject(
+        sourceTable: sourceTable,
+        sourceId: returnId,
+        documentNumber: 'CN-$returnId',
+        documentType: 'credit_note',
+        subtotalCents: subtotalCents,
+        taxCents: taxCents,
+        totalCents: totalCents,
+        currencyId: currencyId,
+        issueDate: issueDate,
+        lines: items
+            .map((i) => <String, Object?>{
+                  'saleItemId': i.saleItemId,
+                  'quantity': i.quantity,
+                  'subtotalCents': i.subtotalCents.toBigInt().toInt(),
+                  'discountCents': i.discountCents.toBigInt().toInt(),
+                  'taxCents': i.taxCents.toBigInt().toInt(),
+                  'refundCents': i.refundCents.toBigInt().toInt(),
+                })
+            .toList(growable: false),
+        originalInvoiceNumber: originalInvoiceNumber,
       );
-
-      final settings = await _loyaltyRepository.getLoyaltySettings();
-      if (settings == null) {
-        developer.log('Loyalty: No settings found — skipping', name: 'SaleRepository');
-        return;
-      }
-      if (!settings.isEnabled) {
-        developer.log('Loyalty: Program disabled — skipping', name: 'SaleRepository');
-        return;
-      }
-
-      // Check minimum spend threshold (stored in cents)
-      if (totalCents < settings.minSpendForPoints) {
-        developer.log(
-          'Loyalty: totalCents=$totalCents < minSpend=${settings.minSpendForPoints} — skipping',
-          name: 'SaleRepository',
-        );
-        return;
-      }
-
-      // Get customer tier and its benefits
-      final summary = await _loyaltyRepository.getCustomerLoyaltySummary(customerId);
-      final tier = summary?.currentTier;
-      final multiplier = tier?.pointsMultiplier ?? 1.0;
-      final bonusPercent = tier?.discountPercent ?? 0.0; // Bonus points percentage
-
-      // Calculate points: (totalCents / 100) * pointsPerCurrencyUnit * multiplier
-      final pointsPerUnit = settings.pointsPerCurrencyUnit;
-      final basePoints = (totalCents * pointsPerUnit) ~/ 100;
-      var points = (basePoints * multiplier).round();
-      
-      // Add bonus points (discountPercent is now bonus points percentage)
-      if (bonusPercent > 0) {
-        final bonusPoints = (points * bonusPercent / 100).round();
-        points += bonusPoints;
-      }
-      
-      // Check for business birthday bonus (company anniversary)
-      if (tier != null && tier.birthdayBonus && settings.businessBirthdayDate != null) {
-        final today = DateTime.now();
-        final businessBirthday = settings.businessBirthdayDate!;
-        // Check if today is the business birthday (same month and day)
-        if (today.month == businessBirthday.month && today.day == businessBirthday.day) {
-          // Add birthday bonus points
-          if (tier.birthdayBonusPoints > 0) {
-            points += tier.birthdayBonusPoints;
-          }
-          // Add birthday discount as bonus points
-          if (tier.birthdayDiscountPercent > 0) {
-            final birthdayBonusPoints = (points * tier.birthdayDiscountPercent / 100).round();
-            points += birthdayBonusPoints;
-          }
-        }
-      }
-
-      developer.log(
-        'Loyalty: pointsPerUnit=$pointsPerUnit, basePoints=$basePoints, multiplier=$multiplier, bonusPercent=$bonusPercent, finalPoints=$points',
-        name: 'SaleRepository',
-      );
-
-      if (points <= 0) {
-        developer.log('Loyalty: points=$points <= 0 — skipping', name: 'SaleRepository');
-        return;
-      }
-
-      await _loyaltyRepository.addPoints(
-        customerId: customerId,
-        points: points,
-        source: 'sale',
-        referenceId: saleId,
-        referenceType: 'sale',
-        description: 'Points earned from sale #$saleId',
-      );
-      developer.log('Loyalty: Successfully awarded $points points', name: 'SaleRepository');
-
-      // STRICT RULE: Loyalty earn journal entry fires at sale completion.
-      // Dr Discounts Given (5500), Cr Loyalty Points Liability (2300)
-      final pointValueCents = settings.pointValueCents;
-      final earnValueCents = points * pointValueCents;
-      if (earnValueCents > 0) {
-        final customer = await _dao.db.customerDao.getCustomer(customerId);
-        final currencyId = customer?.currencyId ?? 1;
-        await _journalService.recordLoyaltyEarnJournalEntry(
-          saleId: saleId,
-          valueCents: earnValueCents,
-          currencyId: currencyId,
-        );
-      }
+      await dispatcher.dispatch(subject);
     } catch (e, st) {
       developer.log(
-        'Warning: Failed to award loyalty points for sale #$saleId: $e\n$st',
+        'E-invoice dispatch failed for return #$returnId: $e',
         name: 'SaleRepository',
-      );
-    }
-  }
-
-  /// Reverse loyalty points when a sale return is created.
-  ///
-  /// Calculates proportional points to deduct based on return amount vs
-  /// original sale amount, then redeems those points.
-  Future<void> _reverseLoyaltyPointsForReturn({
-    required int saleId,
-    required int returnId,
-    required int returnTotalCents,
-  }) async {
-    try {
-      final sale = await _datasource.getSaleById(saleId);
-      if (sale == null || sale.customerId == null) return;
-
-      final settings = await _loyaltyRepository.getLoyaltySettings();
-      if (settings == null || !settings.isEnabled) return;
-
-      final saleTotalCents = sale.totalCents.toBigInt().toInt();
-      if (saleTotalCents <= 0) return;
-
-      // Get customer tier multiplier (use current tier)
-      final summary = await _loyaltyRepository.getCustomerLoyaltySummary(sale.customerId!);
-      final multiplier = summary?.currentTier?.pointsMultiplier ?? 1.0;
-
-      // Calculate original points that were earned for the full sale
-      final pointsPerUnit = settings.pointsPerCurrencyUnit;
-      final originalBasePoints = (saleTotalCents * pointsPerUnit) ~/ 100;
-      final originalPoints = (originalBasePoints * multiplier).round();
-
-      if (originalPoints <= 0) return;
-
-      // Proportional deduction
-      if (saleTotalCents <= 0) return;
-      final pointsToDeduct = (originalPoints * returnTotalCents) ~/ saleTotalCents;
-      if (pointsToDeduct <= 0) return;
-
-      // Only deduct if customer has enough points; otherwise deduct what's available
-      final currentBalance = summary?.pointsBalance ?? 0;
-      final actualDeduction = pointsToDeduct > currentBalance ? currentBalance : pointsToDeduct;
-      if (actualDeduction <= 0) return;
-
-      await _loyaltyRepository.redeemPoints(
-        customerId: sale.customerId!,
-        points: actualDeduction,
-        reason: 'Points reversed for return #$returnId on sale #$saleId',
-        referenceId: returnId,
-        referenceType: 'sale_return',
-      );
-    } catch (e) {
-      developer.log(
-        'Warning: Failed to reverse loyalty points for return #$returnId: $e',
-        name: 'SaleRepository',
+        error: e,
+        stackTrace: st,
       );
     }
   }

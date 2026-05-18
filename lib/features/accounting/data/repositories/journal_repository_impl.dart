@@ -1,18 +1,28 @@
-import 'dart:developer' as developer;
-
 import 'package:decimal/decimal.dart';
 import 'package:drift/drift.dart';
 import '../../../../core/database/app_database.dart';
+import '../../domain/models/journal_entry_data.dart';
 import '../../domain/models/trial_balance.dart';
 import '../../domain/models/reconciliation_result.dart';
 import '../../domain/repositories/journal_repository.dart';
 import '../datasources/journal_local_datasource.dart';
 import 'accounting_repository.dart';
 
-/// Implementation of JournalRepository
+/// Implementation of JournalRepository.
+///
+/// ──────────────────────────────────────────────────────────────────────
+/// Phase 1 (scattered-calc migration) — 2026-05
+/// ──────────────────────────────────────────────────────────────────────
+/// This class is an **adapter** over [AccountingRepository]. All write paths
+/// (create / post / void) and the trial-balance computation delegate to
+/// [AccountingRepository] so that `accounts.balance_cents` has exactly one
+/// writer in the codebase. Read-only watchers and CRUD for accounts /
+/// periods remain routed through [JournalLocalDatasource].
+///
+/// Do NOT re-introduce balance math here. See docs/adr/0001-pricing-engines-as-sot.md.
+/// ──────────────────────────────────────────────────────────────────────
 class JournalRepositoryImpl implements JournalRepository {
   final JournalLocalDatasource _datasource;
-  // ignore: unused_field
   final AccountingRepository _accountingRepo;
 
   static const Set<String> _validAccountTypes = {
@@ -21,16 +31,6 @@ class JournalRepositoryImpl implements JournalRepository {
     'equity',
     'revenue',
     'expense',
-  };
-
-  /// Control account codes that MUST NOT be touched by manual journal entries.
-  static const Set<String> _controlAccountCodes = {'1100', '2000'};
-
-  /// Entry types that are allowed to touch control accounts.
-  static const Set<String> _systemEntryTypes = {
-    'sale', 'purchase', 'payment', 'saleReturn', 'purchaseReturn',
-    'reversal', 'customer_payment', 'customer_discount',
-    'supplier_payment', 'supplier_discount', 'closing',
   };
 
   JournalRepositoryImpl(this._datasource, this._accountingRepo);
@@ -140,7 +140,17 @@ class JournalRepositoryImpl implements JournalRepository {
     int? sourceId,
     int? createdBy,
   }) async {
-    // Validate double-entry: total debits must equal total credits
+    // DELEGATION — this method used to duplicate the double-entry validation,
+    // closed-period lock, control-account protection, and raw table writes
+    // found in AccountingRepository.createJournalEntry. To guarantee a
+    // single writer for `accounts.balance_cents` and a single rule set for
+    // JE validation, the work is funnelled to AccountingRepository.
+    //
+    // Minimal pre-check kept here: ArgumentError on imbalance / empty /
+    // <2-line entries, to preserve the existing public contract of this
+    // interface (its callers — journal_entry_form_bloc etc. — catch
+    // ArgumentError / StateError). AccountingRepository throws
+    // `AccountingException` for the same conditions.
     Decimal totalDebits = Decimal.zero;
     Decimal totalCredits = Decimal.zero;
     for (final line in lines) {
@@ -159,163 +169,79 @@ class JournalRepositoryImpl implements JournalRepository {
       throw ArgumentError('Journal entry must have at least 2 lines');
     }
 
-    if (await _datasource.isDateInClosedPeriod(entryDate)) {
-      throw StateError(
-        'Cannot create journal entry: date ${entryDate.toIso8601String().substring(0, 10)} '
-        'falls in a closed accounting period',
-      );
-    }
-
-    // Enforce control account protection: manual entries cannot touch AR/AP
-    if (!_systemEntryTypes.contains(entryType)) {
-      for (final line in lines) {
-        final account = await _datasource.getAccount(line.accountId);
-        if (account != null && _controlAccountCodes.contains(account.accountCode)) {
-          throw ArgumentError(
-            'Cannot modify control account "${account.accountName}" (${account.accountCode}) '
-            'via manual journal entry. Use the appropriate business transaction '
-            '(sale, purchase, payment) instead.',
-          );
-        }
-      }
-    }
-
-    // Generate entry number
-    final entryNumber = await _datasource.generateNextEntryNumber();
-
-    // Create the journal entry header
-    final entryId = await _datasource.createJournalEntry(
-      JournalEntriesCompanion(
-        entryNumber: Value(entryNumber),
-        description: Value(description),
-        entryDate: Value(entryDate),
-        entryType: Value(entryType),
-        status: const Value('draft'),
-        sourceTable: Value(sourceTable),
-        sourceId: Value(sourceId),
-        totalDebitCents: Value(totalDebits),
-        totalCreditCents: Value(totalCredits),
-        createdBy: Value(createdBy),
-        createdAt: Value(DateTime.now()),
-        updatedAt: Value(DateTime.now()),
-      ),
+    final entryData = JournalEntryData(
+      description: description,
+      entryDate: entryDate,
+      entryType: entryType,
+      sourceTable: sourceTable,
+      sourceId: sourceId,
+      autoPost: false,
+      lines: [
+        for (final line in lines)
+          JournalEntryLineData(
+            accountId: line.accountId,
+            debitCents: line.debitCents.toBigInt().toInt(),
+            creditCents: line.creditCents.toBigInt().toInt(),
+            currencyId: line.currencyId,
+            description: line.description,
+          ),
+      ],
     );
 
-    // Create journal entry lines
-    for (int i = 0; i < lines.length; i++) {
-      final line = lines[i];
-      await _datasource.createJournalEntryLine(
-        JournalEntryLinesCompanion(
-          journalEntryId: Value(entryId),
-          accountId: Value(line.accountId),
-          debitCents: Value(line.debitCents),
-          creditCents: Value(line.creditCents),
-          currencyId: Value(line.currencyId),
-          lineNumber: Value(i + 1),
-          description: Value(line.description),
-          createdAt: Value(DateTime.now()),
-        ),
-      );
-    }
-
-    return entryId;
+    return _accountingRepo.createJournalEntry(
+      entryData: entryData,
+      userId: createdBy,
+    );
   }
 
   @override
   Future<void> postJournalEntry(int entryId, {int? postedBy}) async {
+    // DELEGATION — previously this method contained inline
+    // `accounts.balance_cents` update logic in parallel to
+    // AccountingRepository._updateAccountBalance. Now a single writer.
+    //
+    // Preserve the public contract: ArgumentError when entry not found,
+    // StateError when already posted. AccountingRepository throws
+    // AccountingException for both; translate for callers that match on
+    // the legacy error types.
     final entry = await _datasource.getJournalEntry(entryId);
     if (entry == null) throw ArgumentError('Journal entry not found: $entryId');
     if (entry.status != 'draft') {
-      throw StateError('Only draft entries can be posted. Current status: ${entry.status}');
-    }
-
-    if (await _datasource.isDateInClosedPeriod(entry.entryDate)) {
       throw StateError(
-        'Cannot post journal entry: date ${entry.entryDate.toIso8601String().substring(0, 10)} '
-        'falls in a closed accounting period',
+        'Only draft entries can be posted. Current status: ${entry.status}',
       );
     }
 
-    // Update entry status to posted
-    final updated = entry.copyWith(
-      status: 'posted',
-      postedBy: Value(postedBy),
-      postedAt: Value(DateTime.now()),
-      updatedAt: DateTime.now(),
+    await _accountingRepo.postJournalEntry(
+      entryId: entryId,
+      userId: postedBy,
     );
-    await _datasource.updateJournalEntry(updated);
-
-    // Update account balances
-    final lines = await _datasource.getJournalEntryLines(entryId);
-    for (final line in lines) {
-      final account = await _datasource.getAccount(line.accountId);
-      if (account == null) continue;
-
-      final isDebitNormal = account.accountType == 'asset' || account.accountType == 'expense';
-      final balanceChange = isDebitNormal
-          ? (line.debitCents - line.creditCents)
-          : (line.creditCents - line.debitCents);
-
-      final newBalance = account.balanceCents + balanceChange;
-      final updatedAccount = account.copyWith(
-        balanceCents: newBalance,
-        updatedAt: DateTime.now(),
-      );
-      await _datasource.updateAccount(updatedAccount);
-    }
   }
 
   @override
-  Future<int> voidJournalEntry(int entryId, {required String reason, int? createdBy}) async {
+  Future<int> voidJournalEntry(
+    int entryId, {
+    required String reason,
+    int? createdBy,
+  }) async {
+    // DELEGATION — void-via-reversal is produced by AccountingRepository.
+    // The AccountingRepository variant also atomically links the reversal
+    // entry to the original via `reversedEntryId` at creation time (this
+    // implementation previously did a follow-up update, creating a brief
+    // window where the reversal existed without the back-reference).
     final entry = await _datasource.getJournalEntry(entryId);
     if (entry == null) throw ArgumentError('Journal entry not found: $entryId');
     if (entry.status != 'posted') {
-      throw StateError('Only posted entries can be voided. Current status: ${entry.status}');
-    }
-
-    // Mark original entry as reversed
-    final updatedOriginal = entry.copyWith(
-      isReversed: true,
-      updatedAt: DateTime.now(),
-    );
-    await _datasource.updateJournalEntry(updatedOriginal);
-
-    // Create reversal entry with swapped debits/credits
-    final originalLines = await _datasource.getJournalEntryLines(entryId);
-    final reversalLines = originalLines.map((line) => JournalLineInput(
-      accountId: line.accountId,
-      debitCents: line.creditCents,
-      creditCents: line.debitCents,
-      currencyId: line.currencyId,
-      description: 'Reversal: ${line.description ?? ''}',
-    )).toList();
-
-    final reversalId = await createJournalEntryWithLines(
-      description: 'VOID: $reason (reversal of ${entry.entryNumber})',
-      entryDate: DateTime.now(),
-      entryType: 'reversal',
-      lines: reversalLines,
-      createdBy: createdBy,
-    );
-
-    // Post the reversal immediately
-    await postJournalEntry(reversalId, postedBy: createdBy);
-
-    // Update the reversal entry to reference the original
-    final reversalEntry = await _datasource.getJournalEntry(reversalId);
-    if (reversalEntry != null) {
-      final updatedReversal = reversalEntry.copyWith(
-        reversedEntryId: Value(entryId),
-        updatedAt: DateTime.now(),
+      throw StateError(
+        'Only posted entries can be voided. Current status: ${entry.status}',
       );
-      await _datasource.updateJournalEntry(updatedReversal);
     }
 
-    // Original stays 'posted' with isReversed=true so original + reversal
-    // cancel to net zero in GL. Do NOT set status='voided' — that would
-    // exclude the original from GL while the reversal subtracts again.
-
-    return reversalId;
+    return _accountingRepo.voidJournalEntry(
+      entryId: entryId,
+      reason: reason,
+      userId: createdBy,
+    );
   }
 
   @override
@@ -348,121 +274,15 @@ class JournalRepositoryImpl implements JournalRepository {
 
   // ── Trial Balance & Reconciliation ───────────────────────
 
-  /// Trial Balance — SINGLE SOURCE OF TRUTH: journal_lines table.
-  /// Never uses cached balanceCents. Always aggregates from posted journal lines.
+  /// Trial Balance — delegates to [AccountingRepository.getTrialBalance].
+  ///
+  /// Pre-Phase-1 this method contained a second, parallel implementation of
+  /// the trial-balance classification logic. Both versions aggregated from
+  /// `journal_entry_lines` but the duplication risked drift over time.
+  /// See docs/adr/0001-pricing-engines-as-sot.md § Phase 1.
   @override
-  Future<TrialBalance> getTrialBalance({DateTime? asOfDate}) async {
-    final accounts = await _datasource.getAllActiveAccounts();
-    final effectiveDate = asOfDate ?? DateTime.now();
-
-    // ALWAYS compute from journal_lines — the only source of truth
-    final lines = await _datasource
-        .watchPostedLinesByDateRange(DateTime.fromMillisecondsSinceEpoch(0), effectiveDate)
-        .first;
-
-    final balanceByAccountId = <int, int>{};
-    int rawTotalDebits = 0;
-    int rawTotalCredits = 0;
-    for (final line in lines) {
-      final debit = line.debitCents.toBigInt().toInt();
-      final credit = line.creditCents.toBigInt().toInt();
-      rawTotalDebits += debit;
-      rawTotalCredits += credit;
-      balanceByAccountId.update(
-        line.accountId,
-        (value) => value + debit - credit,
-        ifAbsent: () => debit - credit,
-      );
-    }
-
-    // Diagnostic: raw journal_lines totals
-    developer.log(
-      'DIAGNOSTIC: journal_lines raw totals — '
-      'Debits=$rawTotalDebits, Credits=$rawTotalCredits, '
-      'Diff=${rawTotalDebits - rawTotalCredits}, Lines=${lines.length}',
-      name: 'TrialBalance',
-    );
-
-    if (rawTotalDebits != rawTotalCredits) {
-      developer.log(
-        'WARNING: Raw journal line totals unbalanced! '
-        'Debits=$rawTotalDebits, Credits=$rawTotalCredits, '
-        'Diff=${rawTotalDebits - rawTotalCredits}',
-        name: 'TrialBalance',
-      );
-    }
-
-    int totalDebits = 0;
-    int totalCredits = 0;
-    final items = <TrialBalanceItem>[];
-
-    for (final account in accounts) {
-      // rawBalance = SUM(debit) - SUM(credit) for this account
-      final rawBalance = balanceByAccountId[account.id] ?? 0;
-
-      int debit = 0;
-      int credit = 0;
-
-      final type = account.accountType.toLowerCase();
-      if (type == 'asset' || type == 'expense') {
-        // Normal debit balance: positive rawBalance → debit column
-        if (rawBalance >= 0) {
-          debit = rawBalance;
-        } else {
-          credit = -rawBalance;
-        }
-      } else {
-        // Liability/Equity/Revenue: normal credit balance.
-        // rawBalance is (debit - credit), so negate to get natural balance.
-        // Positive natural balance → credit column (normal).
-        // Negative natural balance → debit column (abnormal).
-        final naturalBalance = -rawBalance;
-        if (naturalBalance >= 0) {
-          credit = naturalBalance;
-        } else {
-          debit = -naturalBalance;
-        }
-      }
-
-      totalDebits += debit;
-      totalCredits += credit;
-
-      items.add(TrialBalanceItem(
-        accountId: account.id,
-        accountCode: account.accountCode,
-        accountName: account.accountName,
-        accountType: account.accountType,
-        debitCents: debit,
-        creditCents: credit,
-      ));
-    }
-
-    // Diagnostic: if trial balance doesn't match, print per-account deltas
-    if (totalDebits != totalCredits) {
-      developer.log(
-        'WARNING: Trial Balance unbalanced after classification! '
-        'Debits=$totalDebits, Credits=$totalCredits, Diff=${totalDebits - totalCredits}',
-        name: 'TrialBalance',
-      );
-      for (final item in items) {
-        if (item.debitCents != 0 || item.creditCents != 0) {
-          developer.log(
-            '  Account ${item.accountCode} (${item.accountName}, ${item.accountType}): '
-            'Dr=${item.debitCents}, Cr=${item.creditCents}, '
-            'RawBalance=${balanceByAccountId[item.accountId] ?? 0}',
-            name: 'TrialBalance',
-          );
-        }
-      }
-    }
-
-    return TrialBalance(
-      asOfDate: effectiveDate,
-      items: items,
-      totalDebitCents: totalDebits,
-      totalCreditCents: totalCredits,
-      isBalanced: totalDebits == totalCredits,
-    );
+  Future<TrialBalance> getTrialBalance({DateTime? asOfDate}) {
+    return _accountingRepo.getTrialBalance(asOfDate: asOfDate);
   }
 
   @override
@@ -488,7 +308,7 @@ class JournalRepositoryImpl implements JournalRepository {
 
     final accounts = await _datasource.getAllActiveAccounts();
     for (final account in accounts) {
-      final normalizedType = _normalizeAccountType(account.accountType);
+      final normalizedType = account.accountType.trim().toLowerCase();
       if (!_validAccountTypes.contains(normalizedType)) {
         issues.add(
           'Invalid account type for ${account.accountCode} (${account.accountName}): '
@@ -532,6 +352,28 @@ class JournalRepositoryImpl implements JournalRepository {
       }
     }
 
+    // Inventory consistency: GL balance of 1200 Inventory MUST equal
+    // Σ(stock_quantity × cost_cents) across the whole stock ledger
+    // (active + inactive variants + variant-less products). A mismatch
+    // means either a stock mutation bypassed the InventoryAdjustmentService
+    // (P0 accounting bug) or an old product was hard-deleted while it still
+    // held stock (no longer possible after the smart-delete write-off flow,
+    // but legacy DBs may surface it once and never again).
+    final invAccount = await _datasource.findByCode('1200');
+    if (invAccount != null) {
+      final invItem =
+          trialBalance.items.where((i) => i.accountId == invAccount.id).firstOrNull;
+      final glBalance =
+          invItem != null ? (invItem.debitCents - invItem.creditCents) : 0;
+      final stockValue = await _datasource.getTotalInventoryValueCents();
+      if (glBalance != stockValue) {
+        issues.add(
+          'Inventory mismatch: GL(journal_lines)=$glBalance, '
+          'Σ(stock×cost)=$stockValue',
+        );
+      }
+    }
+
     return ReconciliationResult(
       isHealthy: issues.isEmpty,
       issues: issues,
@@ -551,6 +393,17 @@ class JournalRepositoryImpl implements JournalRepository {
   String? _expectedTypeForCode(String accountCode) {
     final trimmed = accountCode.trim();
     if (trimmed.isEmpty) return null;
+    // Contra accounts: classified opposite to their numeric prefix so they
+    // automatically net out on the P&L without special-casing the report.
+    //   4100 Purchase Return Adjustment  → contra-expense (deducts from COGS)
+    //   5700 Sales Return Adjustment     → contra-revenue (deducts from Sales)
+    // See `seedDefaultAccounts` for the full rationale.
+    switch (trimmed) {
+      case '4100':
+        return 'expense';
+      case '5700':
+        return 'revenue';
+    }
     switch (trimmed[0]) {
       case '1':
         return 'asset';
@@ -584,22 +437,63 @@ class JournalRepositoryImpl implements JournalRepository {
       {'code': '1010', 'name': 'Bank', 'type': 'asset', 'system': true, 'order': 2},
       {'code': '1100', 'name': 'Accounts Receivable', 'type': 'asset', 'system': true, 'order': 3}, // Customers
       {'code': '1200', 'name': 'Inventory', 'type': 'asset', 'system': true, 'order': 4},
-      {'code': '1300', 'name': 'VAT Receivable', 'type': 'asset', 'system': true, 'order': 5},      // Purchase Tax
+      // 1290 (Returns in Transit) is an INVENTORY-class clearing account
+      // used for the `send_back` disposition on purchase returns: when the
+      // supplier physically leaves the premises with defective goods but
+      // has not yet issued the credit note / refund, the goods sit here
+      // instead of Inventory (1200) or Shrinkage (5800). Clears to AP /
+      // Cash / 4100 when the supplier finally settles. This keeps 1200
+      // reconciliable to on-hand stock count even mid-return.
+      {'code': '1290', 'name': 'Returns in Transit', 'type': 'asset', 'system': true, 'order': 6},
+      {'code': '1300', 'name': 'VAT Receivable', 'type': 'asset', 'system': true, 'order': 7},      // Purchase Tax
       // ── Liabilities (2xxx) ──
       {'code': '2000', 'name': 'Accounts Payable', 'type': 'liability', 'system': true, 'order': 10}, // Suppliers
       {'code': '2100', 'name': 'VAT Payable', 'type': 'liability', 'system': true, 'order': 11},      // Sales Tax
       {'code': '2300', 'name': 'Loyalty Points Liability', 'type': 'liability', 'system': true, 'order': 12},
+      // 2400 (Customer Credit Liability) holds refunds we owe customers but
+      // have not yet settled in cash, when the return is **unlinked** to any
+      // sale invoice. Routing on-account refunds here (instead of into 1100
+      // AR) keeps the AR sub-ledger anchored to real invoices and prevents
+      // orphaned negative-AR balances. When the customer later applies the
+      // credit to a future sale, that sale's JE clears 2400. This is the
+      // IFRS/ZATCA Phase-2-friendly treatment of "credit notes without
+      // original invoice".
+      {'code': '2400', 'name': 'Customer Credit Liability', 'type': 'liability', 'system': true, 'order': 13},
       // ── Equity (3xxx) ──
       {'code': '3000', 'name': 'Owner Capital', 'type': 'equity', 'system': true, 'order': 20},
       {'code': '3100', 'name': 'Opening Balance Equity', 'type': 'equity', 'system': true, 'order': 21},
       // ── Income (4xxx) ──
       {'code': '4000', 'name': 'Sales Revenue', 'type': 'revenue', 'system': true, 'order': 30},
+      // 5700 (Sales Return Adjustment) is a CONTRA-REVENUE account: it carries
+      // a debit balance and is presented as a deduction from gross revenue on
+      // the income statement to yield Net Sales (IFRS/GAAP). Classifying it
+      // as `revenue` makes the P&L revenue total = Σ(Cr − Dr) automatically
+      // subtract sale-return debit balances — no special-case logic needed.
+      {'code': '5700', 'name': 'Sales Return Adjustment', 'type': 'revenue', 'system': true, 'order': 33},
+      {'code': '4200', 'name': 'Inventory Gain', 'type': 'revenue', 'system': true, 'order': 32},
+      // 4900 (Purchase Discounts Earned) is an "other income" account that
+      // captures after-the-fact, unallocated supplier discounts recorded
+      // directly from the supplier profile screen (supplier_transactions
+      // with transaction_type='discount'). Routing the credit here — rather
+      // than to Inventory (1200) as a phantom landed-cost adjustment —
+      // keeps the GL Inventory balance equal to the on-hand carrying value
+      // Σ(stock × cost), eliminating a class of permanent reconciliation
+      // drift. See `JournalEntryService.recordDirectSupplierDiscount…`.
+      {'code': '4900', 'name': 'Purchase Discounts Earned', 'type': 'revenue', 'system': true, 'order': 34},
       // ── Expenses (5xxx) ──
+      // 4100 (Purchase Return Adjustment) is a CONTRA-EXPENSE account: it
+      // carries a credit balance and is presented as a deduction from COGS
+      // on the income statement to yield Net Cost of Sales. Classifying it
+      // as `expense` makes Σ(Dr − Cr) automatically deduct purchase-return
+      // credit balances from gross COGS — IFRS/GAAP presentation.
+      {'code': '4100', 'name': 'Purchase Return Adjustment', 'type': 'expense', 'system': true, 'order': 40},
       {'code': '5100', 'name': 'Expenses', 'type': 'expense', 'system': true, 'order': 41},
       {'code': '5200', 'name': 'Salaries Expense', 'type': 'expense', 'system': true, 'order': 42},
       {'code': '5300', 'name': 'Cost of Goods Sold', 'type': 'expense', 'system': true, 'order': 43},
       {'code': '5500', 'name': 'Discounts Given', 'type': 'expense', 'system': true, 'order': 44},
       {'code': '5600', 'name': 'Commissions Expense', 'type': 'expense', 'system': true, 'order': 45},
+      {'code': '5800', 'name': 'Inventory Shrinkage', 'type': 'expense', 'system': true, 'order': 47},
+      {'code': '5900', 'name': 'Inventory Revaluation', 'type': 'expense', 'system': true, 'order': 48},
     ];
 
     // Idempotent: skip accounts that already exist, create only missing ones

@@ -2,6 +2,7 @@ import 'package:drift/drift.dart' hide Column;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart';
+import '../../../../core/services/reporting/ratio_helper.dart';
 import '../widgets/report_date_range.dart';
 
 // ==================== EVENTS ====================
@@ -69,8 +70,10 @@ class SalespersonCommissionItem {
     this.lastSaleAt,
   });
 
-  /// Commission rate as percentage (e.g., 500 bps = 5.0%)
-  double get commissionRatePercent => defaultCommissionRateBps / 100;
+  /// Commission rate as percentage (e.g., 500 bps = 5.0%).
+  // Phase 7 — bps→percent via RatioHelper SoT (Decimal-exact for all bps).
+  double get commissionRatePercent =>
+      RatioHelper.bpsToPercent(defaultCommissionRateBps);
 }
 
 class SalespeopleCommissionReportData {
@@ -379,10 +382,12 @@ class SalespeopleCommissionReportBloc extends RealtimeBloc<
       final avgOrderValue =
           salesCount > 0 ? totalSalesCents ~/ salesCount : 0;
 
+      // Phase 7 — percentage via RatioHelper SoT.
       // targetAchievement = (totalSales / proRatedTarget) * 100
-      final targetAchievement = proRatedTarget > 0
-          ? (totalSalesCents / proRatedTarget) * 100
-          : 0.0;
+      final targetAchievement = RatioHelper.percent(
+        numeratorCents: totalSalesCents,
+        denominatorCents: proRatedTarget,
+      );
 
       return SalespersonCommissionItem(
         employeeId: employeeId,

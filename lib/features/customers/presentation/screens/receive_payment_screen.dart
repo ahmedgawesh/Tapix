@@ -7,6 +7,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart' hide Size;
 import '../../../../core/services/currency_service.dart';
+import '../../../../core/widgets/inputs/select_all_on_focus.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../domain/repositories/customer_repository.dart';
 import '../bloc/customers_bloc.dart';
@@ -123,6 +124,7 @@ class _ReceivePaymentScreenState extends State<ReceivePaymentScreen> {
                           inputFormatters: [
                             FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
                           ],
+                          onTap: () => selectAllText(_amountController),
                           validator: (value) {
                             if (value == null || value.isEmpty) {
                               return 'customers.amount_required'.tr();
@@ -525,10 +527,10 @@ class _ReceivePaymentScreenState extends State<ReceivePaymentScreen> {
       final amountCents = (amount * 100).round();
       final customer = _selectedCustomer!;
 
-      final txId = await sl<CustomerRepository>().recordTransaction(
+      // Phase 3.5.3 — sign-flip lives in CustomerRepository.recordPayment.
+      final txId = await sl<CustomerRepository>().recordPayment(
         customerId: customer.id,
-        transactionType: 'payment',
-        amountCents: -amountCents,
+        amountCents: amountCents,
         currencyId: customer.currencyId,
         description: _descriptionController.text.isEmpty
             ? null

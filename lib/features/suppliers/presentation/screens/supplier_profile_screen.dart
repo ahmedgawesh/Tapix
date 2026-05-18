@@ -7,11 +7,15 @@ import 'package:lucide_icons/lucide_icons.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../../../core/services/parties/party_balance_classifier.dart';
+import '../../../../core/widgets/inputs/select_all_on_focus.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../domain/repositories/supplier_repository.dart';
 import '../bloc/supplier_profile_bloc.dart';
 import '../services/supplier_transaction_pdf_service.dart';
 import '../../../customers/presentation/widgets/edit_transaction_dialog.dart';
+import '../../../shared/widgets/unified_return_search_sheet.dart';
+import '../../../../core/services/unified_return_service.dart';
 
 /// Supplier profile screen with balance, actions, and transactions
 class SupplierProfileScreen extends StatefulWidget {
@@ -284,11 +288,7 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
                       ),
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
                       autofocus: true,
-                      onTap: () {
-                        if (amountController.text == '0.00' || amountController.text.isEmpty) {
-                          amountController.clear();
-                        }
-                      },
+                      onTap: () => selectAllText(amountController),
                     ),
                     const SizedBox(height: 16),
                     InkWell(
@@ -357,11 +357,12 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
 
                               navigator.pop();
 
+                              // Phase 3.5.3 — sign-flip lives in
+                              // SupplierRepository.recordPayment.
                               final amountCents = (amount * 100).round();
-                              final txId = await sl<SupplierRepository>().recordTransaction(
+                              final txId = await sl<SupplierRepository>().recordPayment(
                                 supplierId: supplier.id,
-                                transactionType: 'payment',
-                                amountCents: -amountCents,
+                                amountCents: amountCents,
                                 currencyId: supplier.currencyId,
                                 description: descriptionController.text.isEmpty
                                     ? null
@@ -546,11 +547,7 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
                       ),
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
                       autofocus: true,
-                      onTap: () {
-                        if (amountController.text == '0.00' || amountController.text.isEmpty) {
-                          amountController.clear();
-                        }
-                      },
+                      onTap: () => selectAllText(amountController),
                     ),
                     const SizedBox(height: 16),
                     InkWell(
@@ -622,10 +619,11 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
 
                               final amountCents = (amount * 100).round();
 
-                              final txId = await sl<SupplierRepository>().recordTransaction(
+                              // Phase 3.5.3 — discount uses repository
+                              // helper so the negation rule is centralised.
+                              final txId = await sl<SupplierRepository>().recordDiscount(
                                 supplierId: supplier.id,
-                                transactionType: 'discount',
-                                amountCents: -amountCents,
+                                amountCents: amountCents,
                                 currencyId: supplier.currencyId,
                                 description: descriptionController.text.isEmpty
                                     ? 'suppliers.discount_type_$selectedDiscountType'.tr()
@@ -679,8 +677,14 @@ class _ProfileHeaderCard extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
-    final isPayable = balanceCents > 0;
-    final isZero = balanceCents == 0;
+    // Phase 3.5.2 — delegate sign interpretation to the classifier so this
+    // widget cannot drift from `supplier_hub` / `customer_*` screens.
+    final status = sl<PartyBalanceClassifier>().statusOf(
+      balanceCents,
+      PartyKind.supplier,
+    );
+    final isPayable = status == PartyBalanceStatus.payable;
+    final isZero = status == PartyBalanceStatus.settled;
     final openingBalanceCents = supplier.openingBalanceCents.toBigInt().toInt();
 
     return Container(
@@ -864,7 +868,14 @@ class _QuickActionsSection extends StatelessWidget {
       backgroundColor: isDark
           ? colorScheme.tertiaryContainer.withValues(alpha: 0.22)
           : colorScheme.tertiaryContainer.withValues(alpha: 0.45),
-      onTap: () => context.push('/purchases/returns'),
+      onTap: () {
+        showUnifiedReturnSearchSheet(
+          context,
+          side: ReturnSide.purchase,
+          partyId: supplier.id,
+          partyName: supplier.name,
+        );
+      },
     );
 
     return LayoutBuilder(
@@ -1406,6 +1417,16 @@ class _TransactionTile extends StatelessWidget {
         icon = LucideIcons.fileX;
         color = Colors.red;
         typeLabel = 'suppliers.transaction_refund_reversal'.tr();
+        break;
+      case 'adjustment_return':
+        icon = LucideIcons.unlink;
+        color = Colors.teal;
+        typeLabel = 'suppliers.transaction_adj_return'.tr();
+        break;
+      case 'adjustment_return_reversal':
+        icon = LucideIcons.unlink;
+        color = Colors.red;
+        typeLabel = 'suppliers.transaction_adj_return_reversal'.tr();
         break;
       default:
         icon = LucideIcons.fileText;

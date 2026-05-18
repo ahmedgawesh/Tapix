@@ -114,11 +114,13 @@ class SupplierStocktakeCategoryOption {
 class SupplierOption {
   final int id;
   final String name;
+  final String? phone;
   final int balanceCents;
 
   const SupplierOption({
     required this.id,
     required this.name,
+    this.phone,
     required this.balanceCents,
   });
 }
@@ -349,7 +351,7 @@ class SupplierStocktakeReportBloc extends RealtimeBloc<
     // Load supplier list for the selector
     final supplierRows = await _db.customSelect(
       '''
-      SELECT s.id, s.name, s.balance_cents
+      SELECT s.id, s.name, s.phone, s.balance_cents
       FROM suppliers s
       WHERE s.is_active = 1
       ORDER BY s.name ASC
@@ -361,6 +363,7 @@ class SupplierStocktakeReportBloc extends RealtimeBloc<
         .map((row) => SupplierOption(
               id: row.read<int>('id'),
               name: row.read<String>('name'),
+              phone: row.readNullable<String>('phone'),
               balanceCents: row.read<int>('balance_cents'),
             ))
         .toList();

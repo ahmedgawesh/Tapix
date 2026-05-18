@@ -7,7 +7,9 @@ import 'package:lucide_icons/lucide_icons.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../../../core/services/parties/party_balance_classifier.dart';
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/widgets/inputs/select_all_on_focus.dart';
 import '../../domain/repositories/customer_repository.dart';
 import '../../domain/repositories/loyalty_repository.dart';
 import '../bloc/customers_bloc.dart';
@@ -128,21 +130,17 @@ class _CustomerHubContentState extends State<_CustomerHubContent> {
     final isDark = theme.brightness == Brightness.dark;
     final currencyService = sl<CurrencyService>();
 
-    // Calculate metrics
+    // Calculate metrics — sign convention and bucket math live in
+    // `PartyBalanceClassifier` (Phase 3.5.2) so this widget cannot drift
+    // from the supplier hub or profile screens.
     final activeCount = data.customers.length;
-    // Positive balance = customer owes us (debit/receivable)
-    // Negative balance = we owe customer (credit/payable)
-    int customerOwesCents = 0;
-    int weOweCustomerCents = 0;
-    for (final c in data.customers) {
-      final balance = c.balanceCents.toBigInt().toInt();
-      if (balance > 0) {
-        customerOwesCents += balance;
-      } else if (balance < 0) {
-        weOweCustomerCents += balance.abs();
-      }
-    }
-    final withCreditCount = data.customers.where((c) => c.balanceCents.toBigInt().toInt() != 0).length;
+    final breakdown = sl<PartyBalanceClassifier>().classifyDecimal(
+      data.customers.map((c) => c.balanceCents),
+      PartyKind.customer,
+    );
+    final customerOwesCents = breakdown.receivableCents;
+    final weOweCustomerCents = breakdown.payableCents;
+    final withCreditCount = breakdown.nonZeroCount;
 
     // Calculate segment counts
     final segmentCounts = <String, int>{
@@ -914,6 +912,7 @@ class _LoyaltySettingsDialogState extends State<_LoyaltySettingsDialog> {
                         controller: _pointsPerUnitCtrl,
                         keyboardType: TextInputType.number,
                         inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                        onTap: () => selectAllText(_pointsPerUnitCtrl),
                         decoration: InputDecoration(
                           labelText: 'customers.loyalty_points_per_unit'.tr(),
                           helperText: 'customers.loyalty_points_per_unit_hint'.tr(),
@@ -925,6 +924,7 @@ class _LoyaltySettingsDialogState extends State<_LoyaltySettingsDialog> {
                       TextField(
                         controller: _minSpendCtrl,
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        onTap: () => selectAllText(_minSpendCtrl),
                         decoration: InputDecoration(
                           labelText: 'customers.loyalty_min_spend'.tr(),
                           helperText: 'customers.loyalty_min_spend_hint'.tr(),
@@ -953,6 +953,7 @@ class _LoyaltySettingsDialogState extends State<_LoyaltySettingsDialog> {
                         controller: _pointValueCtrl,
                         keyboardType: TextInputType.number,
                         inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                        onTap: () => selectAllText(_pointValueCtrl),
                         decoration: InputDecoration(
                           labelText: 'customers.loyalty_point_value'.tr(),
                           helperText: 'customers.loyalty_point_value_hint'.tr(),
@@ -966,6 +967,7 @@ class _LoyaltySettingsDialogState extends State<_LoyaltySettingsDialog> {
                         controller: _minRedemptionCtrl,
                         keyboardType: TextInputType.number,
                         inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                        onTap: () => selectAllText(_minRedemptionCtrl),
                         decoration: InputDecoration(
                           labelText: 'customers.loyalty_min_redemption'.tr(),
                           helperText: 'customers.loyalty_min_redemption_hint'.tr(),
@@ -978,6 +980,7 @@ class _LoyaltySettingsDialogState extends State<_LoyaltySettingsDialog> {
                         controller: _maxPercentCtrl,
                         keyboardType: TextInputType.number,
                         inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                        onTap: () => selectAllText(_maxPercentCtrl),
                         decoration: InputDecoration(
                           labelText: 'customers.loyalty_max_percent'.tr(),
                           helperText: 'customers.loyalty_max_percent_hint'.tr(),

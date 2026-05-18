@@ -22,6 +22,14 @@
 - [Component Inventory](./component-inventory.md)
 - [Development Guide](./development-guide.md)
 
+## Domain Documentation
+
+- [Inventory Architecture](./INVENTORY_ARCHITECTURE.md) - Two-layer model (global valuation × per-product tracking), FEFO contract, expiry alerts.
+- [Inventory Architecture — Plan & Migration history](./INVENTORY_ARCHITECTURE_PLAN.md)
+- [Pricing Engine](./PRICING_ENGINE.md) - Centralised line-level totals (subtotal/discount/tax/total).
+- [Accounting Integrity Guidelines](./ACCOUNTING_INTEGRITY_GUIDELINES.md) - Posting invariants and audit rules.
+- [Variants Implementation Plan](./VARIANTS_IMPLEMENTATION_PLAN.md)
+
 ## Existing Documentation
 
 - [README.md](../README.md) - Basic project information and getting started guide

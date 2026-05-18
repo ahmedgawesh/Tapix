@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/bloc/currency_bloc.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../../../core/widgets/inputs/select_all_on_focus.dart';
 import '../../../barcode/services/barcode_validation_service.dart';
 import '../../domain/entities/category_entity.dart';
 import '../../domain/entities/product_color_entity.dart';
@@ -483,11 +484,7 @@ class _BulkProductRowState extends State<BulkProductRow> {
       inputFormatters: [
         FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
       ],
-      onTap: () {
-        if (_costController.text == '0.00' || _costController.text == '0') {
-          _costController.clear();
-        }
-      },
+      onTap: () => selectAllText(_costController),
       onChanged: (value) {
         widget.onUpdate({'costCents': _parseDecimal(value)});
       },
@@ -509,11 +506,7 @@ class _BulkProductRowState extends State<BulkProductRow> {
       inputFormatters: [
         FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
       ],
-      onTap: () {
-        if (_priceController.text == '0.00' || _priceController.text == '0') {
-          _priceController.clear();
-        }
-      },
+      onTap: () => selectAllText(_priceController),
       onChanged: (value) {
         widget.onUpdate({'priceCents': _parseDecimal(value)});
       },
@@ -533,12 +526,7 @@ class _BulkProductRowState extends State<BulkProductRow> {
       inputFormatters: [
         FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
       ],
-      onTap: () {
-        if (_wholesalePriceController.text == '0.00' || 
-            _wholesalePriceController.text == '0') {
-          _wholesalePriceController.clear();
-        }
-      },
+      onTap: () => selectAllText(_wholesalePriceController),
       onChanged: (value) {
         widget.onUpdate({'wholesalePriceCents': _parseDecimal(value)});
       },
@@ -557,11 +545,7 @@ class _BulkProductRowState extends State<BulkProductRow> {
       inputFormatters: [
         FilteringTextInputFormatter.digitsOnly,
       ],
-      onTap: () {
-        if (_stockController.text == '0') {
-          _stockController.clear();
-        }
-      },
+      onTap: () => selectAllText(_stockController),
       onChanged: (value) {
         widget.onUpdate({'stockQuantity': int.tryParse(value) ?? 0});
       },
@@ -580,11 +564,7 @@ class _BulkProductRowState extends State<BulkProductRow> {
       inputFormatters: [
         FilteringTextInputFormatter.digitsOnly,
       ],
-      onTap: () {
-        if (_minStockController.text == '0') {
-          _minStockController.clear();
-        }
-      },
+      onTap: () => selectAllText(_minStockController),
       onChanged: (value) {
         widget.onUpdate({'minQuantity': int.tryParse(value) ?? 0});
       },

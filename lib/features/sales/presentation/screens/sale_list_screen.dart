@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -9,6 +11,7 @@ import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../domain/entities/sale_entity.dart';
 import '../bloc/sales_bloc.dart';
+import '../../../shared/widgets/date_range_filter_sheet.dart';
 
 class SaleListScreen extends StatelessWidget {
   const SaleListScreen({super.key});
@@ -31,12 +34,24 @@ class _SaleHubView extends StatefulWidget {
 
 class _SaleHubViewState extends State<_SaleHubView> {
   final _searchController = TextEditingController();
+  Timer? _debounceTimer;
   String? _selectedStatus;
   DateTimeRange? _dateRange;
   String? _datePresetLabel;
 
+  void _onSearchChanged(String value) {
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 300), () {
+      if (mounted) {
+        context.read<SalesBloc>().add(SalesSearchRequested(value));
+      }
+    });
+    setState(() {});
+  }
+
   @override
   void dispose() {
+    _debounceTimer?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -226,6 +241,7 @@ class _SaleHubViewState extends State<_SaleHubView> {
                             ? IconButton(
                                 icon: const Icon(LucideIcons.x, size: 18),
                                 onPressed: () {
+                                  _debounceTimer?.cancel();
                                   _searchController.clear();
                                   setState(() {});
                                   context
@@ -241,12 +257,7 @@ class _SaleHubViewState extends State<_SaleHubView> {
                         isDense: true,
                         contentPadding: const EdgeInsets.symmetric(vertical: 12),
                       ),
-                      onChanged: (value) {
-                        setState(() {});
-                        context
-                            .read<SalesBloc>()
-                            .add(SalesSearchRequested(value));
-                      },
+                      onChanged: _onSearchChanged,
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -355,6 +366,8 @@ class _SaleHubViewState extends State<_SaleHubView> {
                     sale: sale,
                     currencyService: currencyService,
                     hasReturn: data.saleIdsWithReturns.contains(sale.id),
+                    searchQuery: data.searchQuery,
+                    isProductMatch: data.productMatchedSaleIds.contains(sale.id),
                     onTap: () => context.push('/sales/${sale.id}'),
                   );
                 },
@@ -388,185 +401,16 @@ class _SaleHubViewState extends State<_SaleHubView> {
   }
 
   Future<void> _showDateRangeDialog(BuildContext context) async {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-
-    final presets = <_DatePreset>[
-      _DatePreset(
-        label: 'sales.date_today'.tr(),
-        icon: LucideIcons.calendarCheck,
-        range: DateTimeRange(start: today, end: today),
-      ),
-      _DatePreset(
-        label: 'sales.date_yesterday'.tr(),
-        icon: LucideIcons.calendarMinus,
-        range: DateTimeRange(
-          start: today.subtract(const Duration(days: 1)),
-          end: today.subtract(const Duration(days: 1)),
-        ),
-      ),
-      _DatePreset(
-        label: 'sales.date_this_week'.tr(),
-        icon: LucideIcons.calendar,
-        range: DateTimeRange(
-          start: today.subtract(Duration(days: today.weekday - 1)),
-          end: today,
-        ),
-      ),
-      _DatePreset(
-        label: 'sales.date_this_month'.tr(),
-        icon: LucideIcons.calendarDays,
-        range: DateTimeRange(
-          start: DateTime(now.year, now.month, 1),
-          end: today,
-        ),
-      ),
-      _DatePreset(
-        label: 'sales.date_last_month'.tr(),
-        icon: LucideIcons.calendarClock,
-        range: DateTimeRange(
-          start: DateTime(now.year, now.month - 1, 1),
-          end: DateTime(now.year, now.month, 0),
-        ),
-      ),
-    ];
-
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 40, height: 4,
-                  margin: const EdgeInsets.only(bottom: 16),
-                  decoration: BoxDecoration(
-                    color: cs.onSurfaceVariant.withValues(alpha: 0.4),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                Row(
-                  children: [
-                    Icon(LucideIcons.calendarRange, size: 20, color: cs.primary),
-                    const SizedBox(width: 8),
-                    Text('sales.date_range'.tr(),
-                        style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold)),
-                    const Spacer(),
-                    if (_dateRange != null)
-                      TextButton.icon(
-                        onPressed: () {
-                          setState(() {
-                            _dateRange = null;
-                            _datePresetLabel = null;
-                          });
-                          Navigator.pop(ctx);
-                        },
-                        icon: const Icon(LucideIcons.x, size: 16),
-                        label: Text('sales.date_clear'.tr()),
-                        style: TextButton.styleFrom(
-                          foregroundColor: cs.error,
-                          visualDensity: VisualDensity.compact,
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                ...presets.map((preset) {
-                  final isActive = _dateRange != null &&
-                      _dateRange!.start == preset.range.start &&
-                      _dateRange!.end == preset.range.end;
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 4),
-                    child: Material(
-                      color: isActive
-                          ? cs.primaryContainer.withValues(alpha: 0.5)
-                          : Colors.transparent,
-                      borderRadius: BorderRadius.circular(12),
-                      child: ListTile(
-                        leading: Container(
-                          width: 38, height: 38,
-                          decoration: BoxDecoration(
-                            color: isActive
-                                ? cs.primary.withValues(alpha: 0.15)
-                                : cs.surfaceContainerHighest,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Icon(preset.icon, size: 18,
-                              color: isActive ? cs.primary : cs.onSurfaceVariant),
-                        ),
-                        title: Text(preset.label,
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                                fontWeight: isActive ? FontWeight.w600 : FontWeight.normal)),
-                        trailing: isActive
-                            ? Icon(LucideIcons.check, size: 18, color: cs.primary)
-                            : null,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
-                        dense: true,
-                        onTap: () {
-                          setState(() {
-                            _dateRange = preset.range;
-                            _datePresetLabel = preset.label;
-                          });
-                          Navigator.pop(ctx);
-                        },
-                      ),
-                    ),
-                  );
-                }),
-                const Divider(height: 16),
-                Material(
-                  color: Colors.transparent,
-                  borderRadius: BorderRadius.circular(12),
-                  child: ListTile(
-                    leading: Container(
-                      width: 38, height: 38,
-                      decoration: BoxDecoration(
-                        color: cs.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Icon(LucideIcons.calendarSearch, size: 18,
-                          color: cs.onSurfaceVariant),
-                    ),
-                    title: Text('sales.date_custom'.tr(),
-                        style: theme.textTheme.bodyMedium),
-                    trailing: const Icon(LucideIcons.chevronRight, size: 18),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                    dense: true,
-                    onTap: () async {
-                      Navigator.pop(ctx);
-                      final range = await showDateRangePicker(
-                        context: context,
-                        firstDate: DateTime(2020),
-                        lastDate: DateTime.now().add(const Duration(days: 30)),
-                        initialDateRange: _dateRange,
-                      );
-                      if (range != null) {
-                        setState(() {
-                          _dateRange = range;
-                          _datePresetLabel = null;
-                        });
-                      }
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
+    final result = await showDateRangeFilterSheet(
+      context,
+      currentRange: _dateRange,
+      currentLabel: _datePresetLabel,
     );
+    if (result == null || !mounted) return;
+    setState(() {
+      _dateRange = result.range;
+      _datePresetLabel = result.label;
+    });
   }
 
   Widget _buildEmptyState(BuildContext context) {
@@ -613,13 +457,6 @@ class _SaleHubViewState extends State<_SaleHubView> {
       ),
     );
   }
-}
-
-class _DatePreset {
-  final String label;
-  final IconData icon;
-  final DateTimeRange range;
-  const _DatePreset({required this.label, required this.icon, required this.range});
 }
 
 // ─── Stat Card ───
@@ -754,12 +591,16 @@ class _SaleTile extends StatelessWidget {
   final SaleEntity sale;
   final CurrencyService currencyService;
   final bool hasReturn;
+  final String? searchQuery;
+  final bool isProductMatch;
   final VoidCallback onTap;
 
   const _SaleTile({
     required this.sale,
     required this.currencyService,
     this.hasReturn = false,
+    this.searchQuery,
+    this.isProductMatch = false,
     required this.onTap,
   });
 
@@ -880,15 +721,19 @@ class _SaleTile extends StatelessWidget {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(
-                                      sale.invoiceNumber,
+                                    _HighlightedText(
+                                      text: sale.invoiceNumber,
+                                      query: searchQuery,
                                       style: theme.textTheme.titleSmall
-                                          ?.copyWith(fontWeight: FontWeight.w600),
+                                          ?.copyWith(fontWeight: FontWeight.w600) ?? const TextStyle(),
+                                      highlightColor: cs.primary.withValues(alpha: 0.2),
                                     ),
-                                    Text(
-                                      sale.customerName ?? 'sales.walk_in'.tr(),
+                                    _HighlightedText(
+                                      text: sale.customerName ?? 'sales.walk_in'.tr(),
+                                      query: searchQuery,
                                       style: theme.textTheme.bodySmall?.copyWith(
-                                          color: cs.onSurfaceVariant),
+                                          color: cs.onSurfaceVariant) ?? const TextStyle(),
+                                      highlightColor: cs.primary.withValues(alpha: 0.2),
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                     ),
@@ -944,6 +789,37 @@ class _SaleTile extends StatelessWidget {
                                       ?.copyWith(color: cs.onSurfaceVariant),
                                 ),
                               ],
+                              if (isProductMatch) ...[
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: cs.tertiary.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(
+                                      color: cs.tertiary.withValues(alpha: 0.3),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(LucideIcons.package,
+                                          size: 10, color: cs.tertiary),
+                                      const SizedBox(width: 3),
+                                      Text(
+                                        'sales.contains_product'.tr(),
+                                        style: theme.textTheme.labelSmall
+                                            ?.copyWith(
+                                          color: cs.tertiary,
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 9,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                               if (hasReturn) ...[
                                 const SizedBox(width: 8),
                                 Container(
@@ -996,6 +872,62 @@ class _SaleTile extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+// ─── Highlighted Text ───
+class _HighlightedText extends StatelessWidget {
+  final String text;
+  final String? query;
+  final TextStyle style;
+  final Color highlightColor;
+  final int? maxLines;
+  final TextOverflow? overflow;
+
+  const _HighlightedText({
+    required this.text,
+    this.query,
+    required this.style,
+    required this.highlightColor,
+    this.maxLines,
+    this.overflow,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (query == null || query!.isEmpty) {
+      return Text(text, style: style, maxLines: maxLines, overflow: overflow);
+    }
+
+    final q = query!.toLowerCase();
+    final spans = <TextSpan>[];
+    final lowerText = text.toLowerCase();
+    int start = 0;
+
+    while (start < text.length) {
+      final index = lowerText.indexOf(q, start);
+      if (index == -1) {
+        spans.add(TextSpan(text: text.substring(start)));
+        break;
+      }
+      if (index > start) {
+        spans.add(TextSpan(text: text.substring(start, index)));
+      }
+      spans.add(TextSpan(
+        text: text.substring(index, index + query!.length),
+        style: TextStyle(
+          backgroundColor: highlightColor,
+          fontWeight: FontWeight.bold,
+        ),
+      ));
+      start = index + query!.length;
+    }
+
+    return RichText(
+      text: TextSpan(style: style, children: spans),
+      maxLines: maxLines,
+      overflow: overflow ?? TextOverflow.clip,
     );
   }
 }

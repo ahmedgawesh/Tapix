@@ -121,7 +121,7 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen> {
 
   Future<void> _pickLogo() async {
     try {
-      final result = await FilePicker.platform.pickFiles(
+      final result = await FilePicker.pickFiles(
         type: FileType.image,
         withData: true,
       );

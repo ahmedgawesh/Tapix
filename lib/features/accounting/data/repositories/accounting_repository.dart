@@ -4,6 +4,7 @@ import 'package:decimal/decimal.dart';
 import 'package:drift/drift.dart';
 
 import '../../../../core/database/app_database.dart';
+import '../../../../core/services/compliance/fiscal_period_service.dart';
 import '../../domain/models/journal_entry_data.dart';
 import '../../domain/models/trial_balance.dart';
 import '../../domain/models/reconciliation_result.dart';
@@ -22,6 +23,21 @@ import '../../domain/exceptions/accounting_exception.dart';
 class AccountingRepository {
   final AppDatabase _db;
 
+  /// Optional Phase-11 fiscal-period guard. When non-null, every
+  /// [createJournalEntry] / [postJournalEntry] / [voidJournalEntry] call
+  /// asserts the effective date falls inside an open fiscal-period row
+  /// (`fiscal_periods` table) BEFORE the JE is written.
+  ///
+  /// This complements the legacy `accounting_periods` lock (which remains
+  /// enforced via [isDateInClosedPeriod]). The two systems are independent
+  /// and either one can block a post — closing a period in either table
+  /// freezes the GL for that date range.
+  ///
+  /// Optional so the existing `AccountingRepository(db)` constructor used
+  /// throughout the test suite continues to work unchanged. DI wires the
+  /// service via the named constructor in production.
+  final FiscalPeriodService? _fiscalPeriodService;
+
   static const Set<String> _validAccountTypes = {
     'asset',
     'liability',
@@ -36,12 +52,24 @@ class AccountingRepository {
   static const Set<String> _controlAccountCodes = {'1100', '2000'};
 
   /// Entry types that are allowed to touch control accounts.
+  ///
+  /// `sale_return` / `purchase_return` are the **unified** Phase-1 types
+  /// produced by `ReturnJournalPolicy`. The legacy camel-case variants
+  /// (`saleReturn`, `purchaseReturn`, `saleReturnAdjustment`,
+  /// `purchaseReturnAdjustment`) and the historical `sale_return_cogs`
+  /// remain whitelisted so historical entries written by the deprecated
+  /// pipeline continue to validate.
   static const Set<String> _systemEntryTypes = {
     'sale',
     'purchase',
     'payment',
+    'sale_return',
+    'purchase_return',
+    'sale_return_cogs',
     'saleReturn',
     'purchaseReturn',
+    'purchaseReturnAdjustment',
+    'saleReturnAdjustment',
     'reversal',
     'customer_payment',
     'customer_discount',
@@ -49,9 +77,21 @@ class AccountingRepository {
     'supplier_discount',
     'closing',
     'opening_balance',
+    // Phase 2.3 — customer credit-note sub-ledger. Issued, applied, and
+    // voided exclusively by `CustomerCreditNoteService` (no UI path),
+    // so they qualify as system entries that may legally touch 1100 AR.
+    'credit_note_issuance',
+    'credit_note_application',
+    'credit_note_void',
   };
 
-  AccountingRepository(this._db);
+  AccountingRepository(this._db) : _fiscalPeriodService = null;
+
+  /// DI-wired constructor — Phase 11.1. Adds the fiscal-period guard.
+  AccountingRepository.withFiscalPeriodGuard(
+    this._db, {
+    required FiscalPeriodService fiscalPeriodService,
+  }) : _fiscalPeriodService = fiscalPeriodService;
 
   // ============================================================
   // ACCOUNT OPERATIONS
@@ -183,6 +223,24 @@ class AccountingRepository {
       );
     }
 
+    // Phase 11.3a — single-currency invariant.
+    // Every line of one JE MUST share the same currencyId. Cross-currency
+    // postings demand FX conversion + realised/unrealised gain-or-loss
+    // accounts which the current chart does not model; rather than silently
+    // accept a mathematically balanced but economically meaningless entry,
+    // we reject it at the canonical writer. Mixed currencies require two
+    // separate journal entries (one per currency) bridged by an explicit
+    // FX-conversion JE.
+    final currencyIds =
+        entryData.lines.map((l) => l.currencyId).toSet();
+    if (currencyIds.length > 1) {
+      throw AccountingException(
+        'Journal entry mixes currencies (${currencyIds.toList()..sort()}). '
+        'Cross-currency postings require an explicit FX-conversion entry; '
+        'split the transaction into one journal entry per currency.',
+      );
+    }
+
     // Enforce control account protection: manual entries cannot touch AR/AP
     final entryType = entryData.entryType ?? 'manual';
     if (!_systemEntryTypes.contains(entryType)) {
@@ -198,13 +256,19 @@ class AccountingRepository {
       }
     }
 
-    // Enforce closed period lock
+    // Enforce closed period lock (legacy `accounting_periods` table).
     final entryDate = entryData.entryDate ?? DateTime.now();
     if (await isDateInClosedPeriod(entryDate)) {
       throw AccountingException(
         'Cannot post journal entry: date ${entryDate.toIso8601String().substring(0, 10)} falls in a closed accounting period'
       );
     }
+
+    // Phase 11.1 — fiscal-period guard (newer `fiscal_periods` table).
+    // Throws FiscalPeriodClosedException if the month is closed. Both
+    // period systems are checked independently; closing in either one
+    // freezes the GL for that date range.
+    await _fiscalPeriodService?.assertOpen(entryDate);
 
     // Execute in atomic transaction
     return await _db.transaction(() async {
@@ -261,9 +325,14 @@ class AccountingRepository {
   }
 
   /// Post a draft journal entry
+  ///
+  /// `userId` is nullable to mirror `voidJournalEntry` and to allow
+  /// non-interactive callers (e.g. `JournalRepositoryImpl` delegation from
+  /// UI blocs where the current user may not be resolved). Drift's
+  /// `postedBy` column is nullable in the schema.
   Future<bool> postJournalEntry({
     required int entryId,
-    required int userId,
+    required int? userId,
   }) async {
     final entry = await (_db.select(_db.journalEntries)
           ..where((e) => e.id.equals(entryId)))
@@ -277,12 +346,15 @@ class AccountingRepository {
       throw AccountingException('Only draft entries can be posted');
     }
 
-    // Enforce closed period lock
+    // Enforce closed period lock (legacy `accounting_periods` table).
     if (await isDateInClosedPeriod(entry.entryDate)) {
       throw AccountingException(
         'Cannot post journal entry: date ${entry.entryDate.toIso8601String().substring(0, 10)} falls in a closed accounting period'
       );
     }
+
+    // Phase 11.1 — fiscal-period guard (newer `fiscal_periods` table).
+    await _fiscalPeriodService?.assertOpen(entry.entryDate);
     
     return await _db.transaction(() async {
       // Update entry status
@@ -317,7 +389,7 @@ class AccountingRepository {
   Future<int> voidJournalEntry({
     required int entryId,
     required String reason,
-    required int userId,
+    required int? userId,
   }) async {
     final entry = await (_db.select(_db.journalEntries)
           ..where((e) => e.id.equals(entryId)))

@@ -16,9 +16,17 @@ import '../database/daos/barcode_template_dao.dart';
 import '../database/daos/purchase_dao.dart';
 import '../database/daos/sale_dao.dart';
 import '../services/currency_service.dart';
+import '../money/money_input_parser.dart';
+import '../services/parties/party_balance_classifier.dart';
+import '../services/pricing/discount_converter.dart';
+import '../services/einvoice/einvoice_artifact_repository.dart';
+import '../services/einvoice/einvoice_dispatch_service.dart';
+import '../services/einvoice/einvoice_provider_registry.dart';
 import '../services/localization_service.dart';
 import '../services/audit_log_service.dart';
 import '../services/below_cost_sale_service.dart';
+import '../services/biometric_service.dart';
+import '../services/pin_service.dart';
 import '../services/theme_service.dart';
 import '../../features/auth/auth.dart';
 import '../../features/products/domain/repositories/product_repository.dart';
@@ -45,6 +53,7 @@ import '../../features/products/presentation/bloc/colors_bloc.dart';
 import '../../features/products/presentation/bloc/sizes_bloc.dart';
 import '../../features/products/presentation/bloc/variant_summaries_bloc.dart';
 import '../../features/products/presentation/bloc/variant_previews_bloc.dart';
+import '../../features/products/presentation/bloc/expiry_summaries_bloc.dart';
 import '../../features/products/services/file_import_service.dart';
 import '../../features/products/services/import_validation_service.dart';
 import '../../features/products/services/product_import_service.dart';
@@ -53,6 +62,7 @@ import '../../features/products/domain/usecases/parse_import_file.dart';
 import '../../features/products/domain/usecases/validate_import_data.dart';
 import '../../features/products/domain/usecases/import_products.dart';
 import '../../features/barcode/services/barcode_validation_service.dart';
+import '../../features/barcode/services/barcode_generation_service.dart';
 import '../../features/barcode/services/barcode_printer_service.dart';
 import '../../features/barcode/presentation/bloc/barcode_scanner_bloc.dart';
 import '../../features/barcode/presentation/bloc/barcode_design_bloc.dart';
@@ -101,6 +111,15 @@ import '../../features/employees/presentation/bloc/leave_requests_bloc.dart';
 import '../../features/employees/presentation/bloc/payroll_bloc.dart';
 import '../../features/employees/presentation/bloc/roles_bloc.dart';
 import '../database/daos/accounting_dao.dart';
+import '../database/daos/adjustment_return_dao.dart';
+import '../database/daos/cheque_confirmation_dao.dart';
+import '../database/daos/inventory_adjustment_dao.dart';
+import '../database/daos/batch_audit_dao.dart';
+import '../services/inventory/inventory_adjustment_service.dart';
+import '../services/inventory/inventory_valuation_service.dart';
+import '../services/inventory/expiry_alert_service.dart';
+import '../../features/inventory/presentation/bloc/expiry_alerts_bloc.dart';
+import '../services/unified_return_service.dart';
 import '../../features/expenses/domain/repositories/expense_repository.dart';
 import '../../features/expenses/data/datasources/expense_local_datasource.dart';
 import '../../features/expenses/data/repositories/expense_repository_impl.dart';
@@ -112,7 +131,16 @@ import '../../features/accounting/data/datasources/journal_local_datasource.dart
 import '../../features/accounting/data/repositories/journal_repository_impl.dart';
 import '../../features/accounting/data/repositories/accounting_repository.dart';
 import '../../features/accounting/domain/services/accounting_close_service.dart';
+import '../services/cheque_lifecycle_service.dart';
 import '../services/journal_entry_service.dart';
+import '../services/commissions/commission_service.dart';
+import '../services/loyalty/loyalty_points_service.dart';
+import '../services/returns/return_approval_service.dart';
+import '../services/returns/return_journal_policy.dart';
+import '../services/returns/return_posting_service.dart';
+import '../services/returns/return_reason_code_service.dart';
+import '../services/compliance/fiscal_period_service.dart';
+import '../services/compliance/customer_credit_note_service.dart';
 import '../services/data_integrity_service.dart';
 import '../services/ledger_rebuild_service.dart';
 import '../services/attendance_service.dart';
@@ -184,11 +212,18 @@ Future<void> init() async {
   sl.registerLazySingleton(() => EmployeeDao(sl()));
   sl.registerLazySingleton(() => SupplierDao(sl()));
   sl.registerLazySingleton(() => AccountingDao(sl()));
+  sl.registerLazySingleton(() => AdjustmentReturnDao(sl()));
+  sl.registerLazySingleton(() => InventoryAdjustmentDao(sl()));
+  sl.registerLazySingleton(() => BatchAuditDao(sl()));
+  // Phase 14.0 — cheque confirmation lifecycle (DB-backed).
+  sl.registerLazySingleton(() => ChequeConfirmationDao(sl()));
 
   // Auth Services
   sl.registerLazySingleton(() => PasswordService());
   sl.registerLazySingleton(() => SessionService());
   sl.registerLazySingleton(() => PermissionService());
+  sl.registerLazySingleton(() => PinService());
+  sl.registerLazySingleton(() => BiometricService());
   sl.registerLazySingleton<AuthRepositoryInterface>(
     () => AuthRepository(
       database: sl(),
@@ -207,9 +242,30 @@ Future<void> init() async {
   sl.registerLazySingleton(() => ThemeService(sl()));
   sl.registerLazySingleton(() => LocalizationService(sl()));
   sl.registerLazySingleton(() => CurrencyService(sl()));
+  // Phase 3.5.1 — single source of truth for free-form text → cents.
+  // All UI forms must obtain cents via this parser instead of doing
+  // `double.parse(text) * 100`, which silently loses precision on edges
+  // like `99999.99 * 100` and ignores currencies with non-2 decimal digits
+  // (JOD/KWD/BHD/OMR/JPY/IQD/...).
+  sl.registerLazySingleton(() => MoneyInputParser(sl<CurrencyService>()));
+  // Phase 3.5.2 — classifier centralises the sign convention that
+  // customer / supplier hubs and profile screens used to hand-roll
+  // inline. See `party_balance_classifier.dart` for the convention.
+  sl.registerLazySingleton(() => const PartyBalanceClassifier());
+  // Phase 3.5.5 — single source of truth for fixed <-> percent discount
+  // conversions. Replaces the `double * 100 / 100` helpers that used to
+  // live inline in `sale_form_dialogs.dart`.
+  sl.registerLazySingleton(() => const DiscountConverter());
   sl.registerLazySingleton(() => AuditLogService(sl<AppDatabase>(), sl<SessionService>()));
   sl.registerLazySingleton(() => const BelowCostSaleService());
   sl.registerLazySingleton(() => DataIntegrityService(sl<AppDatabase>()));
+  sl.registerLazySingleton(() => UnifiedReturnService(
+    sl<AppDatabase>(),
+    sl<PurchaseDao>(),
+    sl<SaleDao>(),
+    sl<AdjustmentReturnDao>(),
+    sl<JournalEntryService>(),
+  ));
 
   // Datasources
   sl.registerLazySingleton<ProductLocalDatasource>(
@@ -221,10 +277,22 @@ Future<void> init() async {
 
   // Feature Repositories
   sl.registerLazySingleton<ProductRepository>(
-    () => ProductRepositoryImpl(sl(), sl<AuditLogService>(), sl<SessionService>()),
+    () => ProductRepositoryImpl(
+      sl(),
+      sl<AuditLogService>(),
+      sl<SessionService>(),
+      // Wired so smartDelete / writeOffAndDeleteProduct can post a balanced
+      // shrinkage entry per variant before removing the row, keeping the
+      // 1200 Inventory ledger in sync with Σ(stock × cost).
+      variantDatasource: sl<VariantLocalDatasource>(),
+      adjustmentService: sl<InventoryAdjustmentService>(),
+    ),
   );
   sl.registerLazySingleton<ProductVariantRepository>(
-    () => ProductVariantRepositoryImpl(sl()),
+    () => ProductVariantRepositoryImpl(
+      sl<VariantLocalDatasource>(),
+      sl<InventoryAdjustmentService>(),
+    ),
   );
   sl.registerLazySingleton<CategoryRepository>(
     () => CategoryRepositoryImpl(sl()),
@@ -236,21 +304,121 @@ Future<void> init() async {
     () => SizeRepositoryImpl(sl()),
   );
 
+  // Phase 11.1 — fiscal-period guard. Registered BEFORE AccountingRepository
+  // because every JE post/void path now consults it. (Lazy singletons so
+  // ordering is purely declarative; this is a readability + future-proofing
+  // move.) The same instance is also injected into ReturnPostingService.
+  sl.registerLazySingleton<FiscalPeriodService>(
+    () => FiscalPeriodService(sl<AppDatabase>()),
+  );
+
   // Accounting Repository & Journal Entry Service (needed by Sales/Purchases)
+  // Phase 11.1 — wired through `withFiscalPeriodGuard` so every
+  // createJournalEntry / postJournalEntry / voidJournalEntry asserts
+  // the effective date falls in an OPEN fiscal period. Closes the
+  // backdating loophole that previously existed only on returns.
   sl.registerLazySingleton<AccountingRepository>(
-    () => AccountingRepository(sl<AppDatabase>()),
+    () => AccountingRepository.withFiscalPeriodGuard(
+      sl<AppDatabase>(),
+      fiscalPeriodService: sl<FiscalPeriodService>(),
+    ),
   );
   sl.registerLazySingleton(() => AccountingCloseService(
     sl<AppDatabase>(),
     sl<AccountingRepository>(),
   ));
+  // Unified return-posting pipeline (Phase 1).
+  // ReturnJournalPolicy is the single source of truth for return JE shape;
+  // ReturnPostingService is the single API every flow (linked + adjustment)
+  // funnels through. The legacy `JournalEntryService.record*ReturnJournalEntry`
+  // methods now delegate here.
+  sl.registerLazySingleton<ReturnJournalPolicy>(
+    () => ReturnJournalPolicy(sl<AccountingRepository>()),
+  );
+  // Phase 2 compliance services — customer-credit-note sub-ledger.
+  // ReturnPostingService also receives the FiscalPeriodService (registered
+  // above) so every return post (linked + adjustment) enforces the same
+  // period guard the JE pipeline now enforces.
+  sl.registerLazySingleton<CustomerCreditNoteService>(
+    () => CustomerCreditNoteService(
+      db: sl<AppDatabase>(),
+      accountingRepo: sl<AccountingRepository>(),
+    ),
+  );
+  sl.registerLazySingleton<ReturnPostingService>(
+    () => ReturnPostingService(
+      accountingRepo: sl<AccountingRepository>(),
+      policy: sl<ReturnJournalPolicy>(),
+      fiscalPeriodService: sl<FiscalPeriodService>(),
+      creditNoteService: sl<CustomerCreditNoteService>(),
+    ),
+  );
+  // Phase 3 — return approval policy + reason-codes registry. Both read
+  // from `app_settings` / `return_reason_codes` and are the single
+  // sources of truth for the approval pipeline; DAOs receive the
+  // approval service via method args, never re-implement policy.
+  sl.registerLazySingleton<ReturnApprovalService>(
+    () => ReturnApprovalService(sl<SettingsDao>()),
+  );
+  sl.registerLazySingleton<ReturnReasonCodeService>(
+    () => ReturnReasonCodeService(sl<AppDatabase>()),
+  );
+  // Phase 4 — e-invoicing. All three services funnel every outgoing
+  // artifact through a single chokepoint:
+  //   EInvoiceDispatchService.dispatch(subject)
+  // Providers are registered empty by default (NullEInvoiceProvider is
+  // the fallback). Per-market providers (ZatcaPhase2Provider, EtaProvider,
+  // PeppolUblProvider) are added here once the tenant has onboarded with
+  // the relevant tax authority (certificates, OAuth creds, Access Point).
+  sl.registerLazySingleton<EInvoiceProviderRegistry>(
+    () => EInvoiceProviderRegistry(providers: const []),
+  );
+  sl.registerLazySingleton<EInvoiceArtifactRepository>(
+    () => EInvoiceArtifactRepository(sl<AppDatabase>()),
+  );
+  sl.registerLazySingleton<EInvoiceDispatchService>(
+    () => EInvoiceDispatchService(
+      registry: sl<EInvoiceProviderRegistry>(),
+      artifactRepository: sl<EInvoiceArtifactRepository>(),
+      settingsDao: sl<SettingsDao>(),
+    ),
+  );
   sl.registerLazySingleton<JournalEntryService>(
-    () => JournalEntryService(sl<AccountingRepository>()),
+    () => JournalEntryService(
+      sl<AccountingRepository>(),
+      returnPostingService: sl<ReturnPostingService>(),
+    ),
+  );
+
+  // Phase 6 — single sources of truth for commission + loyalty math.
+  // SaleRepositoryImpl is the only legitimate consumer of CommissionService;
+  // LoyaltyRepositoryImpl additionally calls LoyaltyPointsService.previewSync
+  // via the static API (no DI handle needed for the preview path).
+  sl.registerLazySingleton<CommissionService>(
+    () => CommissionService(sl<EmployeeDao>()),
+  );
+  sl.registerLazySingleton<LoyaltyPointsService>(
+    () => LoyaltyPointsService(
+      sl<LoyaltyRepository>(),
+      sl<JournalEntryService>(),
+      sl<AppDatabase>(),
+    ),
+  );
+
+  // Inventory adjustments (manual stock shrinkage / gain / revaluation).
+  // Single sanctioned entry point — must be used by any UI that mutates
+  // on-hand stock outside of purchase / sale flows.
+  sl.registerLazySingleton<InventoryAdjustmentService>(
+    () => InventoryAdjustmentService(
+      db: sl<AppDatabase>(),
+      dao: sl<InventoryAdjustmentDao>(),
+      journal: sl<JournalEntryService>(),
+    ),
   );
 
   // Purchases
   sl.registerLazySingleton<PurchaseLocalDatasource>(
-    () => PurchaseLocalDatasourceImpl(sl<PurchaseDao>()),
+    () => PurchaseLocalDatasourceImpl(sl<PurchaseDao>(), sl<AdjustmentReturnDao>()),
   );
   sl.registerLazySingleton<PurchaseRepository>(
     () => PurchaseRepositoryImpl(sl<PurchaseLocalDatasource>(), sl<AuditLogService>(), sl<SessionService>(), sl<JournalEntryService>(), sl<AppDatabase>()),
@@ -258,10 +426,34 @@ Future<void> init() async {
 
   // Sales
   sl.registerLazySingleton<SaleLocalDatasource>(
-    () => SaleLocalDatasourceImpl(sl<SaleDao>()),
+    () => SaleLocalDatasourceImpl(sl<SaleDao>(), sl<AdjustmentReturnDao>()),
   );
   sl.registerLazySingleton<SaleRepository>(
-    () => SaleRepositoryImpl(sl<SaleLocalDatasource>(), sl<SaleDao>(), sl<EmployeeDao>(), sl<JournalEntryService>(), sl<AuditLogService>(), sl<SessionService>(), sl<LoyaltyRepository>()),
+    () => SaleRepositoryImpl(
+      sl<SaleLocalDatasource>(),
+      sl<SaleDao>(),
+      sl<JournalEntryService>(),
+      sl<AuditLogService>(),
+      sl<SessionService>(),
+      sl<LoyaltyRepository>(),
+      sl<CommissionService>(),
+      sl<LoyaltyPointsService>(),
+      einvoiceDispatch: sl<EInvoiceDispatchService>(),
+    ),
+  );
+
+  // Phase 15.0 — cheque lifecycle JE wiring. Orchestrates `cleared` /
+  // `bounced` / `cancelled` transitions across the cheque_confirmations
+  // DAO + the matching Purchase / Sale payment SoT, so a confirmed
+  // cheque actually settles the AP/AR balance + posts the Dr/Cr Bank
+  // journal entry.
+  sl.registerLazySingleton(
+    () => ChequeLifecycleService(
+      db: sl<AppDatabase>(),
+      confirmationDao: sl<ChequeConfirmationDao>(),
+      purchaseRepository: sl<PurchaseRepository>(),
+      saleRepository: sl<SaleRepository>(),
+    ),
   );
 
   // Customers
@@ -340,12 +532,13 @@ Future<void> init() async {
   sl.registerFactory(() => ProductFormBloc(sl<ProductRepository>(), sl<ProductVariantRepository>()));
   sl.registerFactory(() => ProductVariantsBloc(sl<ProductVariantRepository>()));
   sl.registerFactory(() => BulkProductBloc(sl<ProductRepository>(), sl<ProductVariantRepository>()));
-  sl.registerFactory(() => EditPricesBloc(sl<ProductRepository>()));
+  sl.registerFactory(() => EditPricesBloc(sl<ProductRepository>(), sl<ProductVariantRepository>()));
   sl.registerFactory(() => CategoriesBloc(sl<CategoryRepository>()));
   sl.registerFactory(() => ColorsBloc(sl<ProductColorRepository>()));
   sl.registerFactory(() => SizesBloc(sl<SizeRepository>()));
   sl.registerFactory(() => VariantSummariesBloc(sl<ProductVariantRepository>()));
   sl.registerFactory(() => VariantPreviewsBloc(sl<ProductVariantRepository>()));
+  sl.registerFactory(() => ExpirySummariesBloc(sl<ProductRepository>()));
   sl.registerFactory(() => ImportProductsBloc(
     parseImportFile: sl<ParseImportFile>(),
     validateImportData: sl<ValidateImportData>(),
@@ -558,12 +751,28 @@ Future<void> init() async {
   sl.registerLazySingleton(() => CrashlyticsService.instance);
 
   sl.registerLazySingleton(() => BarcodeValidationService());
+  sl.registerLazySingleton(() => BarcodeGenerationService());
   sl.registerLazySingleton(() => BarcodePrinterService(settingsDao: sl()));
 
   // Settings Services
   sl.registerLazySingleton(() => CompanyProfileService(sl()));
   sl.registerLazySingleton(() => AppSettingsService(sl()));
-  
+
+  // Inventory Valuation Service — single source of truth for the
+  // business-wide inventory valuation method (WAC | FIFO). Lives in the
+  // settings cluster because it reads/writes a single row in app_settings.
+  sl.registerLazySingleton(
+    () => InventoryValuationService(sl<SettingsDao>()),
+  );
+
+  // Expiry Alert Service — single owner of the SQL that powers the Phase E
+  // dashboard widget AND the full report screen. Both surfaces render
+  // identical numbers because they read through the same service stream.
+  sl.registerLazySingleton(
+    () => ExpiryAlertService(sl<AppDatabase>()),
+  );
+  sl.registerFactory(() => ExpiryAlertsBloc(sl<ExpiryAlertService>()));
+
   // Settings Blocs
   sl.registerFactory(() => CompanyBloc(sl<CompanyProfileService>()));
   sl.registerLazySingleton(() => AppSettingsBloc(sl<AppSettingsService>()));
@@ -593,7 +802,7 @@ Future<void> init() async {
   // Configure SessionService to use AppSettings for timeout
   sl<SessionService>().configureTimeoutSettings(() {
     final settings = sl<AppSettingsBloc>().state.settings;
-    return (enabled: settings.enableSessionTimeout, timeoutMinutes: settings.sessionTimeoutMinutes);
+    return (enabled: settings.enableSessionTimeout, timeoutMinutes: settings.sessionTimeoutMinutes, rememberMeDurationHours: settings.rememberMeDurationHours);
   });
   
   // Barcode Blocs

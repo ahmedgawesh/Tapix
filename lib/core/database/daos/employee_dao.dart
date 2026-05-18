@@ -489,7 +489,34 @@ class EmployeeDao extends DatabaseAccessor<AppDatabase>
   }
 
   /// Get sales statistics for an employee within a date range.
+  ///
   /// Returns: {salesCount, salesTotalCents, returnsCount, returnsTotalCents}
+  ///
+  /// Aggregates from **all** salesperson-attribution paths supported by the
+  /// sales engine — keeping this query as the single source of truth that
+  /// both the employee detail screen and the target-bonus calculation in
+  /// `EmployeeDetailBloc._onSettleAccount` consume:
+  ///
+  /// **Sales**
+  /// * Per-invoice mode — `sales.employee_id = ?` → credit the full
+  ///   `sales.total_cents` to this employee for that sale.
+  /// * Per-item mode — `sales.employee_id IS NULL` and one or more
+  ///   `sale_items.employee_id = ?` → credit the sum of those items'
+  ///   `sale_items.total_cents`. Same distinct sale only counts once.
+  ///
+  /// **Returns** (both linked and adjustment / unlinked are included)
+  /// * Linked return on a per-invoice-mode sale → full `sale_returns.total_cents`.
+  /// * Linked return on a per-item-mode sale → sum of
+  ///   `sale_return_items.refund_cents` whose originating sale item is
+  ///   assigned to this employee.
+  /// * Adjustment return — `sale_return_adjustments.employee_id = ?` →
+  ///   full `sale_return_adjustments.total_cents`.
+  ///
+  /// Voided rows (`status = 'voided'`) are excluded across every path.
+  /// The per-invoice and per-item branches use mutually exclusive
+  /// `employee_id IS NULL` / `IS NOT NULL` predicates on the header,
+  /// matching the commission attribution rule in `SaleRepositoryImpl`,
+  /// so the same sale can never be credited twice.
   Future<Map<String, int>> getEmployeeSalesStats(
     int employeeId,
     DateTime periodStart,
@@ -497,16 +524,36 @@ class EmployeeDao extends DatabaseAccessor<AppDatabase>
   ) async {
     final salesResult = await customSelect(
       '''
-      SELECT 
-        COUNT(s.id) AS sales_count,
-        COALESCE(SUM(s.total_cents), 0) AS sales_total
-      FROM sales s
-      WHERE s.employee_id = ?
-        AND s.sale_date >= ?
-        AND s.sale_date <= ?
-        AND s.status != 'voided'
+      SELECT
+        COUNT(*) AS sales_count,
+        COALESCE(SUM(contribution_cents), 0) AS sales_total
+      FROM (
+        -- Per-invoice mode: the whole sale is credited to the header employee.
+        SELECT s.id AS sale_id, s.total_cents AS contribution_cents
+        FROM sales s
+        WHERE s.employee_id = ?
+          AND s.sale_date >= ?
+          AND s.sale_date <= ?
+          AND s.status != 'voided'
+        UNION ALL
+        -- Per-item mode: header is NULL, sum only this employee's line items.
+        SELECT s.id AS sale_id,
+               COALESCE(SUM(si.total_cents), 0) AS contribution_cents
+        FROM sales s
+        INNER JOIN sale_items si ON si.sale_id = s.id
+        WHERE s.employee_id IS NULL
+          AND si.employee_id = ?
+          AND s.sale_date >= ?
+          AND s.sale_date <= ?
+          AND s.status != 'voided'
+        GROUP BY s.id
+        HAVING SUM(si.total_cents) > 0
+      )
       ''',
       variables: [
+        Variable.withInt(employeeId),
+        Variable.withDateTime(periodStart),
+        Variable.withDateTime(periodEnd),
         Variable.withInt(employeeId),
         Variable.withDateTime(periodStart),
         Variable.withDateTime(periodEnd),
@@ -515,17 +562,51 @@ class EmployeeDao extends DatabaseAccessor<AppDatabase>
 
     final returnsResult = await customSelect(
       '''
-      SELECT 
-        COUNT(sr.id) AS returns_count,
-        COALESCE(SUM(sr.total_cents), 0) AS returns_total
-      FROM sale_returns sr
-      INNER JOIN sales s ON s.id = sr.sale_id
-      WHERE s.employee_id = ?
-        AND sr.return_date >= ?
-        AND sr.return_date <= ?
-        AND sr.status != 'voided'
+      SELECT
+        COUNT(*) AS returns_count,
+        COALESCE(SUM(contribution_cents), 0) AS returns_total
+      FROM (
+        -- A) Linked return on per-invoice-mode sale: full return total.
+        SELECT sr.id AS ref_id, sr.total_cents AS contribution_cents
+        FROM sale_returns sr
+        INNER JOIN sales s ON s.id = sr.sale_id
+        WHERE s.employee_id = ?
+          AND sr.return_date >= ?
+          AND sr.return_date <= ?
+          AND sr.status != 'voided'
+        UNION ALL
+        -- B) Linked return on per-item-mode sale: sum only this employee's
+        --    return lines (via the original sale_items.employee_id link).
+        SELECT sr.id AS ref_id,
+               COALESCE(SUM(sri.refund_cents), 0) AS contribution_cents
+        FROM sale_returns sr
+        INNER JOIN sales s ON s.id = sr.sale_id
+        INNER JOIN sale_return_items sri ON sri.return_id = sr.id
+        INNER JOIN sale_items si ON si.id = sri.sale_item_id
+        WHERE s.employee_id IS NULL
+          AND si.employee_id = ?
+          AND sr.return_date >= ?
+          AND sr.return_date <= ?
+          AND sr.status != 'voided'
+        GROUP BY sr.id
+        HAVING SUM(sri.refund_cents) > 0
+        UNION ALL
+        -- C) Adjustment (unlinked) return: header employee_id.
+        SELECT sra.id AS ref_id, sra.total_cents AS contribution_cents
+        FROM sale_return_adjustments sra
+        WHERE sra.employee_id = ?
+          AND sra.return_date >= ?
+          AND sra.return_date <= ?
+          AND sra.status != 'voided'
+      )
       ''',
       variables: [
+        Variable.withInt(employeeId),
+        Variable.withDateTime(periodStart),
+        Variable.withDateTime(periodEnd),
+        Variable.withInt(employeeId),
+        Variable.withDateTime(periodStart),
+        Variable.withDateTime(periodEnd),
         Variable.withInt(employeeId),
         Variable.withDateTime(periodStart),
         Variable.withDateTime(periodEnd),

@@ -7,6 +7,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../../../core/widgets/inputs/select_all_on_focus.dart';
 import '../../domain/repositories/loyalty_repository.dart';
 
 /// Full-screen loyalty settings with tier management
@@ -323,6 +324,7 @@ class _LoyaltySettingsScreenState extends State<LoyaltySettingsScreen>
                     controller: _pointsPerUnitCtrl,
                     keyboardType: TextInputType.number,
                     inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    onTap: () => selectAllText(_pointsPerUnitCtrl),
                     decoration: InputDecoration(
                       labelText: 'customers.loyalty_points_per_unit'.tr(),
                       helperText: 'customers.loyalty_points_per_unit_hint'.tr(),
@@ -336,6 +338,7 @@ class _LoyaltySettingsScreenState extends State<LoyaltySettingsScreen>
                     controller: _minSpendCtrl,
                     keyboardType:
                         const TextInputType.numberWithOptions(decimal: true),
+                    onTap: () => selectAllText(_minSpendCtrl),
                     decoration: InputDecoration(
                       labelText: 'customers.loyalty_min_spend'.tr(),
                       helperText: 'customers.loyalty_min_spend_hint'.tr(),
@@ -382,6 +385,7 @@ class _LoyaltySettingsScreenState extends State<LoyaltySettingsScreen>
                     controller: _pointValueCtrl,
                     keyboardType: TextInputType.number,
                     inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    onTap: () => selectAllText(_pointValueCtrl),
                     decoration: InputDecoration(
                       labelText: 'customers.loyalty_point_value'.tr(),
                       helperText: 'customers.loyalty_point_value_hint'.tr(),
@@ -396,6 +400,7 @@ class _LoyaltySettingsScreenState extends State<LoyaltySettingsScreen>
                     controller: _minRedemptionCtrl,
                     keyboardType: TextInputType.number,
                     inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    onTap: () => selectAllText(_minRedemptionCtrl),
                     decoration: InputDecoration(
                       labelText: 'customers.loyalty_min_redemption'.tr(),
                       helperText: 'customers.loyalty_min_redemption_hint'.tr(),
@@ -409,6 +414,7 @@ class _LoyaltySettingsScreenState extends State<LoyaltySettingsScreen>
                     controller: _maxPercentCtrl,
                     keyboardType: TextInputType.number,
                     inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    onTap: () => selectAllText(_maxPercentCtrl),
                     decoration: InputDecoration(
                       labelText: 'customers.loyalty_max_percent'.tr(),
                       helperText: 'customers.loyalty_max_percent_hint'.tr(),
@@ -931,6 +937,7 @@ class _TierEditDialogState extends State<_TierEditDialog> {
                         controller: _minPointsCtrl,
                         keyboardType: TextInputType.number,
                         inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                        onTap: () => selectAllText(_minPointsCtrl),
                         decoration: InputDecoration(
                           labelText: 'customers.loyalty_min_points'.tr(),
                           border: const OutlineInputBorder(),
@@ -944,6 +951,7 @@ class _TierEditDialogState extends State<_TierEditDialog> {
                         controller: _maxPointsCtrl,
                         keyboardType: TextInputType.number,
                         inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                        onTap: () => selectAllText(_maxPointsCtrl),
                         decoration: InputDecoration(
                           labelText: 'customers.loyalty_max_points'.tr(),
                           hintText: '∞',
@@ -972,6 +980,7 @@ class _TierEditDialogState extends State<_TierEditDialog> {
                         controller: _multiplierCtrl,
                         keyboardType:
                             const TextInputType.numberWithOptions(decimal: true),
+                        onTap: () => selectAllText(_multiplierCtrl),
                         decoration: InputDecoration(
                           labelText: 'customers.loyalty_points_multiplier'.tr(),
                           suffixText: 'x',
@@ -985,6 +994,7 @@ class _TierEditDialogState extends State<_TierEditDialog> {
                       child: TextField(
                         controller: _discountCtrl,
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        onTap: () => selectAllText(_discountCtrl),
                         inputFormatters: [
                           FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
                         ],
@@ -1029,6 +1039,7 @@ class _TierEditDialogState extends State<_TierEditDialog> {
                   controller: _earlyAccessCtrl,
                   keyboardType: TextInputType.number,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  onTap: () => selectAllText(_earlyAccessCtrl),
                   decoration: InputDecoration(
                     labelText: 'customers.loyalty_early_access'.tr(),
                     suffixText: 'common.days'.tr(),
@@ -1061,6 +1072,7 @@ class _TierEditDialogState extends State<_TierEditDialog> {
                           controller: _birthdayPointsCtrl,
                           keyboardType: TextInputType.number,
                           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                          onTap: () => selectAllText(_birthdayPointsCtrl),
                           decoration: InputDecoration(
                             labelText: 'customers.loyalty_birthday_points'.tr(),
                             border: const OutlineInputBorder(),
@@ -1076,6 +1088,7 @@ class _TierEditDialogState extends State<_TierEditDialog> {
                           controller: _birthdayDiscountCtrl,
                           keyboardType: TextInputType.number,
                           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                          onTap: () => selectAllText(_birthdayDiscountCtrl),
                           decoration: InputDecoration(
                             labelText: 'customers.loyalty_birthday_discount'.tr(),
                             suffixText: '%',

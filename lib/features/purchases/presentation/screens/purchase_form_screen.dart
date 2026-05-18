@@ -10,6 +10,7 @@ import 'package:decimal/decimal.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../../../core/widgets/inputs/select_all_on_focus.dart';
 import '../../../../core/database/app_database.dart' show Supplier;
 import '../../../products/domain/entities/product_entity.dart';
 import '../../../products/domain/entities/product_variant_entity.dart';
@@ -53,6 +54,7 @@ class PurchaseFormScreen extends StatelessWidget {
             currencyId: 1,
             enableTaxCalculations: enableTax,
             defaultPurchaseTaxRateBps: taxRateBps,
+            taxInclusivePricing: settings.taxInclusivePricing,
             isEditingPosted: isEditingPosted,
           ))),
         BlocProvider(create: (context) => sl<ProductsBloc>()),
@@ -1823,6 +1825,11 @@ class _EditItemSheetState extends State<_EditItemSheet> {
   bool _updatingDiscount = false;
   bool _saving = false;
 
+  /// Trigger a rebuild so the totals preview stays in sync.
+  void _rebuildTotals() {
+    if (mounted) setState(() {});
+  }
+
   void _onSubtotalChanged() {
     if (_updatingDiscount) return;
 
@@ -1874,6 +1881,15 @@ class _EditItemSheetState extends State<_EditItemSheet> {
     // Keep discount values reactive when subtotal changes.
     _qtyCtrl.addListener(_onSubtotalChanged);
     _costCtrl.addListener(_onSubtotalChanged);
+
+    // Rebuild totals preview whenever any input changes.
+    _qtyCtrl.addListener(_rebuildTotals);
+    _costCtrl.addListener(_rebuildTotals);
+    _discountPercentCtrl.addListener(_rebuildTotals);
+    _discountFixedCtrl.addListener(_rebuildTotals);
+    // Keep below-cost warning reactive to sell/wholesale price changes.
+    _sellPriceCtrl.addListener(_rebuildTotals);
+    _wholesalePriceCtrl.addListener(_rebuildTotals);
   }
 
   int get _currentSubtotalCents {
@@ -1915,6 +1931,12 @@ class _EditItemSheetState extends State<_EditItemSheet> {
   void dispose() {
     _qtyCtrl.removeListener(_onSubtotalChanged);
     _costCtrl.removeListener(_onSubtotalChanged);
+    _qtyCtrl.removeListener(_rebuildTotals);
+    _costCtrl.removeListener(_rebuildTotals);
+    _discountPercentCtrl.removeListener(_rebuildTotals);
+    _discountFixedCtrl.removeListener(_rebuildTotals);
+    _sellPriceCtrl.removeListener(_rebuildTotals);
+    _wholesalePriceCtrl.removeListener(_rebuildTotals);
     _qtyCtrl.dispose();
     _costCtrl.dispose();
     _sellPriceCtrl.dispose();
@@ -2125,6 +2147,7 @@ class _EditItemSheetState extends State<_EditItemSheet> {
                             controller: _qtyCtrl,
                             keyboardType: TextInputType.number,
                             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                            onTap: () => selectAllText(_qtyCtrl),
                             decoration: InputDecoration(
                               labelText: 'purchases.quantity'.tr(),
                               border: const OutlineInputBorder(),
@@ -2138,6 +2161,7 @@ class _EditItemSheetState extends State<_EditItemSheet> {
                             controller: _costCtrl,
                             keyboardType: const TextInputType.numberWithOptions(decimal: true),
                             inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
+                            onTap: () => selectAllText(_costCtrl),
                             decoration: InputDecoration(
                               labelText: 'purchases.new_cost'.tr(),
                               border: const OutlineInputBorder(),
@@ -2156,6 +2180,7 @@ class _EditItemSheetState extends State<_EditItemSheet> {
                             controller: _sellPriceCtrl,
                             keyboardType: const TextInputType.numberWithOptions(decimal: true),
                             inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
+                            onTap: () => selectAllText(_sellPriceCtrl),
                             decoration: InputDecoration(
                               labelText: 'purchases.new_sell_price'.tr(),
                               border: const OutlineInputBorder(),
@@ -2169,6 +2194,7 @@ class _EditItemSheetState extends State<_EditItemSheet> {
                             controller: _wholesalePriceCtrl,
                             keyboardType: const TextInputType.numberWithOptions(decimal: true),
                             inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
+                            onTap: () => selectAllText(_wholesalePriceCtrl),
                             decoration: InputDecoration(
                               labelText: 'purchases.new_wholesale_price'.tr(),
                               border: const OutlineInputBorder(),
@@ -2178,6 +2204,44 @@ class _EditItemSheetState extends State<_EditItemSheet> {
                         ),
                       ],
                     ),
+                    // ── Below-cost warning (sell or wholesale price < cost) ──
+                    Builder(builder: (context) {
+                      final costVal = double.tryParse(_costCtrl.text) ?? 0;
+                      final sellVal = double.tryParse(_sellPriceCtrl.text) ?? 0;
+                      final wholesaleVal = double.tryParse(_wholesalePriceCtrl.text) ?? 0;
+                      final sellBelow = sellVal > 0 && costVal > 0 && sellVal < costVal;
+                      final wholesaleBelow = wholesaleVal > 0 && costVal > 0 && wholesaleVal < costVal;
+                      if (!sellBelow && !wholesaleBelow) {
+                        return const SizedBox.shrink();
+                      }
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: cs.tertiaryContainer.withValues(alpha: 0.35),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: cs.tertiary.withValues(alpha: 0.4)),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(LucideIcons.alertTriangle,
+                                  size: 16, color: cs.tertiary),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'products.warning_price_below_cost'.tr(),
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: cs.tertiary,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }),
                     // ── Discount (% and fixed, auto-sync) ──
                     if (widget.discountMode == DiscountMode.perItem) ...[
                       const SizedBox(height: 16),
@@ -2188,6 +2252,7 @@ class _EditItemSheetState extends State<_EditItemSheet> {
                               controller: _discountPercentCtrl,
                               keyboardType: const TextInputType.numberWithOptions(decimal: true),
                               inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
+                              onTap: () => selectAllText(_discountPercentCtrl),
                               decoration: InputDecoration(
                                 labelText: 'purchases.discount_percent'.tr(),
                                 border: const OutlineInputBorder(),
@@ -2202,6 +2267,7 @@ class _EditItemSheetState extends State<_EditItemSheet> {
                               controller: _discountFixedCtrl,
                               keyboardType: const TextInputType.numberWithOptions(decimal: true),
                               inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
+                              onTap: () => selectAllText(_discountFixedCtrl),
                               decoration: InputDecoration(
                                 labelText: 'purchases.discount_fixed'.tr(),
                                 border: const OutlineInputBorder(),
@@ -2213,49 +2279,112 @@ class _EditItemSheetState extends State<_EditItemSheet> {
                       ),
                     ],
                     // ── Expiry Date ──
+                    // Required when the product is batch_expiry-tracked
+                    // (Phase C — two-layer inventory architecture). The
+                    // border, icon, label and a help row below switch to the
+                    // error palette until the user picks a date, and the
+                    // Save button is disabled in the same condition.
                     const SizedBox(height: 16),
-                    InkWell(
-                      borderRadius: BorderRadius.circular(8),
-                      onTap: () async {
-                        final date = await showDatePicker(
-                          context: context,
-                          initialDate: _expiryDate ?? DateTime.now().add(const Duration(days: 180)),
-                          firstDate: DateTime.now(),
-                          lastDate: DateTime.now().add(const Duration(days: 3650)),
-                        );
-                        if (date != null) {
-                          setState(() => _expiryDate = date);
-                        }
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: cs.outline),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(LucideIcons.calendarClock, size: 18,
-                                color: _expiryDate != null ? Colors.orange : cs.onSurfaceVariant),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                _expiryDate != null
-                                    ? '${'purchases.expiry'.tr()}: ${DateFormat.yMMMd().format(_expiryDate!)}'
-                                    : 'purchases.set_expiry'.tr(),
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                    color: _expiryDate != null ? null : cs.onSurfaceVariant),
+                    Builder(builder: (context) {
+                      final requiresExpiry =
+                          widget.item.product.inventoryTrackingType ==
+                              'batch_expiry';
+                      final missingRequired =
+                          requiresExpiry && _expiryDate == null;
+                      final borderColor = missingRequired
+                          ? cs.error
+                          : (_expiryDate != null
+                              ? Colors.orange
+                              : cs.outline);
+                      final iconColor = missingRequired
+                          ? cs.error
+                          : (_expiryDate != null
+                              ? Colors.orange
+                              : cs.onSurfaceVariant);
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          InkWell(
+                            borderRadius: BorderRadius.circular(8),
+                            onTap: () async {
+                              final date = await showDatePicker(
+                                context: context,
+                                initialDate: _expiryDate ??
+                                    DateTime.now()
+                                        .add(const Duration(days: 180)),
+                                firstDate: DateTime.now(),
+                                lastDate: DateTime.now()
+                                    .add(const Duration(days: 3650)),
+                              );
+                              if (date != null) {
+                                setState(() => _expiryDate = date);
+                              }
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 14),
+                              decoration: BoxDecoration(
+                                border: Border.all(color: borderColor),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(LucideIcons.calendarClock,
+                                      size: 18, color: iconColor),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      _expiryDate != null
+                                          ? '${'purchases.expiry'.tr()}: ${DateFormat.yMMMd().format(_expiryDate!)}'
+                                          : (requiresExpiry
+                                              ? 'purchases.expiry_required'
+                                                  .tr()
+                                              : 'purchases.set_expiry'.tr()),
+                                      style: theme.textTheme.bodyMedium
+                                          ?.copyWith(
+                                              color: missingRequired
+                                                  ? cs.error
+                                                  : (_expiryDate != null
+                                                      ? null
+                                                      : cs.onSurfaceVariant),
+                                              fontWeight: missingRequired
+                                                  ? FontWeight.w600
+                                                  : null),
+                                    ),
+                                  ),
+                                  if (_expiryDate != null && !requiresExpiry)
+                                    InkWell(
+                                      onTap: () => setState(
+                                          () => _expiryDate = null),
+                                      child: Icon(LucideIcons.x,
+                                          size: 16,
+                                          color: cs.onSurfaceVariant),
+                                    ),
+                                ],
                               ),
                             ),
-                            if (_expiryDate != null)
-                              InkWell(
-                                onTap: () => setState(() => _expiryDate = null),
-                                child: Icon(LucideIcons.x, size: 16, color: cs.onSurfaceVariant),
-                              ),
+                          ),
+                          if (missingRequired) ...[
+                            const SizedBox(height: 6),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Icon(LucideIcons.alertTriangle,
+                                    size: 14, color: cs.error),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    'purchases.expiry_required_help'.tr(),
+                                    style: theme.textTheme.bodySmall
+                                        ?.copyWith(color: cs.error),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ],
-                        ),
-                      ),
-                    ),
+                        ],
+                      );
+                    }),
                   ],
                 ),
               ),
@@ -2284,9 +2413,17 @@ class _EditItemSheetState extends State<_EditItemSheet> {
                   child: Column(children: [
                     Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                       Text('purchases.subtotal'.tr(), style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
-                      Text(widget.currencyService.format(netCents > 0 ? netCents : 0),
+                      Text(widget.currencyService.format(subtotalCents > 0 ? subtotalCents : 0),
                         style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500)),
                     ]),
+                    if (discCents > 0) ...[
+                      const SizedBox(height: 4),
+                      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                        Text('purchases.discount'.tr(), style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                        Text('- ${widget.currencyService.format(discCents)}',
+                          style: theme.textTheme.bodySmall?.copyWith(color: cs.tertiary)),
+                      ]),
+                    ],
                     if (taxCents > 0) ...[
                       const SizedBox(height: 4),
                       Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
@@ -2316,10 +2453,16 @@ class _EditItemSheetState extends State<_EditItemSheet> {
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: FilledButton.icon(
+                    child: Builder(builder: (context) {
+                      final requiresExpiry =
+                          widget.item.product.inventoryTrackingType ==
+                              'batch_expiry';
+                      final missingRequired =
+                          requiresExpiry && _expiryDate == null;
+                      return FilledButton.icon(
                       icon: const Icon(LucideIcons.check, size: 18),
                       label: Text('common.save'.tr()),
-                      onPressed: _saving
+                      onPressed: _saving || missingRequired
                           ? null
                           : () {
                               setState(() => _saving = true);
@@ -2362,7 +2505,8 @@ class _EditItemSheetState extends State<_EditItemSheet> {
                                 if (mounted) setState(() => _saving = false);
                               }
                             },
-                    ),
+                      );
+                    }),
                   ),
                 ],
               ),
@@ -2851,6 +2995,7 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                                     controller: _discountPercentCtrl,
                                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                                     inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
+                                    onTap: () => selectAllText(_discountPercentCtrl),
                                     decoration: InputDecoration(
                                       labelText: 'purchases.discount_percent'.tr(),
                                       border: const OutlineInputBorder(),
@@ -2865,6 +3010,7 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                                     controller: _discountFixedCtrl,
                                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                                     inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
+                                    onTap: () => selectAllText(_discountFixedCtrl),
                                     decoration: InputDecoration(
                                       labelText: 'purchases.discount_fixed'.tr(),
                                       border: const OutlineInputBorder(),
@@ -2888,6 +3034,7 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                             controller: _paidCtrl,
                             keyboardType: const TextInputType.numberWithOptions(decimal: true),
                             inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
+                            onTap: () => selectAllText(_paidCtrl),
                             decoration: InputDecoration(
                               border: const OutlineInputBorder(),
                               hintText: (state.totalCents.toBigInt().toInt() / 100).toStringAsFixed(2),

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
@@ -11,9 +12,14 @@ import '../../../settings/data/services/company_profile_service.dart';
 import '../../../settings/domain/entities/company_profile.dart';
 import '../../../settings/domain/entities/app_settings.dart';
 import '../../../settings/presentation/bloc/app_settings_bloc.dart';
+import '../../../../core/database/app_database.dart';
+import '../../../../core/database/daos/adjustment_return_dao.dart'
+    show PurchaseAdjReturnItemWithDetails;
 import '../../domain/entities/purchase_entity.dart';
 import '../../../suppliers/domain/repositories/supplier_repository.dart';
 import '../bloc/purchase_form_bloc.dart';
+import '../bloc/purchase_adj_return_form_bloc.dart'
+    show parseAdjReturnNotes, adjReturnReasonLabel;
 
 class PurchasePdfService {
   /// Generate and print a purchase invoice PDF from saved purchase data
@@ -137,6 +143,7 @@ class PurchasePdfService {
     final locale = context.locale;
     final isRtl = locale.languageCode == 'ar';
     final company = await sl<CompanyProfileService>().getProfile();
+    final appSettings = sl<AppSettingsBloc>().state.settings;
 
     final pdf = await _buildPurchaseReturnPdf(
       originalPurchase: originalPurchase,
@@ -146,6 +153,7 @@ class PurchasePdfService {
       locale: locale,
       isRtl: isRtl,
       company: company,
+      appSettings: appSettings,
     );
 
     await Printing.layoutPdf(
@@ -165,6 +173,7 @@ class PurchasePdfService {
     final locale = context.locale;
     final isRtl = locale.languageCode == 'ar';
     final company = await sl<CompanyProfileService>().getProfile();
+    final appSettings = sl<AppSettingsBloc>().state.settings;
 
     final pdf = await _buildPurchaseReturnPdf(
       originalPurchase: originalPurchase,
@@ -174,6 +183,7 @@ class PurchasePdfService {
       locale: locale,
       isRtl: isRtl,
       company: company,
+      appSettings: appSettings,
     );
 
     final bytes = await pdf.save();
@@ -234,6 +244,7 @@ class PurchasePdfService {
                 invoiceNumber: purchase.purchaseNumber.isNotEmpty ? purchase.purchaseNumber : '${purchase.id}',
                 date: purchase.purchaseDate,
                 supplierName: purchase.supplierName,
+                paymentMethod: purchase.paymentMethod,
                 locale: locale,
                 fonts: fonts,
               ),
@@ -266,7 +277,7 @@ class PurchasePdfService {
                 pw.SizedBox(height: 12),
                 supplierBalanceWidget,
               ],
-              pw.Spacer(),
+              pw.SizedBox(height: 20),
               _buildFooter(fonts: fonts, locale: locale, receiptFooterText: appSettings.showHeaderFooterOnPurchases ? appSettings.receiptFooterText : null),
             ],
           );
@@ -323,12 +334,14 @@ class PurchasePdfService {
                 isRtl: isRtl,
                 receiptHeaderText: appSettings.showHeaderFooterOnPurchases ? appSettings.receiptHeaderText : null,
                 taxRegistrationNumber: appSettings.taxRegistrationNumber,
+                showLogo: appSettings.showLogoOnReceipt,
               ),
               pw.SizedBox(height: 16),
               _buildInvoiceInfo(
                 invoiceNumber: state.purchaseNumber ?? '${state.purchaseId ?? ''}',
                 date: state.purchaseDate,
                 supplierName: state.supplierName,
+                paymentMethod: state.paymentMethod.name,
                 locale: locale,
                 fonts: fonts,
               ),
@@ -379,7 +392,7 @@ class PurchasePdfService {
                 pw.SizedBox(height: 12),
                 supplierBalanceWidget,
               ],
-              pw.Spacer(),
+              pw.SizedBox(height: 20),
               _buildFooter(fonts: fonts, locale: locale, receiptFooterText: appSettings.showHeaderFooterOnPurchases ? appSettings.receiptFooterText : null),
             ],
           );
@@ -401,6 +414,7 @@ class PurchasePdfService {
     required Locale locale,
     required bool isRtl,
     required CompanyProfile company,
+    required AppSettings appSettings,
   }) async {
     final fonts = await _loadFonts();
     final pdf = pw.Document();
@@ -433,6 +447,7 @@ class PurchasePdfService {
                 title: 'purchases.purchase_return'.tr(),
                 fonts: fonts,
                 isRtl: isRtl,
+                showLogo: appSettings.showLogoOnReceipt,
               ),
               pw.SizedBox(height: 16),
               // Return info
@@ -515,7 +530,7 @@ class PurchasePdfService {
                 pw.SizedBox(height: 12),
                 supplierBalanceWidget,
               ],
-              pw.Spacer(),
+              pw.SizedBox(height: 20),
               _buildFooter(fonts: fonts, locale: locale),
             ],
           );
@@ -546,6 +561,7 @@ class PurchasePdfService {
     required bool isRtl,
     String? receiptHeaderText,
     String? taxRegistrationNumber,
+    bool showLogo = true,
   }) {
     return pw.Container(
       padding: const pw.EdgeInsets.all(16),
@@ -562,6 +578,21 @@ class PurchasePdfService {
               pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
+                  if (showLogo && company.logoBase64 != null && company.logoBase64!.isNotEmpty)
+                    pw.Container(
+                      width: 40,
+                      height: 40,
+                      margin: const pw.EdgeInsets.only(bottom: 8),
+                      decoration: const pw.BoxDecoration(
+                        shape: pw.BoxShape.circle,
+                      ),
+                      child: pw.ClipOval(
+                        child: pw.Image(
+                          pw.MemoryImage(base64Decode(company.logoBase64!)),
+                          fit: pw.BoxFit.cover,
+                        ),
+                      ),
+                    ),
                   if (company.name.isNotEmpty)
                     _bidiText(company.name, fonts.bold, fontSize: 16),
                   if (company.address != null && company.address!.isNotEmpty)
@@ -585,10 +616,28 @@ class PurchasePdfService {
     );
   }
 
+  static String _translatePaymentMethod(String method) {
+    switch (method) {
+      case 'cash':
+        return 'purchases.payment_cash'.tr();
+      case 'credit':
+        return 'purchases.payment_credit'.tr();
+      case 'card':
+        return 'purchases.payment_card'.tr();
+      case 'cheque':
+        return 'purchases.payment_cheque'.tr();
+      case 'purchaseOrder':
+        return 'purchases.payment_po'.tr();
+      default:
+        return method;
+    }
+  }
+
   static pw.Widget _buildInvoiceInfo({
     required String invoiceNumber,
     required DateTime date,
     required String? supplierName,
+    String? paymentMethod,
     required Locale locale,
     required _PdfFonts fonts,
   }) {
@@ -606,6 +655,8 @@ class PurchasePdfService {
               DateFormat.yMMMd(locale.toString()).format(date), fonts.regular),
           if (supplierName != null)
             _pdfInfoRow('purchases.supplier'.tr(), supplierName, fonts.regular),
+          if (paymentMethod != null && paymentMethod.isNotEmpty)
+            _pdfInfoRow('purchases.payment_method'.tr(), _translatePaymentMethod(paymentMethod), fonts.regular),
         ],
       ),
     );
@@ -835,6 +886,12 @@ class PurchasePdfService {
           alignment: pw.Alignment.center,
           child: _bidiText(generatedText, fonts.regular, fontSize: 8, color: PdfColors.grey500),
         ),
+        pw.SizedBox(height: 4),
+        pw.Container(
+          alignment: pw.Alignment.center,
+          child: pw.Text('Powered by TapixSolutions',
+              style: pw.TextStyle(font: fonts.regular, fontSize: 7, color: PdfColors.grey400)),
+        ),
       ],
     );
   }
@@ -853,8 +910,8 @@ class PurchasePdfService {
 
   static pw.Widget _tableCell(String text, pw.Font font, {bool isHeader = false}) {
     return pw.Padding(
-      padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-      child: _bidiText(text, font, fontSize: isHeader ? 9 : 8),
+      padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+      child: _bidiText(text, font, fontSize: 7),
     );
   }
 
@@ -888,6 +945,307 @@ class PurchasePdfService {
       ),
     );
   }
+
+  // ═══════════════════════════════════════════════════════
+  // PURCHASE ADJUSTMENT RETURN PDF (not linked to a purchase)
+  // ═══════════════════════════════════════════════════════
+
+  /// Generate and print a purchase adjustment return PDF.
+  static Future<void> printPurchaseAdjReturn({
+    required BuildContext context,
+    required PurchaseReturnAdjustment returnEntity,
+    required List<PurchaseAdjReturnItemWithDetails> returnItems,
+    required String? supplierName,
+  }) async {
+    final cs = sl<CurrencyService>();
+    final locale = context.locale;
+    final isRtl = locale.languageCode == 'ar';
+    final company = await sl<CompanyProfileService>().getProfile();
+    final appSettings = sl<AppSettingsBloc>().state.settings;
+
+    final pdf = await _buildPurchaseAdjReturnPdf(
+      returnEntity: returnEntity,
+      returnItems: returnItems,
+      supplierName: supplierName,
+      cs: cs,
+      locale: locale,
+      isRtl: isRtl,
+      company: company,
+      appSettings: appSettings,
+    );
+
+    await Printing.layoutPdf(
+      onLayout: (PdfPageFormat format) async => pdf.save(),
+      name: 'PurchaseAdjReturn_${returnEntity.returnNumber}',
+    );
+  }
+
+  /// Generate and share a purchase adjustment return PDF.
+  static Future<void> sharePurchaseAdjReturn({
+    required BuildContext context,
+    required PurchaseReturnAdjustment returnEntity,
+    required List<PurchaseAdjReturnItemWithDetails> returnItems,
+    required String? supplierName,
+  }) async {
+    final cs = sl<CurrencyService>();
+    final locale = context.locale;
+    final isRtl = locale.languageCode == 'ar';
+    final company = await sl<CompanyProfileService>().getProfile();
+    final appSettings = sl<AppSettingsBloc>().state.settings;
+
+    final pdf = await _buildPurchaseAdjReturnPdf(
+      returnEntity: returnEntity,
+      returnItems: returnItems,
+      supplierName: supplierName,
+      cs: cs,
+      locale: locale,
+      isRtl: isRtl,
+      company: company,
+      appSettings: appSettings,
+    );
+
+    final bytes = await pdf.save();
+    await Printing.sharePdf(
+      bytes: bytes,
+      filename: 'PurchaseAdjReturn_${returnEntity.returnNumber}.pdf',
+    );
+  }
+
+  static Future<pw.Document> _buildPurchaseAdjReturnPdf({
+    required PurchaseReturnAdjustment returnEntity,
+    required List<PurchaseAdjReturnItemWithDetails> returnItems,
+    required String? supplierName,
+    required CurrencyService cs,
+    required Locale locale,
+    required bool isRtl,
+    required CompanyProfile company,
+    required AppSettings appSettings,
+  }) async {
+    final fonts = await _loadFonts();
+    final pdf = pw.Document();
+
+    // Supplier balance for the PDF footer (best-effort).
+    pw.Widget? supplierBalanceWidget;
+    try {
+      final supplierRepo = sl<SupplierRepository>();
+      final supplier = await supplierRepo.getSupplier(returnEntity.supplierId);
+      if (supplier != null) {
+        supplierBalanceWidget = _buildSupplierBalance(
+          supplierName: supplier.name,
+          balanceCents: supplier.balanceCents.toBigInt().toInt(),
+          cs: cs,
+          fonts: fonts,
+        );
+      }
+    } catch (_) {}
+
+    final parsed = parseAdjReturnNotes(returnEntity.notes);
+    final reasonText = parsed.reasonCode != null
+        ? adjReturnReasonLabel(parsed.reasonCode)
+        : null;
+    final userNotes = parsed.userNotes;
+
+    final subtotalCents = returnEntity.subtotalCents.toBigInt().toInt();
+    final discountCents = returnEntity.discountCents.toBigInt().toInt();
+    final taxCents = returnEntity.taxCents.toBigInt().toInt();
+    final totalCents = returnEntity.totalCents.toBigInt().toInt();
+    final totalPieces =
+        returnItems.fold<int>(0, (sum, d) => sum + d.item.quantity);
+
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        textDirection: isRtl ? pw.TextDirection.rtl : pw.TextDirection.ltr,
+        build: (pw.Context ctx) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+            children: [
+              _buildHeader(
+                company: company,
+                title: 'returns.adjustment_detail'.tr(),
+                fonts: fonts,
+                isRtl: isRtl,
+                showLogo: appSettings.showLogoOnReceipt,
+              ),
+              pw.SizedBox(height: 16),
+              // Return info box
+              pw.Container(
+                padding: const pw.EdgeInsets.all(12),
+                decoration: pw.BoxDecoration(
+                  border: pw.Border.all(color: PdfColors.grey300),
+                  borderRadius: pw.BorderRadius.circular(6),
+                ),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    _pdfInfoRow('purchases.return_number'.tr(),
+                        returnEntity.returnNumber, fonts.regular),
+                    _pdfInfoRow(
+                        'purchases.return_date'.tr(),
+                        DateFormat.yMMMd(locale.toString())
+                            .format(returnEntity.returnDate),
+                        fonts.regular),
+                    if (supplierName != null && supplierName.isNotEmpty)
+                      _pdfInfoRow('purchases.supplier'.tr(),
+                          supplierName, fonts.regular),
+                    _pdfInfoRow(
+                        'purchases.refund_method'.tr(),
+                        'purchases.refund_method_${returnEntity.refundMethod}'
+                            .tr(),
+                        fonts.regular),
+                    if (reasonText != null)
+                      _pdfInfoRow('returns.reason_label'.tr(),
+                          reasonText, fonts.regular),
+                    if (userNotes != null)
+                      _pdfInfoRow('common.notes'.tr(),
+                          userNotes, fonts.regular),
+                  ],
+                ),
+              ),
+              pw.SizedBox(height: 16),
+              // Items table
+              _buildAdjReturnItemsTable(
+                items: returnItems
+                    .map((d) => _AdjReturnItemRow(
+                          name: d.product.name,
+                          variantSku: d.variant?.sku,
+                          quantity: d.item.quantity,
+                          unitPriceCents:
+                              d.item.unitPriceCents.toBigInt().toInt(),
+                          totalCents:
+                              d.item.totalCents.toBigInt().toInt(),
+                        ))
+                    .toList(),
+                cs: cs,
+                fonts: fonts,
+              ),
+              pw.SizedBox(height: 16),
+              // Totals
+              pw.Container(
+                padding: const pw.EdgeInsets.all(12),
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.red50,
+                  border: pw.Border.all(color: PdfColors.red200),
+                  borderRadius: pw.BorderRadius.circular(6),
+                ),
+                child: pw.Column(
+                  children: [
+                    _pdfMoneyRow('purchases.total_items_count'.tr(),
+                        '${returnItems.length}', fonts.regular),
+                    _pdfMoneyRow('purchases.total_pieces_count'.tr(),
+                        '$totalPieces', fonts.regular),
+                    pw.SizedBox(height: 4),
+                    if (subtotalCents > 0)
+                      _pdfMoneyRow('purchases.subtotal'.tr(),
+                          cs.format(subtotalCents), fonts.regular),
+                    if (discountCents > 0)
+                      _pdfMoneyRow(
+                          'purchases.discount'.tr(),
+                          '- ${cs.format(discountCents)}',
+                          fonts.regular,
+                          valueColor: PdfColors.orange),
+                    if (taxCents > 0)
+                      _pdfMoneyRow('purchases.tax'.tr(),
+                          '+ ${cs.format(taxCents)}', fonts.regular),
+                    pw.Divider(thickness: 2),
+                    pw.Row(
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                      children: [
+                        _bidiText('purchases.return_total'.tr(), fonts.bold,
+                            fontSize: 14),
+                        pw.Text(cs.format(totalCents),
+                            style: pw.TextStyle(
+                              font: fonts.bold,
+                              fontSize: 14,
+                              color: PdfColors.red,
+                            )),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              if (supplierBalanceWidget != null) ...[
+                pw.SizedBox(height: 12),
+                supplierBalanceWidget,
+              ],
+              pw.SizedBox(height: 20),
+              _buildFooter(
+                fonts: fonts,
+                locale: locale,
+                receiptFooterText: appSettings.showHeaderFooterOnPurchases
+                    ? appSettings.receiptFooterText
+                    : null,
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    return pdf;
+  }
+
+  /// Compact items table shared by purchase/sale adj-return PDFs.
+  static pw.Widget _buildAdjReturnItemsTable({
+    required List<_AdjReturnItemRow> items,
+    required CurrencyService cs,
+    required _PdfFonts fonts,
+  }) {
+    return pw.Table(
+      border: pw.TableBorder.all(color: PdfColors.grey300),
+      columnWidths: {
+        0: const pw.FlexColumnWidth(0.6),
+        1: const pw.FlexColumnWidth(3),
+        2: const pw.FlexColumnWidth(0.8),
+        3: const pw.FlexColumnWidth(1.4),
+        4: const pw.FlexColumnWidth(1.4),
+      },
+      children: [
+        pw.TableRow(
+          decoration: const pw.BoxDecoration(color: PdfColors.grey200),
+          children: [
+            _tableCell('#', fonts.bold, isHeader: true),
+            _tableCell('purchases.product'.tr(), fonts.bold, isHeader: true),
+            _tableCell('purchases.qty'.tr(), fonts.bold, isHeader: true),
+            _tableCell('purchases.unit_cost'.tr(), fonts.bold, isHeader: true),
+            _tableCell('purchases.total'.tr(), fonts.bold, isHeader: true),
+          ],
+        ),
+        ...items.asMap().entries.map((e) {
+          final idx = e.key;
+          final it = e.value;
+          final displayName = it.variantSku != null && it.variantSku!.isNotEmpty
+              ? '${it.name} (${it.variantSku})'
+              : it.name;
+          return pw.TableRow(
+            children: [
+              _tableCell('${idx + 1}', fonts.regular),
+              _tableCell(displayName, fonts.regular),
+              _tableCell('${it.quantity}', fonts.regular),
+              _tableCell(cs.format(it.unitPriceCents), fonts.regular),
+              _tableCell(cs.format(it.totalCents), fonts.regular),
+            ],
+          );
+        }),
+      ],
+    );
+  }
+}
+
+/// Lightweight row DTO used by the adj-return items table.
+class _AdjReturnItemRow {
+  final String name;
+  final String? variantSku;
+  final int quantity;
+  final int unitPriceCents;
+  final int totalCents;
+  const _AdjReturnItemRow({
+    required this.name,
+    this.variantSku,
+    required this.quantity,
+    required this.unitPriceCents,
+    required this.totalCents,
+  });
 }
 
 class _PdfFonts {

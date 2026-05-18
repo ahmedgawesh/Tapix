@@ -19,8 +19,8 @@ void main() {
   setUp(() {
     mockExportService = MockExportService();
     when(() => mockExportService.watchProducts(
-          categoryId: any(named: 'categoryId'),
-          supplierId: any(named: 'supplierId'),
+          categoryId: any(named: 'categoryId', that: anything),
+          supplierId: any(named: 'supplierId', that: anything),
           activeOnly: any(named: 'activeOnly'),
         )).thenAnswer((_) => const Stream.empty());
     exportBloc = ExportBloc(mockExportService);
@@ -57,8 +57,8 @@ void main() {
       'emits loading then success when LoadExportPreview subscribes',
       build: () {
         when(() => mockExportService.watchProducts(
-              categoryId: any(named: 'categoryId'),
-              supplierId: any(named: 'supplierId'),
+              categoryId: any(named: 'categoryId', that: anything),
+              supplierId: any(named: 'supplierId', that: anything),
               activeOnly: any(named: 'activeOnly'),
             )).thenAnswer((_) => Stream.value(testProducts));
         return ExportBloc(mockExportService);
@@ -78,8 +78,8 @@ void main() {
       'emits error when watchProducts stream errors',
       build: () {
         when(() => mockExportService.watchProducts(
-              categoryId: any(named: 'categoryId'),
-              supplierId: any(named: 'supplierId'),
+              categoryId: any(named: 'categoryId', that: anything),
+              supplierId: any(named: 'supplierId', that: anything),
               activeOnly: any(named: 'activeOnly'),
             )).thenAnswer((_) => Stream.error(Exception('Failed to load preview')));
         return ExportBloc(mockExportService);
@@ -96,14 +96,14 @@ void main() {
       'emits success payload when ExportToCSV succeeds',
       build: () {
         when(() => mockExportService.exportToCSV(
-          categoryId: any(named: 'categoryId'),
-          supplierId: any(named: 'supplierId'),
+          categoryId: any(named: 'categoryId', that: anything),
+          supplierId: any(named: 'supplierId', that: anything),
           activeOnly: any(named: 'activeOnly'),
           selectedProductIds: any(named: 'selectedProductIds'),
         )).thenAnswer((_) async => 'id,name\n1,Product 1');
         when(() => mockExportService.watchProducts(
-              categoryId: any(named: 'categoryId'),
-              supplierId: any(named: 'supplierId'),
+              categoryId: any(named: 'categoryId', that: anything),
+              supplierId: any(named: 'supplierId', that: anything),
               activeOnly: any(named: 'activeOnly'),
             )).thenAnswer((_) => Stream.value(testProducts));
         return ExportBloc(mockExportService);
@@ -130,14 +130,14 @@ void main() {
       'emits success payload when ExportToExcel succeeds',
       build: () {
         when(() => mockExportService.exportToExcel(
-          categoryId: any(named: 'categoryId'),
-          supplierId: any(named: 'supplierId'),
+          categoryId: any(named: 'categoryId', that: anything),
+          supplierId: any(named: 'supplierId', that: anything),
           activeOnly: any(named: 'activeOnly'),
           selectedProductIds: any(named: 'selectedProductIds'),
         )).thenAnswer((_) async => Uint8List.fromList([1, 2, 3]));
         when(() => mockExportService.watchProducts(
-              categoryId: any(named: 'categoryId'),
-              supplierId: any(named: 'supplierId'),
+              categoryId: any(named: 'categoryId', that: anything),
+              supplierId: any(named: 'supplierId', that: anything),
               activeOnly: any(named: 'activeOnly'),
             )).thenAnswer((_) => Stream.value(testProducts));
         return ExportBloc(mockExportService);
@@ -165,13 +165,13 @@ void main() {
       build: () {
         when(() => mockExportService.exportToCSV(
           categoryId: 5,
-          supplierId: any(named: 'supplierId'),
+          supplierId: any(named: 'supplierId', that: anything),
           activeOnly: any(named: 'activeOnly'),
           selectedProductIds: any(named: 'selectedProductIds'),
         )).thenAnswer((_) async => 'id,name\n1,Product 1');
         when(() => mockExportService.watchProducts(
-              categoryId: any(named: 'categoryId'),
-              supplierId: any(named: 'supplierId'),
+              categoryId: any(named: 'categoryId', that: anything),
+              supplierId: any(named: 'supplierId', that: anything),
               activeOnly: any(named: 'activeOnly'),
             )).thenAnswer((_) => Stream.value(testProducts));
         return ExportBloc(mockExportService);
@@ -184,7 +184,7 @@ void main() {
       verify: (_) {
         verify(() => mockExportService.exportToCSV(
           categoryId: 5,
-          supplierId: any(named: 'supplierId'),
+          supplierId: any(named: 'supplierId', that: anything),
           activeOnly: any(named: 'activeOnly'),
           selectedProductIds: any(named: 'selectedProductIds'),
         )).called(1);
@@ -195,8 +195,8 @@ void main() {
       'updates format selection in ui data',
       build: () {
         when(() => mockExportService.watchProducts(
-              categoryId: any(named: 'categoryId'),
-              supplierId: any(named: 'supplierId'),
+              categoryId: any(named: 'categoryId', that: anything),
+              supplierId: any(named: 'supplierId', that: anything),
               activeOnly: any(named: 'activeOnly'),
             )).thenAnswer((_) => Stream.value(testProducts));
         return ExportBloc(mockExportService);

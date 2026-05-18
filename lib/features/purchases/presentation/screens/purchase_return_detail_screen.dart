@@ -8,7 +8,9 @@ import 'package:easy_localization/easy_localization.dart';
 
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../../../core/widgets/pin_verification_dialog.dart';
 import '../../../auth/auth.dart';
+import '../../../settings/presentation/bloc/app_settings_bloc.dart';
 import '../../domain/entities/purchase_entity.dart';
 import '../../domain/repositories/purchase_repository.dart';
 import '../services/purchase_pdf_service.dart';
@@ -165,6 +167,13 @@ class _PurchaseReturnDetailScreenState
   Future<void> _voidReturn(BuildContext context) async {
     final messenger = ScaffoldMessenger.of(context);
     final errorColor = Theme.of(context).colorScheme.error;
+    // Check if PIN is required for void/refund
+    final settings = context.read<AppSettingsBloc>().state.settings;
+    if (settings.requirePinForVoidRefund) {
+      final pinOk = await showPinVerificationDialog(context);
+      if (!pinOk || !context.mounted) return;
+    }
+    if (!context.mounted) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(

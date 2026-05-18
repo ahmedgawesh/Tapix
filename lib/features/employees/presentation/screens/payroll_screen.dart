@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../../../core/widgets/inputs/select_all_on_focus.dart';
 import '../../domain/entities/employee_entity.dart';
 import '../../domain/repositories/employee_repository.dart';
 import '../../domain/services/payroll_calculation_service.dart';
@@ -594,6 +595,8 @@ class _PayrollCard extends StatelessWidget {
     final targetBonus = PayrollCalculationService.checkSalesTargetBonus(
       employee: employee,
       actualSalesCents: netSalesCents,
+      periodYear: payroll.periodStart.year,
+      periodMonth: payroll.periodStart.month,
     );
 
     if (!context.mounted) return;
@@ -1010,6 +1013,8 @@ class _CreatePayrollDialogState extends State<_CreatePayrollDialog> {
     final targetBonusResult = PayrollCalculationService.checkSalesTargetBonus(
       employee: employee,
       actualSalesCents: netSalesCents,
+      periodYear: year,
+      periodMonth: month,
     );
 
     final manualBonus = (double.tryParse(_bonusController.text) ?? 0) * 100;
@@ -1022,15 +1027,19 @@ class _CreatePayrollDialogState extends State<_CreatePayrollDialog> {
     if (_overtimeManuallyEdited) {
       overtimeCents = ((double.tryParse(_overtimeController.text) ?? 0) * 100).round();
     } else {
-      // hourlyRate = dailyRate / workingHoursPerDay
-      // overtimePay = overtimeMinutes * hourlyRate / 60
-      final dailyRateCents = employee.workingDaysPerPeriod > 0
-          ? (employee.salaryCents?.toBigInt().toInt() ?? 0) ~/ employee.workingDaysPerPeriod
-          : 0;
-      final hoursPerDay = employee.workingHoursPerDay;
-      overtimeCents = hoursPerDay > 0
-          ? (overtimeMinutes * dailyRateCents) ~/ (hoursPerDay * 60)
-          : 0;
+      // Respect the employee's configured overtime policy
+      // (hourly_rate × multiplier / percentage of daily rate / fixed per hour).
+      // Previously this call site ignored `overtimeCalcType` and `overtimeRateBps`
+      // entirely and paid 1× the regular hourly rate, underpaying employees with
+      // the conventional 1.5× (FLSA-style) multiplier.
+      overtimeCents = PayrollCalculationService.calculateOvertimeCents(
+        overtimeMinutes: overtimeMinutes,
+        salaryCents: employee.salaryCents?.toBigInt().toInt() ?? 0,
+        workingDaysPerPeriod: employee.workingDaysPerPeriod,
+        workingHoursPerDay: employee.workingHoursPerDay,
+        overtimeCalcType: employee.overtimeCalcType,
+        overtimeRateBps: employee.overtimeRateBps,
+      );
       // Pre-fill the controller with auto-calculated value
       final overtimeAmount = overtimeCents / 100;
       _overtimeController.text = overtimeAmount > 0 ? overtimeAmount.toStringAsFixed(2) : '';
@@ -1119,6 +1128,7 @@ class _CreatePayrollDialogState extends State<_CreatePayrollDialog> {
                       TextFormField(
                         controller: _bonusController,
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        onTap: () => selectAllText(_bonusController),
                         decoration: InputDecoration(
                           labelText: 'employees.bonus'.tr(),
                           prefixIcon: const Icon(Icons.card_giftcard_outlined),
@@ -1135,6 +1145,7 @@ class _CreatePayrollDialogState extends State<_CreatePayrollDialog> {
                       TextFormField(
                         controller: _overtimeController,
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        onTap: () => selectAllText(_overtimeController),
                         decoration: InputDecoration(
                           labelText: 'employees.overtime_pay'.tr(),
                           prefixIcon: const Icon(Icons.more_time_outlined),

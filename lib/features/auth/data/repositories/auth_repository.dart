@@ -37,7 +37,7 @@ class AuthRepository implements AuthRepositoryInterface {
   }
 
   @override
-  Future<UserEntity?> login(String username, String password) async {
+  Future<UserEntity?> login(String username, String password, {bool rememberMe = false}) async {
     final query = _database.select(_database.users)
       ..where((u) => u.username.equals(username))
       ..where((u) => u.isActive.equals(1));
@@ -50,7 +50,7 @@ class AuthRepository implements AuthRepositoryInterface {
     }
 
     await updateLastLogin(user.id);
-    await _sessionService.saveSession(user.id);
+    await _sessionService.saveSession(user.id, rememberMe: rememberMe);
 
     final entity = _mapToEntity(user);
     _userController.add(entity);
@@ -200,6 +200,23 @@ class AuthRepository implements AuthRepositoryInterface {
       securityAnswerHash: Value(hashedAnswer),
       updatedAt: Value(now),
     ));
+  }
+
+  @override
+  Future<UserEntity?> loginWithBiometrics() async {
+    // Re-authenticate using the last saved session user
+    final userId = await _sessionService.getCurrentUserId();
+    if (userId == null) return null;
+
+    final user = await _getUserById(userId);
+    if (user == null) return null;
+
+    // Refresh the session
+    await updateLastLogin(user.id);
+    await _sessionService.saveSession(user.id);
+
+    _userController.add(user);
+    return user;
   }
 
   UserEntity _mapToEntity(User user) {

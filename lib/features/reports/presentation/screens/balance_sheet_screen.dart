@@ -32,24 +32,13 @@ class _BalanceSheetView extends StatelessWidget {
     final assetItems = tb.getItemsByType('asset');
     final liabilityItems = tb.getItemsByType('liability');
     final equityItems = tb.getItemsByType('equity');
-    final revenueItems = tb.getItemsByType('revenue');
-    final expenseItems = tb.getItemsByType('expense');
 
-    // Assets: normal debit balance
-    final totalAssets = assetItems.fold<int>(
-        0, (sum, item) => sum + item.debitCents - item.creditCents);
-    // Liabilities: normal credit balance
-    final totalLiabilities = liabilityItems.fold<int>(
-        0, (sum, item) => sum + item.creditCents - item.debitCents);
-    // Owner's Capital: normal credit balance
-    final ownerCapital = equityItems.fold<int>(
-        0, (sum, item) => sum + item.creditCents - item.debitCents);
-    // Revenue: normal credit balance
-    final totalRevenue = revenueItems.fold<int>(
-        0, (sum, item) => sum + item.creditCents - item.debitCents);
-    // Expenses: normal debit balance
-    final totalExpenses = expenseItems.fold<int>(
-        0, (sum, item) => sum + item.debitCents - item.creditCents);
+    // Phase 7 — natural-balance signing via TrialBalance SoT.
+    final totalAssets = tb.totalForType('asset');
+    final totalLiabilities = tb.totalForType('liability');
+    final ownerCapital = tb.totalForType('equity');
+    final totalRevenue = tb.totalForType('revenue');
+    final totalExpenses = tb.totalForType('expense');
 
     // Net Income = Revenue - Expenses
     final netIncome = totalRevenue - totalExpenses;
@@ -223,7 +212,6 @@ class _BalanceSheetView extends StatelessWidget {
                   total: fig.totalAssets,
                   cs: cs,
                   color: colorScheme.primary,
-                  isDebitNatural: true,
                 ),
                 const SizedBox(height: 16),
 
@@ -235,7 +223,6 @@ class _BalanceSheetView extends StatelessWidget {
                   total: fig.totalLiabilities,
                   cs: cs,
                   color: colorScheme.error,
-                  isDebitNatural: false,
                 ),
                 const SizedBox(height: 16),
 
@@ -359,13 +346,15 @@ class _BalanceSheetView extends StatelessWidget {
 
   List<BalanceSheetSection> _buildBsSections(
       TrialBalance tb, CurrencyService cs, _BalanceSheetFigures fig) {
+    // Phase 8 — row-level natural-balance signing routes through the
+    // [TrialBalanceItem.naturalBalanceCents] SoT helper (Phase 7).
     List<BalanceSheetLineItem> toAssetLineItems(List<TrialBalanceItem> items) {
       return items
           .where((i) => i.debitCents > 0 || i.creditCents > 0)
           .map((i) => BalanceSheetLineItem(
                 code: i.accountCode,
                 name: i.accountName,
-                amountCents: i.debitCents - i.creditCents,
+                amountCents: i.naturalBalanceCents,
               ))
           .toList();
     }
@@ -376,7 +365,7 @@ class _BalanceSheetView extends StatelessWidget {
           .map((i) => BalanceSheetLineItem(
                 code: i.accountCode,
                 name: i.accountName,
-                amountCents: i.creditCents - i.debitCents,
+                amountCents: i.naturalBalanceCents,
               ))
           .toList();
     }
@@ -571,7 +560,6 @@ class _BalanceSection extends StatelessWidget {
   final int total;
   final CurrencyService cs;
   final Color color;
-  final bool isDebitNatural;
 
   const _BalanceSection({
     required this.title,
@@ -580,7 +568,6 @@ class _BalanceSection extends StatelessWidget {
     required this.total,
     required this.cs,
     required this.color,
-    required this.isDebitNatural,
   });
 
   @override
@@ -622,10 +609,8 @@ class _BalanceSection extends StatelessWidget {
         ],
         const SizedBox(height: 8),
         ...nonZero.map((item) {
-          // Show amount in its natural balance direction
-          final amount = isDebitNatural
-              ? item.debitCents - item.creditCents
-              : item.creditCents - item.debitCents;
+          // Phase 8 — natural-balance routing via the SoT helper.
+          final amount = item.naturalBalanceCents;
           return Padding(
             padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
             child: Row(
@@ -712,7 +697,8 @@ class _EquitySection extends StatelessWidget {
         const SizedBox(height: 8),
         // Owner's Capital accounts
         ...nonZero.map((item) {
-          final amount = item.creditCents - item.debitCents;
+          // Phase 8 — equity is credit-natural; route via the SoT helper.
+          final amount = item.naturalBalanceCents;
           return Padding(
             padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
             child: Row(

@@ -57,13 +57,17 @@ class VariantDeleteRequested extends ProductVariantsEvent {
   const VariantDeleteRequested(this.variantId);
 }
 
-class VariantStockAdjusted extends ProductVariantsEvent {
+/// Stock-aware delete: posts a balanced Shrinkage adjustment for the full
+/// on-hand quantity (Dr 5800 / Cr 1200) BEFORE running smart delete, so the
+/// 1200 Inventory ledger never strays from Σ(stock × cost). Used when the
+/// user confirms deletion of a variant that still carries stock.
+class VariantWriteOffAndDeleteRequested extends ProductVariantsEvent {
   final int variantId;
-  final int adjustment;
+  final String reason;
 
-  const VariantStockAdjusted({
+  const VariantWriteOffAndDeleteRequested({
     required this.variantId,
-    required this.adjustment,
+    required this.reason,
   });
 }
 
@@ -83,7 +87,7 @@ class ProductVariantsBloc extends RealtimeBloc<List<ProductVariant>, ProductVari
     on<VariantCreateRequested>(_onVariantCreate);
     on<VariantUpdateRequested>(_onVariantUpdate);
     on<VariantDeleteRequested>(_onVariantDelete);
-    on<VariantStockAdjusted>(_onStockAdjusted);
+    on<VariantWriteOffAndDeleteRequested>(_onVariantWriteOffAndDelete);
   }
 
   @override
@@ -181,61 +185,67 @@ class ProductVariantsBloc extends RealtimeBloc<List<ProductVariant>, ProductVari
     Emitter<RealtimeState<List<ProductVariant>>> emit,
   ) async {
     final currentData = this.currentData;
+    // Smart delete: hard-delete if no references, otherwise deactivate.
+    // Mirrors QuickBooks/Xero/Odoo so historical sale/purchase items, return
+    // adjustments, inventory adjustments, batches and price-history rows
+    // never get orphaned (preserves audit trail + journal integrity).
     if (currentData == null) {
       try {
-        await _repository.deleteVariant(event.variantId);
+        await _repository.smartDeleteVariant(event.variantId);
       } catch (e, st) {
         add(RealtimeErrorOccurred(e, st));
       }
       return;
     }
 
+    // Optimistic UX: removing the row from the visible list works for both
+    // hard delete and soft delete, because soft-deleted variants drop out of
+    // `watchVariantsByProduct` (filtered by is_active).
     final optimisticData = currentData.where((v) => v.id != event.variantId).toList();
 
     try {
       await performOptimisticUpdate(
         operationId: _uuid.v4(),
         optimisticData: optimisticData,
-        operation: () => _repository.deleteVariant(event.variantId),
+        operation: () => _repository.smartDeleteVariant(event.variantId),
       );
     } catch (e, st) {
       add(RealtimeErrorOccurred(e, st));
     }
   }
 
-  Future<void> _onStockAdjusted(
-    VariantStockAdjusted event,
+  Future<void> _onVariantWriteOffAndDelete(
+    VariantWriteOffAndDeleteRequested event,
     Emitter<RealtimeState<List<ProductVariant>>> emit,
   ) async {
     final currentData = this.currentData;
-    if (currentData == null) return;
-
-    final variant = currentData.firstWhere(
-      (v) => v.id == event.variantId,
-      orElse: () => throw Exception('Variant not found'),
-    );
-
-    final newStock = variant.stockQuantity + event.adjustment;
-    if (newStock < 0) {
-      add(RealtimeErrorOccurred(Exception('Stock cannot be negative'), StackTrace.current));
+    if (currentData == null) {
+      try {
+        await _repository.writeOffAndDeleteVariant(
+          variantId: event.variantId,
+          reason: event.reason,
+        );
+      } catch (e, st) {
+        add(RealtimeErrorOccurred(e, st));
+      }
       return;
     }
 
-    final updatedVariant = ProductVariant(
-      id: variant.id,
-      productId: variant.productId,
-      sku: variant.sku,
-      barcode: variant.barcode,
-      colorId: variant.colorId,
-      sizeId: variant.sizeId,
-      costCents: variant.costCents,
-      priceCents: variant.priceCents,
-      wholesalePriceCents: variant.wholesalePriceCents,
-      priceAdjustmentCents: variant.priceAdjustmentCents,
-      stockQuantity: newStock,
-      isActive: variant.isActive,
-    );
+    final optimisticData =
+        currentData.where((v) => v.id != event.variantId).toList();
 
-    add(VariantUpdateRequested(updatedVariant));
+    try {
+      await performOptimisticUpdate(
+        operationId: _uuid.v4(),
+        optimisticData: optimisticData,
+        operation: () => _repository.writeOffAndDeleteVariant(
+          variantId: event.variantId,
+          reason: event.reason,
+        ),
+      );
+    } catch (e, st) {
+      add(RealtimeErrorOccurred(e, st));
+    }
   }
+
 }

@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../../../core/widgets/inputs/select_all_on_focus.dart';
 import '../../domain/repositories/employee_repository.dart';
 import '../bloc/roles_bloc.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
@@ -799,12 +800,17 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
     String? Function(String?)? validator,
     int maxLines = 1,
   }) {
+    // Auto-enable select-all-on-focus for numeric fields so users can
+    // overwrite previous price/amount/qty values with a single tap.
+    final isNumeric = keyboardType == TextInputType.number ||
+        keyboardType == const TextInputType.numberWithOptions(decimal: true);
     return TextFormField(
       controller: controller,
       keyboardType: keyboardType,
       inputFormatters: inputFormatters,
       validator: validator,
       maxLines: maxLines,
+      onTap: isNumeric ? () => selectAllText(controller) : null,
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,

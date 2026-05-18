@@ -6,6 +6,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../../../core/services/parties/party_balance_classifier.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../domain/repositories/supplier_repository.dart';
 import '../bloc/suppliers_bloc.dart';
@@ -154,21 +155,17 @@ class _SupplierHubContentState extends State<_SupplierHubContent> {
     final isDark = theme.brightness == Brightness.dark;
     final currencyService = sl<CurrencyService>();
 
-    // Calculate metrics
+    // Calculate metrics — sign convention and bucket math live in
+    // `PartyBalanceClassifier` (Phase 3.5.2) so this widget cannot drift
+    // from the customer hub or profile screens.
     final activeCount = data.suppliers.length;
-    // Positive balance = we owe them (debit/payable)
-    // Negative balance = they owe us (credit/receivable)
-    int weOweCents = 0;
-    int theyOweCents = 0;
-    for (final s in data.suppliers) {
-      final balance = s.balanceCents.toBigInt().toInt();
-      if (balance > 0) {
-        weOweCents += balance;
-      } else if (balance < 0) {
-        theyOweCents += balance.abs();
-      }
-    }
-    final withBalanceCount = data.suppliers.where((s) => s.balanceCents.toBigInt().toInt() != 0).length;
+    final breakdown = sl<PartyBalanceClassifier>().classifyDecimal(
+      data.suppliers.map((s) => s.balanceCents),
+      PartyKind.supplier,
+    );
+    final weOweCents = breakdown.payableCents;
+    final theyOweCents = breakdown.receivableCents;
+    final withBalanceCount = breakdown.nonZeroCount;
 
     return RefreshIndicator(
       onRefresh: () async {

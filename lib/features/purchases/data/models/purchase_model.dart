@@ -1,5 +1,6 @@
 import '../../../../core/database/app_database.dart' as db;
 import '../../../../core/database/daos/purchase_dao.dart';
+import '../../../../core/database/daos/adjustment_return_dao.dart';
 import '../../domain/entities/purchase_entity.dart';
 
 class PurchaseModel extends PurchaseEntity {
@@ -8,6 +9,7 @@ class PurchaseModel extends PurchaseEntity {
     required super.purchaseNumber,
     required super.supplierId,
     super.supplierName,
+    super.supplierPhone,
     required super.subtotalCents,
     super.discountCents,
     required super.taxCents,
@@ -52,6 +54,7 @@ class PurchaseModel extends PurchaseEntity {
       purchaseNumber: pws.purchase.purchaseNumber,
       supplierId: pws.purchase.supplierId,
       supplierName: pws.supplier.name,
+      supplierPhone: pws.supplier.phone,
       subtotalCents: pws.purchase.subtotalCents,
       discountCents: pws.purchase.discountCents,
       taxCents: pws.purchase.taxCents,
@@ -78,6 +81,9 @@ class PurchaseItemModel extends PurchaseItemEntity {
     super.variantId,
     super.productName,
     super.variantSku,
+    super.colorName,
+    super.colorHex,
+    super.sizeName,
     required super.quantity,
     required super.unitCostCents,
     super.discountCents,
@@ -123,6 +129,9 @@ class PurchaseItemModel extends PurchaseItemEntity {
       variantId: d.item.variantId,
       productName: d.product.name,
       variantSku: d.variant?.sku,
+      colorName: d.colorName,
+      colorHex: d.colorHex,
+      sizeName: d.sizeName,
       quantity: d.item.quantity,
       unitCostCents: d.item.unitCostCents,
       discountCents: d.item.discountCents,
@@ -146,6 +155,8 @@ class PurchaseReturnModel extends PurchaseReturnEntity {
     required super.purchaseId,
     required super.returnNumber,
     super.supplierName,
+    super.supplierPhone,
+    super.supplierId,
     super.subtotalCents,
     super.discountCents,
     super.taxCents,
@@ -157,6 +168,8 @@ class PurchaseReturnModel extends PurchaseReturnEntity {
     super.reason,
     required super.returnDate,
     required super.createdAt,
+    super.isAdjustment,
+    super.unifiedId,
   });
 
   factory PurchaseReturnModel.fromDrift(db.PurchaseReturn r) {
@@ -175,6 +188,65 @@ class PurchaseReturnModel extends PurchaseReturnEntity {
       reason: r.reason,
       returnDate: r.returnDate,
       createdAt: r.createdAt,
+      isAdjustment: false,
+    );
+  }
+
+  factory PurchaseReturnModel.fromDriftWithParty(PurchaseReturnWithParty data) {
+    return PurchaseReturnModel(
+      id: data.purchaseReturn.id,
+      purchaseId: data.purchaseReturn.purchaseId,
+      supplierName: data.supplierName,
+      supplierPhone: data.supplierPhone,
+      returnNumber: data.purchaseReturn.returnNumber,
+      subtotalCents: data.purchaseReturn.subtotalCents,
+      discountCents: data.purchaseReturn.discountCents,
+      taxCents: data.purchaseReturn.taxCents,
+      totalCents: data.purchaseReturn.totalCents,
+      currencyId: data.purchaseReturn.currencyId,
+      status: data.purchaseReturn.status,
+      dispositionType: data.purchaseReturn.dispositionType,
+      refundMethod: data.purchaseReturn.refundMethod,
+      reason: data.purchaseReturn.reason,
+      returnDate: data.purchaseReturn.returnDate,
+      createdAt: data.purchaseReturn.createdAt,
+      isAdjustment: false,
+    );
+  }
+
+  factory PurchaseReturnModel.fromAdjustment(db.PurchaseReturnAdjustment adj) {
+    return PurchaseReturnModel(
+      id: adj.id,
+      purchaseId: 0, // No linked purchase
+      supplierId: adj.supplierId,
+      returnNumber: adj.returnNumber,
+      totalCents: adj.totalCents,
+      currencyId: adj.currencyId,
+      status: adj.status,
+      refundMethod: adj.refundMethod,
+      reason: adj.notes,
+      returnDate: adj.returnDate,
+      createdAt: adj.createdAt,
+      isAdjustment: true,
+    );
+  }
+
+  factory PurchaseReturnModel.fromAdjustmentWithParty(PurchaseAdjReturnWithParty data) {
+    return PurchaseReturnModel(
+      id: data.adjustment.id,
+      purchaseId: 0, // No linked purchase
+      supplierId: data.adjustment.supplierId,
+      supplierName: data.supplierName,
+      supplierPhone: data.supplierPhone,
+      returnNumber: data.adjustment.returnNumber,
+      totalCents: data.adjustment.totalCents,
+      currencyId: data.adjustment.currencyId,
+      status: data.adjustment.status,
+      refundMethod: data.adjustment.refundMethod,
+      reason: data.adjustment.notes,
+      returnDate: data.adjustment.returnDate,
+      createdAt: data.adjustment.createdAt,
+      isAdjustment: true,
     );
   }
 }

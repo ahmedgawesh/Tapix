@@ -1,7 +1,7 @@
 import '../entities/user_entity.dart';
 
 abstract class AuthRepositoryInterface {
-  Future<UserEntity?> login(String username, String password);
+  Future<UserEntity?> login(String username, String password, {bool rememberMe = false});
   Future<void> logout();
   Future<UserEntity?> getCurrentUser();
   Stream<UserEntity?> watchCurrentUser();
@@ -32,4 +32,8 @@ abstract class AuthRepositoryInterface {
     required String question,
     required String answer,
   });
+
+  /// Re-authenticate the last logged-in user via biometric verification.
+  /// Returns the user if a valid last-login user exists, null otherwise.
+  Future<UserEntity?> loginWithBiometrics();
 }

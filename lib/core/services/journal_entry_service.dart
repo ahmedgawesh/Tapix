@@ -3,6 +3,8 @@ import 'dart:developer' as developer;
 import '../../features/accounting/data/repositories/accounting_repository.dart';
 import '../../features/accounting/domain/exceptions/accounting_exception.dart';
 import '../../features/accounting/domain/models/journal_entry_data.dart';
+import 'returns/posted_return.dart';
+import 'returns/return_posting_service.dart';
 
 /// MANDATORY journal-entry service for all financial operations.
 ///
@@ -13,18 +15,41 @@ import '../../features/accounting/domain/models/journal_entry_data.dart';
 /// Account codes used here MUST match the STRICT Chart of Accounts
 /// seeded by JournalRepositoryImpl.seedDefaultAccounts:
 ///   Assets:      1000 = Cash, 1010 = Bank, 1100 = Accounts Receivable,
-///                1200 = Inventory, 1300 = VAT Receivable
+///                1200 = Inventory, 1290 = Returns in Transit,
+///                1300 = VAT Receivable
 ///   Liabilities: 2000 = Accounts Payable, 2100 = VAT Payable,
-///                2300 = Loyalty Points Liability
+///                2300 = Loyalty Points Liability,
+///                2400 = Customer Credit Liability
 ///   Equity:      3000 = Owner Capital, 3100 = Opening Balance Equity
-///   Income:      4000 = Sales Revenue
+///   Income:      4000 = Sales Revenue,
+///                4100 = Purchase Return Adjustment (contra-expense),
+///                4200 = Inventory Gain,
+///                4900 = Purchase Discounts Earned,
+///                5700 = Sales Return Adjustment (contra-revenue)
 ///   Expenses:    5100 = Expenses, 5200 = Salaries Expense,
 ///                5300 = Cost of Goods Sold,
-///                5500 = Discounts Given, 5600 = Commissions Expense
+///                5500 = Discounts Given, 5600 = Commissions Expense,
+///                5800 = Inventory Shrinkage,
+///                5900 = Inventory Revaluation
 class JournalEntryService {
   final AccountingRepository _accountingRepo;
 
-  JournalEntryService(this._accountingRepo);
+  /// Optional unified return-posting pipeline.
+  ///
+  /// When provided (production DI always provides it), the four legacy
+  /// `record*ReturnJournalEntry` methods on this class delegate to
+  /// `ReturnPostingService.post` so that linked and adjustment returns
+  /// produce the **same** JE shape (driven by `ReturnJournalPolicy`).
+  ///
+  /// Tests that construct `JournalEntryService` directly may still leave
+  /// this `null` — the class falls back to its legacy in-line shape so
+  /// pre-existing tests continue to pass without rewiring.
+  final ReturnPostingService? _returnPostingService;
+
+  JournalEntryService(
+    this._accountingRepo, {
+    ReturnPostingService? returnPostingService,
+  }) : _returnPostingService = returnPostingService;
 
   // ── Account lookup — fails loudly ──────────────────────────
 
@@ -271,8 +296,14 @@ class JournalEntryService {
 
   /// Reverse COGS when a sale return is posted.
   ///
-  /// STRICT RULES:
-  /// Dr Inventory (1200), Cr Cost of Goods Sold (5300)
+  /// STRICT RULES (unified policy):
+  ///   Dr Inventory         (1200)  costCents   [disposition=restock]
+  ///     Cr COGS             (5300)  costCents
+  ///
+  /// When [_returnPostingService] is wired (production), delegates to
+  /// `ReturnPostingService.post` with a `totalCents=0` sale-return shape
+  /// so only the inventory leg is emitted. Shape matches what the legacy
+  /// method produced, but flows through the single source of truth.
   ///
   /// [costCents] is the total cost of the returned items.
   Future<void> recordSaleReturnCOGSReversalJournalEntry({
@@ -283,6 +314,34 @@ class JournalEntryService {
   }) async {
     if (costCents <= 0) return;
 
+    final svc = _returnPostingService;
+    if (svc != null) {
+      await svc.post(PostedReturn(
+        side: ReturnSide.sale,
+        link: ReturnLink.linked(
+          sourceInvoiceId: returnId,
+          sourceTable: 'sale_returns',
+        ),
+        partyId: null,
+        returnId: returnId,
+        // refund channel is irrelevant for a COGS-only JE (totalCents=0);
+        // use cash as a safe default so the policy does not attempt to
+        // resolve 2400 / 1100 for a zero-amount settlement leg.
+        refund: RefundChannel.cash,
+        currencyId: currencyId,
+        lines: [
+          PostedReturnLine(
+            totalCents: 0,
+            taxCents: 0,
+            inventoryCostCents: costCents,
+          ),
+        ],
+        userId: userId,
+      ));
+      return;
+    }
+
+    // ── Legacy fallback ──
     final inventoryId = await _requireAccountId('1200');
     final cogsId = await _requireAccountId('5300');
 
@@ -301,7 +360,11 @@ class JournalEntryService {
       userId: userId,
     );
 
-    developer.log('COGS reversal journal entry created for Sale Return #$returnId ($costCents cents)', name: 'JournalEntryService');
+    developer.log(
+      'COGS reversal journal entry created for Sale Return #$returnId '
+      '($costCents cents; legacy fallback)',
+      name: 'JournalEntryService',
+    );
   }
 
   // ── Purchase ────────────────────────────────────────────────
@@ -484,113 +547,236 @@ class JournalEntryService {
 
   // ── Sale Return ─────────────────────────────────────────────
 
-  /// Create journal entries for a posted sale return.
+  /// Create the financial-leg journal entry for a posted **linked** sale
+  /// return (sale-return row lives in `sale_returns`).
   ///
-  /// STRICT RULES:
-  /// Sales Return:        Dr Sales Revenue, Cr Cash / Accounts Receivable
-  /// VAT on Sales Return: Dr VAT Payable,   Cr Cash / Accounts Receivable
+  /// When [_returnPostingService] is wired (production), this method
+  /// delegates to `ReturnPostingService.post` which drives the unified
+  /// `ReturnJournalPolicy`. The resulting JE has:
+  ///   Dr  5700 Sales R&A (contra-revenue)  netCents
+  ///   Dr  2100 VAT Payable                 taxCents    (if tax > 0)
+  ///     Cr  routing-account                totalCents
+  ///       - cash         → 1000
+  ///       - bank/cheque  → 1010
+  ///       - credit       → 1100 AR (linked → reduce existing AR)
+  ///
+  /// The COGS leg is handled by [recordSaleReturnCOGSReversalJournalEntry].
+  /// A future cleanup pass can fold the two calls into one compound JE.
+  ///
+  /// [partyId] is the `customer_id` on the sale (required for credit-refund
+  /// defense-in-depth). Callers may pass `null` for walk-in cash refunds.
   Future<void> recordSaleReturnJournalEntry({
     required int returnId,
     required int totalCents,
     required int currencyId,
     int taxCents = 0,
     String refundMethod = 'cash',
+    int? partyId,
     int? userId,
+    DateTime? postingDate,
+    List<PostedReturnLine>? explicitLines,
   }) async {
+    if (totalCents <= 0) return;
+
+    // Delegate to unified pipeline when available.
+    final svc = _returnPostingService;
+    if (svc != null) {
+      await svc.post(PostedReturn(
+        side: ReturnSide.sale,
+        link: ReturnLink.linked(
+          sourceInvoiceId: returnId,
+          sourceTable: 'sale_returns',
+        ),
+        partyId: partyId,
+        returnId: returnId,
+        refund: RefundChannelX.fromWire(refundMethod),
+        currencyId: currencyId,
+        lines: explicitLines ?? [
+          PostedReturnLine(
+            totalCents: totalCents,
+            taxCents: taxCents,
+            inventoryCostCents: 0, // COGS handled separately (legacy path)
+          ),
+        ],
+        userId: userId,
+        postingDate: postingDate,
+      ));
+      return;
+    }
+
+    // ── Legacy fallback (tests that construct JournalEntryService
+    //    without injecting ReturnPostingService) ────────────────────
     final cashOrBankId = await _cashOrBankAccountId(refundMethod);
     final receivablesId = await _requireAccountId('1100');
-    final revenueId = await _requireAccountId('4000');
+    final salesRAId = await _requireAccountId('5700');
 
     final isCreditRefund = refundMethod == 'credit';
     final creditAccountId = isCreditRefund ? receivablesId : cashOrBankId;
     final methodLabel = isCreditRefund ? 'Credit Note' : 'Cash Refund';
 
-    if (totalCents > 0) {
-      if (taxCents > 0) {
-        final netRevenue = totalCents - taxCents;
-        final vatPayableId = await _requireAccountId('2100');
-
-        final lines = <JournalEntryLineData>[];
-        if (netRevenue > 0) {
-          lines.add(JournalEntryLineData(
-            accountId: revenueId,
-            debitCents: netRevenue,
-            creditCents: 0,
-            currencyId: currencyId,
-          ));
-        }
-        if (taxCents > 0) {
-          lines.add(JournalEntryLineData(
-            accountId: vatPayableId,
-            debitCents: taxCents,
-            creditCents: 0,
-            currencyId: currencyId,
-          ));
-        }
-        lines.add(JournalEntryLineData(
-          accountId: creditAccountId,
-          debitCents: 0,
-          creditCents: totalCents,
-          currencyId: currencyId,
-        ));
-
-        await _accountingRepo.createJournalEntry(
-          entryData: JournalEntryData(
-            description: 'Sale Return #$returnId — $methodLabel + VAT Reversal',
-            entryType: 'saleReturn',
-            sourceTable: 'sale_returns',
-            sourceId: returnId,
-            autoPost: true,
-            lines: lines,
-          ),
-          userId: userId,
-        );
-      } else {
-        // Dr Sales Revenue, Cr Cash/AR
-        await _accountingRepo.createJournalEntry(
-          entryData: JournalEntryData.simple(
-            description: 'Sale Return #$returnId — $methodLabel',
-            debitAccountId: revenueId,
-            creditAccountId: creditAccountId,
-            amountCents: totalCents,
-            currencyId: currencyId,
-            entryType: 'saleReturn',
-            sourceTable: 'sale_returns',
-            sourceId: returnId,
-            autoPost: true,
-          ),
-          userId: userId,
-        );
-      }
+    final netRevenue = totalCents - taxCents;
+    final lines = <JournalEntryLineData>[];
+    if (netRevenue > 0) {
+      lines.add(JournalEntryLineData(
+        accountId: salesRAId,
+        debitCents: netRevenue,
+        creditCents: 0,
+        currencyId: currencyId,
+      ));
     }
+    if (taxCents > 0) {
+      final vatPayableId = await _requireAccountId('2100');
+      lines.add(JournalEntryLineData(
+        accountId: vatPayableId,
+        debitCents: taxCents,
+        creditCents: 0,
+        currencyId: currencyId,
+      ));
+    }
+    lines.add(JournalEntryLineData(
+      accountId: creditAccountId,
+      debitCents: 0,
+      creditCents: totalCents,
+      currencyId: currencyId,
+    ));
 
-    developer.log('Journal entries created for Sale Return #$returnId ($methodLabel)', name: 'JournalEntryService');
+    await _accountingRepo.createJournalEntry(
+      entryData: JournalEntryData(
+        description: 'Sale Return #$returnId — $methodLabel',
+        entryType: 'sale_return',
+        sourceTable: 'sale_returns',
+        sourceId: returnId,
+        autoPost: true,
+        lines: lines,
+      ),
+      userId: userId,
+    );
+
+    developer.log(
+      'Journal entries created for Sale Return #$returnId '
+      '($methodLabel; legacy fallback, no ReturnPostingService injected)',
+      name: 'JournalEntryService',
+    );
   }
 
   // ── Purchase Return ─────────────────────────────────────────
 
-  /// Create journal entries for a posted purchase return.
+  /// Create journal entries for a posted **linked** purchase return.
   ///
-  /// Depends on refund method:
-  ///   - cash/cheque: Dr Cash, Cr Inventory          (money comes back)
-  ///   - credit:      Dr Payables, Cr Inventory       (reduces what we owe)
+  /// When [_returnPostingService] is wired (production), this method
+  /// delegates to `ReturnPostingService.post` — identical shape for linked
+  /// and adjustment returns. The unified JE:
+  ///
+  ///   Dr  routing-account          totalCents
+  ///     Cr  1300 VAT Receivable    taxCents     (if tax > 0)
+  ///     Cr  4100 Purchase R&A      netCents
+  ///   Dr  4100 Purchase R&A        inventoryCost
+  ///     Cr  1200 Inventory         inventoryCost
+  ///
+  /// For linked returns `inventoryCost == netCents` so 4100 nets to zero —
+  /// this is correct: no purchase-price variance on linked returns.
+  ///
+  /// [inventoryCostCents] is the historical cost of the returned goods
+  /// from the original batch/WAC; callers are responsible for freezing
+  /// this snapshot at post-time. When omitted (legacy call sites), the
+  /// policy receives `inventoryCostCents = netCents` which preserves the
+  /// previous behaviour (Cr 1200 == net).
   Future<void> recordPurchaseReturnJournalEntry({
     required int returnId,
     required int totalCents,
     required int currencyId,
+    int taxCents = 0,
+    int? inventoryCostCents,
     String refundMethod = 'cash',
     int? userId,
+    DateTime? postingDate,
+    List<PostedReturnLine>? explicitLines,
   }) async {
+    if (totalCents <= 0) {
+      developer.log(
+        'Purchase Return #$returnId — totalCents <= 0, skipping JE',
+        name: 'JournalEntryService',
+      );
+      return;
+    }
+
+    // Defensive clamp — taxCents must never exceed totalCents.
+    final clampedTax = taxCents > totalCents ? totalCents : taxCents;
+    final net = totalCents - clampedTax;
+    // Default invCost to net (linked-return invariant) when caller didn't
+    // supply a historical snapshot. Forces 4100 wash-through.
+    final invCost = inventoryCostCents ?? net;
+
+    final svc = _returnPostingService;
+    if (svc != null) {
+      await svc.post(PostedReturn(
+        side: ReturnSide.purchase,
+        link: ReturnLink.linked(
+          sourceInvoiceId: returnId,
+          sourceTable: 'purchase_returns',
+        ),
+        partyId: null,
+        returnId: returnId,
+        refund: RefundChannelX.fromWire(refundMethod),
+        currencyId: currencyId,
+        lines: explicitLines ?? [
+          PostedReturnLine(
+            totalCents: totalCents,
+            taxCents: clampedTax,
+            inventoryCostCents: invCost,
+          ),
+        ],
+        userId: userId,
+        postingDate: postingDate,
+      ));
+      return;
+    }
+
+    // ── Legacy fallback (tests without ReturnPostingService) ──
     final cashOrBankId = await _cashOrBankAccountId(refundMethod);
     final payablesId = await _requireAccountId('2000');
     final inventoryId = await _requireAccountId('1200');
-
-    // Credit refunds reduce A/P; cash/cheque refunds increase Cash/Bank
     final isCreditRefund = refundMethod == 'credit';
     final debitAccountId = isCreditRefund ? payablesId : cashOrBankId;
     final methodLabel = isCreditRefund ? 'Credit Note' : 'Cash Refund';
 
-    if (totalCents > 0) {
+    if (clampedTax > 0) {
+      final vatReceivableId = await _requireAccountId('1300');
+      final lines = <JournalEntryLineData>[
+        JournalEntryLineData(
+          accountId: debitAccountId,
+          debitCents: totalCents,
+          creditCents: 0,
+          currencyId: currencyId,
+        ),
+        JournalEntryLineData(
+          accountId: vatReceivableId,
+          debitCents: 0,
+          creditCents: clampedTax,
+          currencyId: currencyId,
+        ),
+      ];
+      if (net > 0) {
+        lines.add(JournalEntryLineData(
+          accountId: inventoryId,
+          debitCents: 0,
+          creditCents: net,
+          currencyId: currencyId,
+        ));
+      }
+      await _accountingRepo.createJournalEntry(
+        entryData: JournalEntryData(
+          description:
+              'Purchase Return #$returnId — $methodLabel + VAT Reversal',
+          entryType: 'purchase_return',
+          sourceTable: 'purchase_returns',
+          sourceId: returnId,
+          autoPost: true,
+          lines: lines,
+        ),
+        userId: userId,
+      );
+    } else {
       await _accountingRepo.createJournalEntry(
         entryData: JournalEntryData.simple(
           description: 'Purchase Return #$returnId ($methodLabel)',
@@ -598,7 +784,7 @@ class JournalEntryService {
           creditAccountId: inventoryId,
           amountCents: totalCents,
           currencyId: currencyId,
-          entryType: 'purchaseReturn',
+          entryType: 'purchase_return',
           sourceTable: 'purchase_returns',
           sourceId: returnId,
           autoPost: true,
@@ -607,7 +793,11 @@ class JournalEntryService {
       );
     }
 
-    developer.log('Journal entries created for Purchase Return #$returnId ($methodLabel)', name: 'JournalEntryService');
+    developer.log(
+      'Journal entries created for Purchase Return #$returnId '
+      '($methodLabel, tax=$taxCents; legacy fallback)',
+      name: 'JournalEntryService',
+    );
   }
 
   // ── Expense ─────────────────────────────────────────────────
@@ -820,11 +1010,36 @@ class JournalEntryService {
 
   // ── Direct Supplier Discount (from profile) ───────────────────
 
-  /// Create journal entry for a purchase/supplier discount.
+  /// Create journal entry for a purchase/supplier discount recorded from
+  /// the supplier profile screen (NOT tied to a specific PO line).
   ///
-  /// STRICT RULE — Purchase Discount:
-  /// Dr Accounts Payable / Cash (2000), Cr Inventory (1200)
-  /// All purchase discounts reduce Inventory value directly.
+  /// STRICT RULE — Unallocated Supplier Discount:
+  ///   Dr Accounts Payable (2000) — supplier owes us less
+  ///   Cr Purchase Discounts Earned (4900) — recognised as income
+  ///
+  /// ────────────────────────────────────────────────────────────────────
+  /// WHY NOT Cr Inventory (1200)?
+  /// ────────────────────────────────────────────────────────────────────
+  /// The legacy rule was "Dr AP / Cr Inventory", justified as a landed-
+  /// cost reduction. But this JE has no stock-side movement: it never
+  /// updates `products.cost_cents`, `product_variants.cost_cents`, or
+  /// `stock_batches.cost_cents`, so Σ(stock × cost) stays unchanged
+  /// while GL Inventory drops by the discount amount. The result is a
+  /// permanent, immovable reconciliation drift surfaced by
+  /// `ReconciliationHealthService` as "Inventory mismatch:
+  /// GL(journal_lines)=X, Σ(stock×cost)=Y" with Y − X = discount.
+  ///
+  /// To Cr Inventory CORRECTLY we would need a full landed-cost
+  /// allocation algorithm: prorate the rebate across remaining stock
+  /// layers, write down `cost_cents` per layer/variant, and reverse the
+  /// COGS of already-sold units. That workflow does not exist in this
+  /// app and adding it would be a Phase-2 inventory-valuation engine.
+  ///
+  /// Until then, the IFRS/GAAP-conformant treatment of an unallocated,
+  /// after-the-fact supplier rebate is to recognise it as **other
+  /// income** in the period received (parallel to the customer-side rule:
+  /// customer discount = Dr Discounts Given / Cr AR). That is the
+  /// posting this method now produces.
   Future<void> recordDirectSupplierDiscountJournalEntry({
     required int transactionId,
     required int amountCents,
@@ -832,14 +1047,14 @@ class JournalEntryService {
     int? userId,
   }) async {
     final payablesId = await _requireAccountId('2000');
-    final inventoryId = await _requireAccountId('1200');
+    final discountsEarnedId = await _requireAccountId('4900');
 
     if (amountCents > 0) {
       await _accountingRepo.createJournalEntry(
         entryData: JournalEntryData.simple(
           description: 'Purchase Discount #$transactionId',
           debitAccountId: payablesId,
-          creditAccountId: inventoryId,
+          creditAccountId: discountsEarnedId,
           amountCents: amountCents,
           currencyId: currencyId,
           entryType: 'supplier_discount',
@@ -889,6 +1104,519 @@ class JournalEntryService {
     }
 
     developer.log('Journal entry created for Payroll #$payrollId', name: 'JournalEntryService');
+  }
+
+  // ── Purchase Adjustment Return (Perpetual Inventory) ──────────
+
+  /// Create compound journal entry for a purchase adjustment return.
+  ///
+  /// STRICT RULE — Purchase Adjustment Return (Perpetual Inventory):
+  ///   Financial side:
+  ///     Dr Payment Account (AP 2000 / Cash 1000 / Bank 1010)  [totalCents]
+  ///     Cr Purchase Return Adj (4100)                         netCents
+  ///     Cr VAT Receivable / Input Tax (1300)                  [taxCents]
+  ///   Inventory side:
+  ///     Dr COGS (5300)      [inventoryCostCents]
+  ///     Cr Inventory (1200) [inventoryCostCents]
+  ///
+  /// [totalCents]          = tax-inclusive financial total.
+  /// [taxCents]            = VAT / input-tax portion to reverse.
+  /// [inventoryCostCents]  = sum of (unitCostCents × qty) — inventory value.
+  /// [refundMethod]        = 'cash' | 'credit' | 'cheque' — determines debit account.
+  Future<void> recordPurchaseAdjustmentReturnJournalEntry({
+    required int returnId,
+    required int totalCents,
+    required int taxCents,
+    required int inventoryCostCents,
+    required int currencyId,
+    String refundMethod = 'credit',
+    int? userId,
+    DateTime? postingDate,
+    List<PostedReturnLine>? explicitLines,
+    String approvalStatus = 'auto_approved',
+    String? approvalReason,
+    int? supplierId,
+  }) async {
+    if (totalCents <= 0 && inventoryCostCents <= 0) {
+      developer.log(
+        'Purchase Adj Return #$returnId — nothing to post (total=0, cost=0)',
+        name: 'JournalEntryService',
+      );
+      return;
+    }
+
+    // Delegate to unified pipeline when available. Same shape as
+    // `recordPurchaseReturnJournalEntry` — linked vs adjustment are
+    // identical at the JE level.
+    final svc = _returnPostingService;
+    if (svc != null) {
+      await svc.post(PostedReturn(
+        side: ReturnSide.purchase,
+        link: ReturnLink.adjustment,
+        partyId: supplierId,
+        returnId: returnId,
+        refund: RefundChannelX.fromWire(refundMethod),
+        currencyId: currencyId,
+        lines: explicitLines ?? [
+          PostedReturnLine(
+            totalCents: totalCents,
+            taxCents: taxCents,
+            inventoryCostCents: inventoryCostCents,
+          ),
+        ],
+        userId: userId,
+        postingDate: postingDate,
+        approvalStatus: approvalStatus,
+        approvalReason: approvalReason,
+      ));
+      return;
+    }
+
+    // ── Legacy fallback (in-line shape preserved for unwired tests) ──
+    final adjAccountId = await _requireAccountId('4100');
+    final inventoryId = await _requireAccountId('1200');
+    final cogsId = await _requireAccountId('5300');
+
+    final int debitAccountId;
+    switch (refundMethod) {
+      case 'cash':
+        debitAccountId = await _requireAccountId('1000');
+      case 'cheque':
+        debitAccountId = await _requireAccountId('1010');
+      case 'credit':
+      default:
+        debitAccountId = await _requireAccountId('2000');
+    }
+
+    final netCents = totalCents - taxCents;
+    final lines = <JournalEntryLineData>[];
+
+    if (totalCents > 0) {
+      lines.add(JournalEntryLineData(
+        accountId: debitAccountId,
+        debitCents: totalCents,
+        creditCents: 0,
+        currencyId: currencyId,
+        description: refundMethod == 'credit'
+            ? 'AP reduced — Purchase Adj Return #$returnId'
+            : 'Refund received ($refundMethod) — Purchase Adj Return #$returnId',
+      ));
+      if (netCents > 0) {
+        lines.add(JournalEntryLineData(
+          accountId: adjAccountId,
+          debitCents: 0,
+          creditCents: netCents,
+          currencyId: currencyId,
+          description: 'Purchase Return Adjustment income — #$returnId',
+        ));
+      }
+      if (taxCents > 0) {
+        final vatReceivableId = await _requireAccountId('1300');
+        lines.add(JournalEntryLineData(
+          accountId: vatReceivableId,
+          debitCents: 0,
+          creditCents: taxCents,
+          currencyId: currencyId,
+          description: 'Input VAT reversed — Purchase Adj Return #$returnId',
+        ));
+      }
+    }
+
+    if (inventoryCostCents > 0) {
+      lines.add(JournalEntryLineData(
+        accountId: cogsId,
+        debitCents: inventoryCostCents,
+        creditCents: 0,
+        currencyId: currencyId,
+        description: 'Inventory cost removed — Purchase Adj Return #$returnId',
+      ));
+      lines.add(JournalEntryLineData(
+        accountId: inventoryId,
+        debitCents: 0,
+        creditCents: inventoryCostCents,
+        currencyId: currencyId,
+        description: 'Inventory decreased — Purchase Adj Return #$returnId',
+      ));
+    }
+
+    if (lines.isNotEmpty) {
+      await _accountingRepo.createJournalEntry(
+        entryData: JournalEntryData(
+          description: 'Purchase Adjustment Return #$returnId',
+          entryType: 'purchase_return',
+          sourceTable: 'purchase_return_adjustments',
+          sourceId: returnId,
+          autoPost: true,
+          lines: lines,
+        ),
+        userId: userId,
+      );
+    }
+
+    developer.log(
+      'Purchase Adj Return #$returnId posted via legacy fallback '
+      '(no ReturnPostingService): net=$netCents tax=$taxCents '
+      'total=$totalCents inv=$inventoryCostCents method=$refundMethod',
+      name: 'JournalEntryService',
+    );
+  }
+
+  // ── Sale Adjustment Return (Perpetual Inventory) ────────────
+
+  /// Create compound journal entry for a sale adjustment return.
+  ///
+  /// STRICT RULE — Sale Adjustment Return (Perpetual Inventory):
+  ///   Financial side:
+  ///     Dr Sales Return Adj (5700)                             netCents
+  ///     Dr VAT Payable / Output Tax (2100)                     [taxCents]
+  ///     Cr Payment Account (AR 1100 / Cash 1000 / Bank 1010)   [totalCents]
+  ///   Inventory side:
+  ///     Dr Inventory (1200) [inventoryCostCents]
+  ///     Cr COGS (5300)      [inventoryCostCents]
+  ///
+  /// [totalCents]          = tax-inclusive financial total.
+  /// [taxCents]            = VAT / output-tax portion to reverse.
+  /// [inventoryCostCents]  = sum of (unitCostCents × qty) — inventory value.
+  /// [refundMethod]        = 'cash' | 'credit' | 'cheque' — determines credit account.
+  Future<void> recordSaleAdjustmentReturnJournalEntry({
+    required int returnId,
+    required int totalCents,
+    required int taxCents,
+    required int inventoryCostCents,
+    required int currencyId,
+    String refundMethod = 'cash',
+    int? partyId,
+    int? userId,
+    DateTime? postingDate,
+    List<PostedReturnLine>? explicitLines,
+    String approvalStatus = 'auto_approved',
+    String? approvalReason,
+  }) async {
+    if (totalCents <= 0 && inventoryCostCents <= 0) {
+      developer.log(
+        'Sale Adj Return #$returnId — nothing to post (total=0, cost=0)',
+        name: 'JournalEntryService',
+      );
+      return;
+    }
+
+    // Delegate to unified pipeline when available.
+    final svc = _returnPostingService;
+    if (svc != null) {
+      await svc.post(PostedReturn(
+        side: ReturnSide.sale,
+        link: ReturnLink.adjustment,
+        partyId: partyId,
+        returnId: returnId,
+        refund: RefundChannelX.fromWire(refundMethod),
+        currencyId: currencyId,
+        lines: explicitLines ?? [
+          PostedReturnLine(
+            totalCents: totalCents,
+            taxCents: taxCents,
+            inventoryCostCents: inventoryCostCents,
+          ),
+        ],
+        userId: userId,
+        postingDate: postingDate,
+        approvalStatus: approvalStatus,
+        approvalReason: approvalReason,
+      ));
+      return;
+    }
+
+    // ── Legacy fallback (in-line shape preserved for unwired tests) ──
+    final adjAccountId = await _requireAccountId('5700');
+    final inventoryId = await _requireAccountId('1200');
+    final cogsId = await _requireAccountId('5300');
+
+    final int creditAccountId;
+    switch (refundMethod) {
+      case 'credit':
+        creditAccountId = await _requireAccountId('1100');
+      case 'cheque':
+        creditAccountId = await _requireAccountId('1010');
+      case 'cash':
+      default:
+        creditAccountId = await _requireAccountId('1000');
+    }
+
+    final netCents = totalCents - taxCents;
+    final lines = <JournalEntryLineData>[];
+
+    if (totalCents > 0) {
+      if (netCents > 0) {
+        lines.add(JournalEntryLineData(
+          accountId: adjAccountId,
+          debitCents: netCents,
+          creditCents: 0,
+          currencyId: currencyId,
+          description: 'Sales return adjustment expense — #$returnId',
+        ));
+      }
+      if (taxCents > 0) {
+        final vatPayableId = await _requireAccountId('2100');
+        lines.add(JournalEntryLineData(
+          accountId: vatPayableId,
+          debitCents: taxCents,
+          creditCents: 0,
+          currencyId: currencyId,
+          description: 'Output VAT reversed — Sale Adj Return #$returnId',
+        ));
+      }
+      lines.add(JournalEntryLineData(
+        accountId: creditAccountId,
+        debitCents: 0,
+        creditCents: totalCents,
+        currencyId: currencyId,
+        description: refundMethod == 'credit'
+            ? 'AR reduced — Sale Adj Return #$returnId'
+            : 'Refund issued ($refundMethod) — Sale Adj Return #$returnId',
+      ));
+    }
+
+    if (inventoryCostCents > 0) {
+      lines.add(JournalEntryLineData(
+        accountId: inventoryId,
+        debitCents: inventoryCostCents,
+        creditCents: 0,
+        currencyId: currencyId,
+        description: 'Inventory restored — Sale Adj Return #$returnId',
+      ));
+      lines.add(JournalEntryLineData(
+        accountId: cogsId,
+        debitCents: 0,
+        creditCents: inventoryCostCents,
+        currencyId: currencyId,
+        description: 'COGS reversed — Sale Adj Return #$returnId',
+      ));
+    }
+
+    if (lines.isNotEmpty) {
+      await _accountingRepo.createJournalEntry(
+        entryData: JournalEntryData(
+          description: 'Sale Adjustment Return #$returnId',
+          entryType: 'sale_return',
+          sourceTable: 'sale_return_adjustments',
+          sourceId: returnId,
+          autoPost: true,
+          lines: lines,
+        ),
+        userId: userId,
+      );
+    }
+
+    developer.log(
+      'Sale Adj Return #$returnId posted via legacy fallback '
+      '(no ReturnPostingService): net=$netCents tax=$taxCents '
+      'total=$totalCents inv=$inventoryCostCents method=$refundMethod',
+      name: 'JournalEntryService',
+    );
+  }
+
+  // ── Inventory Adjustment (Shrinkage / Gain / Revaluation) ──
+
+  /// Create journal entry for an **inventory shrinkage** adjustment.
+  ///
+  /// Recognises a loss of on-hand inventory (theft, damage, expiry, count
+  /// shortage). Follows the perpetual-inventory standard used by QuickBooks,
+  /// Odoo, Xero and SAP B1.
+  ///
+  /// STRICT RULE:
+  ///   Dr Inventory Shrinkage (5800)  valueCents
+  ///   Cr Inventory           (1200)  valueCents
+  ///
+  /// [valueCents] MUST equal `abs(quantity) × unitCostCents` and be positive.
+  /// Returns the id of the created journal entry so the caller can link it
+  /// back to its `inventory_adjustments` row (single source of truth).
+  Future<int> recordInventoryShrinkageJournalEntry({
+    required int adjustmentId,
+    required int valueCents,
+    required int currencyId,
+    required String reason,
+    int? userId,
+  }) async {
+    if (valueCents <= 0) {
+      throw AccountingException(
+        'Inventory shrinkage valueCents must be > 0 (got $valueCents)',
+      );
+    }
+    final shrinkageId = await _requireAccountId('5800');
+    final inventoryId = await _requireAccountId('1200');
+
+    final entryId = await _accountingRepo.createJournalEntry(
+      entryData: JournalEntryData.simple(
+        description: 'Inventory Shrinkage #$adjustmentId — $reason',
+        debitAccountId: shrinkageId,
+        creditAccountId: inventoryId,
+        amountCents: valueCents,
+        currencyId: currencyId,
+        entryType: 'inventory_shrinkage',
+        sourceTable: 'inventory_adjustments',
+        sourceId: adjustmentId,
+        autoPost: true,
+      ),
+      userId: userId,
+    );
+
+    developer.log(
+      'Journal entry created for Inventory Shrinkage #$adjustmentId '
+      '($valueCents cents): $reason',
+      name: 'JournalEntryService',
+    );
+    return entryId;
+  }
+
+  /// Create journal entry for an **inventory gain** adjustment.
+  ///
+  /// Recognises a surplus discovered on physical count (found stock, data
+  /// correction). Classified as "other income" (4200), never as revenue —
+  /// mirrors IFRS / GAAP treatment.
+  ///
+  /// STRICT RULE:
+  ///   Dr Inventory    (1200)  valueCents
+  ///   Cr Inventory Gain (4200) valueCents
+  Future<int> recordInventoryGainJournalEntry({
+    required int adjustmentId,
+    required int valueCents,
+    required int currencyId,
+    required String reason,
+    int? userId,
+  }) async {
+    if (valueCents <= 0) {
+      throw AccountingException(
+        'Inventory gain valueCents must be > 0 (got $valueCents)',
+      );
+    }
+    final inventoryId = await _requireAccountId('1200');
+    final gainId = await _requireAccountId('4200');
+
+    final entryId = await _accountingRepo.createJournalEntry(
+      entryData: JournalEntryData.simple(
+        description: 'Inventory Gain #$adjustmentId — $reason',
+        debitAccountId: inventoryId,
+        creditAccountId: gainId,
+        amountCents: valueCents,
+        currencyId: currencyId,
+        entryType: 'inventory_gain',
+        sourceTable: 'inventory_adjustments',
+        sourceId: adjustmentId,
+        autoPost: true,
+      ),
+      userId: userId,
+    );
+
+    developer.log(
+      'Journal entry created for Inventory Gain #$adjustmentId '
+      '($valueCents cents): $reason',
+      name: 'JournalEntryService',
+    );
+    return entryId;
+  }
+
+  /// Create journal entry for an **inventory revaluation**.
+  ///
+  /// Used when the unit cost of on-hand inventory changes without any
+  /// physical movement (e.g. correcting a historical purchase cost or
+  /// applying a Net Realisable Value write-down per IAS 2).
+  ///
+  /// [deltaValueCents] is SIGNED:
+  ///   - positive → carrying value increased (revaluation up)
+  ///       Dr Inventory (1200)  |delta|
+  ///       Cr Inventory Revaluation (5900)  |delta|
+  ///   - negative → carrying value decreased (write-down)
+  ///       Dr Inventory Revaluation (5900)  |delta|
+  ///       Cr Inventory (1200)              |delta|
+  Future<int> recordInventoryRevaluationJournalEntry({
+    required int adjustmentId,
+    required int deltaValueCents,
+    required int currencyId,
+    required String reason,
+    int? userId,
+  }) async {
+    if (deltaValueCents == 0) {
+      throw AccountingException(
+        'Inventory revaluation delta must be non-zero',
+      );
+    }
+    final inventoryId = await _requireAccountId('1200');
+    final revaluationId = await _requireAccountId('5900');
+
+    final amount = deltaValueCents.abs();
+    final isWriteUp = deltaValueCents > 0;
+
+    final entryId = await _accountingRepo.createJournalEntry(
+      entryData: JournalEntryData.simple(
+        description: 'Inventory Revaluation #$adjustmentId '
+            '(${isWriteUp ? "up" : "down"}) — $reason',
+        debitAccountId: isWriteUp ? inventoryId : revaluationId,
+        creditAccountId: isWriteUp ? revaluationId : inventoryId,
+        amountCents: amount,
+        currencyId: currencyId,
+        entryType: 'inventory_revaluation',
+        sourceTable: 'inventory_adjustments',
+        sourceId: adjustmentId,
+        autoPost: true,
+      ),
+      userId: userId,
+    );
+
+    developer.log(
+      'Journal entry created for Inventory Revaluation #$adjustmentId '
+      '(${isWriteUp ? "+" : "-"}$amount cents): $reason',
+      name: 'JournalEntryService',
+    );
+    return entryId;
+  }
+
+  /// Create journal entry for an **inventory opening balance**.
+  ///
+  /// Used when a product / variant is created with a non-zero starting
+  /// quantity. The offsetting credit goes to Opening Balance Equity (3100)
+  /// — NOT Inventory Gain (4200) — so the P&L is not polluted with a
+  /// pseudo-revenue line. This matches QuickBooks / Xero / Sage treatment
+  /// and is IFRS/GAAP-compliant (IAS 2: initial measurement at cost via
+  /// equity movement, not income).
+  ///
+  /// STRICT RULE:
+  ///   Dr Inventory (1200)               valueCents
+  ///   Cr Opening Balance Equity (3100)  valueCents
+  Future<int> recordInventoryOpeningBalanceJournalEntry({
+    required int adjustmentId,
+    required int valueCents,
+    required int currencyId,
+    required String reason,
+    int? userId,
+  }) async {
+    if (valueCents <= 0) {
+      throw AccountingException(
+        'Inventory opening balance valueCents must be > 0 (got $valueCents)',
+      );
+    }
+    final inventoryId = await _requireAccountId('1200');
+    final openingEquityId = await _requireAccountId('3100');
+
+    final entryId = await _accountingRepo.createJournalEntry(
+      entryData: JournalEntryData.simple(
+        description: 'Inventory Opening Balance #$adjustmentId — $reason',
+        debitAccountId: inventoryId,
+        creditAccountId: openingEquityId,
+        amountCents: valueCents,
+        currencyId: currencyId,
+        entryType: 'inventory_opening_balance',
+        sourceTable: 'inventory_adjustments',
+        sourceId: adjustmentId,
+        autoPost: true,
+      ),
+      userId: userId,
+    );
+
+    developer.log(
+      'Journal entry created for Inventory Opening Balance #$adjustmentId '
+      '($valueCents cents): $reason',
+      name: 'JournalEntryService',
+    );
+    return entryId;
   }
 
   // ── Commission Payment ────────────────────────────────────
@@ -1212,7 +1940,7 @@ class JournalEntryService {
           await _accountingRepo.voidJournalEntry(
             entryId: entry.id,
             reason: 'Repair: overpayment journal entry fix',
-            userId: 0,
+            userId: null,
           );
         }
       }
@@ -1275,7 +2003,7 @@ class JournalEntryService {
       await _accountingRepo.voidJournalEntry(
         entryId: entry.id,
         reason: reason,
-        userId: userId ?? 0,
+        userId: userId,
       );
       voided++;
     }

@@ -9,6 +9,7 @@ import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../domain/entities/purchase_entity.dart';
 import '../bloc/purchases_bloc.dart';
+import '../../../shared/widgets/date_range_filter_sheet.dart';
 
 class PurchaseListScreen extends StatelessWidget {
   const PurchaseListScreen({super.key});
@@ -33,6 +34,7 @@ class _PurchaseHubViewState extends State<_PurchaseHubView> {
   final _searchController = TextEditingController();
   String? _selectedStatus;
   DateTimeRange? _dateRange;
+  String? _datePresetLabel;
 
   @override
   void dispose() {
@@ -266,13 +268,18 @@ class _PurchaseHubViewState extends State<_PurchaseHubView> {
                   child: Chip(
                     avatar: Icon(LucideIcons.calendar, size: 14, color: colorScheme.primary),
                     label: Text(
-                      '${DateFormat.MMMd().format(_dateRange!.start)} – ${DateFormat.MMMd().format(_dateRange!.end)}',
-                      style: theme.textTheme.labelSmall,
+                      _datePresetLabel ??
+                          '${DateFormat.MMMd().format(_dateRange!.start)} – ${DateFormat.MMMd().format(_dateRange!.end)}',
+                      style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w600),
                     ),
                     deleteIcon: const Icon(LucideIcons.x, size: 14),
-                    onDeleted: () => setState(() => _dateRange = null),
+                    onDeleted: () => setState(() {
+                      _dateRange = null;
+                      _datePresetLabel = null;
+                    }),
                     visualDensity: VisualDensity.compact,
                     side: BorderSide(color: colorScheme.primary.withValues(alpha: 0.3)),
+                    backgroundColor: colorScheme.primaryContainer.withValues(alpha: 0.3),
                   ),
                 ),
               ),
@@ -375,15 +382,16 @@ class _PurchaseHubViewState extends State<_PurchaseHubView> {
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: () async {
-          final range = await showDateRangePicker(
-            context: context,
-            firstDate: DateTime(2020),
-            lastDate: DateTime.now().add(const Duration(days: 30)),
-            initialDateRange: _dateRange,
+          final result = await showDateRangeFilterSheet(
+            context,
+            currentRange: _dateRange,
+            currentLabel: _datePresetLabel,
           );
-          if (range != null) {
-            setState(() => _dateRange = range);
-          }
+          if (result == null || !mounted) return;
+          setState(() {
+            _dateRange = result.range;
+            _datePresetLabel = result.label;
+          });
         },
         child: Padding(
           padding: const EdgeInsets.all(12),

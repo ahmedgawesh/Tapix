@@ -25,7 +25,6 @@ class SubscriptionBloc extends Bloc<SubscriptionEvent, SubscriptionState> {
     on<SubscriptionGuardStatusChanged>(_onGuardStatusChanged);
     on<SubscriptionRefresh>(_onRefresh);
     on<SubscriptionPresentPaywall>(_onPresentPaywall);
-    on<SubscriptionPresentPaywallIfNeeded>(_onPresentPaywallIfNeeded);
     on<SubscriptionPresentCustomerCenter>(_onPresentCustomerCenter);
     on<SubscriptionRestore>(_onRestore);
     on<SubscriptionLogIn>(_onLogIn);
@@ -82,31 +81,8 @@ class SubscriptionBloc extends Bloc<SubscriptionEvent, SubscriptionState> {
     SubscriptionPresentPaywall event,
     Emitter<SubscriptionState> emit,
   ) async {
-    if (!RevenueCatConfig.isSupported || !_revenueCatService.isInitialized) {
-      return;
-    }
-    try {
-      await _revenueCatService.presentPaywall(offering: event.offering);
-      // After paywall closes, re-run guard to update state
-      add(const SubscriptionRefresh());
-    } catch (e) {
-      _emitError(emit, e.toString());
-    }
-  }
-
-  Future<void> _onPresentPaywallIfNeeded(
-    SubscriptionPresentPaywallIfNeeded event,
-    Emitter<SubscriptionState> emit,
-  ) async {
-    if (!RevenueCatConfig.isSupported || !_revenueCatService.isInitialized) {
-      return;
-    }
-    try {
-      await _revenueCatService.presentPaywallIfNeeded();
-      add(const SubscriptionRefresh());
-    } catch (e) {
-      _emitError(emit, e.toString());
-    }
+    // Custom paywall is now shown via direct navigation.
+    // This event is kept for backwards compatibility but is a no-op.
   }
 
   Future<void> _onPresentCustomerCenter(
@@ -117,7 +93,7 @@ class SubscriptionBloc extends Bloc<SubscriptionEvent, SubscriptionState> {
       return;
     }
     try {
-      await _revenueCatService.presentCustomerCenter();
+      await _revenueCatService.openSubscriptionManagement();
       add(const SubscriptionRefresh());
     } catch (e) {
       _emitError(emit, e.toString());

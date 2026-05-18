@@ -1,13 +1,50 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:easy_localization/easy_localization.dart';
 
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/app_guard_service.dart';
+import '../../../../core/services/revenuecat_service.dart';
 import '../bloc/subscription_bloc.dart';
+import 'custom_paywall_screen.dart';
 
 /// Settings card showing subscription status with Manage/Upgrade button.
 class SubscriptionSettingsCard extends StatelessWidget {
   const SubscriptionSettingsCard({super.key});
+
+  void _showNoInternetDialog(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('subscription.requires_internet_title'.tr()),
+        content: Text('subscription.requires_internet'.tr()),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text('subscription.ok'.tr()),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _handleUpgrade(BuildContext context) {
+    if (!RevenueCatConfig.isSupported ||
+        !RevenueCatService.instance.isInitialized) {
+      _showNoInternetDialog(context);
+      return;
+    }
+    CustomPaywallScreen.show(context);
+  }
+
+  void _handleManage(BuildContext context) {
+    if (!RevenueCatConfig.isSupported ||
+        !RevenueCatService.instance.isInitialized) {
+      _showNoInternetDialog(context);
+      return;
+    }
+    sl<SubscriptionBloc>().add(const SubscriptionPresentCustomerCenter());
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -33,7 +70,9 @@ class SubscriptionSettingsCard extends StatelessWidget {
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      isPro ? 'Tapix Pro' : 'Free Plan',
+                      isPro
+                          ? 'subscription.tapix_pro'.tr()
+                          : 'subscription.free_plan'.tr(),
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.bold,
                           ),
@@ -49,9 +88,9 @@ class SubscriptionSettingsCard extends StatelessWidget {
                           color: Colors.green,
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: const Text(
-                          'ACTIVE',
-                          style: TextStyle(
+                        child: Text(
+                          'subscription.active'.tr(),
+                          style: const TextStyle(
                             color: Colors.white,
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
@@ -64,14 +103,17 @@ class SubscriptionSettingsCard extends StatelessWidget {
                 if (isPro && !isLifetime && expirationDate != null) ...[
                   const SizedBox(height: 8),
                   Text(
-                    'Renews on ${expirationDate.day}/${expirationDate.month}/${expirationDate.year}',
+                    'subscription.renews_on'.tr(namedArgs: {
+                      'date':
+                          '${expirationDate.day}/${expirationDate.month}/${expirationDate.year}',
+                    }),
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],
                 if (isPro && isLifetime) ...[
                   const SizedBox(height: 8),
                   Text(
-                    'Lifetime access',
+                    'subscription.lifetime_access'.tr(),
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: Colors.green,
                         ),
@@ -82,24 +124,18 @@ class SubscriptionSettingsCard extends StatelessWidget {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
-                      onPressed: () {
-                        sl<SubscriptionBloc>()
-                            .add(const SubscriptionPresentPaywall());
-                      },
+                      onPressed: () => _handleUpgrade(context),
                       icon: const Icon(Icons.upgrade),
-                      label: const Text('Upgrade to Pro'),
+                      label: Text('subscription.upgrade_to_pro'.tr()),
                     ),
                   )
                 else
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton.icon(
-                      onPressed: () {
-                        sl<SubscriptionBloc>()
-                            .add(const SubscriptionPresentCustomerCenter());
-                      },
+                      onPressed: () => _handleManage(context),
                       icon: const Icon(Icons.settings),
-                      label: const Text('Manage Subscription'),
+                      label: Text('subscription.manage_subscription'.tr()),
                     ),
                   ),
               ],
@@ -137,8 +173,7 @@ class ProFeatureGate extends StatelessWidget {
             _DefaultLockedWidget(
               featureName: featureName,
               onUpgrade: () {
-                sl<SubscriptionBloc>()
-                    .add(const SubscriptionPresentPaywall());
+                CustomPaywallScreen.show(context);
               },
             );
       },
@@ -256,8 +291,7 @@ class AppLockScreen extends StatelessWidget {
                         width: double.infinity,
                         child: ElevatedButton.icon(
                           onPressed: () {
-                            sl<SubscriptionBloc>()
-                                .add(const SubscriptionPresentPaywall());
+                            CustomPaywallScreen.show(context);
                           },
                           icon: const Icon(Icons.star),
                           label: const Text('Subscribe to Tapix Pro'),
@@ -398,12 +432,12 @@ extension SubscriptionBlocExtension on BuildContext {
   }
 
   void showPaywall() {
-    sl<SubscriptionBloc>().add(const SubscriptionPresentPaywall());
+    CustomPaywallScreen.show(this);
   }
 
   void showPaywallIfNotPro() {
     if (!isPro) {
-      sl<SubscriptionBloc>().add(const SubscriptionPresentPaywallIfNeeded());
+      CustomPaywallScreen.show(this);
     }
   }
 

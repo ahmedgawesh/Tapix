@@ -1,6 +1,7 @@
 import 'package:equatable/equatable.dart';
 import 'package:decimal/decimal.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
+import '../../domain/entities/product_variant_entity.dart';
 
 abstract class EditPricesEvent extends RealtimeEvent with EquatableMixin {
   const EditPricesEvent();
@@ -45,6 +46,15 @@ class EditPricesPriceUpdated extends EditPricesEvent {
   List<Object?> get props => [productId, newPrice, isWholesale];
 }
 
+class EditPricesVariantPriceUpdated extends EditPricesEvent {
+  final ProductVariant updatedVariant;
+
+  const EditPricesVariantPriceUpdated(this.updatedVariant);
+
+  @override
+  List<Object?> get props => [updatedVariant];
+}
+
 class EditPricesSaveChanges extends EditPricesEvent {
   const EditPricesSaveChanges();
 }
@@ -56,6 +66,7 @@ class EditPricesBulkAdjustRequested extends EditPricesEvent {
   final String priceType; // 'cost', 'selling', 'wholesale'
   final bool applyToAll; // true = all products, false = selected only
   final List<int>? selectedProductIds; // null when applyToAll is true
+  final List<int>? selectedVariantIds;
 
   const EditPricesBulkAdjustRequested({
     required this.adjustmentType,
@@ -63,10 +74,11 @@ class EditPricesBulkAdjustRequested extends EditPricesEvent {
     this.priceType = 'selling',
     this.applyToAll = false,
     this.selectedProductIds,
+    this.selectedVariantIds,
   });
 
   @override
-  List<Object?> get props => [adjustmentType, value, priceType, applyToAll, selectedProductIds];
+  List<Object?> get props => [adjustmentType, value, priceType, applyToAll, selectedProductIds, selectedVariantIds];
 }
 
 class EditPricesUndoRequested extends EditPricesEvent {
@@ -92,6 +104,19 @@ class EditPricesProductSelectionToggled extends EditPricesEvent {
 
   @override
   List<Object?> get props => [productId, isSelected];
+}
+
+class EditPricesVariantSelectionToggled extends EditPricesEvent {
+  final int variantId;
+  final bool isSelected;
+
+  const EditPricesVariantSelectionToggled({
+    required this.variantId,
+    required this.isSelected,
+  });
+
+  @override
+  List<Object?> get props => [variantId, isSelected];
 }
 
 class EditPricesSelectAllToggled extends EditPricesEvent {

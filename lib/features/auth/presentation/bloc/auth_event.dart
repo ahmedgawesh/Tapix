@@ -56,6 +56,10 @@ class AuthSecurityQuestionRequested extends AuthEvent {
   List<Object?> get props => [username];
 }
 
+class AuthBiometricLoginRequested extends AuthEvent {
+  const AuthBiometricLoginRequested();
+}
+
 class AuthPasswordResetRequested extends AuthEvent {
   final String username;
   final String securityAnswer;

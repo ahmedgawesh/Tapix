@@ -280,14 +280,14 @@ class _ImportProductsView extends StatelessWidget {
   Future<void> _pickFile(BuildContext context) async {
     try {
       try {
-        await FilePicker.platform.clearTemporaryFiles();
+        await FilePicker.clearTemporaryFiles();
       } catch (e) {
         debugPrint('[ImportProductsScreen] clearTemporaryFiles failed: $e');
       }
 
       debugPrint('[ImportProductsScreen] Opening file picker');
 
-      final result = await FilePicker.platform.pickFiles(
+      final result = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['csv', 'xlsx', 'xls'],
         allowMultiple: false,

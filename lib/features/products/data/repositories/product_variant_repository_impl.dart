@@ -1,6 +1,8 @@
 import 'package:decimal/decimal.dart';
 import 'package:drift/drift.dart';
 import '../../../../core/database/app_database.dart' as db;
+import '../../../../core/services/inventory/inventory_adjustment_service.dart';
+import '../../../barcode/services/barcode_generation_service.dart';
 import '../../domain/entities/product_variant_entity.dart';
 import '../../domain/entities/product_color_entity.dart';
 import '../../domain/entities/size_entity.dart';
@@ -12,12 +14,22 @@ import '../models/size_model.dart';
 
 class ProductVariantRepositoryImpl implements ProductVariantRepository {
   final VariantLocalDatasource _datasource;
+  final InventoryAdjustmentService _adjustmentService;
+  final BarcodeGenerationService _barcodeGen;
 
-  ProductVariantRepositoryImpl(this._datasource);
+  ProductVariantRepositoryImpl(
+    this._datasource,
+    this._adjustmentService, {
+    BarcodeGenerationService? barcodeGen,
+  }) : _barcodeGen = barcodeGen ?? BarcodeGenerationService();
 
+  /// Produces a deterministic, **valid** EAN-13 for a variant. The previous
+  /// implementation returned `'29' + padded(variantId, 11)` which was 13 chars
+  /// but had no checksum — scanners rejecting invalid EAN-13 codes would
+  /// refuse to read store-printed labels. We now compute the proper checksum
+  /// via [BarcodeGenerationService].
   String _buildAutoBarcode(int variantId) {
-    final padded = variantId.toString().padLeft(11, '0');
-    return '29$padded';
+    return _barcodeGen.generateDeterministicEan13(variantId);
   }
 
   // Variants
@@ -89,8 +101,22 @@ class ProductVariantRepositoryImpl implements ProductVariantRepository {
     Decimal? wholesalePriceCents,
     required int stockQuantity,
     bool isActive = true,
-  }) {
-    return _datasource.createVariant(
+  }) async {
+    // ── Phase 4 accounting invariant ─────────────────────────────────────
+    // A newly-created variant with a non-zero starting quantity must post
+    // an "Opening Balance" journal entry so that:
+    //   value on hand (stock × cost) ≡ balance of account 1200 Inventory.
+    //
+    // To make that possible we insert the row with stock_quantity = 0 and
+    // then call InventoryAdjustmentService.recordOpeningBalance, which:
+    //   1. writes an inventory_adjustments audit row (type = opening_balance),
+    //   2. increments stock_quantity to the requested value via StockService,
+    //   3. posts the matching JE: Dr 1200 Inventory / Cr 3100 Opening
+    //      Balance Equity for quantity × cost.
+    //
+    // Creating with stock = 0 (the default flow) skips the service call
+    // entirely and behaves as before.
+    final int id = await _datasource.createVariant(
       db.ProductVariantsCompanion(
         productId: Value(productId),
         sku: Value(sku),
@@ -101,17 +127,27 @@ class ProductVariantRepositoryImpl implements ProductVariantRepository {
         priceCents: Value(priceCents),
         wholesalePriceCents: Value(wholesalePriceCents),
         priceAdjustmentCents: Value(Decimal.zero),
-        stockQuantity: Value(stockQuantity),
+        // Start at zero; opening balance will bring it up via the service.
+        stockQuantity: const Value(0),
         isActive: Value(isActive),
       ),
-    ).then((id) async {
-      final shouldAutoGenerate = barcode == null || barcode.trim().isEmpty;
-      if (shouldAutoGenerate) {
-        final autoBarcode = _buildAutoBarcode(id);
-        await _datasource.updateVariantBarcode(variantId: id, barcode: autoBarcode);
-      }
-      return id;
-    });
+    );
+
+    final shouldAutoGenerate = barcode == null || barcode.trim().isEmpty;
+    if (shouldAutoGenerate) {
+      final autoBarcode = _buildAutoBarcode(id);
+      await _datasource.updateVariantBarcode(variantId: id, barcode: autoBarcode);
+    }
+
+    if (stockQuantity > 0) {
+      await _adjustmentService.recordOpeningBalance(
+        productId: productId,
+        variantId: id,
+        quantity: stockQuantity,
+      );
+    }
+
+    return id;
   }
 
   @override
@@ -144,38 +180,93 @@ class ProductVariantRepositoryImpl implements ProductVariantRepository {
   }
 
   @override
-  Future<void> adjustStock({
+  Future<int> countVariantReferences(int variantId) {
+    return _datasource.countVariantReferences(variantId);
+  }
+
+  @override
+  Future<VariantDeletionResult> smartDeleteVariant(int variantId) async {
+    final result = await _datasource.smartDeleteVariant(variantId);
+    return VariantDeletionResult(
+      wasDeleted: result.wasDeleted,
+      referenceCount: result.referenceCount,
+    );
+  }
+
+  @override
+  Future<VariantDeletionResult> writeOffAndDeleteVariant({
     required int variantId,
+    required String reason,
+  }) async {
+    final variant = await _datasource.getVariantById(variantId);
+    if (variant == null) {
+      // Mirror smart-delete contract for the not-found case so callers
+      // can treat both methods uniformly.
+      return const VariantDeletionResult(wasDeleted: false, referenceCount: 0);
+    }
+
+    // Step 1 — post a balanced shrinkage entry that drives stock to zero.
+    // This guarantees the 1200 Inventory ledger stays aligned with Σ(stock
+    // × cost) regardless of whether the row is hard- or soft-deleted next.
+    if (variant.stockQuantity > 0) {
+      await _adjustmentService.adjustForProduct(
+        productId: variant.productId,
+        variantId: variant.id,
+        type: InventoryAdjustmentType.shrinkage,
+        quantityDelta: -variant.stockQuantity,
+        reason: reason,
+      );
+    }
+
+    // Step 2 — smart delete (hard if no refs, soft if there are any).
+    final result = await _datasource.smartDeleteVariant(variantId);
+    return VariantDeletionResult(
+      wasDeleted: result.wasDeleted,
+      referenceCount: result.referenceCount,
+    );
+  }
+
+  @override
+  Future<int> countActiveDimensionalVariants(int productId) {
+    return _datasource.countActiveDimensionalVariants(productId);
+  }
+
+  @override
+  Future<int> deactivateDimensionalVariants(int productId) {
+    return _datasource.deactivateDimensionalVariants(productId);
+  }
+
+  @override
+  Future<InventoryAdjustmentResult> adjustStock({
+    required int variantId,
+    required InventoryAdjustmentType type,
     required int quantityDelta,
     required String reason,
+    String? notes,
     required int currencyId,
     int? userId,
   }) async {
     final variant = await _datasource.getVariantById(variantId);
-    if (variant == null) throw Exception('Variant not found');
+    if (variant == null) {
+      throw const InventoryAdjustmentException('Variant not found');
+    }
 
-    final newStock = variant.stockQuantity + quantityDelta;
-    if (newStock < 0) throw Exception('Stock cannot be negative');
-
-    // Update the stock quantity
-    final updated = ProductVariantModel(
-      id: variant.id,
+    // Delegate to the single sanctioned entry point. The service owns:
+    //   - reason validation (non-empty),
+    //   - stock mutation via StockService,
+    //   - journal entry posting, and
+    //   - the inventory_adjustments audit row.
+    // This repository must NOT touch stock_quantity directly anymore.
+    return _adjustmentService.adjust(
       productId: variant.productId,
-      sku: variant.sku,
-      barcode: variant.barcode,
-      colorId: variant.colorId,
-      sizeId: variant.sizeId,
-      costCents: variant.costCents,
-      priceCents: variant.priceCents,
-      wholesalePriceCents: variant.wholesalePriceCents,
-      priceAdjustmentCents: variant.priceAdjustmentCents,
-      stockQuantity: newStock,
-      isActive: variant.isActive,
+      variantId: variant.id,
+      type: type,
+      quantityDelta: quantityDelta,
+      reason: reason,
+      notes: notes,
+      currencyId: currencyId,
+      userId: userId,
     );
-    await _datasource.updateVariant(updated);
-
-    // NOTE: No inventory adjustment journal entry.
-    // Inventory account only changes via purchases and returns.
   }
 
   @override

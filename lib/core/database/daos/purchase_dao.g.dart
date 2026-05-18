@@ -14,6 +14,9 @@ mixin _$PurchaseDaoMixin on DatabaseAccessor<AppDatabase> {
   $SizesTable get sizes => attachedDatabase.sizes;
   $ProductVariantsTable get productVariants => attachedDatabase.productVariants;
   $PurchaseItemsTable get purchaseItems => attachedDatabase.purchaseItems;
+  $UsersTable get users => attachedDatabase.users;
+  $ReturnReasonCodesTable get returnReasonCodes =>
+      attachedDatabase.returnReasonCodes;
   $PurchaseReturnsTable get purchaseReturns => attachedDatabase.purchaseReturns;
   $PurchaseReturnItemsTable get purchaseReturnItems =>
       attachedDatabase.purchaseReturnItems;
@@ -21,6 +24,7 @@ mixin _$PurchaseDaoMixin on DatabaseAccessor<AppDatabase> {
       attachedDatabase.purchasePayments;
   $SupplierTransactionsTable get supplierTransactions =>
       attachedDatabase.supplierTransactions;
+  $ProductBatchesTable get productBatches => attachedDatabase.productBatches;
   PurchaseDaoManager get managers => PurchaseDaoManager(this);
 }
 
@@ -51,6 +55,13 @@ class PurchaseDaoManager {
       );
   $$PurchaseItemsTableTableManager get purchaseItems =>
       $$PurchaseItemsTableTableManager(_db.attachedDatabase, _db.purchaseItems);
+  $$UsersTableTableManager get users =>
+      $$UsersTableTableManager(_db.attachedDatabase, _db.users);
+  $$ReturnReasonCodesTableTableManager get returnReasonCodes =>
+      $$ReturnReasonCodesTableTableManager(
+        _db.attachedDatabase,
+        _db.returnReasonCodes,
+      );
   $$PurchaseReturnsTableTableManager get purchaseReturns =>
       $$PurchaseReturnsTableTableManager(
         _db.attachedDatabase,
@@ -70,5 +81,10 @@ class PurchaseDaoManager {
       $$SupplierTransactionsTableTableManager(
         _db.attachedDatabase,
         _db.supplierTransactions,
+      );
+  $$ProductBatchesTableTableManager get productBatches =>
+      $$ProductBatchesTableTableManager(
+        _db.attachedDatabase,
+        _db.productBatches,
       );
 }

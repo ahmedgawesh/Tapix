@@ -56,10 +56,10 @@ extension EditPricesBlocHandlers on dynamic {
           newPrice = currentPrice * (Decimal.one - (event.value / Decimal.fromInt(100)).toDecimal());
           break;
         case 'fixed_increase':
-          newPrice = currentPrice + event.value;
+          newPrice = currentPrice + (event.value * Decimal.fromInt(100));
           break;
         case 'fixed_decrease':
-          newPrice = currentPrice - event.value;
+          newPrice = currentPrice - (event.value * Decimal.fromInt(100));
           break;
         default:
           continue;

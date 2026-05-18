@@ -185,15 +185,11 @@ class _FinancialHealthBanner extends StatelessWidget {
           final tb = data.trialBalance;
           final healthy = data.isHealthy;
 
-          // Compute key figures
-          final totalAssets = tb.getItemsByType('asset').fold<int>(
-              0, (sum, i) => sum + i.debitCents - i.creditCents);
-          final totalLiabilities = tb.getItemsByType('liability').fold<int>(
-              0, (sum, i) => sum + i.creditCents - i.debitCents);
-          final totalRevenue = tb.getItemsByType('revenue').fold<int>(
-              0, (sum, i) => sum + i.creditCents - i.debitCents);
-          final totalExpenses = tb.getItemsByType('expense').fold<int>(
-              0, (sum, i) => sum + i.debitCents - i.creditCents);
+          // Phase 7 — natural-balance signing via TrialBalance SoT.
+          final totalAssets = tb.totalForType('asset');
+          final totalLiabilities = tb.totalForType('liability');
+          final totalRevenue = tb.totalForType('revenue');
+          final totalExpenses = tb.totalForType('expense');
           final netIncome = totalRevenue - totalExpenses;
 
           return Card(

@@ -2,6 +2,7 @@ import 'package:drift/drift.dart' hide Column;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart';
+import '../../../../core/services/ledger/ledger_running_balance.dart';
 import '../widgets/report_date_range.dart';
 
 // ==================== EVENTS ====================
@@ -65,11 +66,13 @@ class DrilldownTypeSummary {
 class SupplierDrilldownOption {
   final int id;
   final String name;
+  final String? phone;
   final int balanceCents;
 
   const SupplierDrilldownOption({
     required this.id,
     required this.name,
+    this.phone,
     required this.balanceCents,
   });
 }
@@ -193,7 +196,7 @@ class SupplierBalanceDrilldownBloc extends RealtimeBloc<
     // Load supplier list for the selector
     final supplierRows = await _db.customSelect(
       '''
-      SELECT s.id, s.name, s.balance_cents
+      SELECT s.id, s.name, s.phone, s.balance_cents
       FROM suppliers s
       WHERE s.is_active = 1
       ORDER BY s.name ASC
@@ -205,6 +208,7 @@ class SupplierBalanceDrilldownBloc extends RealtimeBloc<
         .map((row) => SupplierDrilldownOption(
               id: row.read<int>('id'),
               name: row.read<String>('name'),
+              phone: row.readNullable<String>('phone'),
               balanceCents: row.read<int>('balance_cents'),
             ))
         .toList();
@@ -307,7 +311,8 @@ class SupplierBalanceDrilldownBloc extends RealtimeBloc<
       readsFrom: {_db.supplierTransactions},
     ).get();
 
-    int runningBalance = openingBalanceCents;
+    // Phase 7 — running balance via SoT helper.
+    final running = LedgerRunningBalance(openingBalanceCents);
     int totalDebits = 0;
     int totalCredits = 0;
     final transactions = <DrilldownTransaction>[];
@@ -316,7 +321,7 @@ class SupplierBalanceDrilldownBloc extends RealtimeBloc<
     for (final row in txnRows) {
       final amountCents = row.read<int>('amount_cents');
       final type = row.read<String>('transaction_type');
-      runningBalance += amountCents;
+      final runningBalance = running.apply(amountCents);
 
       if (amountCents > 0) {
         totalDebits += amountCents;

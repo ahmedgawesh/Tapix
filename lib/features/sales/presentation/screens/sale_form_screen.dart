@@ -14,6 +14,12 @@ import '../../../../core/di/injection_container.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/services/below_cost_sale_service.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../../../core/services/pricing/discount_converter.dart';
+import '../../../../core/services/parties/party_balance_classifier.dart';
+import '../../../../core/widgets/inputs/select_all_on_focus.dart';
+import '../../../../core/money/money.dart';
+import '../../../../core/pricing/discount.dart';
+import '../../../../core/pricing/line_item_pricing_engine.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../auth/domain/entities/user_entity.dart';
 import '../../../products/domain/entities/product_entity.dart';
@@ -80,6 +86,12 @@ class _SaleFormScreenState extends State<SaleFormScreen> {
       enableTaxCalculations: enableTax,
       defaultSalesTaxRateBps: taxRateBps,
       allowNegativeStock: settings.allowNegativeStock,
+      allowPartialPayments: settings.allowPartialPayments,
+      allowDiscounts: settings.allowDiscounts,
+      maxDiscountPercent: settings.maxDiscountPercent,
+      requireCustomerForSales: settings.requireCustomerForSales,
+      enableLoyaltyPoints: settings.enableLoyaltyPoints,
+      defaultPaymentMethodStr: settings.defaultPaymentMethod,
       isEditingPosted: isEditingPosted,
     ));
     return bloc;
@@ -153,6 +165,41 @@ class _SaleFormView extends StatelessWidget {
     required this.onSwitchTab,
   });
 
+  Future<bool> _onWillPop(BuildContext context) async {
+    final state = context.read<SaleFormBloc>().state;
+    if (!state.hasUnsavedChanges) return true;
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('sales.unsaved_changes_title'.tr()),
+        content: Text('sales.unsaved_changes_message'.tr()),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('sales.discard'.tr()),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('sales.stay'.tr()),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
+  }
+
+  void _navigateBack(BuildContext context) async {
+    final shouldPop = await _onWillPop(context);
+    if (shouldPop && context.mounted) {
+      if (context.canPop()) {
+        context.pop();
+      } else {
+        context.go('/sales');
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -178,6 +225,13 @@ class _SaleFormView extends StatelessWidget {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             final nav = Navigator.of(context, rootNavigator: true);
             if (nav.context.mounted) {
+              final autoPrint = nav.context.read<AppSettingsBloc>().state.settings.autoPrintReceipt;
+              if (autoPrint) {
+                SalePdfService.printFromFormState(
+                  context: nav.context,
+                  state: stateSnapshot,
+                ).catchError((_) => null);
+              }
               _showSaveConfirmationOverlay(nav.context, stateSnapshot);
             }
           });
@@ -196,18 +250,18 @@ class _SaleFormView extends StatelessWidget {
         }
       },
       builder: (context, state) {
-        return Scaffold(
-          appBar: AppBar(
-            leading: IconButton(
-              icon: const Icon(LucideIcons.arrowLeft),
-              onPressed: () {
-                if (context.canPop()) {
-                  context.pop();
-                } else {
-                  context.go('/sales');
-                }
-              },
-            ),
+        return PopScope(
+          canPop: !state.hasUnsavedChanges,
+          onPopInvokedWithResult: (didPop, _) async {
+            if (didPop) return;
+            _navigateBack(context);
+          },
+          child: Scaffold(
+            appBar: AppBar(
+              leading: IconButton(
+                icon: const Icon(LucideIcons.arrowLeft),
+                onPressed: () => _navigateBack(context),
+              ),
             title: Text(state.saleId == null ? 'sales.new'.tr() : 'sales.edit'.tr()),
             actions: [
               if (!isEditMode)
@@ -234,12 +288,14 @@ class _SaleFormView extends StatelessWidget {
                     const SizedBox(height: 8),
                     _salespersonModeToggle(context, state, theme, cs),
                     const SizedBox(height: 12),
-                    _discountToggle(context, state, theme, cs),
-                    const SizedBox(height: 16),
+                    if (state.allowDiscounts) ...[
+                      _discountToggle(context, state, theme, cs),
+                      const SizedBox(height: 16),
+                    ],
                     _itemsHeader(context, state, theme, cs),
                     const SizedBox(height: 8),
                     if (state.items.isEmpty) _emptyHint(theme, cs),
-                    ...state.items.map((i) => _itemTile(context, i, theme, cs, curr)),
+                    ...state.items.map((i) => _itemTile(context, i, state, theme, cs, curr)),
                     const SizedBox(height: 16),
                     _totalsCard(state, theme, cs, curr),
                     const SizedBox(height: 80),
@@ -249,6 +305,7 @@ class _SaleFormView extends StatelessWidget {
               _bottomBar(context, state, theme, cs, curr),
             ],
           ),
+        ),
         );
       },
     );
@@ -578,8 +635,12 @@ class _SaleFormView extends StatelessWidget {
     ])),
   );
 
-  Widget _itemTile(BuildContext ctx, SaleLineItem item, ThemeData t, ColorScheme cs, CurrencyService curr) {
+  Widget _itemTile(BuildContext ctx, SaleLineItem item, SaleFormState state, ThemeData t, ColorScheme cs, CurrencyService curr) {
     final hasImage = item.product.imagePath != null && item.product.imagePath!.isNotEmpty;
+    final itemTaxCents = item.taxCentsWithSettings(
+      enableTaxCalculations: state.enableTaxCalculations,
+      defaultTaxRateBps: state.defaultSalesTaxRateBps,
+    );
     return Card(
       elevation: 0, margin: const EdgeInsets.only(bottom: 8),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12),
@@ -620,6 +681,11 @@ class _SaleFormView extends StatelessWidget {
                   decoration: BoxDecoration(color: cs.tertiaryContainer, borderRadius: BorderRadius.circular(6)),
                   child: Text('-${curr.format(item.discountCents.toBigInt().toInt())}',
                     style: t.textTheme.labelSmall?.copyWith(color: cs.onTertiaryContainer, fontWeight: FontWeight.w600)))],
+              if (itemTaxCents > Decimal.zero) ...[const SizedBox(width: 8),
+                Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                  decoration: BoxDecoration(color: cs.secondaryContainer, borderRadius: BorderRadius.circular(6)),
+                  child: Text('+${curr.format(itemTaxCents.toBigInt().toInt())}',
+                    style: t.textTheme.labelSmall?.copyWith(color: cs.onSecondaryContainer, fontWeight: FontWeight.w600)))],
             ]),
           ])),
           Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
@@ -798,15 +864,22 @@ class _SaleFormView extends StatelessWidget {
     final isPerItem = bloc.state.salespersonMode == SalespersonMode.perItem;
     showModalBottomSheet<void>(context: ctx, isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (sc) => _EditItemSheet(item: item,
-        showSalesperson: isPerItem,
-        onUpdated: (qty, price, discount, {int? employeeId, String? employeeName, String? itemNote, bool clearEmployee = false}) {
-          bloc.add(SaleLineItemUpdated(
-            tempId: item.tempId, quantity: qty, unitPriceCents: price, discountCents: discount,
-            employeeId: employeeId, employeeName: employeeName, itemNote: itemNote, clearEmployee: clearEmployee));
-          Navigator.pop(sc);
-        },
-        onRemoved: () { bloc.add(SaleLineItemRemoved(item.tempId)); Navigator.pop(sc); }));
+      // BlocProvider.value re-exposes the SaleFormBloc inside the
+      // modal route — without this the sheet's `context.read<SaleFormBloc>()`
+      // (used to source live tax flags for the live total preview)
+      // walks an empty element tree and throws ProviderNotFoundError.
+      // Mirrors the _CheckoutSheet pattern below.
+      builder: (sc) => BlocProvider.value(value: bloc,
+        child: _EditItemSheet(item: item,
+          showSalesperson: isPerItem,
+          allowDiscounts: bloc.state.allowDiscounts,
+          onUpdated: (qty, price, discount, {int? employeeId, String? employeeName, String? itemNote, bool clearEmployee = false}) {
+            bloc.add(SaleLineItemUpdated(
+              tempId: item.tempId, quantity: qty, unitPriceCents: price, discountCents: discount,
+              employeeId: employeeId, employeeName: employeeName, itemNote: itemNote, clearEmployee: clearEmployee));
+            Navigator.pop(sc);
+          },
+          onRemoved: () { bloc.add(SaleLineItemRemoved(item.tempId)); Navigator.pop(sc); })));
   }
 
   // ═══════════════════════════════════════════════════════

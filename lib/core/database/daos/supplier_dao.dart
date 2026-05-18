@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 import 'package:decimal/decimal.dart';
 import '../app_database.dart';
 import '../tables/parties.dart';
+import '../../services/balance_service.dart';
 
 part 'supplier_dao.g.dart';
 
@@ -130,18 +131,10 @@ class SupplierDao extends DatabaseAccessor<AppDatabase> with _$SupplierDaoMixin 
         return txId;
       }
 
-      final supplier = await (select(suppliers)..where((s) => s.id.equals(supplierId)))
-          .getSingleOrNull();
-      if (supplier != null) {
-        final oldBalance = supplier.balanceCents.toBigInt().toInt();
-        final newBalance = oldBalance + deltaCents;
-        await (update(suppliers)..where((s) => s.id.equals(supplierId))).write(
-          SuppliersCompanion(
-            balanceCents: Value(Decimal.fromInt(newBalance)),
-            updatedAt: Value(DateTime.now()),
-          ),
-        );
-      }
+      await BalanceService.adjustSupplierBalance(this,
+        supplierId: supplierId,
+        deltaCents: deltaCents,
+      );
 
       return txId;
     });
@@ -188,19 +181,10 @@ class SupplierDao extends DatabaseAccessor<AppDatabase> with _$SupplierDaoMixin 
 
       // Adjust supplier balance by the delta
       if (deltaCents != 0) {
-        final supplier = await (select(suppliers)
-              ..where((s) => s.id.equals(existing.supplierId)))
-            .getSingleOrNull();
-        if (supplier != null) {
-          final oldBalance = supplier.balanceCents.toBigInt().toInt();
-          final newBalance = oldBalance + deltaCents;
-          await (update(suppliers)..where((s) => s.id.equals(existing.supplierId))).write(
-            SuppliersCompanion(
-              balanceCents: Value(Decimal.fromInt(newBalance)),
-              updatedAt: Value(DateTime.now()),
-            ),
-          );
-        }
+        await BalanceService.adjustSupplierBalance(this,
+          supplierId: existing.supplierId,
+          deltaCents: deltaCents,
+        );
       }
 
       return existing;
@@ -265,6 +249,22 @@ class SupplierDao extends DatabaseAccessor<AppDatabase> with _$SupplierDaoMixin 
         .watch();
   }
 
+  /// INTERNAL — absolute-set writer for `suppliers.balance_cents`.
+  ///
+  /// **DO NOT CALL THIS FROM PRODUCTION CODE.** It bypasses both
+  /// `BalanceService` and `JournalEntryService`, so any caller silently
+  /// desynchronises the supplier sub-ledger from the General Ledger and
+  /// breaks `AccountingRepository.reconcileBalances()`.
+  ///
+  /// Production paths (Phase 1.3, May 2026) must go through:
+  ///   - `BalanceService.adjustSupplierBalance` for delta mutations
+  ///     (already used by `purchase_dao`, `adjustment_return_dao`, etc.)
+  ///   - `recalculateBalance` below, for idempotent rebuild from
+  ///     `supplier_transactions`
+  ///
+  /// Retained only for legacy migration / repair scripts that seed a
+  /// balance before any transactions exist.
+  @Deprecated('Use BalanceService.adjustSupplierBalance or recalculateBalance')
   Future<void> updateSupplierBalance(int supplierId, int newBalanceCents) async {
     await (update(suppliers)..where((s) => s.id.equals(supplierId))).write(
       SuppliersCompanion(

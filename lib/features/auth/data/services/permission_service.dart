@@ -54,6 +54,10 @@ class PermissionService {
       Permissions.editTransactions,
       // Audit
       Permissions.viewAuditLogs,
+      // Phase 11.3b — granular accounting controls (owner-only by default).
+      Permissions.voidJournalEntry,
+      Permissions.closeFiscalPeriod,
+      Permissions.reopenFiscalPeriod,
       // Legacy permissions for backward compatibility
       'manage_users',
       'manage_employees',

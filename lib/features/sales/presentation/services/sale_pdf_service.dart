@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
@@ -12,8 +13,13 @@ import '../../../settings/domain/entities/company_profile.dart';
 import '../../../settings/domain/entities/app_settings.dart';
 import '../../../settings/presentation/bloc/app_settings_bloc.dart';
 import '../../../customers/domain/repositories/customer_repository.dart';
+import '../../../../core/database/app_database.dart';
+import '../../../../core/database/daos/adjustment_return_dao.dart'
+    show SaleAdjReturnItemWithDetails;
 import '../../domain/entities/sale_entity.dart';
 import '../bloc/sale_form_bloc.dart';
+import '../../../purchases/presentation/bloc/purchase_adj_return_form_bloc.dart'
+    show parseAdjReturnNotes, adjReturnReasonLabel;
 
 class SalePdfService {
   /// Generate and print a sale invoice PDF from current form state
@@ -27,17 +33,18 @@ class SalePdfService {
     final company = await sl<CompanyProfileService>().getProfile();
     final appSettings = sl<AppSettingsBloc>().state.settings;
 
-    final pdf = await _buildSaleInvoiceFromState(
-      state: state,
-      cs: cs,
-      locale: locale,
-      isRtl: isRtl,
-      company: company,
-      appSettings: appSettings,
-    );
-
     await Printing.layoutPdf(
-      onLayout: (PdfPageFormat format) async => pdf.save(),
+      onLayout: (PdfPageFormat format) async {
+        final pdf = await _buildSaleInvoiceFromState(
+          state: state,
+          cs: cs,
+          locale: locale,
+          isRtl: isRtl,
+          company: company,
+          appSettings: appSettings,
+        );
+        return pdf.save();
+      },
       name: 'Sale_${state.saleNumber ?? state.saleId ?? 'draft'}',
     );
   }
@@ -81,18 +88,19 @@ class SalePdfService {
     final company = await sl<CompanyProfileService>().getProfile();
     final appSettings = sl<AppSettingsBloc>().state.settings;
 
-    final pdf = await _buildSaleInvoiceFromEntity(
-      sale: sale,
-      items: items,
-      cs: cs,
-      appSettings: appSettings,
-      locale: locale,
-      isRtl: isRtl,
-      company: company,
-    );
-
     await Printing.layoutPdf(
-      onLayout: (PdfPageFormat format) async => pdf.save(),
+      onLayout: (PdfPageFormat format) async {
+        final pdf = await _buildSaleInvoiceFromEntity(
+          sale: sale,
+          items: items,
+          cs: cs,
+          appSettings: appSettings,
+          locale: locale,
+          isRtl: isRtl,
+          company: company,
+        );
+        return pdf.save();
+      },
       name: 'Sale_${sale.invoiceNumber}',
     );
   }
@@ -137,19 +145,22 @@ class SalePdfService {
     final locale = context.locale;
     final isRtl = locale.languageCode == 'ar';
     final company = await sl<CompanyProfileService>().getProfile();
-
-    final pdf = await _buildSaleReturnPdf(
-      originalSale: originalSale,
-      returnEntity: returnEntity,
-      returnItems: returnItems,
-      cs: cs,
-      locale: locale,
-      isRtl: isRtl,
-      company: company,
-    );
+    final appSettings = sl<AppSettingsBloc>().state.settings;
 
     await Printing.layoutPdf(
-      onLayout: (PdfPageFormat format) async => pdf.save(),
+      onLayout: (PdfPageFormat format) async {
+        final pdf = await _buildSaleReturnPdf(
+          originalSale: originalSale,
+          returnEntity: returnEntity,
+          returnItems: returnItems,
+          cs: cs,
+          locale: locale,
+          isRtl: isRtl,
+          company: company,
+          appSettings: appSettings,
+        );
+        return pdf.save();
+      },
       name: 'SaleReturn_${returnEntity.id}',
     );
   }
@@ -165,6 +176,7 @@ class SalePdfService {
     final locale = context.locale;
     final isRtl = locale.languageCode == 'ar';
     final company = await sl<CompanyProfileService>().getProfile();
+    final appSettings = sl<AppSettingsBloc>().state.settings;
 
     final pdf = await _buildSaleReturnPdf(
       originalSale: originalSale,
@@ -174,6 +186,7 @@ class SalePdfService {
       locale: locale,
       isRtl: isRtl,
       company: company,
+      appSettings: appSettings,
     );
 
     final bytes = await pdf.save();
@@ -194,6 +207,7 @@ class SalePdfService {
     required Locale locale,
     required bool isRtl,
     required CompanyProfile company,
+    required AppSettings appSettings,
   }) async {
     final fonts = await _loadFonts();
     final pdf = pw.Document();
@@ -219,7 +233,7 @@ class SalePdfService {
 
     pdf.addPage(
       pw.Page(
-        pageFormat: PdfPageFormat.a4,
+        pageFormat: _getPaperFormat(appSettings.receiptPaperSize),
         textDirection: isRtl ? pw.TextDirection.rtl : pw.TextDirection.ltr,
         build: (pw.Context ctx) {
           return pw.Column(
@@ -230,6 +244,7 @@ class SalePdfService {
                 title: 'sales.sale_return'.tr(),
                 fonts: fonts,
                 isRtl: isRtl,
+                showLogo: appSettings.showLogoOnReceipt,
               ),
               pw.SizedBox(height: 16),
               // Return info
@@ -311,7 +326,7 @@ class SalePdfService {
                 pw.SizedBox(height: 12),
                 customerBalanceWidget,
               ],
-              pw.Spacer(),
+              pw.SizedBox(height: 20),
               _buildFooter(fonts: fonts, locale: locale),
             ],
           );
@@ -437,7 +452,7 @@ class SalePdfService {
 
     pdf.addPage(
       pw.Page(
-        pageFormat: PdfPageFormat.a4,
+        pageFormat: _getPaperFormat(appSettings.receiptPaperSize),
         textDirection: isRtl ? pw.TextDirection.rtl : pw.TextDirection.ltr,
         build: (pw.Context ctx) {
           return pw.Column(
@@ -450,6 +465,7 @@ class SalePdfService {
                 isRtl: isRtl,
                 receiptHeaderText: appSettings.receiptHeaderText,
                 taxRegistrationNumber: appSettings.taxRegistrationNumber,
+                showLogo: appSettings.showLogoOnReceipt,
               ),
               pw.SizedBox(height: 16),
               _buildInvoiceInfo(
@@ -457,6 +473,7 @@ class SalePdfService {
                 date: state.saleDate,
                 customerName: state.customerName ?? 'sales.walk_in'.tr(),
                 salespersonName: state.employeeName,
+                paymentMethod: state.paymentMethod.name,
                 locale: locale,
                 fonts: fonts,
               ),
@@ -511,7 +528,7 @@ class SalePdfService {
                 pw.SizedBox(height: 12),
                 customerBalanceWidget,
               ],
-              pw.Spacer(),
+              pw.SizedBox(height: 20),
               _buildFooter(fonts: fonts, locale: locale, receiptFooterText: appSettings.receiptFooterText),
             ],
           );
@@ -557,7 +574,7 @@ class SalePdfService {
 
     pdf.addPage(
       pw.Page(
-        pageFormat: PdfPageFormat.a4,
+        pageFormat: _getPaperFormat(appSettings.receiptPaperSize),
         textDirection: isRtl ? pw.TextDirection.rtl : pw.TextDirection.ltr,
         build: (pw.Context ctx) {
           return pw.Column(
@@ -570,6 +587,7 @@ class SalePdfService {
                 isRtl: isRtl,
                 receiptHeaderText: appSettings.receiptHeaderText,
                 taxRegistrationNumber: appSettings.taxRegistrationNumber,
+                showLogo: appSettings.showLogoOnReceipt,
               ),
               pw.SizedBox(height: 16),
               _buildInvoiceInfo(
@@ -577,6 +595,7 @@ class SalePdfService {
                 date: sale.saleDate,
                 customerName: sale.customerName ?? 'sales.walk_in'.tr(),
                 salespersonName: sale.employeeName,
+                paymentMethod: sale.paymentMethod,
                 locale: locale,
                 fonts: fonts,
               ),
@@ -631,7 +650,7 @@ class SalePdfService {
                 pw.SizedBox(height: 12),
                 customerBalanceWidget,
               ],
-              pw.Spacer(),
+              pw.SizedBox(height: 20),
               _buildFooter(fonts: fonts, locale: locale, receiptFooterText: appSettings.receiptFooterText),
             ],
           );
@@ -645,6 +664,12 @@ class SalePdfService {
   // ═══════════════════════════════════════════════════════
   // SHARED PDF BUILDING BLOCKS
   // ═══════════════════════════════════════════════════════
+
+  static PdfPageFormat _getPaperFormat(String size) {
+    if (size == '58mm') return PdfPageFormat.roll57;
+    if (size == '80mm') return PdfPageFormat.roll80;
+    return PdfPageFormat.a4;
+  }
 
   static Future<_PdfFonts> _loadFonts() async {
     final fontData = await rootBundle.load('assets/fonts/IBMPlexSansArabic-Regular.ttf');
@@ -662,6 +687,7 @@ class SalePdfService {
     required bool isRtl,
     String? receiptHeaderText,
     String? taxRegistrationNumber,
+    bool showLogo = true,
   }) {
     return pw.Container(
       padding: const pw.EdgeInsets.all(16),
@@ -678,6 +704,21 @@ class SalePdfService {
               pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
+                  if (showLogo && company.logoBase64 != null && company.logoBase64!.isNotEmpty)
+                    pw.Container(
+                      width: 40,
+                      height: 40,
+                      margin: const pw.EdgeInsets.only(bottom: 8),
+                      decoration: const pw.BoxDecoration(
+                        shape: pw.BoxShape.circle,
+                      ),
+                      child: pw.ClipOval(
+                        child: pw.Image(
+                          pw.MemoryImage(base64Decode(company.logoBase64!)),
+                          fit: pw.BoxFit.cover,
+                        ),
+                      ),
+                    ),
                   if (company.name.isNotEmpty)
                     _bidiText(company.name, fonts.bold, fontSize: 16),
                   if (company.address != null && company.address!.isNotEmpty)
@@ -703,11 +744,27 @@ class SalePdfService {
     );
   }
 
+  static String _translatePaymentMethod(String method) {
+    switch (method) {
+      case 'cash':
+        return 'sales.payment_cash'.tr();
+      case 'credit':
+        return 'sales.payment_credit'.tr();
+      case 'card':
+        return 'sales.payment_card'.tr();
+      case 'cheque':
+        return 'sales.payment_cheque'.tr();
+      default:
+        return method;
+    }
+  }
+
   static pw.Widget _buildInvoiceInfo({
     required String invoiceNumber,
     required DateTime date,
     required String customerName,
     String? salespersonName,
+    String? paymentMethod,
     required Locale locale,
     required _PdfFonts fonts,
   }) {
@@ -724,6 +781,8 @@ class SalePdfService {
           _pdfInfoRow('sales.invoice_date'.tr(),
               DateFormat.yMMMd(locale.toString()).format(date), fonts.regular),
           _pdfInfoRow('sales.customer'.tr(), customerName, fonts.regular),
+          if (paymentMethod != null && paymentMethod.isNotEmpty)
+            _pdfInfoRow('sales.payment_method'.tr(), _translatePaymentMethod(paymentMethod), fonts.regular),
           if (salespersonName != null && salespersonName.isNotEmpty)
             _pdfInfoRow('sales.salesperson'.tr(), salespersonName, fonts.regular),
         ],
@@ -936,6 +995,12 @@ class SalePdfService {
           alignment: pw.Alignment.center,
           child: _bidiText(generatedText, fonts.regular, fontSize: 8, color: PdfColors.grey500),
         ),
+        pw.SizedBox(height: 4),
+        pw.Container(
+          alignment: pw.Alignment.center,
+          child: pw.Text('Powered by TapixSolutions',
+              style: pw.TextStyle(font: fonts.regular, fontSize: 7, color: PdfColors.grey400)),
+        ),
       ],
     );
   }
@@ -954,8 +1019,8 @@ class SalePdfService {
 
   static pw.Widget _tableCell(String text, pw.Font font, {bool isHeader = false}) {
     return pw.Padding(
-      padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-      child: _bidiText(text, font, fontSize: isHeader ? 9 : 8),
+      padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+      child: _bidiText(text, font, fontSize: 7),
     );
   }
 
@@ -987,6 +1052,297 @@ class SalePdfService {
               )),
         ],
       ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // SALE ADJUSTMENT RETURN PDF (not linked to a sale)
+  // ═══════════════════════════════════════════════════════
+
+  /// Generate and print a sale adjustment return PDF.
+  static Future<void> printSaleAdjReturn({
+    required BuildContext context,
+    required SaleReturnAdjustment returnEntity,
+    required List<SaleAdjReturnItemWithDetails> returnItems,
+    required String? customerName,
+    required String? employeeName,
+  }) async {
+    final cs = sl<CurrencyService>();
+    final locale = context.locale;
+    final isRtl = locale.languageCode == 'ar';
+    final company = await sl<CompanyProfileService>().getProfile();
+    final appSettings = sl<AppSettingsBloc>().state.settings;
+
+    final pdf = await _buildSaleAdjReturnPdf(
+      returnEntity: returnEntity,
+      returnItems: returnItems,
+      customerName: customerName,
+      employeeName: employeeName,
+      cs: cs,
+      locale: locale,
+      isRtl: isRtl,
+      company: company,
+      appSettings: appSettings,
+    );
+
+    await Printing.layoutPdf(
+      onLayout: (PdfPageFormat format) async => pdf.save(),
+      name: 'SaleAdjReturn_${returnEntity.returnNumber}',
+    );
+  }
+
+  /// Generate and share a sale adjustment return PDF.
+  static Future<void> shareSaleAdjReturn({
+    required BuildContext context,
+    required SaleReturnAdjustment returnEntity,
+    required List<SaleAdjReturnItemWithDetails> returnItems,
+    required String? customerName,
+    required String? employeeName,
+  }) async {
+    final cs = sl<CurrencyService>();
+    final locale = context.locale;
+    final isRtl = locale.languageCode == 'ar';
+    final company = await sl<CompanyProfileService>().getProfile();
+    final appSettings = sl<AppSettingsBloc>().state.settings;
+
+    final pdf = await _buildSaleAdjReturnPdf(
+      returnEntity: returnEntity,
+      returnItems: returnItems,
+      customerName: customerName,
+      employeeName: employeeName,
+      cs: cs,
+      locale: locale,
+      isRtl: isRtl,
+      company: company,
+      appSettings: appSettings,
+    );
+
+    final bytes = await pdf.save();
+    await Printing.sharePdf(
+      bytes: bytes,
+      filename: 'SaleAdjReturn_${returnEntity.returnNumber}.pdf',
+    );
+  }
+
+  static Future<pw.Document> _buildSaleAdjReturnPdf({
+    required SaleReturnAdjustment returnEntity,
+    required List<SaleAdjReturnItemWithDetails> returnItems,
+    required String? customerName,
+    required String? employeeName,
+    required CurrencyService cs,
+    required Locale locale,
+    required bool isRtl,
+    required CompanyProfile company,
+    required AppSettings appSettings,
+  }) async {
+    final fonts = await _loadFonts();
+    final pdf = pw.Document();
+
+    // Customer balance footer (best-effort).
+    pw.Widget? customerBalanceWidget;
+    if (returnEntity.customerId != null) {
+      try {
+        final customerRepo = sl<CustomerRepository>();
+        final customers = await customerRepo.searchCustomers('');
+        final customer = customers
+            .where((c) => c.id == returnEntity.customerId)
+            .firstOrNull;
+        if (customer != null) {
+          customerBalanceWidget = _buildCustomerBalance(
+            customerName: customer.name,
+            balanceCents: customer.balanceCents.toBigInt().toInt(),
+            cs: cs,
+            fonts: fonts,
+          );
+        }
+      } catch (_) {}
+    }
+
+    final parsed = parseAdjReturnNotes(returnEntity.notes);
+    final reasonText = parsed.reasonCode != null
+        ? adjReturnReasonLabel(parsed.reasonCode)
+        : null;
+    final userNotes = parsed.userNotes;
+
+    final subtotalCents = returnEntity.subtotalCents.toBigInt().toInt();
+    final discountCents = returnEntity.discountCents.toBigInt().toInt();
+    final taxCents = returnEntity.taxCents.toBigInt().toInt();
+    final totalCents = returnEntity.totalCents.toBigInt().toInt();
+    final totalPieces =
+        returnItems.fold<int>(0, (sum, d) => sum + d.item.quantity);
+
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        textDirection: isRtl ? pw.TextDirection.rtl : pw.TextDirection.ltr,
+        build: (pw.Context ctx) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+            children: [
+              _buildHeader(
+                company: company,
+                title: 'returns.adjustment_detail'.tr(),
+                fonts: fonts,
+                isRtl: isRtl,
+                showLogo: appSettings.showLogoOnReceipt,
+              ),
+              pw.SizedBox(height: 16),
+              // Return info box
+              pw.Container(
+                padding: const pw.EdgeInsets.all(12),
+                decoration: pw.BoxDecoration(
+                  border: pw.Border.all(color: PdfColors.grey300),
+                  borderRadius: pw.BorderRadius.circular(6),
+                ),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    _pdfInfoRow('sales.return_number'.tr(),
+                        returnEntity.returnNumber, fonts.regular),
+                    _pdfInfoRow(
+                        'sales.date'.tr(),
+                        DateFormat.yMMMd(locale.toString())
+                            .format(returnEntity.returnDate),
+                        fonts.regular),
+                    _pdfInfoRow(
+                        'sales.customer'.tr(),
+                        customerName ?? 'sales.walk_in'.tr(),
+                        fonts.regular),
+                    if (employeeName != null && employeeName.isNotEmpty)
+                      _pdfInfoRow('sales.salesperson'.tr(),
+                          employeeName, fonts.regular),
+                    _pdfInfoRow(
+                        'sales.refund_method'.tr(),
+                        'sales.refund_method_${returnEntity.refundMethod}'
+                            .tr(),
+                        fonts.regular),
+                    if (reasonText != null)
+                      _pdfInfoRow('returns.reason_label'.tr(),
+                          reasonText, fonts.regular),
+                    if (userNotes != null)
+                      _pdfInfoRow('common.notes'.tr(),
+                          userNotes, fonts.regular),
+                  ],
+                ),
+              ),
+              pw.SizedBox(height: 16),
+              _buildSaleAdjReturnItemsTable(
+                items: returnItems,
+                cs: cs,
+                fonts: fonts,
+              ),
+              pw.SizedBox(height: 16),
+              // Totals
+              pw.Container(
+                padding: const pw.EdgeInsets.all(12),
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.red50,
+                  border: pw.Border.all(color: PdfColors.red200),
+                  borderRadius: pw.BorderRadius.circular(6),
+                ),
+                child: pw.Column(
+                  children: [
+                    _pdfMoneyRow('sales.total_items_count'.tr(),
+                        '${returnItems.length}', fonts.regular),
+                    _pdfMoneyRow('sales.total_pieces_count'.tr(),
+                        '$totalPieces', fonts.regular),
+                    pw.SizedBox(height: 4),
+                    if (subtotalCents > 0)
+                      _pdfMoneyRow('sales.subtotal'.tr(),
+                          cs.format(subtotalCents), fonts.regular),
+                    if (discountCents > 0)
+                      _pdfMoneyRow(
+                          'sales.discount'.tr(),
+                          '- ${cs.format(discountCents)}',
+                          fonts.regular,
+                          valueColor: PdfColors.orange),
+                    if (taxCents > 0)
+                      _pdfMoneyRow('sales.tax'.tr(),
+                          '+ ${cs.format(taxCents)}', fonts.regular),
+                    pw.Divider(thickness: 2),
+                    pw.Row(
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                      children: [
+                        _bidiText('sales.total_refund'.tr(), fonts.bold,
+                            fontSize: 14),
+                        pw.Text(cs.format(totalCents),
+                            style: pw.TextStyle(
+                              font: fonts.bold,
+                              fontSize: 14,
+                              color: PdfColors.red,
+                            )),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              if (customerBalanceWidget != null) ...[
+                pw.SizedBox(height: 12),
+                customerBalanceWidget,
+              ],
+              pw.SizedBox(height: 20),
+              _buildFooter(
+                fonts: fonts,
+                locale: locale,
+                receiptFooterText: appSettings.receiptFooterText,
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    return pdf;
+  }
+
+  /// Compact items table for sale adj-return PDF.
+  static pw.Widget _buildSaleAdjReturnItemsTable({
+    required List<SaleAdjReturnItemWithDetails> items,
+    required CurrencyService cs,
+    required _PdfFonts fonts,
+  }) {
+    return pw.Table(
+      border: pw.TableBorder.all(color: PdfColors.grey300),
+      columnWidths: {
+        0: const pw.FlexColumnWidth(0.6),
+        1: const pw.FlexColumnWidth(3),
+        2: const pw.FlexColumnWidth(0.8),
+        3: const pw.FlexColumnWidth(1.4),
+        4: const pw.FlexColumnWidth(1.4),
+      },
+      children: [
+        pw.TableRow(
+          decoration: const pw.BoxDecoration(color: PdfColors.red100),
+          children: [
+            _tableCell('#', fonts.bold, isHeader: true),
+            _tableCell('sales.product_col'.tr(), fonts.bold, isHeader: true),
+            _tableCell('sales.qty_col'.tr(), fonts.bold, isHeader: true),
+            _tableCell('sales.unit_price'.tr(), fonts.bold, isHeader: true),
+            _tableCell('sales.customer_refund'.tr(), fonts.bold, isHeader: true),
+          ],
+        ),
+        ...items.asMap().entries.map((e) {
+          final idx = e.key;
+          final d = e.value;
+          final sku = d.variant?.sku;
+          final name = sku != null && sku.isNotEmpty
+              ? '${d.product.name} ($sku)'
+              : d.product.name;
+          return pw.TableRow(
+            children: [
+              _tableCell('${idx + 1}', fonts.regular),
+              _tableCell(name, fonts.regular),
+              _tableCell('${d.item.quantity}', fonts.regular),
+              _tableCell(
+                  cs.format(d.item.unitPriceCents.toBigInt().toInt()),
+                  fonts.regular),
+              _tableCell(
+                  cs.format(d.item.totalCents.toBigInt().toInt()),
+                  fonts.regular),
+            ],
+          );
+        }),
+      ],
     );
   }
 }

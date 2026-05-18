@@ -2,6 +2,7 @@ import 'package:drift/drift.dart' hide Column;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart';
+import '../../../../core/services/ledger/ledger_running_balance.dart';
 import '../widgets/report_date_range.dart';
 
 // ==================== EVENTS ====================
@@ -115,11 +116,13 @@ class SupplierStatementData {
 class SupplierOption {
   final int id;
   final String name;
+  final String? phone;
   final int balanceCents;
 
   const SupplierOption({
     required this.id,
     required this.name,
+    this.phone,
     required this.balanceCents,
   });
 }
@@ -177,7 +180,7 @@ class SupplierStatementReportBloc extends RealtimeBloc<SupplierStatementData,
     // Load supplier list for the selector
     final supplierRows = await _db.customSelect(
       '''
-      SELECT s.id, s.name, s.balance_cents
+      SELECT s.id, s.name, s.phone, s.balance_cents
       FROM suppliers s
       WHERE s.is_active = 1
       ORDER BY s.name ASC
@@ -189,6 +192,7 @@ class SupplierStatementReportBloc extends RealtimeBloc<SupplierStatementData,
         .map((row) => SupplierOption(
               id: row.read<int>('id'),
               name: row.read<String>('name'),
+              phone: row.readNullable<String>('phone'),
               balanceCents: row.read<int>('balance_cents'),
             ))
         .toList();
@@ -290,14 +294,15 @@ class SupplierStatementReportBloc extends RealtimeBloc<SupplierStatementData,
       readsFrom: {_db.supplierTransactions},
     ).get();
 
-    int runningBalance = openingBalanceCents;
+    // Phase 7 — running balance via SoT helper.
+    final running = LedgerRunningBalance(openingBalanceCents);
     int totalDebits = 0;
     int totalCredits = 0;
     final transactions = <SupplierStatementTransaction>[];
 
     for (final row in txnRows) {
       final amountCents = row.read<int>('amount_cents');
-      runningBalance += amountCents;
+      final runningBalance = running.apply(amountCents);
 
       if (amountCents > 0) {
         totalDebits += amountCents;

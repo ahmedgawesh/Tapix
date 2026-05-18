@@ -40,9 +40,17 @@ class MockAuthRepositoryInterface extends _i1.Mock
   }
 
   @override
-  _i4.Future<_i2.UserEntity?> login(String? username, String? password) =>
+  _i4.Future<_i2.UserEntity?> login(
+    String? username,
+    String? password, {
+    bool? rememberMe = false,
+  }) =>
       (super.noSuchMethod(
-            Invocation.method(#login, [username, password]),
+            Invocation.method(
+              #login,
+              [username, password],
+              {#rememberMe: rememberMe},
+            ),
             returnValue: _i4.Future<_i2.UserEntity?>.value(),
           )
           as _i4.Future<_i2.UserEntity?>);
@@ -161,4 +169,12 @@ class MockAuthRepositoryInterface extends _i1.Mock
             returnValueForMissingStub: _i4.Future<void>.value(),
           )
           as _i4.Future<void>);
+
+  @override
+  _i4.Future<_i2.UserEntity?> loginWithBiometrics() =>
+      (super.noSuchMethod(
+            Invocation.method(#loginWithBiometrics, []),
+            returnValue: _i4.Future<_i2.UserEntity?>.value(),
+          )
+          as _i4.Future<_i2.UserEntity?>);
 }

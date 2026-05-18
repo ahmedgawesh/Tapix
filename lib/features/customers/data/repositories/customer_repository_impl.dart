@@ -118,24 +118,31 @@ class CustomerRepositoryImpl implements CustomerRepository {
     return _datasource.watchTopCustomersByBalance(limit: limit);
   }
 
+  /// DISABLED: Direct balance updates WITHOUT journal entries are forbidden.
+  ///
+  /// Phase 1.3 (scattered-calculation migration, May 2026) closes the last
+  /// rogue writer of `customers.balance_cents`. Mirrors the equivalent
+  /// guard already in place on `SupplierRepositoryImpl.updateSupplierBalance`
+  /// (see `FULL_SYSTEM_AUDIT_REPORT.md` finding H1).
+  ///
+  /// Customer balance must ONLY change through ledger-backed operations:
+  ///   - `createCustomer()` with `initialBalance` → seeds via opening-balance JE
+  ///   - `recordTransaction(transactionType: 'adjustment')` → records a
+  ///      `customer_transactions` row, posts a paired GL entry via
+  ///      `JournalEntryService`, and applies the matching balance delta
+  ///      through `BalanceService` in a single atomic transaction.
+  ///   - DAO-level sale / payment / return flows → already routed through
+  ///     `BalanceService` under their respective transactions.
+  ///
+  /// Allowing the absolute-set path back into production would break the
+  /// GL ↔ Customer sub-ledger reconciliation invariant
+  /// (see `reconcileBalances()`).
   @override
   Future<void> updateCustomerBalance(int customerId, int newBalanceCents) async {
-    final existing = await _datasource.getCustomer(customerId);
-    final oldBalance = existing?.balanceCents.toBigInt().toInt();
-
-    await _datasource.updateCustomerBalance(customerId, newBalanceCents);
-
-    await _auditService.log(
-      entityType: 'customer',
-      entityId: customerId,
-      action: 'balance_change',
-      oldValue: oldBalance == null ? null : {'balanceCents': oldBalance},
-      newValue: {
-        'balanceCents': newBalanceCents,
-        'changeCents': oldBalance == null ? null : (newBalanceCents - oldBalance),
-        'reason': 'customer_balance_update',
-      },
-      userId: await _currentUserId(),
+    throw StateError(
+      'Direct customer balance updates are DISABLED. '
+      'Use recordTransaction(transactionType: "adjustment") instead, '
+      'which atomically updates both the customer balance and the General Ledger.',
     );
   }
 
@@ -208,6 +215,38 @@ class CustomerRepositoryImpl implements CustomerRepository {
     });
 
     return txId;
+  }
+
+  @override
+  Future<int?> adjustOpeningBalance({
+    required int customerId,
+    required int desiredBalanceCents,
+    String? description,
+  }) async {
+    // Wrap read + delta + post in a single DB transaction so a concurrent
+    // writer (e.g. a sale finishing while the form is being saved) cannot
+    // race the read of `balance_cents` and leave us with a stale delta.
+    return _db.transaction(() async {
+      final existing = await _datasource.getCustomer(customerId);
+      if (existing == null) {
+        throw StateError('Customer $customerId not found');
+      }
+      final currentCents = existing.balanceCents.toBigInt().toInt();
+      final deltaCents = desiredBalanceCents - currentCents;
+      if (deltaCents == 0) return null;
+
+      // recordTransaction handles the journal entry + balance write
+      // atomically (it opens its own _db.transaction() block; nested
+      // transactions on Drift coalesce into the outer one, so this stays
+      // a single SQLite commit).
+      return await recordTransaction(
+        customerId: customerId,
+        transactionType: 'adjustment',
+        amountCents: deltaCents,
+        currencyId: existing.currencyId,
+        description: description,
+      );
+    });
   }
 
   @override

@@ -2,7 +2,12 @@ import 'package:decimal/decimal.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 
+import '../../../../core/money/money.dart';
+import '../../../../core/pricing/discount.dart';
+import '../../../../core/pricing/invoice_pricing_engine.dart';
+import '../../../../core/pricing/line_item_pricing_engine.dart';
 import '../../../../core/services/crashlytics_service.dart';
+import '../../../../core/services/purchases/original_price_resolver.dart';
 import '../../domain/repositories/purchase_repository.dart';
 import '../../../products/domain/entities/product_entity.dart';
 import '../../../products/domain/entities/product_variant_entity.dart';
@@ -52,6 +57,7 @@ class PurchaseFormState extends Equatable {
   // Global tax settings
   final bool enableTaxCalculations;
   final int defaultPurchaseTaxRateBps;
+  final bool taxInclusivePricing;
   // Editing posted purchase flag
   final bool isEditingPosted;
 
@@ -79,29 +85,90 @@ class PurchaseFormState extends Equatable {
     this.hasUnsavedChanges = false,
     this.enableTaxCalculations = true,
     this.defaultPurchaseTaxRateBps = 0,
+    this.taxInclusivePricing = false,
     this.isEditingPosted = false,
   }) : invoiceDiscountCents = invoiceDiscountCents ?? Decimal.zero,
        invoiceDiscountPercent = invoiceDiscountPercent ?? Decimal.zero,
        taxRatePercent = taxRatePercent ?? Decimal.zero,
        paidAmountCents = paidAmountCents ?? Decimal.zero;
 
-  Decimal get subtotalCents => items.fold(
-        Decimal.zero,
-        (sum, item) => sum + item.subtotalCents,
-      );
+  // ── Engine-backed invoice math ─────────────────────────────────────────
+  // Single source of truth: every `*Cents` getter that represents a
+  // financial figure (subtotal, discount, tax, total) is derived from
+  // exactly one call to [InvoicePricingEngine.compute]. Memoized once per
+  // state instance so the cost is amortized across the many getter calls
+  // the UI does per rebuild.
+  //
+  // The tender layer (paid / remaining / change) and pure quantity rollups
+  // are intentionally NOT part of the engine — they belong to the bloc per
+  // ADR `docs/adr/0002-engine-readiness-audit.md` §3.
 
+  /// Lazy memoized engine result. Built on first access and reused for
+  /// the lifetime of this immutable state instance.
+  ///
+  /// Phase-5 close-out: the Phase-3 dual-compute `kDebugMode` assertion
+  /// has been removed after a full phase of green Phase-0 goldens and
+  /// Phase-3 regression tests. The engine is now the unconditional SoT.
+  late final InvoicePricingResult pricing = _computePricing();
+
+  InvoicePricingResult _computePricing() {
+    // Discount-mode bridge per ADR 0002 §G7:
+    //   * `perItem`  → per-line discount preserved, overall = none.
+    //   * `invoice`  → per-line discount suppressed (Q3 mode-exclusivity),
+    //                  overall = invoice-level discount.
+    // This matches the legacy `TaxCalculationService.calculateInvoiceTax`
+    // contract used at submission time (which also zeros per-line
+    // discounts in invoice mode) so the engine output stays identical to
+    // what the bloc previously persisted.
+    final inInvoiceMode = discountMode == DiscountMode.invoice;
+    final lineInputs = items
+        .map((i) => i.toPricingInput(
+              overrideDiscount: inInvoiceMode ? Discount.none : null,
+            ))
+        .toList(growable: false);
+
+    return InvoicePricingEngine.compute(InvoicePricingInput(
+      lines: lineInputs,
+      overallDiscount: inInvoiceMode ? _buildOverallDiscount() : Discount.none,
+      enableTaxCalculations: enableTaxCalculations,
+      defaultTaxRateBps: defaultPurchaseTaxRateBps,
+      taxInclusivePricing: taxInclusivePricing,
+    ));
+  }
+
+  Discount _buildOverallDiscount() {
+    if (invoiceDiscountPercent > Decimal.zero) {
+      final bps = (invoiceDiscountPercent * Decimal.fromInt(100))
+          .round()
+          .toBigInt()
+          .toInt();
+      if (bps > 0) return Discount.percent(bps);
+    }
+    if (invoiceDiscountCents > Decimal.zero) {
+      return Discount.fixed(Money.fromDecimalCents(invoiceDiscountCents));
+    }
+    return Discount.none;
+  }
+
+  Decimal get subtotalCents => pricing.subtotal.decimalCents;
+
+  /// Sum of user-entered per-line discounts as displayed in the UI.
+  /// In `invoice` mode this is always zero because `_onDiscountModeChanged`
+  /// (Phase-14) wipes every line's `discountCents` on mode switch, and the
+  /// per-line discount input is gated to `perItem` mode. The engine also
+  /// masks per-line discounts at compute time for defence-in-depth (per
+  /// Q3 mode-exclusivity) — but state is the single SoT.
   Decimal get itemDiscountCents => items.fold(
         Decimal.zero,
         (sum, item) => sum + item.discountCents,
       );
 
+  /// Invoice-level discount actually applied. The engine clamps both
+  /// fixed and percent paths to `[0, subtotal]` so this value can never
+  /// exceed subtotal — matching the IFRS-correct accounting behavior.
   Decimal get effectiveInvoiceDiscountCents {
-    if (invoiceDiscountPercent > Decimal.zero) {
-      final raw = subtotalCents * invoiceDiscountPercent / Decimal.fromInt(100);
-      final computed = Decimal.fromBigInt(raw.round());
-      return computed > subtotalCents ? subtotalCents : computed;
-    }
-    return invoiceDiscountCents;
+    if (discountMode != DiscountMode.invoice) return invoiceDiscountCents;
+    return pricing.overallDiscount.decimalCents;
   }
 
   Decimal get totalDiscountCents {
@@ -111,15 +178,13 @@ class PurchaseFormState extends Equatable {
     return itemDiscountCents;
   }
 
-  Decimal get itemTaxCents => items.fold(
-        Decimal.zero,
-        (sum, item) => sum + item.taxCentsWithSettings(
-          enableTaxCalculations: enableTaxCalculations,
-          defaultTaxRateBps: defaultPurchaseTaxRateBps,
-        ),
-      );
+  Decimal get itemTaxCents => pricing.tax.decimalCents;
 
   Decimal get taxCents => itemTaxCents;
+
+  Decimal get totalCents => pricing.total.decimalCents;
+
+  // ── Tender layer (NOT part of the pricing engine by design) ────────────
 
   Decimal get remainingCents {
     final r = totalCents - paidAmountCents;
@@ -129,11 +194,6 @@ class PurchaseFormState extends Equatable {
   Decimal get changeCents {
     final change = paidAmountCents - totalCents;
     return change > Decimal.zero ? change : Decimal.zero;
-  }
-
-  Decimal get totalCents {
-    final net = subtotalCents - totalDiscountCents + taxCents;
-    return net < Decimal.zero ? Decimal.zero : net;
   }
 
   int get totalQuantity => items.fold(0, (sum, item) => sum + item.quantity);
@@ -165,6 +225,7 @@ class PurchaseFormState extends Equatable {
     bool? hasUnsavedChanges,
     bool? enableTaxCalculations,
     int? defaultPurchaseTaxRateBps,
+    bool? taxInclusivePricing,
     bool? isEditingPosted,
   }) {
     return PurchaseFormState(
@@ -191,6 +252,7 @@ class PurchaseFormState extends Equatable {
       hasUnsavedChanges: hasUnsavedChanges ?? this.hasUnsavedChanges,
       enableTaxCalculations: enableTaxCalculations ?? this.enableTaxCalculations,
       defaultPurchaseTaxRateBps: defaultPurchaseTaxRateBps ?? this.defaultPurchaseTaxRateBps,
+      taxInclusivePricing: taxInclusivePricing ?? this.taxInclusivePricing,
       isEditingPosted: isEditingPosted ?? this.isEditingPosted,
     );
   }
@@ -202,7 +264,7 @@ class PurchaseFormState extends Equatable {
         notes, purchaseDate, dueDate,
         paymentMethod, taxRatePercent, paidAmountCents, overpaymentHandling,
         isSubmitting, error, isSuccess, hasUnsavedChanges,
-        enableTaxCalculations, defaultPurchaseTaxRateBps, isEditingPosted,
+        enableTaxCalculations, defaultPurchaseTaxRateBps, taxInclusivePricing, isEditingPosted,
       ];
 }
 
@@ -218,9 +280,30 @@ class PurchaseLineItem extends Equatable {
   final String? colorName;
   final String? colorHex;
   final String? sizeName;
+  /// Display value for "old cost" in the bottom-sheet. Always populated via
+  /// [OriginalPriceResolver]; never null even for brand-new variants.
   final int originalCostCents;
+
+  /// Display value for "old sell price". See [originalCostCents].
   final int originalPriceCents;
+
+  /// Display value for "old wholesale price". `null` means no wholesale
+  /// price is configured (genuine absence, not default-init `0`).
   final int? originalWholesalePriceCents;
+
+  /// Snapshot of cost to PERSIST as `original_cost_cents` on the purchase
+  /// row. `null` when there is no real historical cost worth freezing
+  /// (default-init variant whose live cost is still `0`). Persisting `null`
+  /// instead of `0` lets a future re-load fall back through the
+  /// [OriginalPriceResolver] chain rather than displaying `0.00`.
+  final int? persistOriginalCostCents;
+
+  /// Snapshot of retail price to PERSIST. See [persistOriginalCostCents].
+  final int? persistOriginalPriceCents;
+
+  /// Snapshot of wholesale price to PERSIST. See [persistOriginalCostCents].
+  final int? persistOriginalWholesalePriceCents;
+
   final Decimal? newSellPriceCents;
   final Decimal? newWholesalePriceCents;
 
@@ -238,48 +321,73 @@ class PurchaseLineItem extends Equatable {
     required this.originalCostCents,
     required this.originalPriceCents,
     this.originalWholesalePriceCents,
+    this.persistOriginalCostCents,
+    this.persistOriginalPriceCents,
+    this.persistOriginalWholesalePriceCents,
     this.newSellPriceCents,
     this.newWholesalePriceCents,
   })  : discountCents = discountCents ?? Decimal.zero;
 
-  Decimal get subtotalCents => unitCostCents * Decimal.fromInt(quantity);
-  Decimal get netCents => subtotalCents - discountCents;
+  // ── Engine-backed line math ────────────────────────────────────────────
+  // Per-line totals flow through [LineItemPricingEngine] so there is
+  // exactly one place where `subtotal → discount → net → tax → total`
+  // is computed. Decimal return types are preserved for UI/PDF/repo
+  // compatibility (consumers call `.toBigInt().toInt()` on the result).
+
+  /// Build the engine input for this line. [overrideDiscount] lets the
+  /// owning state suppress the per-line discount when the invoice-level
+  /// discount mode is active (ADR 0002 §G7 mode-exclusivity bridge).
+  LineItemPricingInput toPricingInput({Discount? overrideDiscount}) {
+    return LineItemPricingInput(
+      unitPrice: Money.fromDecimalCents(unitCostCents),
+      quantity: quantity,
+      discount: overrideDiscount ??
+          (discountCents > Decimal.zero
+              ? Discount.fixed(Money.fromDecimalCents(discountCents))
+              : Discount.none),
+      isTaxable: product.isTaxable,
+      productTaxRateBps: product.purchaseTaxRateBps,
+    );
+  }
+
+  /// Local (line-scoped) engine result. Uses the same contract as the
+  /// historical getters: tax always enabled, no global default rate, no
+  /// tax-inclusive pricing. The state-level engine in [PurchaseFormState]
+  /// is where global settings are honored.
+  LineItemPricingResult _localCompute() => LineItemPricingEngine.compute(
+        input: toPricingInput(),
+        enableTaxCalculations: true,
+        defaultTaxRateBps: 0,
+        taxInclusivePricing: false,
+      );
+
+  Decimal get subtotalCents => _localCompute().subtotal.decimalCents;
+
+  Decimal get netCents => _localCompute().net.decimalCents;
 
   /// Tax is computed from the product's purchase tax rate.
-  /// Uses proper rounding (round half-up) instead of truncation.
-  /// This getter uses product settings - use taxCentsWithSettings for global settings support.
-  Decimal get taxCents => taxCentsWithSettings(enableTaxCalculations: true, defaultTaxRateBps: 0);
+  /// This getter uses product settings — use [taxCentsWithSettings] for
+  /// global-settings-aware computation.
+  Decimal get taxCents => _localCompute().tax.decimalCents;
 
   /// Calculate tax respecting global settings.
-  /// If enableTaxCalculations is false, returns zero.
-  /// If product has its own tax rate (isTaxable && purchaseTaxRateBps > 0), uses that.
-  /// Otherwise, uses the defaultTaxRateBps from global settings.
+  /// If [enableTaxCalculations] is false, returns zero.
+  /// If product has its own tax rate (isTaxable && purchaseTaxRateBps > 0),
+  /// uses that. Otherwise, falls back to [defaultTaxRateBps].
   Decimal taxCentsWithSettings({
     required bool enableTaxCalculations,
     required int defaultTaxRateBps,
+    bool taxInclusivePricing = false,
   }) {
-    if (!enableTaxCalculations) return Decimal.zero;
-    
-    final taxable = netCents;
-    if (taxable <= Decimal.zero) return Decimal.zero;
-    
-    // Determine which tax rate to use
-    int taxRateBps;
-    if (product.isTaxable && product.purchaseTaxRateBps > 0) {
-      // Product has its own tax rate - use it
-      taxRateBps = product.purchaseTaxRateBps;
-    } else if (defaultTaxRateBps > 0) {
-      // Use global default tax rate
-      taxRateBps = defaultTaxRateBps;
-    } else {
-      return Decimal.zero;
-    }
-    
-    final raw = taxable * Decimal.fromInt(taxRateBps) / Decimal.fromInt(10000);
-    return Decimal.fromBigInt(raw.round());
+    return LineItemPricingEngine.compute(
+      input: toPricingInput(),
+      enableTaxCalculations: enableTaxCalculations,
+      defaultTaxRateBps: defaultTaxRateBps,
+      taxInclusivePricing: taxInclusivePricing,
+    ).tax.decimalCents;
   }
 
-  Decimal get totalCents => netCents + taxCents;
+  Decimal get totalCents => _localCompute().total.decimalCents;
 
   String get displayName {
     final parts = <String>[];
@@ -309,6 +417,9 @@ class PurchaseLineItem extends Equatable {
     int? originalCostCents,
     int? originalPriceCents,
     int? originalWholesalePriceCents,
+    int? persistOriginalCostCents,
+    int? persistOriginalPriceCents,
+    int? persistOriginalWholesalePriceCents,
     Decimal? newSellPriceCents,
     Decimal? newWholesalePriceCents,
     bool clearNewSellPrice = false,
@@ -328,6 +439,9 @@ class PurchaseLineItem extends Equatable {
       originalCostCents: originalCostCents ?? this.originalCostCents,
       originalPriceCents: originalPriceCents ?? this.originalPriceCents,
       originalWholesalePriceCents: originalWholesalePriceCents ?? this.originalWholesalePriceCents,
+      persistOriginalCostCents: persistOriginalCostCents ?? this.persistOriginalCostCents,
+      persistOriginalPriceCents: persistOriginalPriceCents ?? this.persistOriginalPriceCents,
+      persistOriginalWholesalePriceCents: persistOriginalWholesalePriceCents ?? this.persistOriginalWholesalePriceCents,
       newSellPriceCents: clearNewSellPrice ? null : (newSellPriceCents ?? this.newSellPriceCents),
       newWholesalePriceCents: clearNewWholesalePrice ? null : (newWholesalePriceCents ?? this.newWholesalePriceCents),
     );
@@ -339,6 +453,7 @@ class PurchaseLineItem extends Equatable {
         unitCostCents, discountCents, expiryDate,
         colorName, colorHex, sizeName,
         originalCostCents, originalPriceCents, originalWholesalePriceCents,
+        persistOriginalCostCents, persistOriginalPriceCents, persistOriginalWholesalePriceCents,
         newSellPriceCents, newWholesalePriceCents,
       ];
 }
@@ -357,6 +472,7 @@ class PurchaseFormInitialized extends PurchaseFormEvent {
   final int currencyId;
   final bool enableTaxCalculations;
   final int defaultPurchaseTaxRateBps;
+  final bool taxInclusivePricing;
   final bool isEditingPosted;
 
   const PurchaseFormInitialized({
@@ -364,23 +480,26 @@ class PurchaseFormInitialized extends PurchaseFormEvent {
     required this.currencyId,
     this.enableTaxCalculations = true,
     this.defaultPurchaseTaxRateBps = 0,
+    this.taxInclusivePricing = false,
     this.isEditingPosted = false,
   });
 
   @override
-  List<Object?> get props => [purchaseId, currencyId, enableTaxCalculations, defaultPurchaseTaxRateBps, isEditingPosted];
+  List<Object?> get props => [purchaseId, currencyId, enableTaxCalculations, defaultPurchaseTaxRateBps, taxInclusivePricing, isEditingPosted];
 }
 
 class PurchaseTaxSettingsChanged extends PurchaseFormEvent {
   final bool enableTaxCalculations;
   final int defaultPurchaseTaxRateBps;
+  final bool taxInclusivePricing;
   const PurchaseTaxSettingsChanged({
     required this.enableTaxCalculations,
     required this.defaultPurchaseTaxRateBps,
+    this.taxInclusivePricing = false,
   });
 
   @override
-  List<Object?> get props => [enableTaxCalculations, defaultPurchaseTaxRateBps];
+  List<Object?> get props => [enableTaxCalculations, defaultPurchaseTaxRateBps, taxInclusivePricing];
 }
 
 class PurchaseSupplierChanged extends PurchaseFormEvent {
@@ -626,12 +745,14 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
           purchaseNumber: nextNumber,
           enableTaxCalculations: event.enableTaxCalculations,
           defaultPurchaseTaxRateBps: event.defaultPurchaseTaxRateBps,
+          taxInclusivePricing: event.taxInclusivePricing,
         ));
       } catch (_) {
         emit(state.copyWith(
           currencyId: event.currencyId,
           enableTaxCalculations: event.enableTaxCalculations,
           defaultPurchaseTaxRateBps: event.defaultPurchaseTaxRateBps,
+          taxInclusivePricing: event.taxInclusivePricing,
         ));
       }
       return;
@@ -642,6 +763,7 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
       currencyId: event.currencyId,
       enableTaxCalculations: event.enableTaxCalculations,
       defaultPurchaseTaxRateBps: event.defaultPurchaseTaxRateBps,
+      taxInclusivePricing: event.taxInclusivePricing,
       isEditingPosted: event.isEditingPosted,
     ));
 
@@ -723,17 +845,19 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
                 isActive: true,
               ));
 
-        // Use stored original prices from DB if available (persisted when purchase was saved).
-        // Fall back to variant/product prices only for legacy items that don't have stored originals.
-        final origCost = i.originalCostCents?.toBigInt().toInt()
-            ?? variant?.costCents.toBigInt().toInt()
-            ?? product.costCents.toBigInt().toInt();
-        final origPrice = i.originalPriceCents?.toBigInt().toInt()
-            ?? variant?.priceCents.toBigInt().toInt()
-            ?? product.priceCents.toBigInt().toInt();
-        final origWholesale = i.originalWholesalePriceCents?.toBigInt().toInt()
-            ?? variant?.wholesalePriceCents?.toBigInt().toInt()
-            ?? product.wholesalePriceCents?.toBigInt().toInt();
+        // Resolve "original" (pre-purchase) prices through the centralized
+        // [OriginalPriceResolver]. This is the SINGLE source of truth for
+        // the chain saved → variant.previous → variant.current → product.*
+        // and for the "saved 0 == legacy default-init" rule. See
+        // `lib/core/services/purchases/original_price_resolver.dart`.
+        final snapshot = OriginalPriceResolver.resolveForEdit(
+          product: product,
+          variant: variant,
+          savedCostCents: i.originalCostCents?.toBigInt().toInt(),
+          savedPriceCents: i.originalPriceCents?.toBigInt().toInt(),
+          savedWholesalePriceCents:
+              i.originalWholesalePriceCents?.toBigInt().toInt(),
+        );
 
         return PurchaseLineItem(
           tempId: _generateTempId(),
@@ -746,9 +870,12 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
           colorName: _resolveColorName(variant?.colorId),
           colorHex: _resolveColorHex(variant?.colorId),
           sizeName: _resolveSizeName(variant?.sizeId),
-          originalCostCents: origCost,
-          originalPriceCents: origPrice,
-          originalWholesalePriceCents: origWholesale,
+          originalCostCents: snapshot.costCents,
+          originalPriceCents: snapshot.priceCents,
+          originalWholesalePriceCents: snapshot.wholesalePriceCents,
+          persistOriginalCostCents: snapshot.persistCostCents,
+          persistOriginalPriceCents: snapshot.persistPriceCents,
+          persistOriginalWholesalePriceCents: snapshot.persistWholesalePriceCents,
           newSellPriceCents: i.newSellPriceCents,
           newWholesalePriceCents: i.newWholesalePriceCents,
         );
@@ -845,10 +972,30 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
     PurchaseDiscountModeChanged event,
     Emitter<PurchaseFormState> emit,
   ) {
+    // Phase-14 mode-exclusivity (state-level): when the user toggles the
+    // discount mode, clear the OTHER mode's discount inputs so the two
+    // paths are mathematically and visually equivalent. The pricing
+    // engine already masks this at compute time (see `_computePricing`
+    // overrideDiscount), but stale per-line discounts in `state.items`
+    // would silently re-activate on a back-toggle to `perItem`, causing
+    // a "double-discount the user can't notice" — exactly the bug class
+    // already documented in `SaleAdjReturnFormBloc._onDiscountModeChanged`.
+    //
+    // Switching INTO `invoice` mode -> wipe per-line `discountCents`.
+    // Switching INTO `perItem`  mode -> wipe invoice-level discount
+    //                                    (already done; kept for symmetry).
+    final isInvoice = event.mode == DiscountMode.invoice;
+    final clearedItems = isInvoice
+        ? state.items
+            .map((i) => i.copyWith(discountCents: Decimal.zero))
+            .toList()
+        : state.items;
     emit(state.copyWith(
       discountMode: event.mode,
+      items: clearedItems,
       invoiceDiscountCents: Decimal.zero,
       invoiceDiscountPercent: Decimal.zero,
+      hasUnsavedChanges: true,
     ));
   }
 
@@ -875,20 +1022,15 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
       } catch (_) {}
     }
 
-    // Use previous prices (price before last purchase update) as "old prices".
-    // Fall back to current prices if no previous prices exist yet (first purchase).
-    final origCost = resolvedVariant?.previousCostCents?.toBigInt().toInt()
-        ?? event.product.previousCostCents?.toBigInt().toInt()
-        ?? resolvedVariant?.costCents.toBigInt().toInt()
-        ?? event.product.costCents.toBigInt().toInt();
-    final origPrice = resolvedVariant?.previousPriceCents?.toBigInt().toInt()
-        ?? event.product.previousPriceCents?.toBigInt().toInt()
-        ?? resolvedVariant?.priceCents.toBigInt().toInt()
-        ?? event.product.priceCents.toBigInt().toInt();
-    final origWholesale = resolvedVariant?.previousWholesalePriceCents?.toBigInt().toInt()
-        ?? event.product.previousWholesalePriceCents?.toBigInt().toInt()
-        ?? resolvedVariant?.wholesalePriceCents?.toBigInt().toInt()
-        ?? event.product.wholesalePriceCents?.toBigInt().toInt();
+    // Capture "original" (pre-purchase) prices through the centralized
+    // [OriginalPriceResolver]. Same chain as the read path in
+    // `_onInitialized`, ensuring the bottom-sheet displays consistent
+    // values whether the line is freshly added or loaded from a saved
+    // purchase. See `lib/core/services/purchases/original_price_resolver.dart`.
+    final snapshot = OriginalPriceResolver.captureForNewLine(
+      product: event.product,
+      variant: resolvedVariant,
+    );
 
     final newItem = PurchaseLineItem(
       tempId: _generateTempId(),
@@ -901,9 +1043,12 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
       colorName: _resolveColorName(resolvedVariant?.colorId),
       colorHex: _resolveColorHex(resolvedVariant?.colorId),
       sizeName: _resolveSizeName(resolvedVariant?.sizeId),
-      originalCostCents: origCost,
-      originalPriceCents: origPrice,
-      originalWholesalePriceCents: origWholesale,
+      originalCostCents: snapshot.costCents,
+      originalPriceCents: snapshot.priceCents,
+      originalWholesalePriceCents: snapshot.wholesalePriceCents,
+      persistOriginalCostCents: snapshot.persistCostCents,
+      persistOriginalPriceCents: snapshot.persistPriceCents,
+      persistOriginalWholesalePriceCents: snapshot.persistWholesalePriceCents,
     );
     emit(state.copyWith(items: [...state.items, newItem], hasUnsavedChanges: true));
   }
@@ -950,6 +1095,21 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
       return;
     }
 
+    // Phase C — two-layer inventory architecture: every line whose product
+    // is tracked as `batch_expiry` MUST carry an expiry date. The UI gates
+    // this at edit time (Save button disabled until a date is picked); this
+    // is the server-authoritative back-stop in case a stale or programmatic
+    // payload bypasses the UI guard.
+    final missingExpiry = state.items
+        .where((it) =>
+            it.product.inventoryTrackingType == 'batch_expiry' &&
+            it.expiryDate == null)
+        .toList();
+    if (missingExpiry.isNotEmpty) {
+      emit(state.copyWith(error: 'purchases.expiry_required_submit_blocked'));
+      return;
+    }
+
     // Cash validation: paid amount must be >= total
     if (state.paymentMethod == PurchasePaymentMethod.cash &&
         state.paidAmountCents < state.totalCents) {
@@ -960,49 +1120,42 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
     emit(state.copyWith(isSubmitting: true, error: null));
 
     try {
-      // Distribute invoice-level discount and tax proportionally to each line
-      // so that each item in the DB carries its correct share (needed for returns).
-      final invoiceDiscount = state.discountMode == DiscountMode.invoice
-          ? state.effectiveInvoiceDiscountCents.toBigInt().toInt()
-          : 0;
-      final invoiceTax = state.taxRatePercent > Decimal.zero
-          ? state.taxCents.toBigInt().toInt()
-          : 0;
-      final totalSubtotal = state.subtotalCents.toBigInt().toInt();
-
+      // SoT for the per-line breakdown is the state-level pricing engine
+      // result: it has already done subtotal → discount → net → invoice-
+      // discount allocation (largest-remainder) → tax-on-adjusted-net.
+      // No parallel arithmetic path lives here, by design.
       final lineItems = state.items;
-      final distributedDiscounts = _distributeProportionally(
-        invoiceDiscount, lineItems.map((i) => i.subtotalCents.toBigInt().toInt()).toList(), totalSubtotal,
-      );
-      final distributedTaxes = _distributeProportionally(
-        invoiceTax, lineItems.map((i) => i.subtotalCents.toBigInt().toInt()).toList(), totalSubtotal,
-      );
+      final pricing = state.pricing;
 
       final items = <PurchaseItemInput>[];
       for (int idx = 0; idx < lineItems.length; idx++) {
         final item = lineItems[idx];
-        // Per-item mode: use item's own values; invoice mode: use distributed values
-        final effectiveDiscount = invoiceDiscount > 0
-            ? Decimal.fromInt(distributedDiscounts[idx])
-            : item.discountCents;
-        final effectiveTax = invoiceTax > 0
-            ? Decimal.fromInt(distributedTaxes[idx])
-            : item.taxCents;
-        final effectiveTotal = item.subtotalCents - effectiveDiscount + effectiveTax;
+        final line = pricing.lines[idx];
         items.add(PurchaseItemInput(
           productId: item.product.id,
           variantId: item.variant?.id,
           quantity: item.quantity,
           unitCostCents: item.unitCostCents,
-          discountCents: effectiveDiscount,
-          subtotalCents: item.subtotalCents,
-          taxCents: effectiveTax,
-          totalCents: effectiveTotal,
+          // Total per-line discount = entered line discount + share of
+          // the invoice-level discount (zero in `perItem` mode).
+          discountCents: Decimal.fromInt(line.totalLineDiscount.cents),
+          subtotalCents: Decimal.fromInt(line.subtotal.cents),
+          taxCents: Decimal.fromInt(line.tax.cents),
+          totalCents: Decimal.fromInt(line.total.cents),
           expiryDate: item.expiryDate,
-          originalCostCents: Decimal.fromInt(item.originalCostCents),
-          originalPriceCents: Decimal.fromInt(item.originalPriceCents),
-          originalWholesalePriceCents: item.originalWholesalePriceCents != null
-              ? Decimal.fromInt(item.originalWholesalePriceCents!)
+          // Persist the snapshot fields, NOT the display fields. When the
+          // resolver determined there is no real historical value (live cost
+          // is still 0 from default-init), persist `null` rather than `0` —
+          // a future re-load will then fall back through the resolver chain
+          // and render meaningful prices instead of `0.00`.
+          originalCostCents: item.persistOriginalCostCents != null
+              ? Decimal.fromInt(item.persistOriginalCostCents!)
+              : null,
+          originalPriceCents: item.persistOriginalPriceCents != null
+              ? Decimal.fromInt(item.persistOriginalPriceCents!)
+              : null,
+          originalWholesalePriceCents: item.persistOriginalWholesalePriceCents != null
+              ? Decimal.fromInt(item.persistOriginalWholesalePriceCents!)
               : null,
           newSellPriceCents: item.newSellPriceCents,
           newWholesalePriceCents: item.newWholesalePriceCents,
@@ -1045,6 +1198,7 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
           notes: state.notes,
           purchaseDate: state.purchaseDate,
           dueDate: state.dueDate,
+          taxInclusiveAtPost: state.taxInclusivePricing,
         );
 
         CrashlyticsService.instance.logAction('purchase_created', {
@@ -1075,6 +1229,7 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
           notes: state.notes,
           purchaseDate: state.purchaseDate,
           dueDate: state.dueDate,
+          taxInclusiveAtPost: state.taxInclusivePricing,
         );
 
         CrashlyticsService.instance.logAction('purchase_edited_posted', {
@@ -1103,6 +1258,7 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
           notes: state.notes,
           purchaseDate: state.purchaseDate,
           dueDate: state.dueDate,
+          taxInclusiveAtPost: state.taxInclusivePricing,
         );
 
         if (!ok) {
@@ -1163,31 +1319,7 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
     emit(state.copyWith(overpaymentHandling: event.handling));
   }
 
-  /// Distribute [total] proportionally across items based on [weights].
-  /// Uses largest-remainder method so the distributed values sum exactly to [total].
-  List<int> _distributeProportionally(int total, List<int> weights, int weightSum) {
-    if (weights.isEmpty || weightSum <= 0 || total == 0) {
-      return List.filled(weights.length, 0);
-    }
-    final result = List<int>.filled(weights.length, 0);
-    int allocated = 0;
-    final remainders = <int, double>{};
-    for (int i = 0; i < weights.length; i++) {
-      final exact = (total * weights[i]) / weightSum;
-      result[i] = exact.floor();
-      remainders[i] = exact - result[i];
-      allocated += result[i];
-    }
-    // Distribute the remainder (total - allocated) to items with largest fractional parts
-    var remaining = total - allocated;
-    final sorted = remainders.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
-    for (final entry in sorted) {
-      if (remaining <= 0) break;
-      result[entry.key]++;
-      remaining--;
-    }
-    return result;
-  }
+  // _distributeProportionally removed — use TaxCalculationService.distributeProportionally()
 
   Future<void> _onPosted(
     PurchaseFormPosted event,
@@ -1218,6 +1350,7 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
     emit(state.copyWith(
       enableTaxCalculations: event.enableTaxCalculations,
       defaultPurchaseTaxRateBps: event.defaultPurchaseTaxRateBps,
+      taxInclusivePricing: event.taxInclusivePricing,
     ));
   }
 }

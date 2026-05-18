@@ -11,9 +11,13 @@ import 'tables/parties.dart';
 import 'tables/loyalty.dart';
 import 'tables/people.dart';
 import 'tables/transactions.dart';
+import 'tables/compliance.dart';
+import 'tables/einvoice.dart';
 import 'tables/accounting.dart';
 import 'tables/audit.dart';
 import 'tables/barcode.dart';
+import 'tables/inventory.dart';
+import 'tables/cheques.dart';
 import 'converters/money_converter.dart';
 import 'converters/json_converter.dart';
 import 'converters/timestamp_converter.dart';
@@ -30,6 +34,17 @@ import 'daos/barcode_template_dao.dart';
 import 'daos/purchase_dao.dart';
 import 'daos/employee_dao.dart';
 import 'daos/supplier_dao.dart';
+import 'daos/adjustment_return_dao.dart';
+import 'daos/inventory_adjustment_dao.dart';
+import 'daos/cheque_confirmation_dao.dart';
+
+// Phase 1.5 (May 2026): the supplier opening-balance repair migration
+// (10032) now delegates to JournalEntryService instead of hand-rolling
+// INSERTs + raw `UPDATE accounts SET balance_cents` — the latter bypassed
+// the single-writer invariant established in
+// docs/adr/0001-pricing-engines-as-sot.md §B.
+import '../../features/accounting/data/repositories/accounting_repository.dart';
+import '../services/journal_entry_service.dart';
 
 import 'database_native.dart' if (dart.library.html) 'database_web.dart';
 
@@ -47,7 +62,9 @@ part 'app_database.g.dart';
     Sizes,
     Products,
     ProductVariants,
+    ProductPriceHistories,
     ProductBatches,
+    BatchConsumptions,
     Customers,
     CustomerTransactions,
     LoyaltyTiers,
@@ -89,6 +106,21 @@ part 'app_database.g.dart';
     Notifications,
     BarcodeTemplates,
     PrintHistories,
+    PurchaseReturnAdjustments,
+    PurchaseReturnAdjustmentItems,
+    SaleReturnAdjustments,
+    SaleReturnAdjustmentItems,
+    InventoryAdjustments,
+    // Phase 2 — compliance & period management
+    FiscalPeriods,
+    CustomerCreditNotes,
+    CustomerCreditNoteApplications,
+    // Phase 3 — normalised return reason codes
+    ReturnReasonCodes,
+    // Phase 4 — e-invoice artifacts (ZATCA / ETA / PEPPOL)
+    EInvoiceDocuments,
+    // Phase 14.0 — cheque lifecycle sidecar (pending/cleared/bounced/cancelled)
+    ChequeConfirmations,
   ],
   daos: [
     ProductDao,
@@ -104,12 +136,15 @@ part 'app_database.g.dart';
     BarcodeTemplateDao,
     EmployeeDao,
     SupplierDao,
+    AdjustmentReturnDao,
+    InventoryAdjustmentDao,
+    ChequeConfirmationDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
   
-  AppDatabase.connect(DatabaseConnection connection) : super.connect(connection);
+  AppDatabase.connect(DatabaseConnection connection) : super(connection);
 
   Future<void> _dedupeUniqueSkuBarcodeIfNeeded() async {
     await customStatement(
@@ -412,29 +447,32 @@ FROM product_variants__old
 
   /// ONE-TIME migration: create missing opening_balance journal entries for
   /// suppliers that have a non-zero balance_cents but no corresponding journal
-  /// entry. This fixes the GL ↔ Suppliers mismatch caused by suppliers
-  /// created before journal entries were enforced.
+  /// entry. Fixes the GL ↔ Suppliers mismatch caused by suppliers created
+  /// before journal entries were enforced.
   ///
-  /// IDEMPOTENT: only inserts entries for suppliers that are truly missing them.
+  /// IDEMPOTENT: only inserts entries for suppliers that are truly missing
+  /// them (NOT EXISTS guard on the source_table/source_id pair).
   /// SAFE: does NOT delete or modify any existing journal entries.
+  ///
+  /// Phase 1.5 refactor (May 2026):
+  /// Previously this method hand-rolled the entire JE (header + lines + raw
+  /// `UPDATE accounts SET balance_cents`), bypassing the single-writer
+  /// invariant for `accounts.balance_cents` documented in
+  /// docs/adr/0001-pricing-engines-as-sot.md §B. It now delegates to
+  /// JournalEntryService.recordSupplierOpeningBalanceJournalEntry, which
+  /// routes through AccountingRepository.createJournalEntry — the sole
+  /// sanctioned writer of `accounts.balance_cents`.
+  ///
+  /// Why constructing the service inline is safe here:
+  ///   * AccountingRepository + JournalEntryService are pure objects with no
+  ///     async init and depend only on AppDatabase.
+  ///   * At the point this runs (onUpgrade, from < 10032), all schema-level
+  ///     migrations have completed, so the chart-of-accounts is fully seeded.
+  ///   * Drift coalesces nested transactions, so the inner
+  ///     `_db.transaction()` inside `createJournalEntry` joins the outer
+  ///     onUpgrade transaction cleanly.
   Future<void> _repairSupplierOpeningBalanceJournals() async {
-    // 1. Look up required account IDs
-    final apRow = await customSelect(
-      "SELECT id FROM accounts WHERE account_code = '2000'",
-    ).getSingleOrNull();
-    final obeRow = await customSelect(
-      "SELECT id FROM accounts WHERE account_code = '3100'",
-    ).getSingleOrNull();
-
-    if (apRow == null || obeRow == null) {
-      debugPrint('Migration 10032: AP or OBE account not found — skipping');
-      return;
-    }
-
-    final apId = apRow.read<int>('id');
-    final obeId = obeRow.read<int>('id');
-
-    // 2. Find suppliers with non-zero balance AND no opening_balance journal entry
+    // Find suppliers with non-zero balance AND no opening_balance JE.
     final suppliersToFix = await customSelect(
       'SELECT s.id, s.balance_cents, s.currency_id FROM suppliers s '
       'WHERE s.balance_cents != 0 '
@@ -451,94 +489,41 @@ FROM product_variants__old
       return;
     }
 
-    debugPrint('Migration 10032: repairing ${suppliersToFix.length} supplier opening balance journal entries');
+    debugPrint(
+      'Migration 10032: repairing ${suppliersToFix.length} supplier '
+      'opening balance journal entries via JournalEntryService (SoT)',
+    );
 
-    final now = DateTime.now().toIso8601String();
-
-    // 3. Get a starting sequence number for entry_number generation
-    final maxSeqRow = await customSelect(
-      "SELECT COUNT(*) AS cnt FROM journal_entries WHERE entry_number LIKE 'SMIG%'",
-    ).getSingle();
-    int seq = maxSeqRow.read<int>('cnt');
+    final accountingRepo = AccountingRepository(this);
+    final journalService = JournalEntryService(accountingRepo);
 
     for (final s in suppliersToFix) {
       final supplierId = s.read<int>('id');
       final balanceCents = s.read<int>('balance_cents');
       final currencyId = s.read<int>('currency_id');
-      final absBalance = balanceCents.abs();
 
-      seq++;
-      final entryNumber = 'SMIG${seq.toString().padLeft(6, '0')}';
-
-      // Determine debit/credit sides based on balance sign:
-      //   balance > 0 (we owe supplier): Dr OBE, Cr AP
-      //   balance < 0 (supplier owes us): Dr AP, Cr OBE
-      final int debitAccountId;
-      final int creditAccountId;
-      if (balanceCents > 0) {
-        debitAccountId = obeId;
-        creditAccountId = apId;
-      } else {
-        debitAccountId = apId;
-        creditAccountId = obeId;
-      }
-
-      // 4a. Insert journal entry header
-      await customStatement(
-        'INSERT INTO journal_entries '
-        '(entry_number, description, entry_date, status, entry_type, '
-        'source_table, source_id, total_debit_cents, total_credit_cents, '
-        'is_reversed, created_at, updated_at, posted_at) '
-        'VALUES ('
-        "'$entryNumber', "
-        "'Supplier #$supplierId — Opening Balance (migration)', "
-        "'$now', 'posted', 'opening_balance', "
-        "'suppliers', $supplierId, "
-        '$absBalance, $absBalance, '
-        "0, '$now', '$now', '$now')"
-      );
-
-      // 4b. Get the inserted entry ID
-      final entryIdRow = await customSelect(
-        'SELECT last_insert_rowid() AS id',
-      ).getSingle();
-      final entryId = entryIdRow.read<int>('id');
-
-      // 4c. Insert debit line
-      await customStatement(
-        'INSERT INTO journal_entry_lines '
-        '(journal_entry_id, account_id, debit_cents, credit_cents, '
-        'currency_id, line_number, created_at) '
-        "VALUES ($entryId, $debitAccountId, $absBalance, 0, $currencyId, 1, '$now')"
-      );
-
-      // 4d. Insert credit line
-      await customStatement(
-        'INSERT INTO journal_entry_lines '
-        '(journal_entry_id, account_id, debit_cents, credit_cents, '
-        'currency_id, line_number, created_at) '
-        "VALUES ($entryId, $creditAccountId, 0, $absBalance, $currencyId, 2, '$now')"
-      );
-
-      // 4e. Update cached account balances.
-      // Both AP (liability) and OBE (equity) are credit-normal accounts:
-      //   debit → balance decreases;  credit → balance increases.
-      await customStatement(
-        'UPDATE accounts SET balance_cents = balance_cents - $absBalance, '
-        "updated_at = '$now' WHERE id = $debitAccountId"
-      );
-      await customStatement(
-        'UPDATE accounts SET balance_cents = balance_cents + $absBalance, '
-        "updated_at = '$now' WHERE id = $creditAccountId"
+      // JournalEntryService resolves AP (2000) + OBE (3100), chooses the
+      // correct Dr/Cr sides from the sign, creates the JE through
+      // AccountingRepository.createJournalEntry (which validates
+      // double-entry and updates `accounts.balance_cents` via the single
+      // sanctioned writer), and is itself idempotent on the
+      // (source_table='suppliers', source_id=supplierId) key.
+      await journalService.recordSupplierOpeningBalanceJournalEntry(
+        supplierId: supplierId,
+        amountCents: balanceCents,
+        currencyId: currencyId,
       );
 
       debugPrint(
         'Migration 10032: created opening balance JE for Supplier #$supplierId '
-        '(${balanceCents > 0 ? 'Dr OBE / Cr AP' : 'Dr AP / Cr OBE'} = $absBalance cents)'
+        '(${balanceCents > 0 ? 'Dr OBE / Cr AP' : 'Dr AP / Cr OBE'} = '
+        '${balanceCents.abs()} cents)',
       );
     }
 
-    debugPrint('Migration 10032: completed — ${suppliersToFix.length} entries created');
+    debugPrint(
+      'Migration 10032: completed — ${suppliersToFix.length} entries created',
+    );
   }
 
   Future<void> _safeAddColumn(String table, String column, String type) async {
@@ -578,6 +563,9 @@ FROM product_variants__old
     await _safeAddColumn('product_variants', 'cost_cents', 'INTEGER NOT NULL DEFAULT 0');
     await _safeAddColumn('product_variants', 'price_cents', 'INTEGER NOT NULL DEFAULT 0');
     await _safeAddColumn('product_variants', 'wholesale_price_cents', 'INTEGER');
+    // v10055 — supplier reference price (gross of trade discounts).
+    await _safeAddColumn('products', 'last_purchase_price_cents', 'INTEGER');
+    await _safeAddColumn('product_variants', 'last_purchase_price_cents', 'INTEGER');
     
     await _safeAddColumn('sizes', 'sort_order', 'INTEGER NOT NULL DEFAULT 0');
 
@@ -784,11 +772,97 @@ CREATE TABLE IF NOT EXISTS sale_payments (
 );
 ''');
 
+    // Adjustment return unified flow columns (v10038)
+    await _safeAddColumn('purchase_return_adjustments', 'refund_method', "TEXT NOT NULL DEFAULT 'credit'");
+    await _safeAddColumn('purchase_return_adjustments', 'return_mode', 'TEXT');
+    await _safeAddColumn('purchase_return_adjustments', 'mode_reason', 'TEXT');
+    await _safeAddColumn('purchase_return_adjustments', 'batch_id', 'TEXT');
+    await _safeAddColumn('sale_return_adjustments', 'refund_method', "TEXT NOT NULL DEFAULT 'cash'");
+    await _safeAddColumn('sale_return_adjustments', 'return_mode', 'TEXT');
+    await _safeAddColumn('sale_return_adjustments', 'mode_reason', 'TEXT');
+    await _safeAddColumn('sale_return_adjustments', 'batch_id', 'TEXT');
+
+    // COGS snapshot column (v10039)
+    await _safeAddColumn('sale_items', 'cost_cents', 'INTEGER');
+
+    // FIFO costing method per product (v10045). Defaults to 'wac' to preserve
+    // existing accounting behaviour for older databases.
+    await _safeAddColumn(
+      'products',
+      'costing_method',
+      "TEXT NOT NULL DEFAULT 'wac'",
+    );
+
     debugPrint('Schema integrity check completed.');
   }
 
+  /// One-time seeder run as part of migration 10044 → 10045.
+  ///
+  /// For every active variant with `stock_quantity > 0`, insert exactly ONE
+  /// opening batch carrying the full on-hand quantity at the *current*
+  /// `cost_cents`. Batches are ALWAYS stored at variant level — this keeps
+  /// the FIFO invariant simple (Σ remaining per variant == variant.stock).
+  ///
+  /// Non-variant products have a single default variant (color_id IS NULL
+  /// AND size_id IS NULL) created automatically; that variant carries the
+  /// stock and therefore receives the opening batch.
+  ///
+  /// Safe & idempotent: skips a variant that already has an active batch.
+  Future<void> _seedOpeningBatchesForFifoActivation() async {
+    final now = DateTime.now().toIso8601String();
+    int seq = 0;
+    final dateTag = now.substring(0, 10).replaceAll('-', '');
+
+    final variantRows = await customSelect(
+      'SELECT v.id AS variant_id, v.product_id AS product_id, '
+      '       v.stock_quantity AS qty, v.cost_cents AS cost_cents, '
+      '       p.supplier_id AS supplier_id '
+      '  FROM product_variants v '
+      '  JOIN products p ON p.id = v.product_id '
+      ' WHERE v.is_active = 1 AND v.stock_quantity > 0 '
+      '   AND NOT EXISTS ('
+      '     SELECT 1 FROM product_batches b '
+      '      WHERE b.variant_id = v.id AND b.is_active = 1'
+      '   )',
+    ).get();
+
+    for (final r in variantRows) {
+      final productId = r.read<int>('product_id');
+      final variantId = r.read<int>('variant_id');
+      final qty = r.read<int>('qty');
+      final cost = r.read<int>('cost_cents');
+      final supplierIdNullable = r.readNullable<int>('supplier_id');
+      seq++;
+      final batchNumber = 'OPEN-$dateTag-V$variantId';
+      await customStatement(
+        'INSERT INTO product_batches '
+        '(product_id, variant_id, batch_number, purchase_item_id, supplier_id, '
+        ' source, received_date, expiry_date, received_quantity, '
+        ' remaining_quantity, unit_cost_cents, is_active, created_at, updated_at) '
+        'VALUES (?, ?, ?, NULL, ?, ?, ?, NULL, ?, ?, ?, 1, ?, ?)',
+        [
+          productId,
+          variantId,
+          batchNumber,
+          if (supplierIdNullable != null) supplierIdNullable else null,
+          'opening',
+          now,
+          qty,
+          qty,
+          cost,
+          now,
+          now,
+        ],
+      );
+    }
+
+    debugPrint(
+      'Migration 10045: created $seq opening batches for FIFO activation',
+    );
+  }
+
   @override
-  int get schemaVersion => 10035;
+  int get schemaVersion => 10057;
 
   @override
   MigrationStrategy get migration {
@@ -796,6 +870,7 @@ CREATE TABLE IF NOT EXISTS sale_payments (
       onCreate: (Migrator m) async {
         await m.createAll();
         await _createIndexes();
+        await _installProductBatchesIntegrityTriggers();
         await _seedInitialData();
       },
       onUpgrade: (Migrator m, int from, int to) async {
@@ -1125,6 +1200,147 @@ CREATE TABLE IF NOT EXISTS sale_payments (
           await _safeAddColumn('users', 'security_answer_hash', 'TEXT');
         }
 
+        // Migration 10035 -> 10036: Adjustment return tables (dual return system)
+        if (from < 10036) {
+          await m.createTable(purchaseReturnAdjustments);
+          await m.createTable(purchaseReturnAdjustmentItems);
+          await m.createTable(saleReturnAdjustments);
+          await m.createTable(saleReturnAdjustmentItems);
+        }
+
+        // Migration 10036 -> 10037: Add unitCostCents to adjustment return items
+        // for perpetual inventory GL entries (Inventory 1200 ↔ COGS 5300)
+        if (from < 10037) {
+          await _safeAddColumn('purchase_return_adjustment_items', 'unit_cost_cents', 'INTEGER NOT NULL DEFAULT 0');
+          await _safeAddColumn('sale_return_adjustment_items', 'unit_cost_cents', 'INTEGER NOT NULL DEFAULT 0');
+        }
+
+        // Migration 10037 -> 10038: Unified return flow — audit fields + refund method on adjustment returns
+        if (from < 10038) {
+          await _safeAddColumn('purchase_return_adjustments', 'refund_method', "TEXT NOT NULL DEFAULT 'credit'");
+          await _safeAddColumn('purchase_return_adjustments', 'return_mode', 'TEXT');
+          await _safeAddColumn('purchase_return_adjustments', 'mode_reason', 'TEXT');
+          await _safeAddColumn('purchase_return_adjustments', 'batch_id', 'TEXT');
+          await _safeAddColumn('sale_return_adjustments', 'refund_method', "TEXT NOT NULL DEFAULT 'cash'");
+          await _safeAddColumn('sale_return_adjustments', 'return_mode', 'TEXT');
+          await _safeAddColumn('sale_return_adjustments', 'mode_reason', 'TEXT');
+          await _safeAddColumn('sale_return_adjustments', 'batch_id', 'TEXT');
+        }
+
+        // Migration 10038 -> 10039: COGS snapshot — freeze cost at sale time
+        if (from < 10039) {
+          await _safeAddColumn('sale_items', 'cost_cents', 'INTEGER');
+        }
+
+        // Migration 10039 -> 10040: Make customer_id nullable in sale_return_adjustments
+        // to support walk-in (no customer) returns
+        if (from < 10040) {
+          await customStatement('PRAGMA foreign_keys = OFF');
+          await customStatement('''
+            CREATE TABLE sale_return_adjustments__new (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              return_number TEXT NOT NULL UNIQUE,
+              customer_id INTEGER REFERENCES customers(id),
+              currency_id INTEGER NOT NULL REFERENCES currencies(id),
+              total_cents INTEGER NOT NULL,
+              status TEXT NOT NULL DEFAULT 'draft',
+              refund_method TEXT NOT NULL DEFAULT 'cash',
+              return_mode TEXT,
+              mode_reason TEXT,
+              batch_id TEXT,
+              notes TEXT,
+              return_date DATETIME NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+              created_at DATETIME NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+              updated_at DATETIME NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+            )
+          ''');
+          await customStatement('''
+            INSERT INTO sale_return_adjustments__new
+              (id, return_number, customer_id, currency_id, total_cents, status,
+               refund_method, return_mode, mode_reason, batch_id, notes,
+               return_date, created_at, updated_at)
+            SELECT id, return_number, customer_id, currency_id, total_cents, status,
+                   refund_method, return_mode, mode_reason, batch_id, notes,
+                   return_date, created_at, updated_at
+            FROM sale_return_adjustments
+          ''');
+          await customStatement('DROP TABLE sale_return_adjustments');
+          await customStatement('ALTER TABLE sale_return_adjustments__new RENAME TO sale_return_adjustments');
+          await customStatement('PRAGMA foreign_keys = ON');
+        }
+
+        // Migration 10040 -> 10041: Add discount/tax/subtotal/employee columns to adjustment return tables
+        if (from < 10041) {
+          // Sale return adjustment header
+          await _safeAddColumn('sale_return_adjustments', 'employee_id', 'INTEGER REFERENCES employees(id)');
+          await _safeAddColumn('sale_return_adjustments', 'subtotal_cents', 'INTEGER NOT NULL DEFAULT 0');
+          await _safeAddColumn('sale_return_adjustments', 'discount_cents', 'INTEGER NOT NULL DEFAULT 0');
+          await _safeAddColumn('sale_return_adjustments', 'tax_cents', 'INTEGER NOT NULL DEFAULT 0');
+          // Sale return adjustment items
+          await _safeAddColumn('sale_return_adjustment_items', 'discount_cents', 'INTEGER NOT NULL DEFAULT 0');
+          await _safeAddColumn('sale_return_adjustment_items', 'tax_cents', 'INTEGER NOT NULL DEFAULT 0');
+          // Purchase return adjustment header
+          await _safeAddColumn('purchase_return_adjustments', 'subtotal_cents', 'INTEGER NOT NULL DEFAULT 0');
+          await _safeAddColumn('purchase_return_adjustments', 'discount_cents', 'INTEGER NOT NULL DEFAULT 0');
+          await _safeAddColumn('purchase_return_adjustments', 'tax_cents', 'INTEGER NOT NULL DEFAULT 0');
+          // Purchase return adjustment items
+          await _safeAddColumn('purchase_return_adjustment_items', 'discount_cents', 'INTEGER NOT NULL DEFAULT 0');
+          await _safeAddColumn('purchase_return_adjustment_items', 'tax_cents', 'INTEGER NOT NULL DEFAULT 0');
+        }
+
+        // Migration 10041 -> 10042: Add dueDate to adjustment return tables (for cheque payments)
+        if (from < 10042) {
+          await _safeAddColumn('sale_return_adjustments', 'due_date', 'DATETIME');
+          await _safeAddColumn('purchase_return_adjustments', 'due_date', 'DATETIME');
+        }
+
+        // Migration 10042 -> 10043: Inventory Adjustments table (manual stock
+        // shrinkage / gain / revaluation with mandatory reason + journal entry).
+        // Adds three new system accounts: 5800, 4200, 5900.
+        if (from < 10043) {
+          await m.createTable(inventoryAdjustments);
+        }
+
+        // Migration 10043 -> 10044: Price history audit trail.
+        // Append-only record of price/cost changes for products & variants,
+        // surfaced in the product form for operators to trace margin history.
+        if (from < 10044) {
+          await m.createTable(productPriceHistories);
+        }
+
+        // Migration 10044 -> 10045: FIFO/Lot tracking foundation.
+        //   - Drop the legacy reserved-but-unused product_batches table and
+        //     recreate it with full FIFO schema (purchase_item_id, supplier_id,
+        //     source, received_quantity, remaining_quantity, unit_cost_cents,
+        //     is_active, updated_at).
+        //   - Create batch_consumptions append-only ledger.
+        //   - Add costing_method to products (default 'wac').
+        //   - Seed an opening batch for every (product, variant) with stock>0
+        //     so the FIFO invariant Σ(remaining)==stock holds at boot.
+        if (from < 10045) {
+          // 1. Add costing_method to products (default 'wac' for all existing).
+          await _safeAddColumn(
+            'products',
+            'costing_method',
+            "TEXT NOT NULL DEFAULT 'wac'",
+          );
+
+          // 2. Drop legacy product_batches (RESERVED — guaranteed empty in
+          //    production by the doc comment that lived on the old table).
+          //    Use CASCADE-safe drop: disable FK, drop, re-enable.
+          await customStatement('PRAGMA foreign_keys = OFF');
+          try {
+            await customStatement('DROP TABLE IF EXISTS product_batches');
+            await m.createTable(productBatches);
+            await m.createTable(batchConsumptions);
+          } finally {
+            await customStatement('PRAGMA foreign_keys = ON');
+          }
+
+          // 3. Seed opening batches from current on-hand stock.
+          await _seedOpeningBatchesForFifoActivation();
+        }
+
         // Migration 10034 -> 10035: Add opening_balance_cents to suppliers and customers
         // This stores the initial balance separately from the current balance for display
         // and reporting purposes. Existing balance_cents values are copied as opening balance.
@@ -1141,6 +1357,773 @@ CREATE TABLE IF NOT EXISTS sale_payments (
             UPDATE customers SET opening_balance_cents = balance_cents 
             WHERE balance_cents != 0 AND opening_balance_cents = 0
           ''');
+        }
+
+        // Migration 10045 -> 10046: Reclassify return-adjustment accounts as
+        // contra-accounts so the income statement presents Net Sales /
+        // Net Cost of Sales without special-casing the report (IFRS/GAAP).
+        //
+        //   4100 Purchase Return Adjustment: revenue → expense (contra-expense)
+        //   5700 Sales Return Adjustment   : expense → revenue (contra-revenue)
+        //
+        // Posted journal_lines remain unchanged — only the account_type is
+        // flipped, which immediately corrects the P&L grouping for both
+        // historical and future entries. Idempotent: repeated runs are no-op.
+        if (from < 10046) {
+          await customStatement(
+            "UPDATE accounts SET account_type = 'expense', updated_at = ? "
+            "WHERE account_code = '4100' AND account_type != 'expense'",
+            [DateTime.now().toIso8601String()],
+          );
+          await customStatement(
+            "UPDATE accounts SET account_type = 'revenue', updated_at = ? "
+            "WHERE account_code = '5700' AND account_type != 'revenue'",
+            [DateTime.now().toIso8601String()],
+          );
+          developer.log(
+            'Migration 10046: reclassified 4100 (Purchase Return Adj.) as '
+            'contra-expense and 5700 (Sales Return Adj.) as contra-revenue.',
+            name: 'DB_MIGRATION',
+          );
+        }
+
+        // Migration 10046 -> 10047: Two-Layer Inventory Architecture (Phase A).
+        //
+        // Introduces a *business-wide* inventory valuation method stored in
+        // `app_settings('inventory_valuation_method')`. Per-product
+        // `costing_method` keeps working for now (Phase B switches readers
+        // to the global setting); this migration only seeds the default
+        // value so the row exists when the new service first reads it.
+        //
+        // Default rule (mirrors SAP Business One's first-run wizard):
+        //   * If ALL existing products are `wac` (or no products yet)
+        //     → global = 'wac' (the IFRS-friendliest default for SMBs).
+        //   * If ANY product is `fifo`
+        //     → global = 'fifo' (preserves the FIFO behaviour the operator
+        //                        previously chose, so no posting changes
+        //                        unexpectedly when readers are flipped to
+        //                        the global setting in Phase B).
+        // Idempotent: skips re-inserting when the setting already exists.
+        if (from < 10047) {
+          final existing = await customSelect(
+            "SELECT value FROM app_settings WHERE key = 'inventory_valuation_method'",
+          ).getSingleOrNull();
+
+          if (existing == null) {
+            // Detect any FIFO product. This query is safe even if the
+            // costing_method column is missing (older installs that skipped
+            // 10045 will return 0 rows under the catch fallback below).
+            int fifoCount = 0;
+            try {
+              final row = await customSelect(
+                "SELECT COUNT(*) AS cnt FROM products WHERE costing_method = 'fifo'",
+              ).getSingleOrNull();
+              fifoCount = row?.read<int>('cnt') ?? 0;
+            } catch (_) {
+              fifoCount = 0;
+            }
+
+            final seedValue = fifoCount > 0 ? 'fifo' : 'wac';
+            final nowIso = DateTime.now().toIso8601String();
+            const seedDescription =
+                'Business-wide inventory valuation method (IAS 2 / ASC 330). '
+                'Seeded from existing per-product costing_method majority.';
+            await customStatement(
+              'INSERT INTO app_settings (key, value, description, created_at, updated_at) '
+              'VALUES (?, ?, ?, ?, ?)',
+              [
+                'inventory_valuation_method',
+                seedValue,
+                seedDescription,
+                nowIso,
+                nowIso,
+              ],
+            );
+
+            developer.log(
+              'Migration 10047: seeded inventory_valuation_method=$seedValue '
+              '(fifoProducts=$fifoCount)',
+              name: 'DB_MIGRATION',
+            );
+          }
+        }
+
+        // Migration 10047 -> 10048: Two-Layer Inventory Architecture (Phase B).
+        //
+        // Adds `products.inventory_tracking_type` (`standard`/`batch`/
+        // `batch_expiry`) which is the per-product knob that decides whether
+        // a product needs batch-level books and expiry tracking.
+        //
+        // Backfill rules (idempotent — guarded by a column-existence probe):
+        //   * costing_method = 'fifo' AND ∃ batch with expiry_date IS NOT NULL
+        //         → 'batch_expiry' (pharmacies, dairy, cosmetics, …).
+        //   * costing_method = 'fifo' (no expiry rows) → 'batch'.
+        //   * costing_method = 'wac' → 'standard'.
+        //
+        // The legacy `costing_method` column is intentionally NOT dropped:
+        // we follow the expand → migrate → contract pattern and keep it as
+        // a fallback signal for one release.
+        if (from < 10048) {
+          final probe = await customSelect(
+            "SELECT COUNT(*) AS c FROM pragma_table_info('products') "
+            "WHERE name = 'inventory_tracking_type'",
+          ).getSingle();
+          final hasColumn = (probe.data['c'] as int? ?? 0) > 0;
+          if (!hasColumn) {
+            await customStatement(
+              'ALTER TABLE products ADD COLUMN inventory_tracking_type '
+              "TEXT NOT NULL DEFAULT 'standard'",
+            );
+          }
+
+          // Backfill from costing_method + presence of expiry rows. We use
+          // CASE/EXISTS so the whole UPDATE is a single statement.
+          await customStatement('''
+            UPDATE products
+               SET inventory_tracking_type = CASE
+                 WHEN costing_method = 'fifo' AND EXISTS (
+                   SELECT 1 FROM product_batches b
+                    WHERE b.product_id = products.id
+                      AND b.expiry_date IS NOT NULL
+                 ) THEN 'batch_expiry'
+                 WHEN costing_method = 'fifo' THEN 'batch'
+                 ELSE 'standard'
+               END
+             WHERE inventory_tracking_type = 'standard'
+                OR inventory_tracking_type IS NULL
+          ''');
+
+          final stats = await customSelect('''
+            SELECT inventory_tracking_type AS t, COUNT(*) AS c
+              FROM products
+             GROUP BY inventory_tracking_type
+          ''').get();
+          final summary = stats
+              .map((r) => '${r.data['t']}=${r.data['c']}')
+              .join(', ');
+          developer.log(
+            'Migration 10048: backfilled products.inventory_tracking_type '
+            '($summary)',
+            name: 'DB_MIGRATION',
+          );
+        }
+
+        // Migration 10048 -> 10049: product_batches integrity triggers (I3).
+        //
+        // Phase I of the Two-Layer Inventory Architecture: defense-in-depth
+        // CHECK constraints enforced at the DB layer via BEFORE INSERT/UPDATE
+        // triggers. SQLite does not support `ALTER TABLE ADD CHECK`, so we
+        // implement the same semantics with `RAISE(ABORT, ...)` triggers.
+        //
+        // Two invariants (mirrors INVENTORY_ARCHITECTURE.md §6 I1/I2):
+        //   • remaining_quantity >= 0
+        //   • remaining_quantity <= received_quantity
+        //
+        // Pre-migration scan: count violators FIRST. If any exist, log every
+        // offending row and abort the migration with a clear, actionable
+        // exception. The app refuses to boot until the data is repaired —
+        // this is a deliberate fail-loud policy because silent data
+        // corruption in inventory is the worst possible outcome.
+        if (from < 10049) {
+          final neg = await customSelect(
+            'SELECT COUNT(*) AS c FROM product_batches '
+            'WHERE remaining_quantity < 0',
+          ).getSingle();
+          final negCount = neg.data['c'] as int? ?? 0;
+
+          final over = await customSelect(
+            'SELECT COUNT(*) AS c FROM product_batches '
+            'WHERE remaining_quantity > received_quantity',
+          ).getSingle();
+          final overCount = over.data['c'] as int? ?? 0;
+
+          if (negCount > 0 || overCount > 0) {
+            final rows = await customSelect(
+              'SELECT id, product_id, variant_id, batch_number, '
+              '       remaining_quantity, received_quantity '
+              '  FROM product_batches '
+              ' WHERE remaining_quantity < 0 '
+              '    OR remaining_quantity > received_quantity '
+              ' ORDER BY id',
+            ).get();
+            for (final r in rows) {
+              developer.log(
+                'Migration 10049 VIOLATOR: batch_id=${r.data['id']} '
+                '(${r.data['batch_number']}) '
+                'product=${r.data['product_id']} '
+                'variant=${r.data['variant_id']} '
+                'remaining=${r.data['remaining_quantity']} '
+                'received=${r.data['received_quantity']}',
+                name: 'DB_MIGRATION',
+              );
+            }
+            throw StateError(
+              'Migration 10049 aborted: '
+              '$negCount row(s) with remaining_quantity<0, '
+              '$overCount row(s) with remaining_quantity>received_quantity. '
+              'Fix corrupt product_batches data before retrying. '
+              'See DB_MIGRATION log for offending IDs.',
+            );
+          }
+
+          await _installProductBatchesIntegrityTriggers();
+          developer.log(
+            'Migration 10049: installed product_batches integrity triggers '
+            '(remaining >= 0 AND remaining <= received_quantity)',
+            name: 'DB_MIGRATION',
+          );
+        }
+
+        // ════════════════════════════════════════════════════════════════════
+        // Migration 10049 → 10050 — Phase 0 hardening for the return system.
+        // ════════════════════════════════════════════════════════════════════
+        // Adds:
+        //   • sale_items.qty_returned_linked / qty_returned_adjustment
+        //   • purchase_items.qty_returned_linked / qty_returned_adjustment
+        //   • idempotency_key (TEXT NULL UNIQUE) on the four return headers:
+        //       sale_returns, purchase_returns,
+        //       sale_return_adjustments, purchase_return_adjustments
+        //
+        // Why these counters:
+        //   The previous validation only checked stock at post-time. A user
+        //   could legitimately have stock (from an unrelated supplier or a
+        //   prior return cycle) and still over-return a given (party, product)
+        //   pair across multiple invoices. The atomic counter pinned to each
+        //   sale_item / purchase_item is the authoritative cap and survives
+        //   reporting drift.
+        //
+        // Backfill strategy:
+        //   • qty_returned_linked = Σ(quantity) on non-voided
+        //     sale_return_items / purchase_return_items grouped by line.
+        //   • qty_returned_adjustment stays at 0 — adjustment returns are
+        //     not pinned to a specific invoice line, so they can't be
+        //     attributed retroactively. Future returns will increment them.
+        //
+        // Idempotency keys are NULL by default for legacy rows so the unique
+        // index does not collide. Only forward submissions set them.
+        if (from < 10050) {
+          // 1. Counters on sale_items / purchase_items.
+          await _safeAddColumn(
+            'sale_items', 'qty_returned_linked', 'INTEGER NOT NULL DEFAULT 0',
+          );
+          await _safeAddColumn(
+            'sale_items', 'qty_returned_adjustment', 'INTEGER NOT NULL DEFAULT 0',
+          );
+          await _safeAddColumn(
+            'purchase_items', 'qty_returned_linked', 'INTEGER NOT NULL DEFAULT 0',
+          );
+          await _safeAddColumn(
+            'purchase_items', 'qty_returned_adjustment', 'INTEGER NOT NULL DEFAULT 0',
+          );
+
+          // Backfill linked counters from existing return items (non-voided).
+          await customStatement(
+            'UPDATE sale_items SET qty_returned_linked = COALESCE(('
+            '  SELECT SUM(sri.quantity) FROM sale_return_items sri '
+            '  JOIN sale_returns sr ON sr.id = sri.return_id '
+            "  WHERE sri.sale_item_id = sale_items.id AND sr.status != 'voided'"
+            '), 0)',
+          );
+          await customStatement(
+            'UPDATE purchase_items SET qty_returned_linked = COALESCE(('
+            '  SELECT SUM(pri.quantity) FROM purchase_return_items pri '
+            '  JOIN purchase_returns pr ON pr.id = pri.return_id '
+            "  WHERE pri.purchase_item_id = purchase_items.id AND pr.status != 'voided'"
+            '), 0)',
+          );
+
+          // 2. Idempotency keys on the four return headers.
+          await _safeAddColumn('sale_returns', 'idempotency_key', 'TEXT');
+          await _safeAddColumn('purchase_returns', 'idempotency_key', 'TEXT');
+          await _safeAddColumn('sale_return_adjustments', 'idempotency_key', 'TEXT');
+          await _safeAddColumn('purchase_return_adjustments', 'idempotency_key', 'TEXT');
+
+          await customStatement(
+            'CREATE UNIQUE INDEX IF NOT EXISTS idx_sale_returns_idempotency '
+            'ON sale_returns(idempotency_key) WHERE idempotency_key IS NOT NULL',
+          );
+          await customStatement(
+            'CREATE UNIQUE INDEX IF NOT EXISTS idx_purchase_returns_idempotency '
+            'ON purchase_returns(idempotency_key) WHERE idempotency_key IS NOT NULL',
+          );
+          await customStatement(
+            'CREATE UNIQUE INDEX IF NOT EXISTS idx_sale_return_adjustments_idempotency '
+            'ON sale_return_adjustments(idempotency_key) WHERE idempotency_key IS NOT NULL',
+          );
+          await customStatement(
+            'CREATE UNIQUE INDEX IF NOT EXISTS idx_purchase_return_adjustments_idempotency '
+            'ON purchase_return_adjustments(idempotency_key) WHERE idempotency_key IS NOT NULL',
+          );
+
+          developer.log(
+            'Migration 10050: added qty_returned_* counters + idempotency_key '
+            'columns to return tables (Phase 0 hardening).',
+            name: 'DB_MIGRATION',
+          );
+        }
+
+        // ════════════════════════════════════════════════════════════════════
+        // Migration 10050 → 10051 — Phase 2 compliance & period management.
+        // ════════════════════════════════════════════════════════════════════
+        // Adds:
+        //   • Snapshot columns on the four return-line tables:
+        //       sale_return_items.tax_rate_bps_at_post,
+        //                       .unit_cost_at_post_cents
+        //       purchase_return_items.tax_rate_bps_at_post,
+        //                            .unit_cost_at_post_cents
+        //       sale_return_adjustment_items.tax_rate_bps_at_post,
+        //                                   .unit_cost_at_post_cents,
+        //                                   .original_invoice_id,
+        //                                   .disposition_type
+        //       purchase_return_adjustment_items.tax_rate_bps_at_post,
+        //                                       .unit_cost_at_post_cents,
+        //                                       .original_invoice_id,
+        //                                       .disposition_type
+        //   • fx_rate_to_base on the four return headers.
+        //   • New tables: fiscal_periods, customer_credit_notes,
+        //                 customer_credit_note_applications.
+        //
+        // Why these:
+        //   - Snapshots freeze tax rate + unit cost at post-time so future
+        //     rate changes / WAC drift cannot retroactively distort an
+        //     already-posted return (IFRS / IAS 12 / IAS 2 compliance).
+        //   - disposition_type per line lets adjustment returns mix
+        //     restock / damaged / scrap and route the inventory leg to
+        //     1200 vs 5800 in ReturnJournalPolicy.
+        //   - fx_rate_to_base captures the booking-time rate so
+        //     multi-currency returns can be revalued at base in reports.
+        //   - fiscal_periods + close enforcement is a hard requirement of
+        //     every world-class accounting product (QB, Odoo, NetSuite).
+        //   - customer_credit_notes is the sub-ledger backing 2400
+        //     Customer Credit Liability — Σ(open balances) MUST tie out
+        //     to the GL.
+        if (from < 10051) {
+          // 1. Snapshot columns on return-line tables.
+          await _safeAddColumn(
+            'sale_return_items', 'tax_rate_bps_at_post', 'INTEGER',
+          );
+          await _safeAddColumn(
+            'sale_return_items', 'unit_cost_at_post_cents', 'INTEGER',
+          );
+          await _safeAddColumn(
+            'purchase_return_items', 'tax_rate_bps_at_post', 'INTEGER',
+          );
+          await _safeAddColumn(
+            'purchase_return_items', 'unit_cost_at_post_cents', 'INTEGER',
+          );
+          await _safeAddColumn(
+            'sale_return_adjustment_items', 'tax_rate_bps_at_post', 'INTEGER',
+          );
+          await _safeAddColumn(
+            'sale_return_adjustment_items', 'unit_cost_at_post_cents', 'INTEGER',
+          );
+          await _safeAddColumn(
+            'sale_return_adjustment_items', 'original_invoice_id', 'INTEGER',
+          );
+          await _safeAddColumn(
+            'sale_return_adjustment_items',
+            'disposition_type',
+            "TEXT NOT NULL DEFAULT 'restock'",
+          );
+          await _safeAddColumn(
+            'purchase_return_adjustment_items',
+            'tax_rate_bps_at_post',
+            'INTEGER',
+          );
+          await _safeAddColumn(
+            'purchase_return_adjustment_items',
+            'unit_cost_at_post_cents',
+            'INTEGER',
+          );
+          await _safeAddColumn(
+            'purchase_return_adjustment_items',
+            'original_invoice_id',
+            'INTEGER',
+          );
+          await _safeAddColumn(
+            'purchase_return_adjustment_items',
+            'disposition_type',
+            "TEXT NOT NULL DEFAULT 'restock'",
+          );
+
+          // 2. FX columns on return headers.
+          await _safeAddColumn('sale_returns', 'fx_rate_to_base', 'TEXT');
+          await _safeAddColumn('purchase_returns', 'fx_rate_to_base', 'TEXT');
+          await _safeAddColumn(
+            'sale_return_adjustments', 'fx_rate_to_base', 'TEXT',
+          );
+          await _safeAddColumn(
+            'purchase_return_adjustments', 'fx_rate_to_base', 'TEXT',
+          );
+
+          // 3. New tables: fiscal_periods, customer_credit_notes,
+          //    customer_credit_note_applications.
+          await customStatement('''
+CREATE TABLE IF NOT EXISTS fiscal_periods (
+  id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+  period_key TEXT NOT NULL UNIQUE,
+  start_date TEXT NOT NULL,
+  end_date TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'open',
+  closed_by_user_id INTEGER,
+  closed_at TEXT,
+  notes TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+)
+''');
+          await customStatement(
+            'CREATE INDEX IF NOT EXISTS idx_fiscal_periods_status_dates '
+            'ON fiscal_periods(status, start_date, end_date)',
+          );
+
+          await customStatement('''
+CREATE TABLE IF NOT EXISTS customer_credit_notes (
+  id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+  note_number TEXT NOT NULL UNIQUE,
+  customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE RESTRICT,
+  currency_id INTEGER NOT NULL REFERENCES currencies(id) ON DELETE RESTRICT,
+  original_amount_cents INTEGER NOT NULL,
+  balance_cents INTEGER NOT NULL,
+  status TEXT NOT NULL DEFAULT 'open',
+  source_table TEXT NOT NULL,
+  source_id INTEGER NOT NULL,
+  issue_journal_entry_id INTEGER,
+  expires_at TEXT,
+  notes TEXT,
+  issued_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+)
+''');
+          await customStatement(
+            'CREATE INDEX IF NOT EXISTS idx_customer_credit_notes_customer '
+            'ON customer_credit_notes(customer_id, status)',
+          );
+          await customStatement(
+            'CREATE INDEX IF NOT EXISTS idx_customer_credit_notes_source '
+            'ON customer_credit_notes(source_table, source_id)',
+          );
+
+          await customStatement('''
+CREATE TABLE IF NOT EXISTS customer_credit_note_applications (
+  id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+  credit_note_id INTEGER NOT NULL REFERENCES customer_credit_notes(id) ON DELETE RESTRICT,
+  sale_id INTEGER,
+  amount_cents INTEGER NOT NULL,
+  journal_entry_id INTEGER,
+  notes TEXT,
+  applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+)
+''');
+          await customStatement(
+            'CREATE INDEX IF NOT EXISTS idx_credit_note_apps_note '
+            'ON customer_credit_note_applications(credit_note_id)',
+          );
+
+          developer.log(
+            'Migration 10051: added Phase 2 snapshot/disposition/FX columns '
+            'and fiscal_periods + customer_credit_notes ledger tables.',
+            name: 'DB_MIGRATION',
+          );
+        }
+
+        // ════════════════════════════════════════════════════════════════════
+        // Migration 10051 → 10052 — Phase 3 approval workflow & audit trail.
+        // ════════════════════════════════════════════════════════════════════
+        // Adds on every return header (sale_returns, purchase_returns,
+        // sale_return_adjustments, purchase_return_adjustments):
+        //   • approval_status          TEXT NOT NULL DEFAULT 'auto_approved'
+        //   • approval_required        INTEGER NOT NULL DEFAULT 0
+        //   • approval_reason          TEXT
+        //   • approved_by              INTEGER -> users(id) ON DELETE SET NULL
+        //   • approved_at              TEXT
+        //   • override_reason          TEXT
+        //   • override_by              INTEGER -> users(id) ON DELETE SET NULL
+        //   • posted_by                INTEGER -> users(id) ON DELETE SET NULL
+        //   • posted_at                TEXT
+        //   • voided_by                INTEGER -> users(id) ON DELETE SET NULL
+        //   • voided_at                TEXT
+        //   • void_reason              TEXT
+        //   • reason_code_id           INTEGER -> return_reason_codes(id)
+        //
+        // Also creates the new `return_reason_codes` lookup table and
+        // seeds it with system codes (`DEFECTIVE`, `WRONG_ITEM`,
+        // `CUSTOMER_CHANGED_MIND`, `DAMAGED_IN_TRANSIT`, `EXPIRED`,
+        // `NO_INVOICE`, `PRICE_ADJUSTMENT`, `OTHER`).
+        //
+        // Why these:
+        //   - Approval workflow: mandatory in every world-class ERP
+        //     (SAP, Odoo, QB) for returns above a threshold, returns
+        //     without an original invoice, or when the operator uses
+        //     `allowOverHistory` to bypass the Phase 0 quantity cap.
+        //   - Audit trail: `posted_by`/`voided_by` + timestamps are
+        //     regulatory minima (ZATCA, ETA, SOX). Free-text
+        //     `void_reason` supports internal control narratives.
+        //   - Normalised `reason_code_id` replaces free-text `reason`
+        //     for analytics & e-invoice XML fields.
+        //
+        // NOTE — because the FK targets (`users`, `return_reason_codes`)
+        // must exist before any ALTER, we create `return_reason_codes`
+        // first. All new columns are nullable / defaulted so legacy
+        // rows upgrade safely without data-migration.
+        if (from < 10052) {
+          // 1. Lookup table — seed happens in _seedInitialData() after migrate().
+          await customStatement('''
+CREATE TABLE IF NOT EXISTS return_reason_codes (
+  id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+  code TEXT NOT NULL UNIQUE,
+  label_en TEXT NOT NULL,
+  label_ar TEXT NOT NULL,
+  side TEXT NOT NULL DEFAULT 'both',
+  is_active INTEGER NOT NULL DEFAULT 1,
+  is_system INTEGER NOT NULL DEFAULT 0,
+  description TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+)
+''');
+          await customStatement(
+            'CREATE INDEX IF NOT EXISTS idx_return_reason_codes_side_active '
+            'ON return_reason_codes(side, is_active)',
+          );
+
+          // 2. Approval / audit columns on all four return headers.
+          for (final table in const [
+            'sale_returns',
+            'purchase_returns',
+            'sale_return_adjustments',
+            'purchase_return_adjustments',
+          ]) {
+            await _safeAddColumn(
+              table,
+              'approval_status',
+              "TEXT NOT NULL DEFAULT 'auto_approved'",
+            );
+            await _safeAddColumn(
+              table, 'approval_required', 'INTEGER NOT NULL DEFAULT 0',
+            );
+            await _safeAddColumn(table, 'approval_reason', 'TEXT');
+            await _safeAddColumn(table, 'approved_by', 'INTEGER');
+            await _safeAddColumn(table, 'approved_at', 'TEXT');
+            await _safeAddColumn(table, 'override_reason', 'TEXT');
+            await _safeAddColumn(table, 'override_by', 'INTEGER');
+            await _safeAddColumn(table, 'posted_by', 'INTEGER');
+            await _safeAddColumn(table, 'posted_at', 'TEXT');
+            await _safeAddColumn(table, 'voided_by', 'INTEGER');
+            await _safeAddColumn(table, 'voided_at', 'TEXT');
+            await _safeAddColumn(table, 'void_reason', 'TEXT');
+            await _safeAddColumn(table, 'reason_code_id', 'INTEGER');
+          }
+
+          developer.log(
+            'Migration 10052: added Phase 3 approval & audit columns on '
+            'all four return headers + return_reason_codes table.',
+            name: 'DB_MIGRATION',
+          );
+        }
+
+        // ════════════════════════════════════════════════════════════════════
+        // Migration 10052 → 10053 — Phase 4 e-invoice infrastructure.
+        // ════════════════════════════════════════════════════════════════════
+        // Adds:
+        //   • `einvoice_documents` — single table storing every outgoing
+        //     e-invoice artifact (ZATCA Phase 2 signed XML, ETA JSON,
+        //     PEPPOL UBL). One row per (source_table, source_id) UNIQUE.
+        //   • `app_settings` rows consumed as jurisdiction config:
+        //       - `einvoice_jurisdiction` (`NONE` | `KSA_ZATCA_PHASE2` |
+        //         `EG_ETA` | `EU_PEPPOL`)
+        //       - `einvoice_enabled` (`'true'` | `'false'`)
+        //       - `einvoice_tax_registration_number`
+        //       - `einvoice_legal_name`
+        //       - `einvoice_onboarding_config_json` (provider-specific)
+        //
+        // The table is jurisdiction-agnostic; per-country providers read and
+        // write their payload columns through the same repository.
+        if (from < 10053) {
+          await customStatement('''
+CREATE TABLE IF NOT EXISTS e_invoice_documents (
+  id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+  source_table TEXT NOT NULL,
+  source_id INTEGER NOT NULL,
+  jurisdiction TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'draft',
+  icv INTEGER,
+  document_uuid TEXT,
+  document_hash TEXT,
+  previous_hash TEXT,
+  payload_xml TEXT,
+  payload_json TEXT,
+  qr_code_base64 TEXT,
+  response_payload TEXT,
+  last_error TEXT,
+  attempt_count INTEGER NOT NULL DEFAULT 0,
+  prepared_at TEXT,
+  submitted_at TEXT,
+  cleared_at TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(source_table, source_id)
+);
+''');
+          await customStatement(
+            'CREATE INDEX IF NOT EXISTS idx_einvoice_docs_status '
+            'ON e_invoice_documents(status);',
+          );
+          await customStatement(
+            'CREATE INDEX IF NOT EXISTS idx_einvoice_docs_icv '
+            'ON e_invoice_documents(jurisdiction, icv);',
+          );
+          developer.log(
+            'Migration 10053: created e_invoice_documents table (Phase 4).',
+            name: 'DB_MIGRATION',
+          );
+        }
+
+        // Migration 10053 → 10054: Phase 11.2 audit-snapshot columns on
+        // every invoice / return header. Columns are nullable so legacy
+        // rows continue to validate; new posts are written through the
+        // DAO layer with `PricingEngineVersion.current` + the engine's
+        // tax-inclusive + rounding-mode settings.
+        if (from < 10054) {
+          for (final table in const [
+            'sales',
+            'purchases',
+            'sale_returns',
+            'purchase_returns',
+            'sale_return_adjustments',
+            'purchase_return_adjustments',
+          ]) {
+            await _safeAddColumn(table, 'pricing_engine_version', 'TEXT');
+            await _safeAddColumn(table, 'tax_inclusive_at_post', 'INTEGER');
+            await _safeAddColumn(table, 'rounding_mode_at_post', 'TEXT');
+          }
+          developer.log(
+            'Migration 10054: added audit-snapshot columns '
+            '(pricing_engine_version, tax_inclusive_at_post, '
+            'rounding_mode_at_post) to 6 invoice/return header tables '
+            '(Phase 11.2).',
+            name: 'DB_MIGRATION',
+          );
+        }
+
+        // ════════════════════════════════════════════════════════════════════
+        // Migration 10054 → 10055 — Decouple "supplier reference price" from
+        // the IAS-2 inventory cost basis.
+        // ════════════════════════════════════════════════════════════════════
+        // Adds nullable `last_purchase_price_cents` to `products` and
+        // `product_variants`. The existing `cost_cents` stays NET of trade
+        // discounts (used for COGS, inventory valuation, GL reconciliation
+        // — IAS 2 §11), while `last_purchase_price_cents` stores the GROSS
+        // unit cost the user typed on the most recent purchase line and is
+        // displayed by the product/variant edit screens.
+        //
+        // Backfill is intentionally a no-op: existing rows leave the column
+        // NULL, and every UI read falls back to `cost_cents` via the
+        // `lastPurchasePriceCents ?? costCents` pattern. New purchases write
+        // both columns going forward (see `purchase_dao.postPurchase`).
+        if (from < 10055) {
+          await _safeAddColumn(
+              'products', 'last_purchase_price_cents', 'INTEGER');
+          await _safeAddColumn(
+              'product_variants', 'last_purchase_price_cents', 'INTEGER');
+          developer.log(
+            'Migration 10055: added last_purchase_price_cents (nullable) '
+            'to products and product_variants. Decouples supplier reference '
+            'price (gross) from IAS-2 inventory cost basis (net).',
+            name: 'DB_MIGRATION',
+          );
+        }
+
+        // ════════════════════════════════════════════════════════════════════
+        // Migration 10055 → 10056 — Phase 14.0 cheque lifecycle minimal-risk.
+        // ════════════════════════════════════════════════════════════════════
+        // Adds:
+        //   1. `cheque_confirmations` table — sidecar for the dashboard
+        //      "confirm collected / bounced / cancelled" UX. Replaces the
+        //      old SharedPreferences-only dismissal that did not survive
+        //      device migration nor produce an audit trail. Status values:
+        //      pending | cleared | bounced | cancelled. One row per
+        //      (source_table, source_id). No JE policy change in this phase
+        //      — `cleared` is purely informational and the dashboard reads
+        //      pending rows only.
+        //   2. `sale_returns.due_date` + `purchase_returns.due_date`
+        //      (nullable). Closes the gap where linked returns paid by
+        //      cheque had no due-date storage and were invisible to the
+        //      dashboard reminder. Symmetric to the existing columns on
+        //      `sales`, `purchases`, `sale_return_adjustments`,
+        //      `purchase_return_adjustments`.
+        //
+        // All additive, all idempotent, all nullable defaults — no risk
+        // to existing rows. See `docs/ACCOUNTING_INTEGRITY_GUIDELINES.md`
+        // §Phase-14 for the SoT entries.
+        if (from < 10056) {
+          await _safeAddColumn('sale_returns', 'due_date', 'TEXT');
+          await _safeAddColumn('purchase_returns', 'due_date', 'TEXT');
+          await customStatement('''
+CREATE TABLE IF NOT EXISTS cheque_confirmations (
+  id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+  source_table TEXT NOT NULL,
+  source_id INTEGER NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  confirmed_at TEXT,
+  confirmed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  note TEXT,
+  bounce_reason TEXT,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S.000', 'now')),
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S.000', 'now')),
+  UNIQUE (source_table, source_id)
+)
+''');
+          await customStatement(
+            'CREATE INDEX IF NOT EXISTS idx_cheque_confirmations_status '
+            'ON cheque_confirmations(status)',
+          );
+          await customStatement(
+            'CREATE INDEX IF NOT EXISTS idx_cheque_confirmations_source '
+            'ON cheque_confirmations(source_table, source_id)',
+          );
+          developer.log(
+            'Migration 10056: added sale_returns.due_date, '
+            'purchase_returns.due_date, and cheque_confirmations table. '
+            'Phase 14.0 minimal-risk cheque lifecycle (no JE policy change).',
+            name: 'DB_MIGRATION',
+          );
+        }
+
+        // ════════════════════════════════════════════════════════════════════
+        // Migration 10056 → 10057 — Phase 15.0 cheque lifecycle JE wiring.
+        // ════════════════════════════════════════════════════════════════════
+        // Adds `cheque_confirmations.cleared_payment_id` (nullable INT).
+        //
+        // Closes the field-reported gap where confirming a cheque as
+        // `cleared` in the dashboard wrote only to `cheque_confirmations`
+        // but did NOT settle the supplier/customer balance, did NOT
+        // insert a `purchase_payments` / `sale_payments` row, and did NOT
+        // post the corresponding Dr/Cr Bank journal entry. Phase 14 had
+        // deferred the JE side to "a future phase"; this is that phase.
+        //
+        // The new column stores the `purchase_payments.id` (or
+        // `sale_payments.id`, polymorphic via `source_table`) created by
+        // the `ChequeLifecycleService.markCleared` orchestrator. A later
+        // `cleared → bounced` / `cleared → cancelled` transition uses
+        // that id to call `deletePayment` on the matching repo, which
+        // restores the party balance, voids the JE, and zeroes
+        // `purchases.paid_amount_cents` / `sales.paid_amount_cents`.
+        //
+        // All additive, all nullable. No existing-row migration required.
+        // See `docs/ACCOUNTING_INTEGRITY_GUIDELINES.md` §Phase-15.
+        if (from < 10057) {
+          await _safeAddColumn(
+              'cheque_confirmations', 'cleared_payment_id', 'INTEGER');
+          developer.log(
+            'Migration 10057: added cheque_confirmations.cleared_payment_id. '
+            'Phase 15.0 cheque-lifecycle JE wiring. Cleared cheques now '
+            'post a real PurchasePayment/SalePayment (settles AP/AR + Dr/Cr '
+            'Bank). Bounced/cancelled-after-cleared reverses deterministically.',
+            name: 'DB_MIGRATION',
+          );
         }
 
         await _createIndexes();
@@ -1270,6 +2253,110 @@ CREATE TABLE IF NOT EXISTS sale_payments (
 
     // Product variant stock lookups (used in postSale stock validation)
     await customStatement('CREATE INDEX IF NOT EXISTS idx_product_variants_product_active ON product_variants(product_id, is_active)');
+
+    // FIFO batch lookup indexes (v10045) — FIFO consumption hot path:
+    //   ORDER BY expiry_date ASC NULLS LAST, received_date ASC
+    // filtered by product+variant+is_active+remaining_quantity>0.
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_product_batches_fifo '
+      'ON product_batches(product_id, variant_id, is_active, remaining_quantity, '
+      'expiry_date, received_date)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_product_batches_purchase_item '
+      'ON product_batches(purchase_item_id)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_batch_consumptions_batch '
+      'ON batch_consumptions(batch_id)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_batch_consumptions_sale_item '
+      'ON batch_consumptions(sale_item_id)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_batch_consumptions_purchase_return_item '
+      'ON batch_consumptions(purchase_return_item_id)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_batch_consumptions_inventory_adjustment '
+      'ON batch_consumptions(inventory_adjustment_id)',
+    );
+
+    // Adjustment return indexes
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_purchase_return_adj_supplier ON purchase_return_adjustments(supplier_id)');
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_purchase_return_adj_status ON purchase_return_adjustments(status)');
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_purchase_return_adj_date ON purchase_return_adjustments(return_date)');
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_purchase_return_adj_items_return ON purchase_return_adjustment_items(return_id)');
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_sale_return_adj_customer ON sale_return_adjustments(customer_id)');
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_sale_return_adj_status ON sale_return_adjustments(status)');
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_sale_return_adj_date ON sale_return_adjustments(return_date)');
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_sale_return_adj_items_return ON sale_return_adjustment_items(return_id)');
+  }
+
+  /// Defense-in-depth DB-level guards on `product_batches` (Phase I, I3).
+  ///
+  /// SQLite does not allow `ALTER TABLE ADD CHECK`, so we install equivalent
+  /// `BEFORE INSERT/UPDATE` triggers that `RAISE(ABORT, ...)` whenever an
+  /// invariant is violated. This is a fail-loud safety net layered *below*
+  /// the optimistic-lock guarantees in `BatchService`: any future write path
+  /// that bypasses the service is rejected at the DB layer.
+  ///
+  /// Invariants enforced (mirrors INVENTORY_ARCHITECTURE.md §6):
+  ///   • I-DB-1: `remaining_quantity >= 0`
+  ///   • I-DB-2: `remaining_quantity <= received_quantity`
+  ///
+  /// Idempotent: every CREATE TRIGGER uses IF NOT EXISTS.
+  @visibleForTesting
+  Future<void> installProductBatchesIntegrityTriggersForTest() =>
+      _installProductBatchesIntegrityTriggers();
+
+  Future<void> _installProductBatchesIntegrityTriggers() async {
+    // I-DB-1: remaining_quantity must never be negative.
+    await customStatement('''
+      CREATE TRIGGER IF NOT EXISTS trg_product_batches_remaining_nonneg_insert
+      BEFORE INSERT ON product_batches
+      FOR EACH ROW
+      WHEN NEW.remaining_quantity < 0
+      BEGIN
+        SELECT RAISE(ABORT,
+          'product_batches.remaining_quantity must be >= 0 (insert)');
+      END;
+    ''');
+    await customStatement('''
+      CREATE TRIGGER IF NOT EXISTS trg_product_batches_remaining_nonneg_update
+      BEFORE UPDATE OF remaining_quantity ON product_batches
+      FOR EACH ROW
+      WHEN NEW.remaining_quantity < 0
+      BEGIN
+        SELECT RAISE(ABORT,
+          'product_batches.remaining_quantity must be >= 0 (update)');
+      END;
+    ''');
+
+    // I-DB-2: remaining_quantity must never exceed received_quantity. This
+    // catches both restoration overflows (returns restoring more than was
+    // consumed) and any future bug that fabricates extra units.
+    await customStatement('''
+      CREATE TRIGGER IF NOT EXISTS trg_product_batches_remaining_le_received_insert
+      BEFORE INSERT ON product_batches
+      FOR EACH ROW
+      WHEN NEW.remaining_quantity > NEW.received_quantity
+      BEGIN
+        SELECT RAISE(ABORT,
+          'product_batches.remaining_quantity must be <= received_quantity (insert)');
+      END;
+    ''');
+    await customStatement('''
+      CREATE TRIGGER IF NOT EXISTS trg_product_batches_remaining_le_received_update
+      BEFORE UPDATE ON product_batches
+      FOR EACH ROW
+      WHEN NEW.remaining_quantity > NEW.received_quantity
+      BEGIN
+        SELECT RAISE(ABORT,
+          'product_batches.remaining_quantity must be <= received_quantity (update)');
+      END;
+    ''');
   }
 
   Future<void> _seedInitialData() async {
@@ -1492,6 +2579,26 @@ CREATE TABLE IF NOT EXISTS sale_payments (
       currencyId: usdId,
     );
 
+    // 4100 is a CONTRA-EXPENSE: classified as `expense` so its credit
+    // balance automatically reduces gross COGS on the income statement
+    // (IFRS/GAAP "Net Cost of Sales" presentation).
+    await upsertAccount(
+      accountCode: '4100',
+      accountName: 'Purchase Return Adjustment',
+      accountType: 'expense',
+      currencyId: usdId,
+    );
+
+    // 5700 is a CONTRA-REVENUE: classified as `revenue` so its debit
+    // balance automatically reduces gross Sales on the income statement
+    // (IFRS/GAAP "Net Sales" presentation).
+    await upsertAccount(
+      accountCode: '5700',
+      accountName: 'Sales Return Adjustment',
+      accountType: 'revenue',
+      currencyId: usdId,
+    );
+
     await upsertSetting(
       key: 'app_version',
       value: '1.0.0',
@@ -1502,6 +2609,18 @@ CREATE TABLE IF NOT EXISTS sale_payments (
       key: 'default_currency_id',
       value: usdId.toString(),
       description: 'Default currency ID',
+    );
+
+    // Seed the global inventory valuation method for fresh installs.
+    // Mirrors the migration 10047 default. WAC is the IFRS-friendliest
+    // safe default for SMBs and matches Xero / QuickBooks (UK/AU).
+    // Re-runs are idempotent (upsertSetting only writes once per key).
+    await upsertSetting(
+      key: 'inventory_valuation_method',
+      value: 'wac',
+      description:
+          'Business-wide inventory valuation method (IAS 2 / ASC 330). '
+          "Allowed values: 'wac' | 'fifo'.",
     );
 
     await _seedDefaultColors();
@@ -1529,6 +2648,136 @@ CREATE TABLE IF NOT EXISTS sale_payments (
     } catch (e, st) {
       debugPrint('DB seed skipped (default roles): $e');
       debugPrint('$st');
+    }
+
+    // Phase 3 — normalised reason codes + default approval settings.
+    // Both are safe to re-run (UPSERT-style guards).
+    try {
+      await _seedReturnReasonCodes();
+    } catch (e, st) {
+      debugPrint('DB seed skipped (return reason codes): $e');
+      debugPrint('$st');
+    }
+
+    // Default approval policy — threshold=0 (disabled), approval required
+    // when no original invoice is present (the strongest defense), and
+    // required when an operator uses the `allowOverHistory` override.
+    // Operators may raise the threshold or soften the no-invoice rule via
+    // the settings UI; defaults match the conservative world-class
+    // baseline (QB Online, Xero, Odoo).
+    await upsertSetting(
+      key: 'return_approval_threshold_cents',
+      value: '0',
+      description: 'Amount (in cents) at/above which a return requires '
+          'manager approval before posting. 0 disables the threshold rule.',
+    );
+    await upsertSetting(
+      key: 'require_approval_when_no_invoice',
+      value: '1',
+      description: 'When 1, any adjustment return with no original '
+          'invoice reference requires manager approval before posting.',
+    );
+    await upsertSetting(
+      key: 'require_approval_on_override',
+      value: '1',
+      description: 'When 1, any return posted with `allowOverHistory` '
+          '(bypassing the Phase 0 quantity cap) requires manager '
+          'approval before posting.',
+    );
+  }
+
+  /// Phase 3 — seed the canonical return reason codes.
+  ///
+  /// Idempotent: each row is UPSERTed by `code`. `is_system=1` means the
+  /// row is protected from deletion by `ReturnReasonCodeService`. Labels
+  /// ship in English + Arabic; other locales read the code and translate
+  /// via the app's i18n layer.
+  Future<void> _seedReturnReasonCodes() async {
+    const seeds = <Map<String, String>>[
+      {
+        'code': 'DEFECTIVE',
+        'label_en': 'Defective / faulty product',
+        'label_ar': 'منتج معيب',
+        'side': 'both',
+      },
+      {
+        'code': 'WRONG_ITEM',
+        'label_en': 'Wrong item delivered',
+        'label_ar': 'صنف خاطئ',
+        'side': 'both',
+      },
+      {
+        'code': 'CUSTOMER_CHANGED_MIND',
+        'label_en': 'Customer changed their mind',
+        'label_ar': 'العميل غيّر رأيه',
+        'side': 'sale',
+      },
+      {
+        'code': 'DAMAGED_IN_TRANSIT',
+        'label_en': 'Damaged in transit',
+        'label_ar': 'تلف أثناء النقل',
+        'side': 'both',
+      },
+      {
+        'code': 'EXPIRED',
+        'label_en': 'Expired goods',
+        'label_ar': 'منتج منتهي الصلاحية',
+        'side': 'both',
+      },
+      {
+        'code': 'NO_INVOICE',
+        'label_en': 'Return without original invoice',
+        'label_ar': 'مرتجع بدون فاتورة',
+        'side': 'both',
+      },
+      {
+        'code': 'PRICE_ADJUSTMENT',
+        'label_en': 'Price adjustment / renegotiation',
+        'label_ar': 'تسوية أو إعادة تفاوض سعر',
+        'side': 'both',
+      },
+      {
+        'code': 'OTHER',
+        'label_en': 'Other',
+        'label_ar': 'أخرى',
+        'side': 'both',
+      },
+    ];
+
+    for (final row in seeds) {
+      final existing = await customSelect(
+        'SELECT id FROM return_reason_codes WHERE code = ?',
+        variables: [Variable.withString(row['code']!)],
+      ).getSingleOrNull();
+
+      if (existing == null) {
+        await customStatement(
+          'INSERT INTO return_reason_codes '
+          '(code, label_en, label_ar, side, is_active, is_system) '
+          'VALUES (?, ?, ?, ?, 1, 1)',
+          [
+            row['code']!,
+            row['label_en']!,
+            row['label_ar']!,
+            row['side']!,
+          ],
+        );
+      } else {
+        // Keep existing user edits but make sure the system flag + labels
+        // are in sync with the latest shipping defaults. We DO NOT touch
+        // `is_active` — if an admin deactivated a code we respect that.
+        await customStatement(
+          'UPDATE return_reason_codes SET '
+          'label_en = ?, label_ar = ?, side = ?, is_system = 1, '
+          'updated_at = CURRENT_TIMESTAMP WHERE code = ?',
+          [
+            row['label_en']!,
+            row['label_ar']!,
+            row['side']!,
+            row['code']!,
+          ],
+        );
+      }
     }
   }
 
@@ -1958,22 +3207,53 @@ CREATE TABLE IF NOT EXISTS sale_payments (
       {'code': '1010', 'name': 'Bank', 'type': 'asset', 'system': true, 'order': 2},
       {'code': '1100', 'name': 'Accounts Receivable', 'type': 'asset', 'system': true, 'order': 3},
       {'code': '1200', 'name': 'Inventory', 'type': 'asset', 'system': true, 'order': 4},
-      {'code': '1300', 'name': 'VAT Receivable', 'type': 'asset', 'system': true, 'order': 5},
+      // 1290 Returns in Transit — asset-class clearing account for the
+      // `send_back` disposition on purchase returns. Goods have physically
+      // left but the supplier credit memo is still pending; inventory
+      // value parks here until reconciled. See seedDefaultAccounts doc.
+      {'code': '1290', 'name': 'Returns in Transit', 'type': 'asset', 'system': true, 'order': 6},
+      {'code': '1300', 'name': 'VAT Receivable', 'type': 'asset', 'system': true, 'order': 7},
       // ── Liabilities (2xxx) ──
       {'code': '2000', 'name': 'Accounts Payable', 'type': 'liability', 'system': true, 'order': 10},
       {'code': '2100', 'name': 'VAT Payable', 'type': 'liability', 'system': true, 'order': 11},
       {'code': '2300', 'name': 'Loyalty Points Liability', 'type': 'liability', 'system': true, 'order': 12},
+      // 2400 Customer Credit Liability — holds on-account refunds for
+      // unlinked sale returns (returns without an original invoice).
+      // Keeps 1100 AR clean and prevents orphaned negative-AR balances.
+      {'code': '2400', 'name': 'Customer Credit Liability', 'type': 'liability', 'system': true, 'order': 13},
       // ── Equity (3xxx) ──
       {'code': '3000', 'name': 'Owner Capital', 'type': 'equity', 'system': true, 'order': 20},
       {'code': '3100', 'name': 'Opening Balance Equity', 'type': 'equity', 'system': true, 'order': 21},
       // ── Income (4xxx) ──
       {'code': '4000', 'name': 'Sales Revenue', 'type': 'revenue', 'system': true, 'order': 30},
+      // 5700 Sales Return Adjustment is a CONTRA-REVENUE account: classified
+      // as `revenue` so its debit balance auto-reduces gross sales on the
+      // income statement (IFRS/GAAP "Net Sales" presentation).
+      {'code': '5700', 'name': 'Sales Return Adjustment', 'type': 'revenue', 'system': true, 'order': 33},
+      {'code': '4200', 'name': 'Inventory Gain', 'type': 'revenue', 'system': true, 'order': 32},
+      // 4900 Purchase Discounts Earned — revenue / "other income" account
+      // for after-the-fact, unallocated supplier discounts recorded from
+      // the supplier profile screen (transaction_type='discount'). The
+      // historical posting was Dr AP / Cr Inventory which silently credited
+      // Inventory without any matching stock-side movement, producing a
+      // permanent GL ↔ Σ(stock×cost) drift. Routing the credit here keeps
+      // Inventory equal to the on-hand carrying value and recognises the
+      // discount as income in the period received (IFRS/GAAP treatment of
+      // unallocated supplier rebates that cannot be allocated back to
+      // specific PO lines without a landed-cost recalculation).
+      {'code': '4900', 'name': 'Purchase Discounts Earned', 'type': 'revenue', 'system': true, 'order': 34},
       // ── Expenses (5xxx) ──
+      // 4100 Purchase Return Adjustment is a CONTRA-EXPENSE account:
+      // classified as `expense` so its credit balance auto-reduces gross
+      // COGS on the income statement (IFRS/GAAP "Net Cost of Sales").
+      {'code': '4100', 'name': 'Purchase Return Adjustment', 'type': 'expense', 'system': true, 'order': 40},
       {'code': '5100', 'name': 'Expenses', 'type': 'expense', 'system': true, 'order': 41},
       {'code': '5200', 'name': 'Salaries Expense', 'type': 'expense', 'system': true, 'order': 42},
       {'code': '5300', 'name': 'Cost of Goods Sold', 'type': 'expense', 'system': true, 'order': 43},
       {'code': '5500', 'name': 'Discounts Given', 'type': 'expense', 'system': true, 'order': 44},
       {'code': '5600', 'name': 'Commissions Expense', 'type': 'expense', 'system': true, 'order': 45},
+      {'code': '5800', 'name': 'Inventory Shrinkage', 'type': 'expense', 'system': true, 'order': 47},
+      {'code': '5900', 'name': 'Inventory Revaluation', 'type': 'expense', 'system': true, 'order': 48},
     ];
 
     // Idempotent: skip accounts that already exist

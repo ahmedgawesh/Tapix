@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:drift/drift.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/services/journal_entry_service.dart';
+import '../../../../core/services/loyalty/loyalty_points_service.dart';
 import '../../domain/repositories/loyalty_repository.dart';
 
 /// Implementation of LoyaltyRepository
@@ -462,27 +463,31 @@ class LoyaltyRepositoryImpl implements LoyaltyRepository {
 
   @override
   int calculatePointsToEarn(int amountCents, double multiplier) {
-    // Uses cached settings if available; falls back to 1 point per currency unit
-    // For real-time accuracy, callers should fetch settings first.
-    // This is a synchronous convenience method for UI previews.
-    return _calculatePointsSync(amountCents, multiplier);
-  }
-
-  int _calculatePointsSync(int amountCents, double multiplier) {
-    // Fallback: 1 point per 100 cents (1 currency unit)
-    final basePoints = amountCents ~/ 100;
-    return (basePoints * multiplier).round();
+    // Phase 6 — preview path delegates to LoyaltyPointsService so it
+    // can never drift from the live award path. Default fallback of
+    // `pointsPerCurrencyUnit = 1` preserves the legacy preview
+    // contract for callers that don't have settings handy.
+    return LoyaltyPointsService.previewSync(
+      amountCents: amountCents,
+      multiplier: multiplier,
+    );
   }
 
   @override
-  Future<int> calculatePointsToEarnWithSettings(int amountCents, double multiplier) async {
+  Future<int> calculatePointsToEarnWithSettings(
+    int amountCents,
+    double multiplier,
+  ) async {
     final settings = await getLoyaltySettings();
     if (settings == null || !settings.isEnabled) return 0;
-    if (amountCents < settings.minSpendForPoints) return 0;
-
-    final pointsPerUnit = settings.pointsPerCurrencyUnit;
-    final basePoints = (amountCents * pointsPerUnit) ~/ 100;
-    return (basePoints * multiplier).round();
+    // Phase 6 — funnel through LoyaltyPointsService.compute so the
+    // settings-aware preview matches the award path byte-for-byte.
+    return LoyaltyPointsService.previewSync(
+      amountCents: amountCents,
+      multiplier: multiplier,
+      pointsPerCurrencyUnit: settings.pointsPerCurrencyUnit,
+      minSpendForPoints: settings.minSpendForPoints,
+    );
   }
 
   @override

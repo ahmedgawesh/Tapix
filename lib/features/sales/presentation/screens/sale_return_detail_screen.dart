@@ -8,7 +8,9 @@ import 'package:easy_localization/easy_localization.dart';
 
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../../../core/widgets/pin_verification_dialog.dart';
 import '../../../auth/auth.dart';
+import '../../../settings/presentation/bloc/app_settings_bloc.dart';
 import '../../domain/entities/sale_entity.dart';
 import '../../domain/repositories/sale_repository.dart';
 import '../services/sale_pdf_service.dart';
@@ -163,6 +165,14 @@ class _SaleReturnDetailScreenState extends State<SaleReturnDetailScreen> {
   Future<void> _voidReturn(BuildContext context) async {
     final messenger = ScaffoldMessenger.of(context);
     final errorColor = Theme.of(context).colorScheme.error;
+    // Capture policy BEFORE any async gap to avoid using context after await.
+    final settings = context.read<AppSettingsBloc>().state.settings;
+    final allowNegativeStock = settings.allowNegativeStock;
+    if (settings.requirePinForVoidRefund) {
+      final pinOk = await showPinVerificationDialog(context);
+      if (!pinOk || !context.mounted) return;
+    }
+    if (!context.mounted) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -186,7 +196,10 @@ class _SaleReturnDetailScreenState extends State<SaleReturnDetailScreen> {
     if (confirmed != true || !mounted) return;
     try {
       final repo = sl<SaleRepository>();
-      await repo.voidSaleReturn(widget.returnId);
+      await repo.voidSaleReturn(
+        widget.returnId,
+        allowNegativeStock: allowNegativeStock,
+      );
       if (mounted) {
         messenger.showSnackBar(
           SnackBar(

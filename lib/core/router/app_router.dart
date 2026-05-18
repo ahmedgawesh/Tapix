@@ -32,6 +32,8 @@ import '../../features/purchases/presentation/screens/purchase_detail_screen.dar
 import '../../features/purchases/presentation/screens/purchase_returns_screen.dart';
 import '../../features/purchases/presentation/screens/purchase_return_form_screen.dart';
 import '../../features/purchases/presentation/screens/purchase_return_detail_screen.dart';
+import '../../features/purchases/presentation/screens/purchase_adj_return_form_screen.dart';
+import '../../features/purchases/presentation/screens/purchase_adj_return_detail_screen.dart';
 import '../../features/customers/presentation/screens/customer_hub_screen.dart';
 import '../../features/customers/presentation/screens/customer_form_screen.dart';
 import '../../features/customers/presentation/screens/customer_profile_screen.dart';
@@ -43,6 +45,8 @@ import '../../features/sales/presentation/screens/sale_detail_screen.dart';
 import '../../features/sales/presentation/screens/sale_returns_screen.dart';
 import '../../features/sales/presentation/screens/sale_return_form_screen.dart';
 import '../../features/sales/presentation/screens/sale_return_detail_screen.dart';
+import '../../features/sales/presentation/screens/sale_adj_return_form_screen.dart';
+import '../../features/sales/presentation/screens/sale_adj_return_detail_screen.dart';
 import '../../features/barcode/presentation/screens/barcode_scanner_screen.dart';
 import '../../features/barcode/presentation/screens/barcode_label_designer_screen.dart';
 import '../../features/barcode/presentation/screens/barcode_design_screen.dart';
@@ -71,6 +75,8 @@ import '../../features/reports/presentation/screens/balance_sheet_screen.dart';
 import '../../features/reports/presentation/screens/general_ledger_screen.dart';
 import '../../features/reports/presentation/screens/accounting_health_screen.dart';
 import '../../features/reports/presentation/screens/inventory_reports_screen.dart';
+import '../../features/reports/presentation/screens/expiry_report_screen.dart';
+import '../../features/inventory/presentation/screens/batch_management_screen.dart';
 import '../../features/reports/presentation/screens/product_movement_detail_screen.dart';
 import '../../features/reports/presentation/screens/product_variant_movement_screen.dart';
 import '../../features/reports/presentation/screens/category_movement_screen.dart';
@@ -382,6 +388,35 @@ class AppRouter {
                 },
               ),
               GoRoute(
+                path: 'adjustment',
+                builder: (context, state) {
+                  final params = state.uri.queryParameters;
+                  final rawVariantLabel = params['variantLabel'];
+                  return SaleAdjReturnFormScreen(
+                    customerId: int.tryParse(params['customerId'] ?? ''),
+                    customerName: params['customerName'],
+                    productId: int.tryParse(params['productId'] ?? ''),
+                    variantId: int.tryParse(params['variantId'] ?? ''),
+                    productName: params['productName'],
+                    productSku: params['sku'],
+                    variantLabel: (rawVariantLabel == null || rawVariantLabel.isEmpty)
+                        ? null
+                        : rawVariantLabel,
+                    productPrice: int.tryParse(params['price'] ?? ''),
+                    taxRateBps: int.tryParse(params['taxRateBps'] ?? ''),
+                  );
+                },
+              ),
+              GoRoute(
+                path: 'adj/:returnId',
+                builder: (context, state) {
+                  final returnId = int.tryParse(
+                      state.pathParameters['returnId'] ?? '');
+                  if (returnId == null) return const SaleReturnsScreen();
+                  return SaleAdjReturnDetailScreen(returnId: returnId);
+                },
+              ),
+              GoRoute(
                 path: ':returnId',
                 builder: (context, state) {
                   final returnId = int.tryParse(
@@ -500,6 +535,35 @@ class AppRouter {
                 },
               ),
               GoRoute(
+                path: 'adjustment',
+                builder: (context, state) {
+                  final params = state.uri.queryParameters;
+                  final rawVariantLabel = params['variantLabel'];
+                  return PurchaseAdjReturnFormScreen(
+                    supplierId: int.tryParse(params['supplierId'] ?? ''),
+                    supplierName: params['supplierName'],
+                    productId: int.tryParse(params['productId'] ?? ''),
+                    variantId: int.tryParse(params['variantId'] ?? ''),
+                    productName: params['productName'],
+                    productSku: params['sku'],
+                    variantLabel: (rawVariantLabel == null || rawVariantLabel.isEmpty)
+                        ? null
+                        : rawVariantLabel,
+                    productPrice: int.tryParse(params['price'] ?? ''),
+                    taxRateBps: int.tryParse(params['taxRateBps'] ?? ''),
+                  );
+                },
+              ),
+              GoRoute(
+                path: 'adj/:returnId',
+                builder: (context, state) {
+                  final returnId = int.tryParse(
+                      state.pathParameters['returnId'] ?? '');
+                  if (returnId == null) return const PurchaseReturnsScreen();
+                  return PurchaseAdjReturnDetailScreen(returnId: returnId);
+                },
+              ),
+              GoRoute(
                 path: ':returnId',
                 builder: (context, state) {
                   final returnId = int.tryParse(
@@ -578,6 +642,14 @@ class AppRouter {
           GoRoute(
             path: 'inventory',
             builder: (context, state) => const InventoryReportsScreen(),
+          ),
+          GoRoute(
+            path: 'expiry',
+            builder: (context, state) => const ExpiryReportScreen(),
+          ),
+          GoRoute(
+            path: 'batches',
+            builder: (context, state) => const BatchManagementScreen(),
           ),
           GoRoute(
             path: 'product-movement-detail',

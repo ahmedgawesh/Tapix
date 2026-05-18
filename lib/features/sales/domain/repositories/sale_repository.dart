@@ -85,6 +85,9 @@ abstract class SaleRepository {
     DateTime? saleDate,
     DateTime? dueDate,
     bool allowNegativeStock = false,
+    /// Phase 11.2 — tax-inclusive flag the engine used to produce the
+    /// totals being persisted. Stamped on `sales.tax_inclusive_at_post`.
+    bool taxInclusiveAtPost = false,
   });
 
   /// Update an existing sale
@@ -103,6 +106,9 @@ abstract class SaleRepository {
     String? notes,
     DateTime? saleDate,
     DateTime? dueDate,
+    /// Phase 11.2 — tax-inclusive flag the engine used to produce the
+    /// totals being persisted.
+    bool taxInclusiveAtPost = false,
   });
 
   /// Post/complete a sale (deducts stock)
@@ -131,6 +137,9 @@ abstract class SaleRepository {
     DateTime? saleDate,
     DateTime? dueDate,
     bool allowNegativeStock = false,
+    /// Phase 11.2 — tax-inclusive flag the engine used to produce the
+    /// totals being persisted.
+    bool taxInclusiveAtPost = false,
   });
 
   /// Delete a sale (only draft/pending)
@@ -166,10 +175,30 @@ abstract class SaleRepository {
     String? dispositionType,
     String? refundMethod,
     DateTime? returnDate,
+
+    /// Phase 14.0 — cheque due date when `refundMethod` is `cheque`.
+    /// Required by the form bloc when refund method is cheque; ignored
+    /// (stored as NULL) otherwise. Surfaces on the dashboard reminder.
+    DateTime? dueDate,
+
+    /// Optional client-generated idempotency token. The unique constraint on
+    /// `sale_returns.idempotency_key` rejects duplicate inserts so a
+    /// double-tap or retried network call cannot create two returns / GL
+    /// entries / stock movements.
+    String? idempotencyKey,
+
+    /// Phase 11.2 — tax-inclusive flag the engine used to produce the
+    /// totals being persisted. Stamped on
+    /// `sale_returns.tax_inclusive_at_post`.
+    bool taxInclusiveAtPost = false,
   });
 
-  /// Void a sale return
-  Future<void> voidSaleReturn(int returnId);
+  /// Void a sale return.
+  ///
+  /// Voiding a posted return DECREASES stock. If [allowNegativeStock] is false
+  /// and current stock is insufficient to cover the reversal, the operation
+  /// is rejected.
+  Future<void> voidSaleReturn(int returnId, {bool allowNegativeStock = false});
 
   // ==================== SALE PAYMENTS ====================
 
@@ -203,4 +232,10 @@ abstract class SaleRepository {
 
   /// Watch dashboard stats
   Stream<SaleDashboardStats> watchDashboardStats();
+
+  /// Watch a map of saleId → product search terms (names, barcodes, SKUs)
+  Stream<Map<int, List<String>>> watchSaleProductSearchTerms();
+
+  /// Watch product search terms for return items (unifiedId → terms)
+  Stream<Map<String, List<String>>> watchSaleReturnProductSearchTerms();
 }

@@ -4,6 +4,12 @@ import '../app_database.dart';
 import '../tables/transactions.dart';
 import '../tables/parties.dart';
 import '../tables/products.dart';
+import '../../services/stock_service.dart';
+import '../../services/balance_service.dart';
+import '../../services/batch_service.dart';
+import '../../services/price_history_service.dart';
+import '../../services/inventory/product_cost_service.dart';
+import '../../services/journal_entry_service.dart';
 
 part 'purchase_dao.g.dart';
 
@@ -34,16 +40,41 @@ class PurchaseReturnItemWithDetails {
   });
 }
 
-/// Data class for purchase item with product and variant info
+/// Data class for purchase item with product and variant info.
+///
+/// `colorName` / `colorHex` / `sizeName` are resolved per-variant via
+/// `productColors` and `sizes` joins so that a single invoice carrying
+/// multiple variants of the same product renders each line's true
+/// attributes. Mirrors the sales-side join (`SaleItemWithDetails`) and the
+/// purchase-return-side join (`PurchaseReturnItemWithDetails`).
 class PurchaseItemWithDetails {
   final PurchaseItem item;
   final Product product;
   final ProductVariant? variant;
+  final String? colorName;
+  final String? colorHex;
+  final String? sizeName;
 
   PurchaseItemWithDetails({
     required this.item,
     required this.product,
     this.variant,
+    this.colorName,
+    this.colorHex,
+    this.sizeName,
+  });
+}
+
+/// Data class for purchase return joined with supplier info
+class PurchaseReturnWithParty {
+  final PurchaseReturn purchaseReturn;
+  final String? supplierName;
+  final String? supplierPhone;
+
+  PurchaseReturnWithParty({
+    required this.purchaseReturn,
+    this.supplierName,
+    this.supplierPhone,
   });
 }
 
@@ -68,9 +99,34 @@ class PurchaseDashboardStats {
   });
 }
 
-@DriftAccessor(tables: [Purchases, PurchaseItems, PurchaseReturns, PurchaseReturnItems, PurchasePayments, Suppliers, SupplierTransactions, Products, ProductVariants])
+@DriftAccessor(tables: [Purchases, PurchaseItems, PurchaseReturns, PurchaseReturnItems, PurchasePayments, Suppliers, SupplierTransactions, Products, ProductVariants, ProductBatches])
 class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin {
   PurchaseDao(super.db);
+
+  /// Returns `true` when the product needs **batch-level books** (a
+  /// `product_batches` row per purchase, frozen unit cost, FIFO/FEFO
+  /// consumption on sale).
+  ///
+  /// Phase B (two-layer inventory architecture): the predicate is the OR of
+  /// the two columns so the helper is robust against any transient skew
+  /// between them (e.g. a freshly-restored backup, a direct SQL update, or a
+  /// test fixture that only sets one):
+  ///   * `inventory_tracking_type IN ('batch','batch_expiry')`  ⇒ `true`.
+  ///   * legacy `costing_method = 'fifo'`                       ⇒ `true`.
+  ///   * otherwise                                              ⇒ `false`.
+  ///
+  /// `setInventoryTrackingType` keeps both columns in sync, and migration
+  /// v10048 backfills them, so in normal production both signals agree.
+  Future<bool> _isFifoProduct(int productId) async {
+    final row = await customSelect(
+      'SELECT inventory_tracking_type, costing_method FROM products WHERE id = ?',
+      variables: [Variable.withInt(productId)],
+    ).getSingleOrNull();
+    if (row == null) return false;
+    final tracking = row.read<String?>('inventory_tracking_type');
+    if (tracking == 'batch' || tracking == 'batch_expiry') return true;
+    return (row.read<String?>('costing_method') ?? 'wac') == 'fifo';
+  }
 
   // ==================== PURCHASES ====================
 
@@ -127,11 +183,18 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
     return (select(purchaseItems)..where((i) => i.purchaseId.equals(purchaseId))).get();
   }
 
-  /// Get purchase items with product and variant details
+  /// Get purchase items with product and variant details.
+  ///
+  /// Joins `productColors` and `sizes` so each line carries its OWN
+  /// variant attributes — required for invoices that contain multiple
+  /// variants of the same product (otherwise a productId-keyed lookup
+  /// on the UI side would collapse every line to the first variant).
   Future<List<PurchaseItemWithDetails>> getPurchaseItemsWithDetails(int purchaseId) async {
     final query = select(purchaseItems).join([
       innerJoin(products, products.id.equalsExp(purchaseItems.productId)),
       leftOuterJoin(productVariants, productVariants.id.equalsExp(purchaseItems.variantId)),
+      leftOuterJoin(productColors, productColors.id.equalsExp(productVariants.colorId)),
+      leftOuterJoin(sizes, sizes.id.equalsExp(productVariants.sizeId)),
     ])
       ..where(purchaseItems.purchaseId.equals(purchaseId));
 
@@ -141,15 +204,21 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
         item: row.readTable(purchaseItems),
         product: row.readTable(products),
         variant: row.readTableOrNull(productVariants),
+        colorName: row.readTableOrNull(productColors)?.name,
+        colorHex: row.readTableOrNull(productColors)?.hexCode,
+        sizeName: row.readTableOrNull(sizes)?.name,
       );
     }).toList();
   }
 
-  /// Watch purchase items with product and variant details
+  /// Watch purchase items with product and variant details. See
+  /// [getPurchaseItemsWithDetails] for the per-variant join rationale.
   Stream<List<PurchaseItemWithDetails>> watchPurchaseItemsWithDetails(int purchaseId) {
     final query = select(purchaseItems).join([
       innerJoin(products, products.id.equalsExp(purchaseItems.productId)),
       leftOuterJoin(productVariants, productVariants.id.equalsExp(purchaseItems.variantId)),
+      leftOuterJoin(productColors, productColors.id.equalsExp(productVariants.colorId)),
+      leftOuterJoin(sizes, sizes.id.equalsExp(productVariants.sizeId)),
     ])
       ..where(purchaseItems.purchaseId.equals(purchaseId));
 
@@ -158,6 +227,9 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
             item: row.readTable(purchaseItems),
             product: row.readTable(products),
             variant: row.readTableOrNull(productVariants),
+            colorName: row.readTableOrNull(productColors)?.name,
+            colorHex: row.readTableOrNull(productColors)?.hexCode,
+            sizeName: row.readTableOrNull(sizes)?.name,
           );
         }).toList());
   }
@@ -196,13 +268,31 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
     });
   }
 
-  /// Update a purchase and replace its items
+  /// Update a purchase and replace its items.
+  ///
+  /// I1 (defense-in-depth): only `draft`/`pending` purchases may be edited.
+  /// A posted/voided purchase has opening batches, stock movements and
+  /// journal entries that would silently desync if items were rewritten
+  /// without re-running the post pipeline. The repository layer already
+  /// gates on this, but we re-check inside the DAO so any future caller
+  /// (test, script, new feature) cannot bypass the policy.
   Future<bool> updatePurchaseWithItems(
     int purchaseId,
     PurchasesCompanion purchase,
     List<PurchaseItemsCompanion> items,
   ) {
     return transaction(() async {
+      final existing = await (select(purchases)
+            ..where((p) => p.id.equals(purchaseId)))
+          .getSingleOrNull();
+      if (existing == null) return false;
+      if (existing.status != 'draft' && existing.status != 'pending') {
+        throw StateError(
+          'I1 violation: cannot edit a "${existing.status}" purchase '
+          '(#$purchaseId). Void it and create a new one instead.',
+        );
+      }
+
       final updated = await updatePurchase(purchaseId, purchase);
       if (!updated) return false;
 
@@ -236,8 +326,22 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
         .then((rows) => rows > 0);
   }
 
-  /// Post purchase - update variant stock quantities and costs
-  Future<void> postPurchase(int purchaseId, {int? userId, String costStrategy = 'last_cost'}) {
+  /// Post purchase - update variant stock quantities and costs.
+  ///
+  /// Cost-update strategy is read from each product's own `costing_method`
+  /// column (`'wac'` | `'fifo'`) via [ProductCostService], aligning the
+  /// per-product user choice with the actual cost write. The legacy
+  /// [costStrategy] parameter is retained for source compatibility with
+  /// older callers (none in production) but is IGNORED — it used to apply
+  /// weighted-average to every product regardless of its configured
+  /// method, which silently broke the FIFO option in the product form.
+  ///
+  /// All writes to `products.cost_cents` and `product_variants.cost_cents`
+  /// funnel through [ProductCostService] (the single sanctioned writer).
+  /// The post-loop parent aggregation now uses a TRUE weighted average
+  /// across active variants — replacing the buggy `MAX(cost_cents)` that
+  /// surfaced as the "55.63 instead of 65" report.
+  Future<void> postPurchase(int purchaseId, {int? userId, String costStrategy = 'weighted_average'}) {
     return transaction(() async {
       final purchase = await getPurchaseById(purchaseId);
       if (purchase == null) {
@@ -251,6 +355,12 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
 
       // Track which products were affected so we can sync them afterwards
       final affectedProductIds = <int>{};
+      // I4 (Invariant I1): products whose batch ledger was actually mutated
+      // (a new batch row created via createBatchFromPurchase). Used to bound
+      // the cross-table assertion to FIFO/batch products — WAC products
+      // legitimately have stock without matching batch rows so an
+      // unconditional assertion would false-positive.
+      final batchedProductIds = <int>{};
       // Check if the purchase has any tax (to update product taxable flag)
       final purchaseTaxCents = purchase.taxCents.toBigInt().toInt();
 
@@ -258,10 +368,91 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
         final variantId = item.variantId;
         final productId = item.productId;
         affectedProductIds.add(productId);
-        final newCostCents = item.unitCostCents.toBigInt().toInt();
+        // IAS 2 / ASC 330 — trade discounts taken at purchase reduce the
+        // cost basis. The purchase JE already debits 1200 Inventory at
+        // (subtotal − discount) (= `purchase.totalCents − taxCents`); storing
+        // the GROSS unit cost on the variant/batch would systematically
+        // inflate Σ(stock × cost) by Σ(line_discount) and break the
+        // reconciliation invariant `Inventory GL == Σ(stock × cost)`.
+        // We therefore record the EFFECTIVE per-unit cost = max(0, gross −
+        // (lineDiscount / qty)). Half-up rounding aligns with the JE's
+        // banker rounding for typical 1-unit-of-precision cases. The
+        // typed-in `purchase_items.unit_cost_cents` is preserved as the
+        // user-facing "list price" snapshot — only the variant/batch cost
+        // basis is netted.
+        final grossUnitCost = item.unitCostCents.toBigInt().toInt();
+        final lineDiscount = item.discountCents.toBigInt().toInt();
+        final lineQty = item.quantity;
+        final newCostCents = (lineQty > 0 && lineDiscount > 0)
+            ? (grossUnitCost - (lineDiscount / lineQty).round())
+                .clamp(0, 1 << 62)
+            : grossUnitCost;
         final newSellPrice = item.newSellPriceCents?.toBigInt().toInt();
         final newWholesalePrice = item.newWholesalePriceCents?.toBigInt().toInt();
         final now = DateTime.now().toIso8601String();
+
+        // Per-product `track_inventory` flag — gates every physical-stock and
+        // batch write below. When false (services / non-stocked items) we
+        // still apply the per-line sell/wholesale overrides and post the GL
+        // legs, but we do NOT touch stock, do NOT update cost (no WAC base),
+        // and do NOT create a batch (no inventory ledger to feed).
+        final trackInventoryRow = await customSelect(
+          'SELECT track_inventory FROM products WHERE id = ?',
+          variables: [Variable.withInt(productId)],
+        ).getSingleOrNull();
+        final tracks =
+            (trackInventoryRow?.read<int>('track_inventory') ?? 1) != 0;
+
+        // Snapshot old cost/price/wholesale BEFORE any mutation so price
+        // history records the correct deltas. Routed through
+        // PriceHistoryService at the end of this iteration — the SINGLE
+        // sanctioned writer for product_price_histories.
+        //
+        // Two cost snapshots are taken on purpose:
+        //   * `oldCostBefore`       — NET basis (cost_cents). Feeds the WAC /
+        //                             FIFO / last-cost math inside
+        //                             `ProductCostService` and must stay net
+        //                             of line discounts (IAS-2).
+        //   * `oldGrossCostBefore`  — GROSS basis (last_purchase_price_cents,
+        //                             with a fallback to cost_cents for
+        //                             pre-migration rows). Feeds the
+        //                             user-facing price-history audit log so
+        //                             "what did I pay last time" matches the
+        //                             value the supplier invoiced before
+        //                             discounts — the same value the product
+        //                             edit screen now surfaces.
+        int oldCostBefore;
+        int oldGrossCostBefore;
+        int oldPriceBefore;
+        int? oldWholesaleBefore;
+        if (variantId != null) {
+          final r = await customSelect(
+            'SELECT cost_cents, last_purchase_price_cents, '
+            'price_cents, wholesale_price_cents '
+            'FROM product_variants WHERE id = ?',
+            variables: [Variable.withInt(variantId)],
+          ).getSingleOrNull();
+          oldCostBefore = r?.read<int>('cost_cents') ?? 0;
+          oldGrossCostBefore =
+              r?.readNullable<int>('last_purchase_price_cents') ??
+                  oldCostBefore;
+          oldPriceBefore = r?.read<int>('price_cents') ?? 0;
+          oldWholesaleBefore = r?.readNullable<int>('wholesale_price_cents');
+        } else {
+          final r = await customSelect(
+            'SELECT cost_cents, last_purchase_price_cents, '
+            'price_cents, wholesale_price_cents '
+            'FROM products WHERE id = ?',
+            variables: [Variable.withInt(productId)],
+          ).getSingleOrNull();
+          oldCostBefore = r?.read<int>('cost_cents') ?? 0;
+          oldGrossCostBefore =
+              r?.readNullable<int>('last_purchase_price_cents') ??
+                  oldCostBefore;
+          oldPriceBefore = r?.read<int>('price_cents') ?? 0;
+          oldWholesaleBefore = r?.readNullable<int>('wholesale_price_cents');
+        }
+
         if (variantId != null) {
           // Save current prices as previous before any update
           await customUpdate(
@@ -275,41 +466,61 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
             updateKind: UpdateKind.update,
           );
 
-          // Increase variant stock
-          await customUpdate(
-            'UPDATE product_variants SET stock_quantity = stock_quantity + ?, updated_at = ? WHERE id = ?',
-            variables: [Variable.withInt(item.quantity), Variable.withString(now), Variable.withInt(variantId)],
-            updates: {productVariants},
-            updateKind: UpdateKind.update,
-          );
+          // Increase variant stock — only when the product is inventory-tracked.
+          if (tracks) {
+            await StockService.adjustStock(this,
+              productId: productId,
+              variantId: variantId,
+              quantity: item.quantity,
+              direction: StockDirection.increase,
+            );
+          }
 
-          // Update cost based on strategy
-          if (costStrategy == 'weighted_average') {
-            // Weighted average: (oldCost * oldQty + newCost * newQty) / (oldQty + newQty)
-            final variantRow = await customSelect(
-              'SELECT cost_cents, stock_quantity FROM product_variants WHERE id = ?',
+          // Update cost — only when tracking. Funnels through
+          // ProductCostService so the strategy (wac | fifo | last) is
+          // resolved per-product and the math lives in one tested place.
+          if (tracks) {
+            // Read the post-increase stock to derive the pre-increase
+            // quantity (`oldCostBefore` was already snapshotted).
+            final postQtyRow = await customSelect(
+              'SELECT stock_quantity FROM product_variants WHERE id = ?',
               variables: [Variable.withInt(variantId)],
             ).getSingleOrNull();
-            if (variantRow != null) {
-              final oldCost = variantRow.read<int>('cost_cents');
-              // stock_quantity was already incremented above, so subtract to get old qty
-              final currentStock = variantRow.read<int>('stock_quantity');
-              final oldQty = currentStock - item.quantity;
-              if (oldQty + item.quantity > 0) {
-                final avgCost = ((oldCost * oldQty) + (newCostCents * item.quantity)) ~/ (oldQty + item.quantity);
-                await customUpdate(
-                  'UPDATE product_variants SET cost_cents = ?, updated_at = ? WHERE id = ?',
-                  variables: [Variable.withInt(avgCost), Variable.withString(now), Variable.withInt(variantId)],
-                  updates: {productVariants},
-                  updateKind: UpdateKind.update,
-                );
-              }
-            }
-          } else {
-            // last_cost (default)
+            final postQty = postQtyRow?.read<int>('stock_quantity') ?? 0;
+            final beforeQty = postQty - item.quantity;
+
+            // Resolve costing method from the product row. Falls back to
+            // 'wac' on read failure to match the schema default.
+            final methodRow = await customSelect(
+              'SELECT costing_method FROM products WHERE id = ?',
+              variables: [Variable.withInt(productId)],
+            ).getSingleOrNull();
+            final method =
+                methodRow?.read<String>('costing_method') ?? 'wac';
+
+            await ProductCostService.applyPurchaseCostToVariant(
+              this,
+              variantId: variantId,
+              beforeQty: beforeQty < 0 ? 0 : beforeQty,
+              beforeCostCents: oldCostBefore,
+              addedQty: item.quantity,
+              newPaidCostCents: newCostCents,
+              costingMethod: method,
+            );
+
+            // Stamp the supplier reference price (GROSS unit cost — pre line
+            // discount) so the product/variant edit screen shows what the
+            // user typed on the most recent purchase line. Decoupled from
+            // `cost_cents` which carries the IAS-2 net basis. See migration
+            // 10055 and `Products.lastPurchasePriceCents` docs.
             await customUpdate(
-              'UPDATE product_variants SET cost_cents = ?, updated_at = ? WHERE id = ?',
-              variables: [Variable.withInt(newCostCents), Variable.withString(now), Variable.withInt(variantId)],
+              'UPDATE product_variants SET last_purchase_price_cents = ?, '
+              'updated_at = ? WHERE id = ?',
+              variables: [
+                Variable.withInt(grossUnitCost),
+                Variable.withString(now),
+                Variable.withInt(variantId),
+              ],
               updates: {productVariants},
               updateKind: UpdateKind.update,
             );
@@ -358,37 +569,52 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
             updateKind: UpdateKind.update,
           );
 
-          // Non-variant product: update the products table directly
-          if (costStrategy == 'weighted_average') {
-            final productRow = await customSelect(
-              'SELECT cost_cents, stock_quantity FROM products WHERE id = ?',
+          // Non-variant product: read pre-increase state, then bump
+          // stock, then update cost via ProductCostService. Order matters:
+          // we capture `beforeQty` BEFORE adjustStock so the WAC math is
+          // unambiguous regardless of any concurrent stock writers.
+          if (tracks) {
+            final preRow = await customSelect(
+              'SELECT stock_quantity FROM products WHERE id = ?',
               variables: [Variable.withInt(productId)],
             ).getSingleOrNull();
-            if (productRow != null) {
-              final oldCost = productRow.read<int>('cost_cents');
-              final oldQty = productRow.read<int>('stock_quantity');
-              if (oldQty + item.quantity > 0) {
-                final avgCost = ((oldCost * oldQty) + (newCostCents * item.quantity)) ~/ (oldQty + item.quantity);
-                await customUpdate(
-                  'UPDATE products SET cost_cents = ?, stock_quantity = stock_quantity + ?, updated_at = ? WHERE id = ?',
-                  variables: [Variable.withInt(avgCost), Variable.withInt(item.quantity), Variable.withString(now), Variable.withInt(productId)],
-                  updates: {products},
-                  updateKind: UpdateKind.update,
-                );
-              } else {
-                await customUpdate(
-                  'UPDATE products SET cost_cents = ?, stock_quantity = stock_quantity + ?, updated_at = ? WHERE id = ?',
-                  variables: [Variable.withInt(newCostCents), Variable.withInt(item.quantity), Variable.withString(now), Variable.withInt(productId)],
-                  updates: {products},
-                  updateKind: UpdateKind.update,
-                );
-              }
-            }
-          } else {
-            // last_cost (default)
+            final beforeQty = preRow?.read<int>('stock_quantity') ?? 0;
+
+            // Increase stock via StockService (handles products + default variant)
+            await StockService.adjustStock(this,
+              productId: productId,
+              variantId: null,
+              quantity: item.quantity,
+              direction: StockDirection.increase,
+            );
+
+            final methodRow = await customSelect(
+              'SELECT costing_method FROM products WHERE id = ?',
+              variables: [Variable.withInt(productId)],
+            ).getSingleOrNull();
+            final method =
+                methodRow?.read<String>('costing_method') ?? 'wac';
+
+            await ProductCostService.applyPurchaseCostToProduct(
+              this,
+              productId: productId,
+              beforeQty: beforeQty,
+              beforeCostCents: oldCostBefore,
+              addedQty: item.quantity,
+              newPaidCostCents: newCostCents,
+              costingMethod: method,
+            );
+
+            // Stamp the supplier reference price (GROSS) on the product row.
+            // See sibling write in the variant branch for the full rationale.
             await customUpdate(
-              'UPDATE products SET cost_cents = ?, stock_quantity = stock_quantity + ?, updated_at = ? WHERE id = ?',
-              variables: [Variable.withInt(newCostCents), Variable.withInt(item.quantity), Variable.withString(now), Variable.withInt(productId)],
+              'UPDATE products SET last_purchase_price_cents = ?, '
+              'updated_at = ? WHERE id = ?',
+              variables: [
+                Variable.withInt(grossUnitCost),
+                Variable.withString(now),
+                Variable.withInt(productId),
+              ],
               updates: {products},
               updateKind: UpdateKind.update,
             );
@@ -414,14 +640,44 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
             );
           }
 
-          // Also sync the default variant if one exists
-          await customUpdate(
-            'UPDATE product_variants SET cost_cents = ?, stock_quantity = stock_quantity + ?, updated_at = ? '
-            'WHERE product_id = ? AND color_id IS NULL AND size_id IS NULL',
-            variables: [Variable.withInt(newCostCents), Variable.withInt(item.quantity), Variable.withString(now), Variable.withInt(productId)],
-            updates: {productVariants},
-            updateKind: UpdateKind.update,
-          );
+          // Mirror the parent's resolved cost onto the default variant so
+          // both rows stay consistent. Read the just-written value back
+          // (cheaper than re-deriving the WAC) and write it through.
+          if (tracks) {
+            final parentRow = await customSelect(
+              'SELECT cost_cents FROM products WHERE id = ?',
+              variables: [Variable.withInt(productId)],
+            ).getSingleOrNull();
+            final mirroredCost =
+                parentRow?.read<int>('cost_cents') ?? newCostCents;
+            await customUpdate(
+              'UPDATE product_variants SET cost_cents = ?, updated_at = ? '
+              'WHERE product_id = ? AND color_id IS NULL AND size_id IS NULL',
+              variables: [
+                Variable.withInt(mirroredCost),
+                Variable.withString(now),
+                Variable.withInt(productId),
+              ],
+              updates: {productVariants},
+              updateKind: UpdateKind.update,
+            );
+
+            // Mirror the GROSS supplier reference price onto the default
+            // variant too so variant-level UI reads stay consistent with
+            // the parent product row.
+            await customUpdate(
+              'UPDATE product_variants SET last_purchase_price_cents = ?, '
+              'updated_at = ? '
+              'WHERE product_id = ? AND color_id IS NULL AND size_id IS NULL',
+              variables: [
+                Variable.withInt(grossUnitCost),
+                Variable.withString(now),
+                Variable.withInt(productId),
+              ],
+              updates: {productVariants},
+              updateKind: UpdateKind.update,
+            );
+          }
 
           // Sync sell/wholesale prices to default variant too
           if (newSellPrice != null) {
@@ -443,39 +699,97 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
             );
           }
         }
+
+        // Create a batch row for every posted purchase line — the batch
+        // ledger is the source of truth for FIFO COGS *and* the only place
+        // that holds expiry-aware remaining quantity. Skipped for
+        // non-tracked products (services have no inventory ledger).
+        if (tracks) {
+          await BatchService.createBatchFromPurchase(
+            this,
+            productId: productId,
+            variantId: variantId,
+            purchaseItemId: item.id,
+            supplierId: purchase.supplierId,
+            quantity: item.quantity,
+            unitCostCents: newCostCents,
+            receivedDate: purchase.purchaseDate,
+            expiryDate: item.expiryDate,
+          );
+          if (await _isFifoProduct(productId)) {
+            batchedProductIds.add(productId);
+          }
+        }
+
+        // ── Centralized price-history audit ──
+        // The price-history widget is a USER-FACING audit log answering "what
+        // did I pay / charge over time". For COST we therefore record the
+        // GROSS unit cost the user typed on the purchase line
+        // (`grossUnitCost`), NOT:
+        //   * the post-WAC variant cost — WAC blends old qty × old cost with
+        //     new qty × new cost (e.g. 50×3 + 60×1 / 4 = 52.50) which made
+        //     users ask "why is the new cost 52?", and
+        //   * the post-discount NET basis (`newCostCents`) — that's the
+        //     IAS-2 inventory basis (correct for COGS / GL) but it caused
+        //     the user-reported "I typed 100 but history shows 99" bug
+        //     whenever a per-line discount was applied.
+        // Pairs with `oldGrossCostBefore` (which falls back to cost_cents on
+        // pre-migration rows) so consecutive history rows compare gross-to-
+        // gross. Non-tracked products carry no inventory cost basis, so we
+        // leave the recorded cost equal to the prior gross value
+        // (PriceHistoryService no-ops on equal values).
+        //
+        // For sell/wholesale we read the POST-mutation values: those reflect
+        // either (a) the user's per-line override (newSellPrice /
+        // newWholesalePrice) when supplied or (b) the unchanged prior value
+        // — both are correct, since these prices are user-set, not computed.
+        final int recordedNewCost =
+            tracks ? grossUnitCost : oldGrossCostBefore;
+        int newPriceAfter;
+        int? newWholesaleAfter;
+        if (variantId != null) {
+          final r = await customSelect(
+            'SELECT price_cents, wholesale_price_cents '
+            'FROM product_variants WHERE id = ?',
+            variables: [Variable.withInt(variantId)],
+          ).getSingleOrNull();
+          newPriceAfter = r?.read<int>('price_cents') ?? oldPriceBefore;
+          newWholesaleAfter = r?.readNullable<int>('wholesale_price_cents');
+        } else {
+          final r = await customSelect(
+            'SELECT price_cents, wholesale_price_cents '
+            'FROM products WHERE id = ?',
+            variables: [Variable.withInt(productId)],
+          ).getSingleOrNull();
+          newPriceAfter = r?.read<int>('price_cents') ?? oldPriceBefore;
+          newWholesaleAfter = r?.readNullable<int>('wholesale_price_cents');
+        }
+        await PriceHistoryService.recordIfChanged(
+          this,
+          productId: productId,
+          variantId: variantId,
+          oldCostCents: oldGrossCostBefore,
+          newCostCents: recordedNewCost,
+          oldPriceCents: oldPriceBefore,
+          newPriceCents: newPriceAfter,
+          oldWholesalePriceCents: oldWholesaleBefore,
+          newWholesalePriceCents: newWholesaleAfter,
+          userId: userId,
+          changeReason: 'purchase_post:#$purchaseId',
+        );
       }
 
-      // Sync products table from variants for ALL affected products
-      // This keeps the product card display (price, stock, cost) up to date.
-      // Both has_variants=true AND has_variants=false products need syncing
-      // because non-variant products also have a default variant whose stock
-      // is updated during purchase posting.
+      // Sync products table from variants for ALL affected products.
+      // ProductCostService.syncProductFromVariants computes a TRUE
+      // weighted average across active variants — replacing the legacy
+      // `MAX(cost_cents)` aggregation that produced misleading parent
+      // cost values when variants had different costs (the user-reported
+      // "55.63 instead of 65" bug).
       for (final productId in affectedProductIds) {
-        final now = DateTime.now().toIso8601String();
-        // Aggregate stock and get latest prices from all active variants
-        final stockRow = await customSelect(
-          'SELECT COALESCE(SUM(stock_quantity), 0) AS total_stock, '
-          'COALESCE(MAX(cost_cents), 0) AS latest_cost, '
-          'COALESCE(MAX(price_cents), 0) AS latest_price, '
-          'MAX(wholesale_price_cents) AS latest_wholesale '
-          'FROM product_variants WHERE product_id = ? AND is_active = 1',
-          variables: [Variable.withInt(productId)],
-        ).getSingleOrNull();
-        if (stockRow != null) {
-          final totalStock = stockRow.read<int>('total_stock');
-          final latestCost = stockRow.read<int>('latest_cost');
-          final latestPrice = stockRow.read<int>('latest_price');
-          final latestWholesale = stockRow.readNullable<int>('latest_wholesale');
-          final wholesaleClause = latestWholesale != null
-              ? ', wholesale_price_cents = $latestWholesale'
-              : '';
-          await customUpdate(
-            'UPDATE products SET stock_quantity = ?, cost_cents = ?, price_cents = ?$wholesaleClause, updated_at = ? WHERE id = ?',
-            variables: [Variable.withInt(totalStock), Variable.withInt(latestCost), Variable.withInt(latestPrice), Variable.withString(now), Variable.withInt(productId)],
-            updates: {products},
-            updateKind: UpdateKind.update,
-          );
-        }
+        await ProductCostService.syncProductFromVariants(
+          this,
+          productId: productId,
+        );
       }
 
       // Update isTaxable flag on affected products when purchase has tax
@@ -488,6 +802,14 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
             updateKind: UpdateKind.update,
           );
         }
+      }
+
+      // I4 (Invariant I1): assert Σ(batch.remaining) == variant.stock_quantity
+      // for every FIFO product whose batch ledger was touched. Catches any
+      // silent desync BEFORE the transaction commits.
+      for (final productId in batchedProductIds) {
+        await BatchService.assertInvariantForProduct(this,
+            productId: productId);
       }
 
       // Update purchase status to posted
@@ -598,20 +920,10 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
 
       // Apply net balance delta once.
       final deltaCents = totalCents - totalPaidCents;
-      if (deltaCents != 0) {
-        final supplier = await (select(suppliers)
-              ..where((s) => s.id.equals(purchase.supplierId)))
-            .getSingleOrNull();
-        if (supplier != null) {
-          final oldBalance = supplier.balanceCents.toBigInt().toInt();
-          final newBalance = oldBalance + deltaCents;
-          await (update(suppliers)..where((s) => s.id.equals(purchase.supplierId)))
-              .write(SuppliersCompanion(
-                balanceCents: Value(Decimal.fromInt(newBalance)),
-                updatedAt: Value(DateTime.now()),
-              ));
-        }
-      }
+      await BalanceService.adjustSupplierBalance(this,
+        supplierId: purchase.supplierId,
+        deltaCents: deltaCents,
+      );
     });
   }
 
@@ -723,24 +1035,26 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
       }
 
       if (deltaBalanceCents != 0) {
-        final supplier = await (select(suppliers)..where((s) => s.id.equals(supplierId)))
-            .getSingleOrNull();
-        if (supplier != null) {
-          final oldBalance = supplier.balanceCents.toBigInt().toInt();
-          final newBalance = oldBalance + deltaBalanceCents;
-          await (update(suppliers)..where((s) => s.id.equals(supplierId)))
-              .write(SuppliersCompanion(
-                balanceCents: Value(Decimal.fromInt(newBalance)),
-                updatedAt: Value(DateTime.now()),
-              ));
-        }
+        await BalanceService.adjustSupplierBalance(this,
+          supplierId: supplierId,
+          deltaCents: deltaBalanceCents,
+        );
       }
     });
   }
 
   /// Void purchase - reverse stock changes if posted
   /// Also cascade-voids all associated returns to keep stock/accounting consistent.
-  Future<void> voidPurchase(int purchaseId, {int? userId}) {
+  ///
+  /// 2026-05-13 — accepts an optional [journalEntryService]. When provided,
+  /// the cascade reverses the linked purchase-returns' journal entries
+  /// before flipping their status. See `sale_dao.voidSale` for the full
+  /// rationale (same root-cause symmetry on the purchase side).
+  Future<void> voidPurchase(
+    int purchaseId, {
+    JournalEntryService? journalEntryService,
+    int? userId,
+  }) {
     return transaction(() async {
       final purchase = await getPurchaseById(purchaseId);
       if (purchase == null) {
@@ -756,6 +1070,16 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
           .get();
       for (final ret in associatedReturns) {
         if (ret.status != 'voided') {
+          // 2026-05-13 — emit the JE reversal BEFORE flipping the row's
+          // status, mirroring `PurchaseRepositoryImpl.voidPurchaseReturn`.
+          if (journalEntryService != null) {
+            await journalEntryService.voidJournalEntriesForSource(
+              sourceTable: 'purchase_returns',
+              sourceId: ret.id,
+              reason: 'Purchase voided — cascade',
+              userId: userId,
+            );
+          }
           await voidPurchaseReturn(ret.id);
         }
       }
@@ -764,12 +1088,38 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
       if (purchase.status == 'posted') {
         final items = await getPurchaseItems(purchaseId);
         final voidAffectedProductIds = <int>{};
+        // I4: FIFO products whose batches we deactivate.
+        final voidBatchedProductIds = <int>{};
 
         for (final item in items) {
           final variantId = item.variantId;
           final productId = item.productId;
           voidAffectedProductIds.add(productId);
-          final now = DateTime.now().toIso8601String();
+
+          // FIFO safety: if any batch sourced from this purchase line has
+          // been (even partially) consumed, voiding the purchase would
+          // orphan the linked sales/returns and break the invariant. Refuse
+          // — the user must reverse the dependent transactions first. We
+          // deactivate untouched batches AFTER stock reversal below.
+          if (await _isFifoProduct(productId)) {
+            final batchRows = await customSelect(
+              'SELECT id, received_quantity, remaining_quantity '
+              '  FROM product_batches '
+              ' WHERE purchase_item_id = ? AND is_active = 1',
+              variables: [Variable.withInt(item.id)],
+            ).get();
+            for (final r in batchRows) {
+              final received = r.read<int>('received_quantity');
+              final remaining = r.read<int>('remaining_quantity');
+              if (remaining != received) {
+                throw Exception(
+                  'Cannot void purchase: batch from purchase_item #${item.id} '
+                  'has been partially consumed ($remaining of $received remaining). '
+                  'Reverse the dependent sales/returns first.',
+                );
+              }
+            }
+          }
 
           if (variantId != null) {
             // Check current stock before deducting
@@ -787,14 +1137,14 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
                 );
               }
             }
-            await customUpdate(
-              'UPDATE product_variants SET stock_quantity = stock_quantity - ?, updated_at = ? WHERE id = ?',
-              variables: [Variable.withInt(item.quantity), Variable.withString(now), Variable.withInt(variantId)],
-              updates: {productVariants},
-              updateKind: UpdateKind.update,
+            await StockService.adjustStock(this,
+              productId: productId,
+              variantId: variantId,
+              quantity: item.quantity,
+              direction: StockDirection.decrease,
             );
           } else {
-            // Non-variant product: check and reverse stock on products table
+            // Non-variant product: check stock before deducting
             final productRow = await customSelect(
               'SELECT stock_quantity FROM products WHERE id = ?',
               variables: [Variable.withInt(productId)],
@@ -809,42 +1159,53 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
                 );
               }
             }
+            await StockService.adjustStock(this,
+              productId: productId,
+              variantId: null,
+              quantity: item.quantity,
+              direction: StockDirection.decrease,
+            );
+          }
+
+          // FIFO sync: deactivate batches sourced from this purchase line
+          // (already validated above to be untouched). Use is_active=0 +
+          // remaining_quantity=0 so they neither serve future FIFO consumption
+          // nor inflate Σ(remaining) on the invariant check.
+          if (await _isFifoProduct(productId)) {
             await customUpdate(
-              'UPDATE products SET stock_quantity = stock_quantity - ?, updated_at = ? WHERE id = ?',
-              variables: [Variable.withInt(item.quantity), Variable.withString(now), Variable.withInt(productId)],
-              updates: {products},
+              'UPDATE product_batches '
+              '   SET is_active = 0, remaining_quantity = 0, updated_at = ? '
+              ' WHERE purchase_item_id = ? AND is_active = 1',
+              variables: [
+                Variable.withString(DateTime.now().toIso8601String()),
+                Variable.withInt(item.id),
+              ],
+              updates: {productBatches},
               updateKind: UpdateKind.update,
             );
-            // Also reverse the default variant
-            await customUpdate(
-              'UPDATE product_variants SET stock_quantity = stock_quantity - ?, updated_at = ? '
-              'WHERE product_id = ? AND color_id IS NULL AND size_id IS NULL',
-              variables: [Variable.withInt(item.quantity), Variable.withString(now), Variable.withInt(productId)],
-              updates: {productVariants},
-              updateKind: UpdateKind.update,
-            );
+            voidBatchedProductIds.add(productId);
           }
         }
 
-        // Sync products table from variants for ALL affected products
+        // Sync products table from variants for ALL affected products via
+        // ProductCostService — same single-writer path as postPurchase, so
+        // the parent cost on void is also a TRUE weighted average instead
+        // of the legacy `MAX(cost_cents)` aggregation. Price columns are
+        // intentionally skipped (`syncPrice: false`) because voiding a
+        // purchase must not retroactively rewrite the user's retail/
+        // wholesale prices, which are governed by sale-side documents.
         for (final productId in voidAffectedProductIds) {
-          final now = DateTime.now().toIso8601String();
-          final stockRow = await customSelect(
-            'SELECT COALESCE(SUM(stock_quantity), 0) AS total_stock, '
-            'COALESCE(MAX(cost_cents), 0) AS latest_cost '
-            'FROM product_variants WHERE product_id = ? AND is_active = 1',
-            variables: [Variable.withInt(productId)],
-          ).getSingleOrNull();
-          if (stockRow != null) {
-            final totalStock = stockRow.read<int>('total_stock');
-            final latestCost = stockRow.read<int>('latest_cost');
-            await customUpdate(
-              'UPDATE products SET stock_quantity = ?, cost_cents = ?, updated_at = ? WHERE id = ?',
-              variables: [Variable.withInt(totalStock), Variable.withInt(latestCost), Variable.withString(now), Variable.withInt(productId)],
-              updates: {products},
-              updateKind: UpdateKind.update,
-            );
-          }
+          await ProductCostService.syncProductFromVariants(
+            this,
+            productId: productId,
+            syncPrice: false,
+          );
+        }
+
+        // I4 (Invariant I1): cross-table invariant for FIFO products.
+        for (final productId in voidBatchedProductIds) {
+          await BatchService.assertInvariantForProduct(this,
+              productId: productId);
         }
 
         // Reverse supplier balance: undo the net delta that was applied on posting.
@@ -887,20 +1248,10 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
 
         // Net balance change: -(totalCents - totalPaidCents)
         final netReversalCents = totalCents - totalPaidCents;
-        if (netReversalCents != 0) {
-          final supplier = await (select(suppliers)
-                ..where((s) => s.id.equals(purchase.supplierId)))
-              .getSingleOrNull();
-          if (supplier != null) {
-            final oldBalance = supplier.balanceCents.toBigInt().toInt();
-            final newBalance = oldBalance - netReversalCents;
-            await (update(suppliers)..where((s) => s.id.equals(purchase.supplierId)))
-                .write(SuppliersCompanion(
-                  balanceCents: Value(Decimal.fromInt(newBalance)),
-                  updatedAt: Value(DateTime.now()),
-                ));
-          }
-        }
+        await BalanceService.adjustSupplierBalance(this,
+          supplierId: purchase.supplierId,
+          deltaCents: -netReversalCents,
+        );
       }
 
       await updatePurchaseStatus(purchaseId, 'voided', userId: userId);
@@ -952,14 +1303,15 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
             }).toList());
   }
 
-  /// Search purchases by number or supplier name
+  /// Search purchases by number, supplier name, or supplier phone
   Stream<List<PurchaseWithSupplier>> searchPurchases(String query) {
     final searchQuery = '%$query%';
     final joinQuery = select(purchases).join([
       innerJoin(suppliers, suppliers.id.equalsExp(purchases.supplierId)),
     ])
       ..where(purchases.purchaseNumber.like(searchQuery) |
-          suppliers.name.like(searchQuery))
+          suppliers.name.like(searchQuery) |
+          suppliers.phone.like(searchQuery))
       ..orderBy([OrderingTerm.desc(purchases.purchaseDate)]);
 
     return joinQuery.watch().map((rows) => rows.map((row) {
@@ -968,6 +1320,33 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
             supplier: row.readTable(suppliers),
           );
         }).toList());
+  }
+
+  /// Watch product search terms for all purchases (product name, barcode, SKU).
+  Stream<Map<int, List<String>>> watchPurchaseProductSearchTerms() {
+    final query = select(purchaseItems).join([
+      innerJoin(products, products.id.equalsExp(purchaseItems.productId)),
+      leftOuterJoin(productVariants, productVariants.id.equalsExp(purchaseItems.variantId)),
+    ]);
+
+    return query.watch().map((rows) {
+      final map = <int, List<String>>{};
+      for (final row in rows) {
+        final item = row.readTable(purchaseItems);
+        final product = row.readTable(products);
+        final variant = row.readTableOrNull(productVariants);
+        final terms = <String>[];
+        terms.add(product.name);
+        if (product.nameAr != null) terms.add(product.nameAr!);
+        if (product.nameFr != null) terms.add(product.nameFr!);
+        if (product.barcode != null) terms.add(product.barcode!);
+        if (product.sku != null) terms.add(product.sku!);
+        if (variant?.barcode != null) terms.add(variant!.barcode!);
+        if (variant?.sku != null) terms.add(variant!.sku!);
+        map.putIfAbsent(item.purchaseId, () => []).addAll(terms);
+      }
+      return map;
+    });
   }
 
   /// Get dashboard stats using SQL aggregation (no full-table load).
@@ -1021,16 +1400,58 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
     return into(purchaseItems).insert(item);
   }
 
-  /// Update purchase item
+  /// Update a single purchase item.
+  ///
+  /// I1 (defense-in-depth): only items belonging to a `draft`/`pending`
+  /// purchase may be updated. Editing a single item on a posted purchase
+  /// would silently desync opening batches and the GL.
   Future<bool> updatePurchaseItem(int itemId, PurchaseItemsCompanion item) {
-    return (update(purchaseItems)..where((i) => i.id.equals(itemId)))
-        .write(item)
-        .then((rows) => rows > 0);
+    return transaction(() async {
+      final parentRow = await customSelect(
+        'SELECT p.id AS pid, p.status AS status FROM purchase_items pi '
+        'INNER JOIN purchases p ON p.id = pi.purchase_id '
+        'WHERE pi.id = ?',
+        variables: [Variable.withInt(itemId)],
+      ).getSingleOrNull();
+      if (parentRow == null) return false;
+      final status = parentRow.read<String>('status');
+      if (status != 'draft' && status != 'pending') {
+        final pid = parentRow.read<int>('pid');
+        throw StateError(
+          'I1 violation: cannot edit an item on a "$status" purchase '
+          '(#$pid). Void it and create a new one instead.',
+        );
+      }
+      return (update(purchaseItems)..where((i) => i.id.equals(itemId)))
+          .write(item)
+          .then((rows) => rows > 0);
+    });
   }
 
-  /// Delete purchase item
+  /// Delete a single purchase item.
+  ///
+  /// I1 (defense-in-depth): only items belonging to a `draft`/`pending`
+  /// purchase may be deleted. Removing an item from a posted purchase
+  /// would silently desync opening batches and the GL.
   Future<int> deletePurchaseItem(int itemId) {
-    return (delete(purchaseItems)..where((i) => i.id.equals(itemId))).go();
+    return transaction(() async {
+      final parentRow = await customSelect(
+        'SELECT p.id AS pid, p.status AS status FROM purchase_items pi '
+        'INNER JOIN purchases p ON p.id = pi.purchase_id '
+        'WHERE pi.id = ?',
+        variables: [Variable.withInt(itemId)],
+      ).getSingleOrNull();
+      if (parentRow == null) return 0;
+      final status = parentRow.read<String>('status');
+      if (status != 'draft' && status != 'pending') {
+        final pid = parentRow.read<int>('pid');
+        throw StateError(
+          'I1 violation: cannot delete an item from a "$status" purchase '
+          '(#$pid). Void it and create a new one instead.',
+        );
+      }
+      return (delete(purchaseItems)..where((i) => i.id.equals(itemId))).go();
+    });
   }
 
   /// Get items with expiry dates approaching (within days)
@@ -1097,11 +1518,59 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
     );
   }
 
-  /// Watch all purchase returns
+  /// Watch all purchase returns with supplier info (name, phone)
+  Stream<List<PurchaseReturnWithParty>> watchAllPurchaseReturnsWithParty() {
+    final query = select(purchaseReturns).join([
+      innerJoin(purchases, purchases.id.equalsExp(purchaseReturns.purchaseId)),
+      innerJoin(suppliers, suppliers.id.equalsExp(purchases.supplierId)),
+    ])
+      ..orderBy([OrderingTerm.desc(purchaseReturns.returnDate)]);
+
+    return query.watch().map((rows) => rows.map((row) {
+          return PurchaseReturnWithParty(
+            purchaseReturn: row.readTable(purchaseReturns),
+            supplierName: row.readTable(suppliers).name,
+            supplierPhone: row.readTable(suppliers).phone,
+          );
+        }).toList());
+  }
+
+  /// Watch all purchase returns (raw, without party info)
   Stream<List<PurchaseReturn>> watchAllPurchaseReturns() {
     return (select(purchaseReturns)
           ..orderBy([(r) => OrderingTerm.desc(r.returnDate)]))
         .watch();
+  }
+
+  /// Watch product search terms for purchase return items.
+  Stream<Map<String, List<String>>> watchPurchaseReturnProductSearchTerms() {
+    final linkedQuery = select(purchaseReturnItems).join([
+      innerJoin(purchaseItems,
+          purchaseItems.id.equalsExp(purchaseReturnItems.purchaseItemId)),
+      innerJoin(products, products.id.equalsExp(purchaseItems.productId)),
+      leftOuterJoin(productVariants,
+          productVariants.id.equalsExp(purchaseItems.variantId)),
+    ]);
+
+    return linkedQuery.watch().map((rows) {
+      final map = <String, List<String>>{};
+      for (final row in rows) {
+        final item = row.readTable(purchaseReturnItems);
+        final product = row.readTable(products);
+        final variant = row.readTableOrNull(productVariants);
+        final key = 'PR-${item.returnId}';
+        final terms = <String>[];
+        terms.add(product.name);
+        if (product.nameAr != null) terms.add(product.nameAr!);
+        if (product.nameFr != null) terms.add(product.nameFr!);
+        if (product.barcode != null) terms.add(product.barcode!);
+        if (product.sku != null) terms.add(product.sku!);
+        if (variant?.barcode != null) terms.add(variant!.barcode!);
+        if (variant?.sku != null) terms.add(variant!.sku!);
+        map.putIfAbsent(key, () => []).addAll(terms);
+      }
+      return map;
+    });
   }
 
   /// Get purchase return by ID
@@ -1146,9 +1615,18 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
     });
   }
 
-  /// Post purchase return - update variant stock based on disposition
+  /// Post purchase return - update variant stock based on disposition.
   /// Validates that return quantities don't exceed available (purchased - already returned).
-  Future<void> postPurchaseReturn(int returnId, {int? userId}) {
+  ///
+  /// Posting a purchase return DECREASES stock (goods leaving the warehouse
+  /// back to the supplier). If [allowNegativeStock] is false and current stock
+  /// is insufficient, the operation is rejected — matching the inventory
+  /// policy used by SAP / NetSuite / Odoo / QuickBooks.
+  Future<void> postPurchaseReturn(
+    int returnId, {
+    int? userId,
+    bool allowNegativeStock = false,
+  }) {
     return transaction(() async {
       final returnData = await getPurchaseReturnById(returnId);
       if (returnData == null) {
@@ -1189,85 +1667,115 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
       // or sent for repair. Disposition only affects financial treatment.
       {
         final returnAffectedProductIds = <int>{};
+        // I4: FIFO products whose batch ledger we consume from on this return.
+        final returnBatchedProductIds = <int>{};
         for (final row in returnItemRows) {
           final returnItem = row.readTable(purchaseReturnItems);
           final purchaseItem = row.readTable(purchaseItems);
           final variantId = purchaseItem.variantId;
           final productId = purchaseItem.productId;
           returnAffectedProductIds.add(productId);
-          final now = DateTime.now().toIso8601String();
           if (variantId != null) {
-            // Guard against negative stock
-            final variantRow = await customSelect(
-              'SELECT stock_quantity FROM product_variants WHERE id = ?',
-              variables: [Variable.withInt(variantId)],
-            ).getSingleOrNull();
-            if (variantRow != null) {
-              final currentStock = variantRow.read<int>('stock_quantity');
-              if (currentStock < returnItem.quantity) {
-                throw Exception(
-                  'Cannot return: variant #$variantId stock ($currentStock) '
-                  'is less than return quantity (${returnItem.quantity}).',
-                );
+            // Guard against negative stock unless explicitly allowed by policy.
+            if (!allowNegativeStock) {
+              final variantRow = await customSelect(
+                'SELECT stock_quantity FROM product_variants WHERE id = ?',
+                variables: [Variable.withInt(variantId)],
+              ).getSingleOrNull();
+              if (variantRow != null) {
+                final currentStock = variantRow.read<int>('stock_quantity');
+                if (currentStock < returnItem.quantity) {
+                  throw Exception(
+                    'Cannot return: variant #$variantId stock ($currentStock) '
+                    'is less than return quantity (${returnItem.quantity}).',
+                  );
+                }
               }
             }
 
-            await customUpdate(
-              'UPDATE product_variants SET stock_quantity = stock_quantity - ?, updated_at = ? WHERE id = ?',
-              variables: [Variable.withInt(returnItem.quantity), Variable.withString(now), Variable.withInt(variantId)],
-              updates: {productVariants},
-              updateKind: UpdateKind.update,
+            await StockService.adjustStock(this,
+              productId: productId,
+              variantId: variantId,
+              quantity: returnItem.quantity,
+              direction: StockDirection.decrease,
             );
+
+            // FIFO sync: deduct oldest batches for FIFO products and link
+            // the consumption to this return item so a later void can mirror
+            // it back precisely to the same batches at the FROZEN unit cost.
+            if (await _isFifoProduct(productId)) {
+              await BatchService.consumeFifo(this,
+                productId: productId,
+                variantId: variantId,
+                quantity: returnItem.quantity,
+                consumptionType: 'purchase_return',
+                purchaseReturnItemId: returnItem.id,
+              );
+              returnBatchedProductIds.add(productId);
+            }
           } else {
-            // Non-variant product: deduct from products table
-            final productRow = await customSelect(
-              'SELECT stock_quantity FROM products WHERE id = ?',
-              variables: [Variable.withInt(productId)],
-            ).getSingleOrNull();
-            if (productRow != null) {
-              final currentStock = productRow.read<int>('stock_quantity');
-              if (currentStock < returnItem.quantity) {
-                throw Exception(
-                  'Cannot return: product #$productId stock ($currentStock) '
-                  'is less than return quantity (${returnItem.quantity}).',
-                );
+            // Non-variant product: check stock unless explicitly allowed.
+            if (!allowNegativeStock) {
+              final productRow = await customSelect(
+                'SELECT stock_quantity FROM products WHERE id = ?',
+                variables: [Variable.withInt(productId)],
+              ).getSingleOrNull();
+              if (productRow != null) {
+                final currentStock = productRow.read<int>('stock_quantity');
+                if (currentStock < returnItem.quantity) {
+                  throw Exception(
+                    'Cannot return: product #$productId stock ($currentStock) '
+                    'is less than return quantity (${returnItem.quantity}).',
+                  );
+                }
               }
             }
-            await customUpdate(
-              'UPDATE products SET stock_quantity = stock_quantity - ?, updated_at = ? WHERE id = ?',
-              variables: [Variable.withInt(returnItem.quantity), Variable.withString(now), Variable.withInt(productId)],
-              updates: {products},
-              updateKind: UpdateKind.update,
+            await StockService.adjustStock(this,
+              productId: productId,
+              variantId: null,
+              quantity: returnItem.quantity,
+              direction: StockDirection.decrease,
             );
-            // Also deduct from the default variant
-            await customUpdate(
-              'UPDATE product_variants SET stock_quantity = stock_quantity - ?, updated_at = ? '
-              'WHERE product_id = ? AND color_id IS NULL AND size_id IS NULL',
-              variables: [Variable.withInt(returnItem.quantity), Variable.withString(now), Variable.withInt(productId)],
-              updates: {productVariants},
-              updateKind: UpdateKind.update,
-            );
+
+            // FIFO sync (non-variant branch): same intent as the variant
+            // branch above — BatchService resolves null variantId to the
+            // product's default variant internally.
+            if (await _isFifoProduct(productId)) {
+              await BatchService.consumeFifo(this,
+                productId: productId,
+                variantId: null,
+                quantity: returnItem.quantity,
+                consumptionType: 'purchase_return',
+                purchaseReturnItemId: returnItem.id,
+              );
+              returnBatchedProductIds.add(productId);
+            }
           }
         }
 
-        // Sync products.stock_quantity from variants for products with variants
+        // Sync products.stock_quantity from variants
         for (final productId in returnAffectedProductIds) {
-          final now = DateTime.now().toIso8601String();
-          final stockRow = await customSelect(
-            'SELECT COALESCE(SUM(stock_quantity), 0) AS total_stock '
-            'FROM product_variants WHERE product_id = ? AND is_active = 1',
-            variables: [Variable.withInt(productId)],
-          ).getSingleOrNull();
-          if (stockRow != null) {
-            final totalStock = stockRow.read<int>('total_stock');
-            await customUpdate(
-              'UPDATE products SET stock_quantity = ?, updated_at = ? WHERE id = ?',
-              variables: [Variable.withInt(totalStock), Variable.withString(now), Variable.withInt(productId)],
-              updates: {products},
-              updateKind: UpdateKind.update,
-            );
-          }
+          await StockService.syncProductStockFromVariants(this, productId: productId);
         }
+
+        // I4 (Invariant I1): cross-table invariant for FIFO products.
+        for (final productId in returnBatchedProductIds) {
+          await BatchService.assertInvariantForProduct(this,
+              productId: productId);
+        }
+      }
+
+      // ── Atomic counters: bump qty_returned_linked on each purchase_item.
+      //    Phase 0 hard cap — keeps the linked + adjustment counters in
+      //    sync so subsequent adjustment returns can never exceed history.
+      for (final row in returnItemRows) {
+        final returnItem = row.readTable(purchaseReturnItems);
+        await customStatement(
+          'UPDATE purchase_items '
+          'SET qty_returned_linked = qty_returned_linked + ? '
+          'WHERE id = ?',
+          [returnItem.quantity, returnItem.purchaseItemId],
+        );
       }
 
       // Update return status to posted
@@ -1303,18 +1811,10 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
         // Cash/cheque means the supplier already gave us the money back,
         // so the balance (what we owe them) doesn't change.
         if (isCreditRefund) {
-          final supplier = await (select(suppliers)
-                ..where((s) => s.id.equals(purchase.supplierId)))
-              .getSingleOrNull();
-          if (supplier != null) {
-            final oldBalance = supplier.balanceCents.toBigInt().toInt();
-            final newBalance = oldBalance - refundCents;
-            await (update(suppliers)..where((s) => s.id.equals(purchase.supplierId)))
-                .write(SuppliersCompanion(
-                  balanceCents: Value(Decimal.fromInt(newBalance)),
-                  updatedAt: Value(DateTime.now()),
-                ));
-          }
+          await BalanceService.adjustSupplierBalance(this,
+            supplierId: purchase.supplierId,
+            deltaCents: -refundCents,
+          );
         }
       }
     });
@@ -1388,57 +1888,52 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
 
         final items = await query.get();
         final voidReturnAffectedProductIds = <int>{};
+        // I4: FIFO products whose batches we restore to.
+        final voidReturnBatchedProductIds = <int>{};
         for (final row in items) {
           final returnItem = row.readTable(purchaseReturnItems);
           final purchaseItem = row.readTable(purchaseItems);
-          final variantId = purchaseItem.variantId;
-          final productId = purchaseItem.productId;
-          voidReturnAffectedProductIds.add(productId);
-          final now = DateTime.now().toIso8601String();
+          voidReturnAffectedProductIds.add(purchaseItem.productId);
+          await StockService.adjustStock(this,
+            productId: purchaseItem.productId,
+            variantId: purchaseItem.variantId,
+            quantity: returnItem.quantity,
+            direction: StockDirection.increase,
+          );
 
-          if (variantId != null) {
-            await customUpdate(
-              'UPDATE product_variants SET stock_quantity = stock_quantity + ?, updated_at = ? WHERE id = ?',
-              variables: [Variable.withInt(returnItem.quantity), Variable.withString(now), Variable.withInt(variantId)],
-              updates: {productVariants},
-              updateKind: UpdateKind.update,
-            );
-          } else {
-            // Non-variant product: restore stock on products table
-            await customUpdate(
-              'UPDATE products SET stock_quantity = stock_quantity + ?, updated_at = ? WHERE id = ?',
-              variables: [Variable.withInt(returnItem.quantity), Variable.withString(now), Variable.withInt(productId)],
-              updates: {products},
-              updateKind: UpdateKind.update,
-            );
-            // Also restore the default variant
-            await customUpdate(
-              'UPDATE product_variants SET stock_quantity = stock_quantity + ?, updated_at = ? '
-              'WHERE product_id = ? AND color_id IS NULL AND size_id IS NULL',
-              variables: [Variable.withInt(returnItem.quantity), Variable.withString(now), Variable.withInt(productId)],
-              updates: {productVariants},
-              updateKind: UpdateKind.update,
-            );
+          // FIFO restoration: mirror every 'out' consumption row this
+          // return item produced back into its source batch at the FROZEN
+          // unit_cost. No-op for WAC products (no consumption rows exist).
+          await BatchService.restoreConsumptions(this,
+            reverseConsumptionType: 'purchase_return_void',
+            purchaseReturnItemId: returnItem.id,
+          );
+          if (await _isFifoProduct(purchaseItem.productId)) {
+            voidReturnBatchedProductIds.add(purchaseItem.productId);
           }
         }
 
-        // Sync products.stock_quantity from variants for products with variants
+        // Sync products.stock_quantity from variants
         for (final productId in voidReturnAffectedProductIds) {
-          final now = DateTime.now().toIso8601String();
-          final stockRow = await customSelect(
-            'SELECT COALESCE(SUM(stock_quantity), 0) AS total_stock '
-            'FROM product_variants WHERE product_id = ? AND is_active = 1',
-            variables: [Variable.withInt(productId)],
-          ).getSingleOrNull();
-          if (stockRow != null) {
-            final totalStock = stockRow.read<int>('total_stock');
-            await customUpdate(
-              'UPDATE products SET stock_quantity = ?, updated_at = ? WHERE id = ?',
-              variables: [Variable.withInt(totalStock), Variable.withString(now), Variable.withInt(productId)],
-              updates: {products},
-              updateKind: UpdateKind.update,
-            );
-          }
+          await StockService.syncProductStockFromVariants(this, productId: productId);
+        }
+
+        // I4 (Invariant I1): cross-table invariant for FIFO products.
+        for (final productId in voidReturnBatchedProductIds) {
+          await BatchService.assertInvariantForProduct(this,
+              productId: productId);
+        }
+
+        // ── Atomic counters: reverse qty_returned_linked on each
+        //    purchase_item so the cap returns to its pre-post state.
+        for (final row in items) {
+          final returnItem = row.readTable(purchaseReturnItems);
+          await customStatement(
+            'UPDATE purchase_items '
+            'SET qty_returned_linked = qty_returned_linked - ? '
+            'WHERE id = ? AND qty_returned_linked >= ?',
+            [returnItem.quantity, returnItem.purchaseItemId, returnItem.quantity],
+          );
         }
       }
 
@@ -1467,18 +1962,10 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
           // Cash/cheque refunds did not change the balance on posting,
           // so voiding them should not change it either.
           if (isCreditRefund) {
-            final supplier = await (select(suppliers)
-                  ..where((s) => s.id.equals(purchase.supplierId)))
-                .getSingleOrNull();
-            if (supplier != null) {
-              final oldBalance = supplier.balanceCents.toBigInt().toInt();
-              final newBalance = oldBalance + refundCents;
-              await (update(suppliers)..where((s) => s.id.equals(purchase.supplierId)))
-                  .write(SuppliersCompanion(
-                    balanceCents: Value(Decimal.fromInt(newBalance)),
-                    updatedAt: Value(DateTime.now()),
-                  ));
-            }
+            await BalanceService.adjustSupplierBalance(this,
+              supplierId: purchase.supplierId,
+              deltaCents: refundCents,
+            );
           }
         }
       }
@@ -1544,18 +2031,10 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
           ),
         );
 
-        final supplier = await (select(suppliers)
-              ..where((s) => s.id.equals(purchase.supplierId)))
-            .getSingleOrNull();
-        if (supplier != null) {
-          final oldBalance = supplier.balanceCents.toBigInt().toInt();
-          final newBalance = oldBalance - amountCents;
-          await (update(suppliers)..where((s) => s.id.equals(purchase.supplierId)))
-              .write(SuppliersCompanion(
-                balanceCents: Value(Decimal.fromInt(newBalance)),
-                updatedAt: Value(DateTime.now()),
-              ));
-        }
+        await BalanceService.adjustSupplierBalance(this,
+          supplierId: purchase.supplierId,
+          deltaCents: -amountCents,
+        );
       }
 
       return paymentId;
@@ -1600,30 +2079,48 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
           ),
         );
 
-        final supplier = await (select(suppliers)
-              ..where((s) => s.id.equals(purchase.supplierId)))
-            .getSingleOrNull();
-        if (supplier != null) {
-          final oldBalance = supplier.balanceCents.toBigInt().toInt();
-          final newBalance = oldBalance + amountCents;
-          await (update(suppliers)..where((s) => s.id.equals(purchase.supplierId)))
-              .write(SuppliersCompanion(
-                balanceCents: Value(Decimal.fromInt(newBalance)),
-                updatedAt: Value(DateTime.now()),
-              ));
-        }
+        await BalanceService.adjustSupplierBalance(this,
+          supplierId: purchase.supplierId,
+          deltaCents: amountCents,
+        );
       }
     });
   }
 
-  /// Get total already returned quantity for a specific purchase item
+  /// Get total already returned quantity for a specific purchase item.
+  ///
+  /// Returns the union of two history streams:
+  ///   • `purchase_return_items` rows where the parent
+  ///     `purchase_returns.status != 'voided'` (linked-return path).
+  ///   • `purchase_items.qty_returned_adjustment` — FIFO-allocated quantity
+  ///     that posted **adjustment** (unlinked) purchase returns have
+  ///     attributed to this purchase_item via
+  ///     `AdjustmentReturnDao._allocatePurchaseItemsForAdjustment`. The
+  ///     counter is bumped on `postPurchaseAdjReturn` and decremented on
+  ///     void, so it is always the current authoritative adjustment-side
+  ///     total per line.
+  ///
+  /// Why both? Adjustment returns are not linked to a purchase_item via
+  /// FK, so the legacy SQL silently missed adjustment-return quantity.
+  /// The cap in `postPurchaseReturn` then allowed a linked return to
+  /// over-return units that were already adjusted — driving GL inventory
+  /// above on-hand stock. Including the counter closes the bypass.
   Future<int> getReturnedQuantity(int purchaseItemId) async {
     final rows = await customSelect(
-      'SELECT COALESCE(SUM(pri.quantity), 0) as total '
-      'FROM purchase_return_items pri '
-      'JOIN purchase_returns pr ON pr.id = pri.return_id '
-      'WHERE pri.purchase_item_id = ? AND pr.status != ?',
-      variables: [Variable.withInt(purchaseItemId), const Variable('voided')],
+      'SELECT '
+      '  COALESCE(('
+      '    SELECT SUM(pri.quantity) FROM purchase_return_items pri '
+      '    JOIN purchase_returns pr ON pr.id = pri.return_id '
+      "    WHERE pri.purchase_item_id = ? AND pr.status != 'voided'"
+      '  ), 0) '
+      '  + '
+      '  COALESCE(('
+      '    SELECT qty_returned_adjustment FROM purchase_items WHERE id = ?'
+      '  ), 0) AS total',
+      variables: [
+        Variable.withInt(purchaseItemId),
+        Variable.withInt(purchaseItemId),
+      ],
     ).get();
     return rows.isEmpty ? 0 : rows.first.read<int>('total');
   }

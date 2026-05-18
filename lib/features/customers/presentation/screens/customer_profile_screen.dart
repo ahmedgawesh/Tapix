@@ -8,6 +8,8 @@ import '../../../../core/theme/colors.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../../../core/services/parties/party_balance_classifier.dart';
+import '../../../../core/widgets/inputs/select_all_on_focus.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../sales/domain/repositories/sale_repository.dart';
 import '../../../sales/domain/entities/sale_entity.dart';
@@ -17,6 +19,8 @@ import '../bloc/customer_loyalty_bloc.dart';
 import '../bloc/customer_profile_bloc.dart';
 import '../services/customer_transaction_pdf_service.dart';
 import '../widgets/edit_transaction_dialog.dart';
+import '../../../shared/widgets/unified_return_search_sheet.dart';
+import '../../../../core/services/unified_return_service.dart';
 
 /// Customer profile screen with 360° view
 class CustomerProfileScreen extends StatefulWidget {
@@ -160,67 +164,12 @@ class _OutstandingChequesSection extends StatelessWidget {
 }
 
 class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
-  Future<void> _selectSaleForReturn(BuildContext context, Customer customer) async {
-    await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (ctx) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'customers.select_sale_for_return'.tr(),
-                  style: Theme.of(ctx).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 12),
-                Flexible(
-                  child: StreamBuilder<List<SaleEntity>>(
-                    stream: sl<SaleRepository>().watchCustomerSales(customer.id),
-                    builder: (context, snapshot) {
-                      final sales = snapshot.data ?? const <SaleEntity>[];
-                      final completedSales = sales.where((s) => s.isCompleted).toList();
-
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return const Center(child: CircularProgressIndicator());
-                      }
-
-                      if (completedSales.isEmpty) {
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 24),
-                          child: Center(child: Text('customers.no_completed_sales'.tr())),
-                        );
-                      }
-
-                      return ListView.separated(
-                        shrinkWrap: true,
-                        itemCount: completedSales.length,
-                        separatorBuilder: (_, index) => const Divider(height: 1),
-                        itemBuilder: (context, index) {
-                          final sale = completedSales[index];
-                          return ListTile(
-                            leading: const Icon(Icons.receipt_long_outlined),
-                            title: Text(sale.invoiceNumber),
-                            subtitle: Text(DateFormat.yMMMd().format(sale.saleDate)),
-                            trailing: const Icon(Icons.chevron_right),
-                            onTap: () {
-                              Navigator.pop(ctx);
-                              context.push('/sales/returns/new?saleId=${sale.id}');
-                            },
-                          );
-                        },
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
+  void _openUnifiedReturn(BuildContext context, Customer customer) {
+    showUnifiedReturnSearchSheet(
+      context,
+      side: ReturnSide.sale,
+      partyId: customer.id,
+      partyName: customer.name,
     );
   }
 
@@ -354,7 +303,7 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                       customer: customer,
                       onPaymentPressed: () => _showPaymentDialog(context, customer),
                       onDiscountPressed: () => _showDiscountDialog(context, customer),
-                      onReturnPressed: () => _selectSaleForReturn(context, customer),
+                      onReturnPressed: () => _openUnifiedReturn(context, customer),
                     ),
                     const SizedBox(height: 16),
                     _OutstandingChequesSection(customerId: widget.customerId),
@@ -505,11 +454,7 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                       ),
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
                       autofocus: true,
-                      onTap: () {
-                        if (amountController.text == '0.00' || amountController.text.isEmpty) {
-                          amountController.clear();
-                        }
-                      },
+                      onTap: () => selectAllText(amountController),
                     ),
                     const SizedBox(height: 16),
                     InkWell(
@@ -579,11 +524,13 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                               navigator.pop();
 
                               try {
+                                // Phase 3.5.3 — sign convention is owned by
+                                // the repository (see CustomerRepository.
+                                // recordPayment), not by the widget.
                                 final amountCents = (amount * 100).round();
-                                final txId = await sl<CustomerRepository>().recordTransaction(
+                                final txId = await sl<CustomerRepository>().recordPayment(
                                   customerId: customer.id,
-                                  transactionType: 'payment',
-                                  amountCents: -amountCents,
+                                  amountCents: amountCents,
                                   currencyId: customer.currencyId,
                                   description: descriptionController.text.isEmpty
                                       ? null
@@ -769,11 +716,7 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                       ),
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
                       autofocus: true,
-                      onTap: () {
-                        if (amountController.text == '0.00' || amountController.text.isEmpty) {
-                          amountController.clear();
-                        }
-                      },
+                      onTap: () => selectAllText(amountController),
                     ),
                     const SizedBox(height: 16),
                     InkWell(
@@ -846,10 +789,12 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                               try {
                                 final amountCents = (amount * 100).round();
 
-                                final txId = await sl<CustomerRepository>().recordTransaction(
+                                // Phase 3.5.3 — discount is a positive
+                                // operator-facing amount; the repository
+                                // negates it before persisting.
+                                final txId = await sl<CustomerRepository>().recordDiscount(
                                   customerId: customer.id,
-                                  transactionType: 'discount',
-                                  amountCents: -amountCents,
+                                  amountCents: amountCents,
                                   currencyId: customer.currencyId,
                                   description: descriptionController.text.isEmpty
                                       ? 'customers.discount_type_$selectedDiscountType'.tr()
@@ -1084,8 +1029,14 @@ class _BalanceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isReceivable = balanceCents > 0;
-    final isZero = balanceCents == 0;
+    // Phase 3.5.2 — delegate sign interpretation to the classifier so this
+    // widget cannot drift from `customer_hub` / `supplier_*` screens.
+    final status = sl<PartyBalanceClassifier>().statusOf(
+      balanceCents,
+      PartyKind.customer,
+    );
+    final isReceivable = status == PartyBalanceStatus.receivable;
+    final isZero = status == PartyBalanceStatus.settled;
     final isDark = theme.brightness == Brightness.dark;
     final colorScheme = theme.colorScheme;
 
@@ -1895,6 +1846,16 @@ class _TransactionTile extends StatelessWidget {
         icon = LucideIcons.shoppingCart;
         color = Colors.orange;
         typeLabel = 'customers.transaction_sale'.tr();
+        break;
+      case 'adjustment_return':
+        icon = LucideIcons.unlink;
+        color = Colors.teal;
+        typeLabel = 'customers.transaction_adj_return'.tr();
+        break;
+      case 'adjustment_return_reversal':
+        icon = LucideIcons.unlink;
+        color = Colors.red;
+        typeLabel = 'customers.transaction_adj_return_reversal'.tr();
         break;
       default:
         icon = LucideIcons.fileText;

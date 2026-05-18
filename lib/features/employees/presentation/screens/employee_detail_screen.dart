@@ -163,9 +163,12 @@ class _EmployeeDetailContent extends StatelessWidget {
     if (state.employee == null) return;
     try {
       final netSalesCents = state.salesTotalCents - state.returnsTotalCents;
+      final parts = state.period.split('-');
       final targetBonus = PayrollCalculationService.checkSalesTargetBonus(
         employee: state.employee!,
         actualSalesCents: netSalesCents,
+        periodYear: int.parse(parts[0]),
+        periodMonth: int.parse(parts[1]),
       );
       await PayslipPdfService.generateAndPrint(
         context: context,
@@ -194,9 +197,12 @@ class _EmployeeDetailContent extends StatelessWidget {
     if (state.employee == null) return;
     try {
       final netSalesCents = state.salesTotalCents - state.returnsTotalCents;
+      final parts = state.period.split('-');
       final targetBonus = PayrollCalculationService.checkSalesTargetBonus(
         employee: state.employee!,
         actualSalesCents: netSalesCents,
+        periodYear: int.parse(parts[0]),
+        periodMonth: int.parse(parts[1]),
       );
       await PayslipPdfService.generateAndShare(
         context: context,
@@ -1087,7 +1093,7 @@ class _NetPayCard extends StatelessWidget {
       overtimeCents = payroll.overtimeCents.toBigInt().toInt();
     } else {
       // Calculate based on employee's overtime settings
-      overtimeCents = _calculateOvertimeCents(
+      overtimeCents = PayrollCalculationService.calculateOvertimeCents(
         overtimeMinutes: overtimeMinutes,
         salaryCents: employee.salaryCents?.toBigInt().toInt() ?? 0,
         workingDaysPerPeriod: employee.workingDaysPerPeriod,
@@ -1099,9 +1105,12 @@ class _NetPayCard extends StatelessWidget {
 
     // Check sales target bonus
     final netSalesCents = state.salesTotalCents - state.returnsTotalCents;
+    final periodParts = state.period.split('-');
     final targetBonusResult = PayrollCalculationService.checkSalesTargetBonus(
       employee: employee,
       actualSalesCents: netSalesCents,
+      periodYear: int.parse(periodParts[0]),
+      periodMonth: int.parse(periodParts[1]),
     );
     final totalBonus = manualBonus + targetBonusResult.targetBonusCents;
 
@@ -1458,7 +1467,7 @@ class _DeleteEmployeeButton extends StatelessWidget {
     if (payroll != null && payroll.overtimeCents.toBigInt().toInt() > 0) {
       overtimeCents = payroll.overtimeCents.toBigInt().toInt();
     } else {
-      overtimeCents = _calculateOvertimeCents(
+      overtimeCents = PayrollCalculationService.calculateOvertimeCents(
         overtimeMinutes: overtimeMinutes,
         salaryCents: employee.salaryCents?.toBigInt().toInt() ?? 0,
         workingDaysPerPeriod: employee.workingDaysPerPeriod,
@@ -1469,9 +1478,12 @@ class _DeleteEmployeeButton extends StatelessWidget {
     }
     
     final netSalesCents = state.salesTotalCents - state.returnsTotalCents;
+    final periodParts = state.period.split('-');
     final targetBonus = PayrollCalculationService.checkSalesTargetBonus(
       employee: employee,
       actualSalesCents: netSalesCents,
+      periodYear: int.parse(periodParts[0]),
+      periodMonth: int.parse(periodParts[1]),
     );
     final totalBonus = manualBonus + targetBonus.targetBonusCents;
     final calc = PayrollCalculationService.calculate(
@@ -1553,45 +1565,3 @@ class _DeleteEmployeeButton extends StatelessWidget {
   }
 }
 
-/// Calculate overtime pay based on employee settings
-/// - hourly_rate: overtimeRateBps is a multiplier (15000 = 150% of hourly rate)
-/// - percentage: overtimeRateBps is a percentage of daily rate per hour (e.g., 2000 = 20% of daily rate per hour)
-/// - fixed: overtimeRateBps is the fixed amount in cents per hour
-int _calculateOvertimeCents({
-  required int overtimeMinutes,
-  required int salaryCents,
-  required int workingDaysPerPeriod,
-  required int workingHoursPerDay,
-  required String overtimeCalcType,
-  required int overtimeRateBps,
-}) {
-  if (overtimeMinutes <= 0 || salaryCents <= 0) return 0;
-  
-  final dailyRateCents = workingDaysPerPeriod > 0
-      ? salaryCents ~/ workingDaysPerPeriod
-      : 0;
-  final hourlyRateCents = workingHoursPerDay > 0
-      ? dailyRateCents ~/ workingHoursPerDay
-      : 0;
-  final overtimeHours = overtimeMinutes / 60.0;
-  
-  switch (overtimeCalcType) {
-    case 'hourly_rate':
-      // overtimeRateBps is a multiplier (15000 = 150%)
-      // overtimePay = overtimeHours * hourlyRate * (overtimeRateBps / 10000)
-      return (overtimeHours * hourlyRateCents * overtimeRateBps / 10000).round();
-    
-    case 'percentage':
-      // overtimeRateBps is a percentage of daily rate per hour
-      // overtimePay = overtimeHours * dailyRate * (overtimeRateBps / 10000)
-      return (overtimeHours * dailyRateCents * overtimeRateBps / 10000).round();
-    
-    case 'fixed':
-      // overtimeRateBps is the fixed amount in cents per hour
-      return (overtimeHours * overtimeRateBps).round();
-    
-    default:
-      // Default to hourly_rate calculation
-      return (overtimeHours * hourlyRateCents * overtimeRateBps / 10000).round();
-  }
-}

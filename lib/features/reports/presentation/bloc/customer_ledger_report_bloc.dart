@@ -2,6 +2,7 @@ import 'package:drift/drift.dart' hide Column;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart';
+import '../../../../core/services/ledger/ledger_running_balance.dart';
 import '../widgets/report_date_range.dart';
 
 // ==================== EVENTS ====================
@@ -111,11 +112,13 @@ class CustomerLedgerData {
 class CustomerLedgerOption {
   final int id;
   final String name;
+  final String? phone;
   final int balanceCents;
 
   const CustomerLedgerOption({
     required this.id,
     required this.name,
+    this.phone,
     required this.balanceCents,
   });
 }
@@ -171,7 +174,7 @@ class CustomerLedgerReportBloc
     // ── Customer list ──
     final customerRows = await _db.customSelect(
       '''
-      SELECT c.id, c.name, c.balance_cents
+      SELECT c.id, c.name, c.phone, c.balance_cents
       FROM customers c WHERE c.is_active = 1
       ORDER BY c.name ASC
       ''',
@@ -182,6 +185,7 @@ class CustomerLedgerReportBloc
         .map((r) => CustomerLedgerOption(
               id: r.read<int>('id'),
               name: r.read<String>('name'),
+              phone: r.readNullable<String>('phone'),
               balanceCents: r.read<int>('balance_cents'),
             ))
         .toList();
@@ -273,7 +277,8 @@ class CustomerLedgerReportBloc
     ).get();
 
     // ── Build ledger rows ──
-    int runningBalance = openingBalanceCents;
+    // Phase 7 — running balance via SoT helper.
+    final running = LedgerRunningBalance(openingBalanceCents);
     int totalSales = 0;
     int totalReturns = 0;
     int totalPayments = 0;
@@ -291,34 +296,54 @@ class CustomerLedgerReportBloc
       final refType = row.readNullable<String>('reference_type');
       final date = DateTime.parse(row.read<String>('transaction_date'));
 
-      runningBalance += amountCents;
+      final runningBalance = running.apply(amountCents);
 
       // Determine if this is a sale return
       final isReturnTx = (type == 'credit_note' || type == 'refund' || type == 'return') &&
           refType == 'sale_return';
 
+      // Adjustment returns (unlinked returns)
+      final isAdjReturnTx = type == 'adjustment_return';
+      final isAdjReturnReversalTx = type == 'adjustment_return_reversal';
+
       // Determine total pieces for sale/return from the reference
       int totalPiecesCount = 0;
       if (refId != null && (type == 'sale' || isReturnTx)) {
         totalPiecesCount = await _getTotalPieces(refId, refType);
+      } else if (isAdjReturnTx && refId != null) {
+        totalPiecesCount = await _getAdjReturnTotalPieces(refId);
       }
 
       // For return transactions, fetch the return number from sale_returns table
       String? resolvedReturnNumber;
       if (isReturnTx && refId != null) {
         resolvedReturnNumber = await _getReturnNumber(refId);
+      } else if (isAdjReturnTx && refId != null) {
+        resolvedReturnNumber = await _getAdjReturnNumber(refId);
       }
 
       // Build a ledger row based on type
-      if (isReturnTx) {
-        // Sale return — show in return columns
+      if (isReturnTx || isAdjReturnTx) {
+        // Sale return or adjustment return — show in return columns
         totalReturns += amountCents.abs();
         totalReturnItems += totalPiecesCount;
+        final label = resolvedReturnNumber ?? txNumber ?? (refId != null ? 'RET-$refId' : null);
         ledgerRows.add(CustomerLedgerRow(
           date: date,
           returnId: refId,
-          returnNumber: resolvedReturnNumber ?? txNumber ?? (refId != null ? 'RET-$refId' : null),
+          returnNumber: isAdjReturnTx ? '${label ?? ''} ⓐ' : label,
           returnItemCount: totalPiecesCount,
+          returnTotalCents: amountCents.abs(),
+          runningBalanceCents: runningBalance,
+        ));
+      } else if (isAdjReturnReversalTx) {
+        // Voided adjustment return — show as negative return (reversal)
+        totalReturns -= amountCents.abs();
+        ledgerRows.add(CustomerLedgerRow(
+          date: date,
+          returnId: refId,
+          returnNumber: '${txNumber ?? 'REV-$refId'} ⓐ',
+          returnItemCount: 0,
           returnTotalCents: amountCents.abs(),
           runningBalanceCents: runningBalance,
         ));
@@ -377,7 +402,7 @@ class CustomerLedgerReportBloc
       customerPhone: cInfo.readNullable<String>('phone'),
       customerAddress: cInfo.readNullable<String>('address'),
       openingBalanceCents: openingBalanceCents,
-      closingBalanceCents: runningBalance,
+      closingBalanceCents: running.current,
       totalSalesCents: totalSales,
       totalReturnsCents: totalReturns,
       totalPaymentsCents: totalPayments,
@@ -421,6 +446,34 @@ class CustomerLedgerReportBloc
         'SELECT return_number FROM sale_returns WHERE id = ?',
         variables: [Variable.withInt(returnId)],
         readsFrom: {_db.saleReturns},
+      ).getSingleOrNull();
+      return result?.readNullable<String>('return_number');
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Get total pieces for a sale adjustment return
+  Future<int> _getAdjReturnTotalPieces(int returnId) async {
+    try {
+      final result = await _db.customSelect(
+        'SELECT COALESCE(SUM(quantity), 0) AS total_qty FROM sale_return_adjustment_items WHERE return_id = ?',
+        variables: [Variable.withInt(returnId)],
+        readsFrom: {_db.saleReturnAdjustmentItems},
+      ).getSingle();
+      return result.read<int>('total_qty');
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  /// Get the return number from the sale_return_adjustments table
+  Future<String?> _getAdjReturnNumber(int returnId) async {
+    try {
+      final result = await _db.customSelect(
+        'SELECT return_number FROM sale_return_adjustments WHERE id = ?',
+        variables: [Variable.withInt(returnId)],
+        readsFrom: {_db.saleReturnAdjustments},
       ).getSingleOrNull();
       return result?.readNullable<String>('return_number');
     } catch (_) {

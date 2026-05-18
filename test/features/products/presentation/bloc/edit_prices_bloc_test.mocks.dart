@@ -5,14 +5,25 @@
 // ignore_for_file: no_leading_underscores_for_library_prefixes
 import 'dart:async' as _i3;
 
-import 'package:decimal/decimal.dart' as _i5;
+import 'package:decimal/decimal.dart' as _i7;
 import 'package:mockito/mockito.dart' as _i1;
+import 'package:mockito/src/dummies.dart' as _i8;
+import 'package:tapix/core/services/inventory/inventory_adjustment_service.dart'
+    as _i5;
 import 'package:tapix/features/products/domain/entities/price_history_entity.dart'
-    as _i6;
+    as _i9;
+import 'package:tapix/features/products/domain/entities/product_color_entity.dart'
+    as _i11;
 import 'package:tapix/features/products/domain/entities/product_entity.dart'
-    as _i4;
+    as _i6;
+import 'package:tapix/features/products/domain/entities/product_variant_entity.dart'
+    as _i10;
+import 'package:tapix/features/products/domain/entities/size_entity.dart'
+    as _i12;
 import 'package:tapix/features/products/domain/repositories/product_repository.dart'
     as _i2;
+import 'package:tapix/features/products/domain/repositories/product_variant_repository.dart'
+    as _i4;
 
 // ignore_for_file: type=lint
 // ignore_for_file: avoid_redundant_argument_values
@@ -29,6 +40,29 @@ import 'package:tapix/features/products/domain/repositories/product_repository.d
 // ignore_for_file: subtype_of_sealed_class
 // ignore_for_file: invalid_use_of_internal_member
 
+class _FakeProductDeletionResult_0 extends _i1.SmartFake
+    implements _i2.ProductDeletionResult {
+  _FakeProductDeletionResult_0(Object parent, Invocation parentInvocation)
+    : super(parent, parentInvocation);
+}
+
+class _FakeFuture_1<T1> extends _i1.SmartFake implements _i3.Future<T1> {
+  _FakeFuture_1(Object parent, Invocation parentInvocation)
+    : super(parent, parentInvocation);
+}
+
+class _FakeVariantDeletionResult_2 extends _i1.SmartFake
+    implements _i4.VariantDeletionResult {
+  _FakeVariantDeletionResult_2(Object parent, Invocation parentInvocation)
+    : super(parent, parentInvocation);
+}
+
+class _FakeInventoryAdjustmentResult_3 extends _i1.SmartFake
+    implements _i5.InventoryAdjustmentResult {
+  _FakeInventoryAdjustmentResult_3(Object parent, Invocation parentInvocation)
+    : super(parent, parentInvocation);
+}
+
 /// A class which mocks [ProductRepository].
 ///
 /// See the documentation for Mockito's code generation for more information.
@@ -38,58 +72,66 @@ class MockProductRepository extends _i1.Mock implements _i2.ProductRepository {
   }
 
   @override
-  _i3.Stream<List<_i4.Product>> watchAllProducts({bool? isActive = true}) =>
+  _i3.Stream<List<_i6.Product>> watchAllProducts({bool? isActive = true}) =>
       (super.noSuchMethod(
             Invocation.method(#watchAllProducts, [], {#isActive: isActive}),
-            returnValue: _i3.Stream<List<_i4.Product>>.empty(),
+            returnValue: _i3.Stream<List<_i6.Product>>.empty(),
           )
-          as _i3.Stream<List<_i4.Product>>);
+          as _i3.Stream<List<_i6.Product>>);
 
   @override
-  _i3.Stream<_i4.Product?> watchProduct(int? id) =>
+  _i3.Stream<_i6.Product?> watchProduct(int? id) =>
       (super.noSuchMethod(
             Invocation.method(#watchProduct, [id]),
-            returnValue: _i3.Stream<_i4.Product?>.empty(),
+            returnValue: _i3.Stream<_i6.Product?>.empty(),
           )
-          as _i3.Stream<_i4.Product?>);
+          as _i3.Stream<_i6.Product?>);
 
   @override
-  _i3.Future<List<_i4.Product>> searchProducts(
+  _i3.Future<List<_i6.Product>> searchProducts(
     String? query, {
     bool? isActive = true,
   }) =>
       (super.noSuchMethod(
             Invocation.method(#searchProducts, [query], {#isActive: isActive}),
-            returnValue: _i3.Future<List<_i4.Product>>.value(<_i4.Product>[]),
+            returnValue: _i3.Future<List<_i6.Product>>.value(<_i6.Product>[]),
           )
-          as _i3.Future<List<_i4.Product>>);
+          as _i3.Future<List<_i6.Product>>);
 
   @override
-  _i3.Future<_i4.Product?> findBySku(String? sku) =>
+  _i3.Future<_i6.Product?> findBySku(String? sku) =>
       (super.noSuchMethod(
             Invocation.method(#findBySku, [sku]),
-            returnValue: _i3.Future<_i4.Product?>.value(),
+            returnValue: _i3.Future<_i6.Product?>.value(),
           )
-          as _i3.Future<_i4.Product?>);
+          as _i3.Future<_i6.Product?>);
 
   @override
-  _i3.Future<_i4.Product?> findByBarcode(String? barcode) =>
+  _i3.Future<_i6.Product?> findByBarcode(String? barcode) =>
       (super.noSuchMethod(
             Invocation.method(#findByBarcode, [barcode]),
-            returnValue: _i3.Future<_i4.Product?>.value(),
+            returnValue: _i3.Future<_i6.Product?>.value(),
           )
-          as _i3.Future<_i4.Product?>);
+          as _i3.Future<_i6.Product?>);
 
   @override
-  _i3.Future<_i4.Product?> findByName(String? name) =>
+  _i3.Future<_i6.Product?> findByName(String? name) =>
       (super.noSuchMethod(
             Invocation.method(#findByName, [name]),
-            returnValue: _i3.Future<_i4.Product?>.value(),
+            returnValue: _i3.Future<_i6.Product?>.value(),
           )
-          as _i3.Future<_i4.Product?>);
+          as _i3.Future<_i6.Product?>);
 
   @override
-  _i3.Future<List<_i4.Product>> filterProducts({
+  _i3.Future<_i6.Product?> getProductById(int? id) =>
+      (super.noSuchMethod(
+            Invocation.method(#getProductById, [id]),
+            returnValue: _i3.Future<_i6.Product?>.value(),
+          )
+          as _i3.Future<_i6.Product?>);
+
+  @override
+  _i3.Future<List<_i6.Product>> filterProducts({
     int? categoryId,
     String? stockStatus,
     int? limit = 50,
@@ -106,12 +148,12 @@ class MockProductRepository extends _i1.Mock implements _i2.ProductRepository {
               #isActive: isActive,
               #lowStockThreshold: lowStockThreshold,
             }),
-            returnValue: _i3.Future<List<_i4.Product>>.value(<_i4.Product>[]),
+            returnValue: _i3.Future<List<_i6.Product>>.value(<_i6.Product>[]),
           )
-          as _i3.Future<List<_i4.Product>>);
+          as _i3.Future<List<_i6.Product>>);
 
   @override
-  _i3.Stream<List<_i4.Product>> watchFilteredProducts({
+  _i3.Stream<List<_i6.Product>> watchFilteredProducts({
     int? categoryId,
     String? stockStatus,
     bool? isActive = true,
@@ -124,12 +166,12 @@ class MockProductRepository extends _i1.Mock implements _i2.ProductRepository {
               #isActive: isActive,
               #lowStockThreshold: lowStockThreshold,
             }),
-            returnValue: _i3.Stream<List<_i4.Product>>.empty(),
+            returnValue: _i3.Stream<List<_i6.Product>>.empty(),
           )
-          as _i3.Stream<List<_i4.Product>>);
+          as _i3.Stream<List<_i6.Product>>);
 
   @override
-  _i3.Stream<List<_i4.Product>> watchProductsForExport({
+  _i3.Stream<List<_i6.Product>> watchProductsForExport({
     int? categoryId,
     int? supplierId,
     bool? activeOnly = true,
@@ -140,12 +182,12 @@ class MockProductRepository extends _i1.Mock implements _i2.ProductRepository {
               #supplierId: supplierId,
               #activeOnly: activeOnly,
             }),
-            returnValue: _i3.Stream<List<_i4.Product>>.empty(),
+            returnValue: _i3.Stream<List<_i6.Product>>.empty(),
           )
-          as _i3.Stream<List<_i4.Product>>);
+          as _i3.Stream<List<_i6.Product>>);
 
   @override
-  _i3.Future<List<_i4.Product>> fetchProductsForExport({
+  _i3.Future<List<_i6.Product>> fetchProductsForExport({
     int? categoryId,
     int? supplierId,
     bool? activeOnly = true,
@@ -160,9 +202,9 @@ class MockProductRepository extends _i1.Mock implements _i2.ProductRepository {
               #limit: limit,
               #offset: offset,
             }),
-            returnValue: _i3.Future<List<_i4.Product>>.value(<_i4.Product>[]),
+            returnValue: _i3.Future<List<_i6.Product>>.value(<_i6.Product>[]),
           )
-          as _i3.Future<List<_i4.Product>>);
+          as _i3.Future<List<_i6.Product>>);
 
   @override
   _i3.Future<int> createProduct({
@@ -172,9 +214,9 @@ class MockProductRepository extends _i1.Mock implements _i2.ProductRepository {
     String? description,
     String? sku,
     String? barcode,
-    required _i5.Decimal? costCents,
-    required _i5.Decimal? priceCents,
-    _i5.Decimal? wholesalePriceCents,
+    required _i7.Decimal? costCents,
+    required _i7.Decimal? priceCents,
+    _i7.Decimal? wholesalePriceCents,
     required int? stockQuantity,
     required int? minQuantity,
     int? categoryId,
@@ -187,6 +229,8 @@ class MockProductRepository extends _i1.Mock implements _i2.ProductRepository {
     int? salesTaxRateBps = 0,
     bool? isActive = true,
     bool? trackInventory = true,
+    String? costingMethod = 'wac',
+    String? inventoryTrackingType = 'standard',
   }) =>
       (super.noSuchMethod(
             Invocation.method(#createProduct, [], {
@@ -211,18 +255,69 @@ class MockProductRepository extends _i1.Mock implements _i2.ProductRepository {
               #salesTaxRateBps: salesTaxRateBps,
               #isActive: isActive,
               #trackInventory: trackInventory,
+              #costingMethod: costingMethod,
+              #inventoryTrackingType: inventoryTrackingType,
             }),
             returnValue: _i3.Future<int>.value(0),
           )
           as _i3.Future<int>);
 
   @override
-  _i3.Future<bool> updateProduct(_i4.Product? product) =>
+  _i3.Future<bool> updateProduct(_i6.Product? product) =>
       (super.noSuchMethod(
             Invocation.method(#updateProduct, [product]),
             returnValue: _i3.Future<bool>.value(false),
           )
           as _i3.Future<bool>);
+
+  @override
+  _i3.Future<String?> getCostingMethodLockReason(int? productId) =>
+      (super.noSuchMethod(
+            Invocation.method(#getCostingMethodLockReason, [productId]),
+            returnValue: _i3.Future<String?>.value(),
+          )
+          as _i3.Future<String?>);
+
+  @override
+  _i3.Future<String?> setCostingMethod({
+    required int? productId,
+    required String? method,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(#setCostingMethod, [], {
+              #productId: productId,
+              #method: method,
+            }),
+            returnValue: _i3.Future<String?>.value(),
+          )
+          as _i3.Future<String?>);
+
+  @override
+  _i3.Future<String> getInventoryTrackingType(int? productId) =>
+      (super.noSuchMethod(
+            Invocation.method(#getInventoryTrackingType, [productId]),
+            returnValue: _i3.Future<String>.value(
+              _i8.dummyValue<String>(
+                this,
+                Invocation.method(#getInventoryTrackingType, [productId]),
+              ),
+            ),
+          )
+          as _i3.Future<String>);
+
+  @override
+  _i3.Future<String?> setInventoryTrackingType({
+    required int? productId,
+    required String? trackingType,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(#setInventoryTrackingType, [], {
+              #productId: productId,
+              #trackingType: trackingType,
+            }),
+            returnValue: _i3.Future<String?>.value(),
+          )
+          as _i3.Future<String?>);
 
   @override
   _i3.Future<int> deleteProduct(int? id) =>
@@ -239,6 +334,49 @@ class MockProductRepository extends _i1.Mock implements _i2.ProductRepository {
             returnValue: _i3.Future<int>.value(0),
           )
           as _i3.Future<int>);
+
+  @override
+  _i3.Future<int> countProductReferences(int? productId) =>
+      (super.noSuchMethod(
+            Invocation.method(#countProductReferences, [productId]),
+            returnValue: _i3.Future<int>.value(0),
+          )
+          as _i3.Future<int>);
+
+  @override
+  _i3.Future<_i2.ProductDeletionResult> smartDeleteProduct(int? productId) =>
+      (super.noSuchMethod(
+            Invocation.method(#smartDeleteProduct, [productId]),
+            returnValue: _i3.Future<_i2.ProductDeletionResult>.value(
+              _FakeProductDeletionResult_0(
+                this,
+                Invocation.method(#smartDeleteProduct, [productId]),
+              ),
+            ),
+          )
+          as _i3.Future<_i2.ProductDeletionResult>);
+
+  @override
+  _i3.Future<_i2.ProductDeletionResult> writeOffAndDeleteProduct({
+    required int? productId,
+    required String? reason,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(#writeOffAndDeleteProduct, [], {
+              #productId: productId,
+              #reason: reason,
+            }),
+            returnValue: _i3.Future<_i2.ProductDeletionResult>.value(
+              _FakeProductDeletionResult_0(
+                this,
+                Invocation.method(#writeOffAndDeleteProduct, [], {
+                  #productId: productId,
+                  #reason: reason,
+                }),
+              ),
+            ),
+          )
+          as _i3.Future<_i2.ProductDeletionResult>);
 
   @override
   _i3.Future<int> deactivateProduct(int? id) =>
@@ -283,9 +421,9 @@ class MockProductRepository extends _i1.Mock implements _i2.ProductRepository {
 
   @override
   _i3.Future<void> bulkUpdatePricesWithHistory({
-    required List<_i4.Product>? products,
-    required Map<int, Map<String, _i5.Decimal>>? priceChanges,
-    required List<_i6.PriceHistory>? historyRecords,
+    required List<_i6.Product>? products,
+    required Map<int, Map<String, _i7.Decimal>>? priceChanges,
+    required List<_i9.PriceHistory>? historyRecords,
   }) =>
       (super.noSuchMethod(
             Invocation.method(#bulkUpdatePricesWithHistory, [], {
@@ -299,21 +437,441 @@ class MockProductRepository extends _i1.Mock implements _i2.ProductRepository {
           as _i3.Future<void>);
 
   @override
-  _i3.Future<List<_i6.PriceHistory>> getPriceHistory(int? productId) =>
+  _i3.Future<List<_i9.PriceHistory>> getPriceHistory(int? productId) =>
       (super.noSuchMethod(
             Invocation.method(#getPriceHistory, [productId]),
-            returnValue: _i3.Future<List<_i6.PriceHistory>>.value(
-              <_i6.PriceHistory>[],
+            returnValue: _i3.Future<List<_i9.PriceHistory>>.value(
+              <_i9.PriceHistory>[],
             ),
           )
-          as _i3.Future<List<_i6.PriceHistory>>);
+          as _i3.Future<List<_i9.PriceHistory>>);
 
   @override
-  _i3.Future<void> createPriceHistory(_i6.PriceHistory? history) =>
+  _i3.Future<void> createPriceHistory(_i9.PriceHistory? history) =>
       (super.noSuchMethod(
             Invocation.method(#createPriceHistory, [history]),
             returnValue: _i3.Future<void>.value(),
             returnValueForMissingStub: _i3.Future<void>.value(),
           )
           as _i3.Future<void>);
+
+  @override
+  _i3.Future<T> runInTransaction<T>(_i3.Future<T> Function()? action) =>
+      (super.noSuchMethod(
+            Invocation.method(#runInTransaction, [action]),
+            returnValue:
+                _i8.ifNotNull(
+                  _i8.dummyValueOrNull<T>(
+                    this,
+                    Invocation.method(#runInTransaction, [action]),
+                  ),
+                  (T v) => _i3.Future<T>.value(v),
+                ) ??
+                _FakeFuture_1<T>(
+                  this,
+                  Invocation.method(#runInTransaction, [action]),
+                ),
+          )
+          as _i3.Future<T>);
+
+  @override
+  _i3.Stream<Map<int, ({int expiredQty, DateTime? nextExpiry})>>
+  watchExpirySummaries() =>
+      (super.noSuchMethod(
+            Invocation.method(#watchExpirySummaries, []),
+            returnValue:
+                _i3.Stream<
+                  Map<int, ({int expiredQty, DateTime? nextExpiry})>
+                >.empty(),
+          )
+          as _i3.Stream<Map<int, ({int expiredQty, DateTime? nextExpiry})>>);
+}
+
+/// A class which mocks [ProductVariantRepository].
+///
+/// See the documentation for Mockito's code generation for more information.
+class MockProductVariantRepository extends _i1.Mock
+    implements _i4.ProductVariantRepository {
+  MockProductVariantRepository() {
+    _i1.throwOnMissingStub(this);
+  }
+
+  @override
+  _i3.Stream<List<_i10.ProductVariant>> watchAllVariants() =>
+      (super.noSuchMethod(
+            Invocation.method(#watchAllVariants, []),
+            returnValue: _i3.Stream<List<_i10.ProductVariant>>.empty(),
+          )
+          as _i3.Stream<List<_i10.ProductVariant>>);
+
+  @override
+  _i3.Stream<List<_i10.ProductVariant>> watchVariantsByProduct(
+    int? productId,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#watchVariantsByProduct, [productId]),
+            returnValue: _i3.Stream<List<_i10.ProductVariant>>.empty(),
+          )
+          as _i3.Stream<List<_i10.ProductVariant>>);
+
+  @override
+  _i3.Future<List<_i10.ProductVariant>> getVariantsByProduct(int? productId) =>
+      (super.noSuchMethod(
+            Invocation.method(#getVariantsByProduct, [productId]),
+            returnValue: _i3.Future<List<_i10.ProductVariant>>.value(
+              <_i10.ProductVariant>[],
+            ),
+          )
+          as _i3.Future<List<_i10.ProductVariant>>);
+
+  @override
+  _i3.Future<_i10.ProductVariant?> getVariantById(int? id) =>
+      (super.noSuchMethod(
+            Invocation.method(#getVariantById, [id]),
+            returnValue: _i3.Future<_i10.ProductVariant?>.value(),
+          )
+          as _i3.Future<_i10.ProductVariant?>);
+
+  @override
+  _i3.Future<_i10.ProductVariant?> getVariantByBarcode(String? barcode) =>
+      (super.noSuchMethod(
+            Invocation.method(#getVariantByBarcode, [barcode]),
+            returnValue: _i3.Future<_i10.ProductVariant?>.value(),
+          )
+          as _i3.Future<_i10.ProductVariant?>);
+
+  @override
+  _i3.Future<_i10.ProductVariant?> getVariantBySku(String? sku) =>
+      (super.noSuchMethod(
+            Invocation.method(#getVariantBySku, [sku]),
+            returnValue: _i3.Future<_i10.ProductVariant?>.value(),
+          )
+          as _i3.Future<_i10.ProductVariant?>);
+
+  @override
+  _i3.Future<_i10.ProductVariant?> getDefaultVariantByProduct(int? productId) =>
+      (super.noSuchMethod(
+            Invocation.method(#getDefaultVariantByProduct, [productId]),
+            returnValue: _i3.Future<_i10.ProductVariant?>.value(),
+          )
+          as _i3.Future<_i10.ProductVariant?>);
+
+  @override
+  _i3.Future<int> ensureDefaultVariantForProduct({
+    required int? productId,
+    required _i7.Decimal? costCents,
+    required _i7.Decimal? priceCents,
+    required int? stockQuantity,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(#ensureDefaultVariantForProduct, [], {
+              #productId: productId,
+              #costCents: costCents,
+              #priceCents: priceCents,
+              #stockQuantity: stockQuantity,
+            }),
+            returnValue: _i3.Future<int>.value(0),
+          )
+          as _i3.Future<int>);
+
+  @override
+  _i3.Future<int> createVariant({
+    required int? productId,
+    String? sku,
+    String? barcode,
+    int? colorId,
+    int? sizeId,
+    required _i7.Decimal? costCents,
+    required _i7.Decimal? priceCents,
+    _i7.Decimal? wholesalePriceCents,
+    required int? stockQuantity,
+    bool? isActive = true,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(#createVariant, [], {
+              #productId: productId,
+              #sku: sku,
+              #barcode: barcode,
+              #colorId: colorId,
+              #sizeId: sizeId,
+              #costCents: costCents,
+              #priceCents: priceCents,
+              #wholesalePriceCents: wholesalePriceCents,
+              #stockQuantity: stockQuantity,
+              #isActive: isActive,
+            }),
+            returnValue: _i3.Future<int>.value(0),
+          )
+          as _i3.Future<int>);
+
+  @override
+  _i3.Future<bool> updateVariant(_i10.ProductVariant? variant) =>
+      (super.noSuchMethod(
+            Invocation.method(#updateVariant, [variant]),
+            returnValue: _i3.Future<bool>.value(false),
+          )
+          as _i3.Future<bool>);
+
+  @override
+  _i3.Future<int> deleteVariant(int? id) =>
+      (super.noSuchMethod(
+            Invocation.method(#deleteVariant, [id]),
+            returnValue: _i3.Future<int>.value(0),
+          )
+          as _i3.Future<int>);
+
+  @override
+  _i3.Future<int> countVariantReferences(int? variantId) =>
+      (super.noSuchMethod(
+            Invocation.method(#countVariantReferences, [variantId]),
+            returnValue: _i3.Future<int>.value(0),
+          )
+          as _i3.Future<int>);
+
+  @override
+  _i3.Future<_i4.VariantDeletionResult> smartDeleteVariant(int? variantId) =>
+      (super.noSuchMethod(
+            Invocation.method(#smartDeleteVariant, [variantId]),
+            returnValue: _i3.Future<_i4.VariantDeletionResult>.value(
+              _FakeVariantDeletionResult_2(
+                this,
+                Invocation.method(#smartDeleteVariant, [variantId]),
+              ),
+            ),
+          )
+          as _i3.Future<_i4.VariantDeletionResult>);
+
+  @override
+  _i3.Future<_i4.VariantDeletionResult> writeOffAndDeleteVariant({
+    required int? variantId,
+    required String? reason,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(#writeOffAndDeleteVariant, [], {
+              #variantId: variantId,
+              #reason: reason,
+            }),
+            returnValue: _i3.Future<_i4.VariantDeletionResult>.value(
+              _FakeVariantDeletionResult_2(
+                this,
+                Invocation.method(#writeOffAndDeleteVariant, [], {
+                  #variantId: variantId,
+                  #reason: reason,
+                }),
+              ),
+            ),
+          )
+          as _i3.Future<_i4.VariantDeletionResult>);
+
+  @override
+  _i3.Future<int> countActiveDimensionalVariants(int? productId) =>
+      (super.noSuchMethod(
+            Invocation.method(#countActiveDimensionalVariants, [productId]),
+            returnValue: _i3.Future<int>.value(0),
+          )
+          as _i3.Future<int>);
+
+  @override
+  _i3.Future<int> deactivateDimensionalVariants(int? productId) =>
+      (super.noSuchMethod(
+            Invocation.method(#deactivateDimensionalVariants, [productId]),
+            returnValue: _i3.Future<int>.value(0),
+          )
+          as _i3.Future<int>);
+
+  @override
+  _i3.Future<_i5.InventoryAdjustmentResult> adjustStock({
+    required int? variantId,
+    required _i5.InventoryAdjustmentType? type,
+    required int? quantityDelta,
+    required String? reason,
+    String? notes,
+    required int? currencyId,
+    int? userId,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(#adjustStock, [], {
+              #variantId: variantId,
+              #type: type,
+              #quantityDelta: quantityDelta,
+              #reason: reason,
+              #notes: notes,
+              #currencyId: currencyId,
+              #userId: userId,
+            }),
+            returnValue: _i3.Future<_i5.InventoryAdjustmentResult>.value(
+              _FakeInventoryAdjustmentResult_3(
+                this,
+                Invocation.method(#adjustStock, [], {
+                  #variantId: variantId,
+                  #type: type,
+                  #quantityDelta: quantityDelta,
+                  #reason: reason,
+                  #notes: notes,
+                  #currencyId: currencyId,
+                  #userId: userId,
+                }),
+              ),
+            ),
+          )
+          as _i3.Future<_i5.InventoryAdjustmentResult>);
+
+  @override
+  _i3.Future<bool> isSkuTaken(String? sku, {int? excludeVariantId}) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #isSkuTaken,
+              [sku],
+              {#excludeVariantId: excludeVariantId},
+            ),
+            returnValue: _i3.Future<bool>.value(false),
+          )
+          as _i3.Future<bool>);
+
+  @override
+  _i3.Future<bool> isBarcodeTaken(String? barcode, {int? excludeVariantId}) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #isBarcodeTaken,
+              [barcode],
+              {#excludeVariantId: excludeVariantId},
+            ),
+            returnValue: _i3.Future<bool>.value(false),
+          )
+          as _i3.Future<bool>);
+
+  @override
+  _i3.Future<bool> variantExists({
+    required int? productId,
+    int? colorId,
+    int? sizeId,
+    int? excludeVariantId,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(#variantExists, [], {
+              #productId: productId,
+              #colorId: colorId,
+              #sizeId: sizeId,
+              #excludeVariantId: excludeVariantId,
+            }),
+            returnValue: _i3.Future<bool>.value(false),
+          )
+          as _i3.Future<bool>);
+
+  @override
+  _i3.Stream<Map<int, ({int count, int totalStock})>> watchVariantSummaries() =>
+      (super.noSuchMethod(
+            Invocation.method(#watchVariantSummaries, []),
+            returnValue:
+                _i3.Stream<Map<int, ({int count, int totalStock})>>.empty(),
+          )
+          as _i3.Stream<Map<int, ({int count, int totalStock})>>);
+
+  @override
+  _i3.Stream<Map<int, ({String? colorHex, String? sizeName})>>
+  watchVariantPreviews() =>
+      (super.noSuchMethod(
+            Invocation.method(#watchVariantPreviews, []),
+            returnValue:
+                _i3.Stream<
+                  Map<int, ({String? colorHex, String? sizeName})>
+                >.empty(),
+          )
+          as _i3.Stream<Map<int, ({String? colorHex, String? sizeName})>>);
+
+  @override
+  _i3.Future<({int count, int totalStock})?> getVariantSummaryByProduct(
+    int? productId,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#getVariantSummaryByProduct, [productId]),
+            returnValue: _i3.Future<({int count, int totalStock})?>.value(),
+          )
+          as _i3.Future<({int count, int totalStock})?>);
+
+  @override
+  _i3.Stream<List<_i11.ProductColor>> watchAllColors() =>
+      (super.noSuchMethod(
+            Invocation.method(#watchAllColors, []),
+            returnValue: _i3.Stream<List<_i11.ProductColor>>.empty(),
+          )
+          as _i3.Stream<List<_i11.ProductColor>>);
+
+  @override
+  _i3.Future<List<_i11.ProductColor>> getAllColors() =>
+      (super.noSuchMethod(
+            Invocation.method(#getAllColors, []),
+            returnValue: _i3.Future<List<_i11.ProductColor>>.value(
+              <_i11.ProductColor>[],
+            ),
+          )
+          as _i3.Future<List<_i11.ProductColor>>);
+
+  @override
+  _i3.Future<int> createColor(String? name, String? hexCode) =>
+      (super.noSuchMethod(
+            Invocation.method(#createColor, [name, hexCode]),
+            returnValue: _i3.Future<int>.value(0),
+          )
+          as _i3.Future<int>);
+
+  @override
+  _i3.Future<bool> updateColor(_i11.ProductColor? color) =>
+      (super.noSuchMethod(
+            Invocation.method(#updateColor, [color]),
+            returnValue: _i3.Future<bool>.value(false),
+          )
+          as _i3.Future<bool>);
+
+  @override
+  _i3.Future<int> deleteColor(int? id) =>
+      (super.noSuchMethod(
+            Invocation.method(#deleteColor, [id]),
+            returnValue: _i3.Future<int>.value(0),
+          )
+          as _i3.Future<int>);
+
+  @override
+  _i3.Stream<List<_i12.Size>> watchAllSizes() =>
+      (super.noSuchMethod(
+            Invocation.method(#watchAllSizes, []),
+            returnValue: _i3.Stream<List<_i12.Size>>.empty(),
+          )
+          as _i3.Stream<List<_i12.Size>>);
+
+  @override
+  _i3.Future<List<_i12.Size>> getAllSizes() =>
+      (super.noSuchMethod(
+            Invocation.method(#getAllSizes, []),
+            returnValue: _i3.Future<List<_i12.Size>>.value(<_i12.Size>[]),
+          )
+          as _i3.Future<List<_i12.Size>>);
+
+  @override
+  _i3.Future<int> createSize(
+    String? name,
+    int? sortOrder,
+    String? description,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#createSize, [name, sortOrder, description]),
+            returnValue: _i3.Future<int>.value(0),
+          )
+          as _i3.Future<int>);
+
+  @override
+  _i3.Future<bool> updateSize(_i12.Size? size) =>
+      (super.noSuchMethod(
+            Invocation.method(#updateSize, [size]),
+            returnValue: _i3.Future<bool>.value(false),
+          )
+          as _i3.Future<bool>);
+
+  @override
+  _i3.Future<int> deleteSize(int? id) =>
+      (super.noSuchMethod(
+            Invocation.method(#deleteSize, [id]),
+            returnValue: _i3.Future<int>.value(0),
+          )
+          as _i3.Future<int>);
 }

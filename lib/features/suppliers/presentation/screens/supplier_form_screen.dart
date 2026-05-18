@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/widgets/inputs/select_all_on_focus.dart';
 import '../../domain/repositories/supplier_repository.dart';
 import '../bloc/supplier_form_bloc.dart';
 
@@ -259,11 +260,7 @@ class _SupplierFormContentState extends State<_SupplierFormContent> {
                     ),
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                     textInputAction: TextInputAction.done,
-                    onTap: () {
-                      if (_balanceController.text == '0.00' || _balanceController.text.isEmpty) {
-                        _balanceController.clear();
-                      }
-                    },
+                    onTap: () => selectAllText(_balanceController),
                     onChanged: (value) => context.read<SupplierFormBloc>().add(
                           SupplierFormBalanceChanged(value),
                         ),

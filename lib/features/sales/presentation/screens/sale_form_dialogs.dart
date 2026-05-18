@@ -637,11 +637,12 @@ class _AddItemSheetState extends State<_AddItemSheet> {
 class _EditItemSheet extends StatefulWidget {
   final SaleLineItem item;
   final bool showSalesperson;
+  final bool allowDiscounts;
   final void Function(int quantity, Decimal unitPrice, Decimal discount, {
     int? employeeId, String? employeeName, String? itemNote, bool clearEmployee,
   }) onUpdated;
   final VoidCallback onRemoved;
-  const _EditItemSheet({required this.item, required this.onUpdated, required this.onRemoved, this.showSalesperson = false});
+  const _EditItemSheet({required this.item, required this.onUpdated, required this.onRemoved, this.showSalesperson = false, this.allowDiscounts = true});
 
   @override
   State<_EditItemSheet> createState() => _EditItemSheetState();
@@ -785,6 +786,7 @@ class _EditItemSheetState extends State<_EditItemSheet> {
             controller: _priceCtrl,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
+            onTap: () => selectAllText(_priceCtrl),
             decoration: InputDecoration(
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               filled: true, isDense: true,
@@ -816,6 +818,7 @@ class _EditItemSheetState extends State<_EditItemSheet> {
                   textAlign: TextAlign.center,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
+                  onTap: () => selectAllText(_quantityCtrl),
                   decoration: const InputDecoration(
                     border: InputBorder.none,
                     contentPadding: EdgeInsets.zero,
@@ -840,36 +843,39 @@ class _EditItemSheetState extends State<_EditItemSheet> {
           const SizedBox(height: 16),
 
           // Discount with % / $ toggle
-          Row(children: [
-            Text('sales.item_discount'.tr(),
-              style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
-            const Spacer(),
-            SegmentedButton<bool>(
-              segments: [
-                ButtonSegment(value: false, label: Text(curr.currencySymbol, style: const TextStyle(fontSize: 12))),
-                const ButtonSegment(value: true, label: Text('%', style: TextStyle(fontSize: 12))),
-              ],
-              selected: {_discountIsPercent},
-              onSelectionChanged: (v) => setState(() {
-                _discountIsPercent = v.first;
-                _discountCtrl.clear();
-              }),
-              style: const ButtonStyle(visualDensity: VisualDensity.compact, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+          if (widget.allowDiscounts) ...[
+            Row(children: [
+              Text('sales.item_discount'.tr(),
+                style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+              const Spacer(),
+              SegmentedButton<bool>(
+                segments: [
+                  ButtonSegment(value: false, label: Text(curr.currencySymbol, style: const TextStyle(fontSize: 12))),
+                  const ButtonSegment(value: true, label: Text('%', style: TextStyle(fontSize: 12))),
+                ],
+                selected: {_discountIsPercent},
+                onSelectionChanged: (v) => setState(() {
+                  _discountIsPercent = v.first;
+                  _discountCtrl.clear();
+                }),
+                style: const ButtonStyle(visualDensity: VisualDensity.compact, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+              ),
+            ]),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _discountCtrl,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
+              onTap: () => selectAllText(_discountCtrl),
+              decoration: InputDecoration(
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                filled: true, isDense: true,
+                hintText: _discountIsPercent ? '0 %' : '0.00',
+                prefixIcon: Icon(_discountIsPercent ? LucideIcons.percent : LucideIcons.tag, size: 18)),
+              onChanged: (_) => setState(() {}),
             ),
-          ]),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _discountCtrl,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
-            decoration: InputDecoration(
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              filled: true, isDense: true,
-              hintText: _discountIsPercent ? '0 %' : '0.00',
-              prefixIcon: Icon(_discountIsPercent ? LucideIcons.percent : LucideIcons.tag, size: 18)),
-            onChanged: (_) => setState(() {}),
-          ),
-          const SizedBox(height: 16),
+            const SizedBox(height: 16),
+          ],
 
           // Item note
           Text('sales.item_note'.tr(),
@@ -890,18 +896,44 @@ class _EditItemSheetState extends State<_EditItemSheet> {
           if (widget.showSalesperson) ...[_buildItemSalesperson(theme, cs), const SizedBox(height: 16)],
 
           // Preview totals (before & after tax)
+          //
+          // Phase 3.5.4 — the preview now goes through the same
+          // [LineItemPricingEngine] that the bloc uses on submit, so a
+          // tax-inclusive setting / global default rate / rounding-mode
+          // change is reflected here without divergence (the historical
+          // "preview shows X, posted invoice shows Y" bug class).
           Builder(builder: (context) {
-            final price = double.tryParse(_priceCtrl.text) ?? 0;
-            final priceCents = (price * 100).round();
+            // Parse price using Decimal end-to-end (no `double` in money
+            // arithmetic — IEEE-754 traps like 99999.99 * 100 are the
+            // class of bug Phase 3.5 closes).
+            final priceDec = Decimal.tryParse(_priceCtrl.text.trim()) ?? Decimal.zero;
+            final priceCents = (priceDec * Decimal.fromInt(100))
+                .round()
+                .toBigInt()
+                .toInt();
             final subtotalCents = priceCents * _quantity;
             final discountCents = _computeDiscountCents();
-            final netCents = subtotalCents - discountCents;
             final product = widget.item.product;
-            final taxBps = product.isTaxable ? product.salesTaxRateBps : 0;
-            final taxCents = taxBps > 0 && netCents > 0
-                ? ((netCents * taxBps) / 10000).round()
-                : 0;
-            final totalAfterTax = netCents + taxCents;
+            // Source the global tax flags from the SaleFormBloc so the
+            // preview honours `taxInclusivePricing` and the default rate
+            // exactly like the bloc's [InvoicePricingEngine.compute] call.
+            final saleState = context.read<SaleFormBloc>().state;
+            final pricing = LineItemPricingEngine.compute(
+              input: LineItemPricingInput(
+                unitPrice: Money.fromCents(priceCents),
+                quantity: _quantity,
+                discount: discountCents > 0
+                    ? Discount.fixed(Money.fromCents(discountCents))
+                    : Discount.none,
+                isTaxable: product.isTaxable,
+                productTaxRateBps: product.salesTaxRateBps,
+              ),
+              enableTaxCalculations: saleState.enableTaxCalculations,
+              defaultTaxRateBps: saleState.defaultSalesTaxRateBps,
+              taxInclusivePricing: saleState.taxInclusivePricing,
+            );
+            final taxCents = pricing.tax.cents;
+            final totalAfterTax = pricing.total.cents;
             return Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -910,9 +942,17 @@ class _EditItemSheetState extends State<_EditItemSheet> {
               child: Column(children: [
                 Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                   Text('sales.subtotal'.tr(), style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
-                  Text(curr.format(netCents > 0 ? netCents : 0),
+                  Text(curr.format(subtotalCents > 0 ? subtotalCents : 0),
                     style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500)),
                 ]),
+                if (discountCents > 0) ...[
+                  const SizedBox(height: 4),
+                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                    Text('sales.discount'.tr(), style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                    Text('- ${curr.format(discountCents)}',
+                      style: theme.textTheme.bodySmall?.copyWith(color: cs.tertiary)),
+                  ]),
+                ],
                 if (taxCents > 0) ...[
                   const SizedBox(height: 4),
                   Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
@@ -1012,23 +1052,38 @@ class _EditItemSheetState extends State<_EditItemSheet> {
   }
 
   int _computeDiscountCents() {
-    final val = double.tryParse(_discountCtrl.text) ?? 0;
+    final val = Decimal.tryParse(_discountCtrl.text.trim()) ?? Decimal.zero;
     if (_discountIsPercent) {
-      final price = double.tryParse(_priceCtrl.text) ?? 0;
-      final subtotal = (price * 100).round() * _quantity;
-      return (subtotal * val / 100).round();
+      final price = Decimal.tryParse(_priceCtrl.text.trim()) ?? Decimal.zero;
+      final subtotalCents =
+          (price * Decimal.fromInt(100)).round().toBigInt().toInt() *
+              _quantity;
+      // Phase 3.5.5 — centralised percent → cents conversion.
+      return sl<DiscountConverter>().fixedFromPercent(
+        subtotalCents: subtotalCents,
+        percent: val,
+      );
     }
-    return (val * 100).round();
+    return (val * Decimal.fromInt(100)).round().toBigInt().toInt();
   }
 
 
   void _onSave() {
-    final price = double.tryParse(_priceCtrl.text) ?? 0;
+    // Phase 3.5.4 — parse the price via Decimal so the saved value is
+    // bit-identical to the preview shown by [LineItemPricingEngine].
+    // Mixing `double.parse` here with the Decimal-based preview is
+    // exactly how the "preview vs invoice differs by 1 cent" bug class
+    // creeps back in.
+    final priceDec = Decimal.tryParse(_priceCtrl.text.trim()) ?? Decimal.zero;
+    final priceCents = (priceDec * Decimal.fromInt(100))
+        .round()
+        .toBigInt()
+        .toInt();
     final discountCents = _computeDiscountCents();
     final note = _noteCtrl.text.trim();
     widget.onUpdated(
       _quantity,
-      Decimal.fromInt((price * 100).round()),
+      Decimal.fromInt(priceCents),
       Decimal.fromInt(discountCents),
       employeeId: _employeeId,
       employeeName: _employeeName,
@@ -1056,11 +1111,108 @@ class _CheckoutSheet extends StatefulWidget {
 }
 
 class _CheckoutSheetState extends State<_CheckoutSheet> {
-  final _paidCtrl = TextEditingController();
+  late final TextEditingController _paidCtrl;
+  late final TextEditingController _discountPercentCtrl;
+  late final TextEditingController _discountFixedCtrl;
+  bool _updatingDiscount = false;
+  bool _hasHydratedFromBloc = false;
   bool _loyaltyLoadTriggered = false;
 
   @override
-  void dispose() { _paidCtrl.dispose(); super.dispose(); }
+  void initState() {
+    super.initState();
+    final state = context.read<SaleFormBloc>().state;
+    _paidCtrl = TextEditingController(
+        text: state.paidAmountCents > Decimal.zero
+            ? (state.paidAmountCents.toBigInt().toInt() / 100).toStringAsFixed(2)
+            : '');
+
+    final discCents = state.invoiceDiscountCents.toBigInt().toInt();
+    final subtotalCents = state.subtotalCents.toBigInt().toInt();
+    _discountFixedCtrl = TextEditingController(
+        text: discCents > 0 ? (discCents / 100).toStringAsFixed(2) : '');
+    _discountPercentCtrl = TextEditingController(
+        text: discCents > 0 && subtotalCents > 0
+            ? ((discCents / subtotalCents) * 100).toStringAsFixed(2)
+            : '');
+
+    _discountPercentCtrl.addListener(_syncDiscountFromPercent);
+    _discountFixedCtrl.addListener(_syncDiscountFromFixed);
+  }
+
+  void _hydrateControllersIfNeeded(SaleFormState state) {
+    final focused = FocusManager.instance.primaryFocus;
+    final isEditingText = focused?.context?.widget is EditableText;
+    if (isEditingText) return;
+
+    if (!_hasHydratedFromBloc) {
+      final paidText = state.paidAmountCents > Decimal.zero
+          ? (state.paidAmountCents.toBigInt().toInt() / 100).toStringAsFixed(2)
+          : '';
+      if (_paidCtrl.text != paidText) _paidCtrl.text = paidText;
+
+      final discCents = state.invoiceDiscountCents.toBigInt().toInt();
+      final subtotalCents = state.subtotalCents.toBigInt().toInt();
+      final fixedText = discCents > 0 ? (discCents / 100).toStringAsFixed(2) : '';
+      final pctText = discCents > 0 && subtotalCents > 0
+          ? ((discCents / subtotalCents) * 100).toStringAsFixed(2)
+          : '';
+
+      if (_discountFixedCtrl.text != fixedText) _discountFixedCtrl.text = fixedText;
+      if (_discountPercentCtrl.text != pctText) _discountPercentCtrl.text = pctText;
+
+      _hasHydratedFromBloc = true;
+    }
+  }
+
+  void _syncDiscountFromPercent() {
+    if (_updatingDiscount) return;
+    _updatingDiscount = true;
+    // Phase 3.5.5 — percent → fixed handled by the central converter so
+    // this screen can never drift from the line-edit discount helper.
+    final pct = Decimal.tryParse(_discountPercentCtrl.text.trim()) ?? Decimal.zero;
+    final sub = context.read<SaleFormBloc>().state.subtotalCents.toBigInt().toInt();
+    final cents = sl<DiscountConverter>().fixedFromPercent(
+      subtotalCents: sub,
+      percent: pct,
+    );
+    _discountFixedCtrl.text = cents > 0 ? (cents / 100).toStringAsFixed(2) : '';
+    _applyInvoiceDiscount();
+    _updatingDiscount = false;
+  }
+
+  void _syncDiscountFromFixed() {
+    if (_updatingDiscount) return;
+    _updatingDiscount = true;
+    final fixedVal = Decimal.tryParse(_discountFixedCtrl.text.trim()) ?? Decimal.zero;
+    final fixedCents =
+        (fixedVal * Decimal.fromInt(100)).round().toBigInt().toInt();
+    final sub = context.read<SaleFormBloc>().state.subtotalCents.toBigInt().toInt();
+    final pct = sl<DiscountConverter>().percentFromFixed(
+      subtotalCents: sub,
+      fixedCents: fixedCents,
+    );
+    _discountPercentCtrl.text =
+        pct == Decimal.zero ? '' : pct.toString();
+    _applyInvoiceDiscount();
+    _updatingDiscount = false;
+  }
+
+  void _applyInvoiceDiscount() {
+    final fixedVal = double.tryParse(_discountFixedCtrl.text) ?? 0;
+    final cents = (fixedVal * 100).round();
+    context.read<SaleFormBloc>().add(
+          SaleInvoiceDiscountChanged(Decimal.fromInt(cents)),
+        );
+  }
+
+  @override
+  void dispose() { 
+    _paidCtrl.dispose(); 
+    _discountPercentCtrl.dispose();
+    _discountFixedCtrl.dispose();
+    super.dispose(); 
+  }
 
   void _ensureLoyaltyDataLoaded(BuildContext context, SaleFormState state) {
     if (_loyaltyLoadTriggered) return;
@@ -1077,6 +1229,7 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
 
     return BlocBuilder<SaleFormBloc, SaleFormState>(
       builder: (context, state) {
+        _hydrateControllersIfNeeded(state);
         _ensureLoyaltyDataLoaded(context, state);
         return DraggableScrollableSheet(
           initialChildSize: 0.85, maxChildSize: 0.95, minChildSize: 0.5, expand: false,
@@ -1159,7 +1312,8 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                       ),
                     ),
                   // Loyalty Points Redemption
-                  if (state.customerId != null &&
+                  if (state.enableLoyaltyPoints &&
+                      state.customerId != null &&
                       state.loyaltySettings != null &&
                       state.loyaltyPointsBalance > 0 &&
                       state.loyaltySettings!.allowPointsRedemption &&
@@ -1324,20 +1478,39 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                     const SizedBox(height: 16),
                   ],
 
-                  // Invoice Discount (if invoice mode)
-                  if (state.discountMode == SaleDiscountMode.invoice) ...[
+                  // Invoice Discount (if invoice mode and allowed)
+                  if (state.allowDiscounts && state.discountMode == SaleDiscountMode.invoice) ...[
                     _section(theme, cs, LucideIcons.tag, 'sales.invoice_discount'.tr(),
-                      child: TextField(
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
-                        decoration: InputDecoration(
-                          labelText: 'sales.discount'.tr(),
-                          border: const OutlineInputBorder(), isDense: true),
-                        onChanged: (v) {
-                          final val = double.tryParse(v) ?? 0;
-                          context.read<SaleFormBloc>().add(
-                            SaleInvoiceDiscountChanged(Decimal.fromInt((val * 100).round())));
-                        },
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _discountFixedCtrl,
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
+                              onTap: () => selectAllText(_discountFixedCtrl),
+                              decoration: InputDecoration(
+                                labelText: 'purchases.discount_fixed'.tr(),
+                                border: const OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: TextField(
+                              controller: _discountPercentCtrl,
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
+                              onTap: () => selectAllText(_discountPercentCtrl),
+                              decoration: InputDecoration(
+                                labelText: 'purchases.discount_percent'.tr(),
+                                border: const OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -1350,6 +1523,7 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                         controller: _paidCtrl,
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
                         inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
+                        onTap: () => selectAllText(_paidCtrl),
                         decoration: InputDecoration(
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                           filled: true, isDense: true,
@@ -1638,8 +1812,17 @@ class _CustomerBalanceInfo extends StatelessWidget {
         }
         final customer = snapshot.data!;
         final currentBalanceCents = customer.balanceCents.toBigInt().toInt();
-        // After this invoice: balance changes by (invoice total - paid now).
-        final projectedBalanceCents = currentBalanceCents + invoiceTotalCents - paidAmountCents;
+        // Phase 3.5.6 — projection lives in [PartyBalanceClassifier].
+        // The widget no longer hand-rolls the `+ invoice − paid`
+        // formula, so future tweaks (advances, FX, cheque fees) ripple
+        // through one service instead of every screen.
+        final classifier = sl<PartyBalanceClassifier>();
+        final projectedBalanceCents = classifier.project(
+          currentBalanceCents: currentBalanceCents,
+          invoiceTotalCents: invoiceTotalCents,
+          paidAmountCents: paidAmountCents,
+          kind: PartyKind.customer,
+        );
 
         final isCurrentReceivable = currentBalanceCents > 0;
         final isProjectedReceivable = projectedBalanceCents > 0;
@@ -2023,6 +2206,7 @@ class _LoyaltyRedemptionSectionState extends State<_LoyaltyRedemptionSection> {
                   controller: _pointsCtrl,
                   keyboardType: TextInputType.number,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  onTap: () => selectAllText(_pointsCtrl),
                   decoration: InputDecoration(
                     labelText: 'sales.points_to_redeem'.tr(),
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),

@@ -8,12 +8,18 @@ import 'package:decimal/decimal.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../../../core/services/void_impact_analyzer.dart';
+import '../../../../core/widgets/pin_verification_dialog.dart';
+import '../../../../core/widgets/void_impact_dialog.dart';
 import '../../../auth/auth.dart';
+import '../../../settings/presentation/bloc/app_settings_bloc.dart';
 import '../../domain/entities/purchase_entity.dart';
 import '../../domain/repositories/purchase_repository.dart';
 import '../../../products/domain/repositories/product_variant_repository.dart';
 import '../services/purchase_pdf_service.dart';
 import '../../../barcode/data/models/invoice_print_data.dart';
+import '../../../shared/widgets/unified_return_search_sheet.dart';
+import '../../../../core/services/unified_return_service.dart';
 
 class PurchaseDetailScreen extends StatefulWidget {
   final int purchaseId;
@@ -666,21 +672,22 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
                 ],
               ),
             ),
-            // Items
-            StreamBuilder<Map<int, ({String? sizeName, String? colorHex})>>(
-              stream: sl<ProductVariantRepository>().watchVariantPreviews(),
-              builder: (context, snapshot) {
-                final previews = snapshot.data ?? const {};
-                return ListView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: _items.length,
-                  itemBuilder: (context, index) {
-                    final item = _items[index];
-                    final isEven = index % 2 == 0;
-                    final preview = previews[item.productId];
-                    final sizeName = preview?.sizeName?.trim();
-                    final shade = tryParseHexColor(preview?.colorHex);
+            // Items.
+            //
+            // Each line's color/size attributes are read DIRECTLY from the
+            // purchase item entity (resolved per-variant by the DAO join on
+            // `productColors`/`sizes`). A productId-keyed lookup would
+            // collapse every line of the same product to the first
+            // variant — see `getPurchaseItemsWithDetails` in `purchase_dao`.
+            ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _items.length,
+              itemBuilder: (context, index) {
+                final item = _items[index];
+                final isEven = index % 2 == 0;
+                final sizeName = item.sizeName?.trim();
+                final shade = tryParseHexColor(item.colorHex);
 
                     return Container(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -785,6 +792,14 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
                                       fontSize: 11,
                                     ),
                                   ),
+                                if (item.taxCents > Decimal.zero)
+                                  Text(
+                                    '+${cs.format(item.taxCents.toBigInt().toInt())}',
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: colorScheme.secondary,
+                                      fontSize: 11,
+                                    ),
+                                  ),
                                 if (item.expiryDate != null)
                                   Padding(
                                     padding: const EdgeInsets.only(top: 2),
@@ -848,9 +863,7 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
                       ),
                     );
                   },
-                );
-              },
-            ),
+                ),
           ],
         ],
       ),
@@ -1240,25 +1253,21 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
         router.push('/purchases/${widget.purchaseId}/edit?posted=true');
         break;
       case 'void':
-        final confirmed = await showDialog<bool>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: Text('purchases.void_confirm_title'.tr()),
-            content: Text('purchases.void_confirm_message'.tr()),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: Text('common.cancel'.tr()),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                style: FilledButton.styleFrom(backgroundColor: errorColor),
-                child: Text('purchases.void_purchase'.tr()),
-              ),
-            ],
-          ),
-        );
-        if (confirmed == true) {
+        // Check if PIN is required for void/refund
+        final voidSettings = context.read<AppSettingsBloc>().state.settings;
+        if (voidSettings.requirePinForVoidRefund) {
+          final pinOk = await showPinVerificationDialog(context);
+          if (!pinOk || !context.mounted) return;
+        }
+        if (!context.mounted) return;
+        // 2026-05-13 — pre-flight integrity check via VoidImpactAnalyzer.
+        // Surfaces entangled adjustment returns, projected negative stock,
+        // and estimated GL impact (AP/Inventory) BEFORE the void runs.
+        final report = await VoidImpactAnalyzer(sl<AppDatabase>())
+            .analyzePurchaseVoid(widget.purchaseId);
+        if (!context.mounted) return;
+        final confirmed = await VoidImpactDialog.show(context, report);
+        if (confirmed) {
           try {
             await repo.voidPurchase(widget.purchaseId);
             if (!mounted) return;
@@ -1267,6 +1276,10 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
                   behavior: SnackBarBehavior.floating),
             );
             _loadPurchase();
+          } on VoidBlockedByImpactException catch (e) {
+            // Defensive: blocker added between analyze and execute.
+            if (!context.mounted) return;
+            await VoidImpactDialog.show(context, e.report);
           } catch (e) {
             debugPrint('[PurchaseDetailScreen] voidPurchase failed: $e');
             if (!mounted) return;
@@ -1403,7 +1416,14 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
         }
         break;
       case 'return':
-        router.push('/purchases/returns/new?purchaseId=${widget.purchaseId}');
+        showUnifiedReturnSearchSheet(
+          context,
+          side: ReturnSide.purchase,
+          partyId: _purchase?.supplierId,
+          partyName: _purchase?.supplierName,
+          invoiceId: widget.purchaseId,
+          invoiceNumber: _purchase?.purchaseNumber,
+        );
         break;
     }
   }

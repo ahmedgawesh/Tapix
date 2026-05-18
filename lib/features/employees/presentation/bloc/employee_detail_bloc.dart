@@ -422,11 +422,27 @@ class EmployeeDetailBloc
       final periodStart = DateTime(year, month, 1);
       final periodEnd = DateTime(year, month + 1, 0, 23, 59, 59);
 
-      // Calculate payroll
-      final netSalesCents = state.salesTotalCents - state.returnsTotalCents;
+      // Calculate payroll. For the sales-target bonus we must query sales over
+      // the employee's TARGET period (monthly / quarterly / yearly) rather
+      // than just the payroll month — otherwise a quarterly or yearly target
+      // would never register as achieved from this code path.
+      final targetRange = PayrollCalculationService.targetPeriodRange(
+        targetPeriod: employee.targetPeriod,
+        year: year,
+        month: month,
+      );
+      final targetPeriodStats = await _repository.getEmployeeSalesStats(
+        employee.id,
+        targetRange.start,
+        targetRange.end,
+      );
+      final targetPeriodNetSales = (targetPeriodStats['salesTotalCents'] ?? 0) -
+          (targetPeriodStats['returnsTotalCents'] ?? 0);
       final targetBonus = PayrollCalculationService.checkSalesTargetBonus(
         employee: employee,
-        actualSalesCents: netSalesCents,
+        actualSalesCents: targetPeriodNetSales,
+        periodYear: year,
+        periodMonth: month,
       );
       final payroll = state.latestPayroll;
       final manualBonus = payroll?.bonusCents.toBigInt().toInt() ?? 0;

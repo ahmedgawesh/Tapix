@@ -7,8 +7,11 @@ import 'package:easy_localization/easy_localization.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../../../core/services/unified_return_service.dart';
 import '../../domain/entities/purchase_entity.dart';
 import '../bloc/purchase_returns_bloc.dart';
+import '../../../shared/widgets/unified_return_search_sheet.dart';
+import '../../../shared/widgets/date_range_filter_sheet.dart';
 
 class PurchaseReturnsScreen extends StatelessWidget {
   const PurchaseReturnsScreen({super.key});
@@ -32,6 +35,7 @@ class _PurchaseReturnsView extends StatefulWidget {
 class _PurchaseReturnsViewState extends State<_PurchaseReturnsView> {
   final _searchController = TextEditingController();
   DateTimeRange? _dateRange;
+  String? _datePresetLabel;
 
   @override
   void dispose() {
@@ -66,6 +70,14 @@ class _PurchaseReturnsViewState extends State<_PurchaseReturnsView> {
           },
         ),
         title: Text('purchases.returns'.tr()),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => showUnifiedReturnSearchSheet(
+          context,
+          side: ReturnSide.purchase,
+        ),
+        icon: const Icon(LucideIcons.plus),
+        label: Text('returns.create_purchase_return'.tr()),
       ),
       body: SafeArea(
         child: BlocBuilder<PurchaseReturnsBloc,
@@ -154,14 +166,24 @@ class _PurchaseReturnsViewState extends State<_PurchaseReturnsView> {
                     child: Align(
                       alignment: AlignmentDirectional.centerStart,
                       child: Chip(
-                        avatar: const Icon(LucideIcons.calendar, size: 14),
+                        avatar: Icon(LucideIcons.calendar, size: 14,
+                            color: colorScheme.primary),
                         label: Text(
-                          '${DateFormat.MMMd().format(_dateRange!.start)} – ${DateFormat.MMMd().format(_dateRange!.end)}',
-                          style: theme.textTheme.labelSmall,
+                          _datePresetLabel ??
+                              '${DateFormat.MMMd().format(_dateRange!.start)} – ${DateFormat.MMMd().format(_dateRange!.end)}',
+                          style: theme.textTheme.labelSmall
+                              ?.copyWith(fontWeight: FontWeight.w600),
                         ),
                         deleteIcon: const Icon(LucideIcons.x, size: 14),
-                        onDeleted: () => setState(() => _dateRange = null),
+                        onDeleted: () => setState(() {
+                          _dateRange = null;
+                          _datePresetLabel = null;
+                        }),
                         visualDensity: VisualDensity.compact,
+                        side: BorderSide(
+                            color: colorScheme.primary.withValues(alpha: 0.3)),
+                        backgroundColor: colorScheme.primaryContainer
+                            .withValues(alpha: 0.3),
                       ),
                     ),
                   ),
@@ -204,15 +226,16 @@ class _PurchaseReturnsViewState extends State<_PurchaseReturnsView> {
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: () async {
-          final range = await showDateRangePicker(
-            context: context,
-            firstDate: DateTime(2020),
-            lastDate: DateTime.now().add(const Duration(days: 30)),
-            initialDateRange: _dateRange,
+          final result = await showDateRangeFilterSheet(
+            context,
+            currentRange: _dateRange,
+            currentLabel: _datePresetLabel,
           );
-          if (range != null) {
-            setState(() => _dateRange = range);
-          }
+          if (result == null || !mounted) return;
+          setState(() {
+            _dateRange = result.range;
+            _datePresetLabel = result.label;
+          });
         },
         child: Padding(
           padding: const EdgeInsets.all(12),
@@ -322,6 +345,7 @@ class _ReturnTile extends StatelessWidget {
         : '?';
 
     return Padding(
+      key: ValueKey(returnEntity.unifiedId),
       padding: const EdgeInsets.only(bottom: 6),
       child: Material(
         color: cs.surface,
@@ -329,7 +353,13 @@ class _ReturnTile extends StatelessWidget {
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           borderRadius: BorderRadius.circular(14),
-          onTap: () => context.push('/purchases/returns/${returnEntity.id}'),
+          onTap: () {
+            if (returnEntity.isAdjustment) {
+              context.push('/purchases/returns/adj/${returnEntity.id}');
+            } else {
+              context.push('/purchases/returns/${returnEntity.id}');
+            }
+          },
           child: Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
@@ -342,7 +372,11 @@ class _ReturnTile extends StatelessWidget {
                 Container(
                   width: 4,
                   decoration: BoxDecoration(
-                    color: returnEntity.status == 'voided' ? cs.outlineVariant : cs.error,
+                    color: returnEntity.status == 'voided'
+                        ? cs.outlineVariant
+                        : returnEntity.isAdjustment
+                            ? cs.tertiary
+                            : cs.error,
                     borderRadius: const BorderRadiusDirectional.only(
                       topStart: Radius.circular(14),
                       bottomStart: Radius.circular(14),
@@ -359,23 +393,54 @@ class _ReturnTile extends StatelessWidget {
                           width: 38, height: 38,
                           decoration: BoxDecoration(
                             gradient: LinearGradient(
-                              colors: [cs.errorContainer, cs.errorContainer.withValues(alpha: 0.5)],
+                              colors: returnEntity.isAdjustment
+                                  ? [cs.tertiaryContainer, cs.tertiaryContainer.withValues(alpha: 0.5)]
+                                  : [cs.errorContainer, cs.errorContainer.withValues(alpha: 0.5)],
                             ),
                             borderRadius: BorderRadius.circular(10),
                           ),
                           alignment: Alignment.center,
-                          child: Text(supplierInitial,
-                              style: theme.textTheme.titleSmall?.copyWith(
-                                  color: cs.error, fontWeight: FontWeight.bold)),
+                          child: returnEntity.isAdjustment
+                              ? Icon(LucideIcons.rotateCcw,
+                                  color: cs.onTertiaryContainer, size: 16)
+                              : Text(supplierInitial,
+                                  style: theme.textTheme.titleSmall?.copyWith(
+                                      color: cs.error, fontWeight: FontWeight.bold)),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(returnEntity.returnNumber,
-                                  style: theme.textTheme.titleSmall?.copyWith(
-                                      fontWeight: FontWeight.w600)),
+                              Row(
+                                children: [
+                                  Flexible(
+                                    child: Text(returnEntity.returnNumber,
+                                        style: theme.textTheme.titleSmall?.copyWith(
+                                            fontWeight: FontWeight.w600),
+                                        overflow: TextOverflow.ellipsis),
+                                  ),
+                                  if (returnEntity.isAdjustment) ...[
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 6, vertical: 1),
+                                      decoration: BoxDecoration(
+                                        color: cs.tertiaryContainer,
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        'returns.adjustment'.tr(),
+                                        style: theme.textTheme.labelSmall?.copyWith(
+                                          color: cs.onTertiaryContainer,
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 9,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
                               const SizedBox(height: 2),
                               Row(
                                 children: [

@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 import 'package:decimal/decimal.dart';
 import '../app_database.dart';
 import '../tables/parties.dart';
+import '../../services/balance_service.dart';
 
 part 'customer_dao.g.dart';
 
@@ -134,18 +135,10 @@ class CustomerDao extends DatabaseAccessor<AppDatabase> with _$CustomerDaoMixin 
         return txId;
       }
 
-      final customer = await (select(customers)..where((c) => c.id.equals(customerId)))
-          .getSingleOrNull();
-      if (customer != null) {
-        final oldBalance = customer.balanceCents.toBigInt().toInt();
-        final newBalance = oldBalance + deltaCents;
-        await (update(customers)..where((c) => c.id.equals(customerId))).write(
-          CustomersCompanion(
-            balanceCents: Value(Decimal.fromInt(newBalance)),
-            updatedAt: Value(DateTime.now()),
-          ),
-        );
-      }
+      await BalanceService.adjustCustomerBalance(this,
+        customerId: customerId,
+        deltaCents: deltaCents,
+      );
 
       return txId;
     });
@@ -192,19 +185,10 @@ class CustomerDao extends DatabaseAccessor<AppDatabase> with _$CustomerDaoMixin 
 
       // Adjust customer balance by the delta
       if (deltaCents != 0) {
-        final customer = await (select(customers)
-              ..where((c) => c.id.equals(existing.customerId)))
-            .getSingleOrNull();
-        if (customer != null) {
-          final oldBalance = customer.balanceCents.toBigInt().toInt();
-          final newBalance = oldBalance + deltaCents;
-          await (update(customers)..where((c) => c.id.equals(existing.customerId))).write(
-            CustomersCompanion(
-              balanceCents: Value(Decimal.fromInt(newBalance)),
-              updatedAt: Value(DateTime.now()),
-            ),
-          );
-        }
+        await BalanceService.adjustCustomerBalance(this,
+          customerId: existing.customerId,
+          deltaCents: deltaCents,
+        );
       }
 
       return existing;
@@ -269,6 +253,25 @@ class CustomerDao extends DatabaseAccessor<AppDatabase> with _$CustomerDaoMixin 
         .watch();
   }
 
+  /// INTERNAL — absolute-set writer for `customers.balance_cents`.
+  ///
+  /// **DO NOT CALL THIS FROM PRODUCTION CODE.** It bypasses both
+  /// `BalanceService` (the per-delta path) and `JournalEntryService` (the GL
+  /// posting path), so any caller will silently desynchronise the customer
+  /// sub-ledger from the General Ledger and break
+  /// `AccountingRepository.reconcileBalances()`.
+  ///
+  /// As of Phase 1.3 (May 2026) every production path was migrated to:
+  ///   - `BalanceService.adjustCustomerBalance` for delta mutations
+  ///     (already used by `sale_dao`, `adjustment_return_dao`, etc.)
+  ///   - `recalculateBalance` below, for idempotent rebuild from
+  ///     `customer_transactions` (the legitimate authoritative source)
+  ///
+  /// This method is retained ONLY for legacy migration / repair scripts
+  /// that need to seed a balance before any transactions exist.
+  ///
+  /// See `docs/adr/0001-pricing-engines-as-sot.md` § Phase 1.
+  @Deprecated('Use BalanceService.adjustCustomerBalance or recalculateBalance')
   Future<void> updateCustomerBalance(int customerId, int newBalanceCents) async {
     await (update(customers)..where((c) => c.id.equals(customerId))).write(
       CustomersCompanion(
