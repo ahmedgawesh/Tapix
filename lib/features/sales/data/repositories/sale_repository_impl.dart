@@ -440,6 +440,24 @@ class SaleRepositoryImpl implements SaleRepository {
       userId: await _currentUserId(),
     );
 
+    // 2026-05-18 — Phase 15.2 — Reverse the GL journal entry for EVERY
+    // payment row attached to this sale (cash, cheque-cleared, card,
+    // mixed tender, customer-credit reapplications). The DAO records a
+    // `payment_reversal` customer_transaction so the sub-ledger zeroes
+    // out, but the GL payment leg (Dr Cash|Bank / Cr AR) must be reversed
+    // here or AR and Cash drift by the cleared payment amount. Symmetric
+    // to the purchase side; same root-cause class as the AP drift = 89991¢
+    // reproduced in `tapix_backup_20260518_051956.db`.
+    final paymentsForVoid = await _datasource.getSalePayments(saleId);
+    for (final p in paymentsForVoid) {
+      await _journalService.voidJournalEntriesForSource(
+        sourceTable: 'sale_payments',
+        sourceId: p.id,
+        reason: 'Sale voided — payment JE reversed',
+        userId: await _currentUserId(),
+      );
+    }
+
     // Void commissions linked to this sale
     await _commissionService.deleteForSale(saleId);
 

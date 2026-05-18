@@ -236,39 +236,41 @@ class JournalLocalDatasourceImpl implements JournalLocalDatasource {
   @override
   Future<int> getTotalInventoryValueCents() async {
     final db = _accountingDao.attachedDatabase;
-    // ── Phase 15.0 — Batch-ledger-authoritative formula ─────────────────
+    // ── Phase 15.2 — Batch ledger is SoT only for FIFO/batch products ───
     //
     // Pre-Phase-15 this was `Σ(variant.stock × variant.cost_cents)` for
-    // ALL products. That formula is correct ONLY for products whose
-    // `costing_method = 'wac'` (cost_cents is the moving-average cost
-    // basis on every layer). For products configured as `'fifo'` /
-    // `'last'`, `cost_cents` is a DISPLAY value — it always holds the
-    // most-recent paid unit cost — so the per-layer cost basis lives in
-    // `product_batches.unit_cost_cents` and `Σ(stock × cost_cents)`
-    // systematically under- or over-reports valuation as soon as two
-    // purchase lines for the same SKU carry different effective unit
-    // costs (e.g. a trade-discounted re-stock).
+    // ALL products. Phase 15.0 then made `product_batches` authoritative
+    // whenever ANY active batch existed for a variant. That was correct
+    // for FIFO/batch products but wrong for WAC products: Phase 6.4
+    // unified the write side and creates a `product_batches` row for
+    // EVERY tracked purchase line — but only the FIFO consumption paths
+    // (`BatchService.consumeFifo`, `_isFifoProduct(productId) == true`
+    // in `PurchaseDao.postPurchaseReturn` / `SaleDao.postSaleReturn` /
+    // `AdjustmentReturnDao`) decrement `remaining_quantity`. WAC return
+    // paths only adjust `variant.stock_quantity` and post the
+    // `1200 Inventory` GL leg — they NEVER touch the batch row.
     //
-    // Field-reported manifestation (May 2026): a `fifo` / `batch_expiry`
-    // product was bought at 9,900¢/unit (qty 10) and re-bought at 9,801¢
-    // /unit (qty 3, after 99¢/unit discount). GL(1200 Inventory) =
-    // 99,000 + 29,403 = 128,403. `variant.cost_cents` = 9,801 (last).
-    // 13 × 9,801 = 127,413 → reconciliation engine reported a 990¢
-    // false drift. The books were correct; the formula was wrong.
+    // Result: a WAC product's batch rows are write-once / read-stale.
+    // Reading them as authoritative valuation produced a phantom drift
+    // exactly equal to `(returned_qty × unit_cost)` on every linked or
+    // adjustment purchase return against a WAC product (field report
+    // 2026-05-18, backup `tapix_backup_20260518_061018.db` — 9 900¢
+    // drift after one 1-unit linked purchase return on a WAC variant).
     //
-    // New formula: **prefer the batch ledger** when active batch rows
-    // exist for the variant (FIFO products always have batches; WAC
-    // products also get a batch row per purchase line because Phase 6.4
-    // unified the ledger). Fall back to `variant.stock × variant.cost`
-    // ONLY for variants that genuinely have no batch coverage
-    // (extremely rare — legacy data, or non-batched WAC products that
-    // pre-date 10044). Same dual-fallback for products without variants.
+    // **Single rule**: the read predicate gating the batch branch must
+    // mirror the write predicate `_isFifoProduct` (FIFO ⇔ batch ledger
+    // is the SoT). Anything else is asymmetric and accumulates drift.
     //
-    // The variant/product fallback keeps the WAC happy path identical
-    // for pre-batch DBs and preserves the inactive-variant inclusion
-    // that prevents soft-delete from triggering a false mismatch
-    // (variants stay in the SUM via the batch ledger as long as the
-    // batches are still `is_active = 1`).
+    //   Branch 1 (batch ledger):   product is FIFO/batch + active batch
+    //   Branch 2 (variant):        product is WAC ............ OR
+    //                              product is FIFO but variant has no
+    //                              active batch (pre-10044 legacy)
+    //   Branch 3 (product):        same predicate as Branch 2 but for
+    //                              products without variants
+    //
+    // The legacy fallback inside Branches 2/3 keeps pre-batch FIFO data
+    // visible. Soft-deleted (`is_active = 0`) batches stay excluded so
+    // a void cleanly removes a layer from the SoT.
     final row = await _accountingDao.customSelect(
       '''
       SELECT
@@ -278,7 +280,10 @@ class JournalLocalDatasourceImpl implements JournalLocalDatasource {
             CAST(b.unit_cost_cents AS INTEGER)
           )
           FROM product_batches b
+          INNER JOIN products p ON p.id = b.product_id
           WHERE b.is_active = 1
+            AND (p.inventory_tracking_type IN ('batch', 'batch_expiry')
+                 OR p.costing_method = 'fifo')
         ), 0)
         +
         COALESCE((
@@ -287,10 +292,13 @@ class JournalLocalDatasourceImpl implements JournalLocalDatasource {
             CAST(v.cost_cents AS INTEGER)
           )
           FROM product_variants v
-          WHERE NOT EXISTS (
-            SELECT 1 FROM product_batches b
-            WHERE b.variant_id = v.id AND b.is_active = 1
-          )
+          INNER JOIN products p ON p.id = v.product_id
+          WHERE NOT (p.inventory_tracking_type IN ('batch', 'batch_expiry')
+                     OR p.costing_method = 'fifo')
+             OR NOT EXISTS (
+               SELECT 1 FROM product_batches b
+               WHERE b.variant_id = v.id AND b.is_active = 1
+             )
         ), 0)
         +
         COALESCE((
@@ -302,9 +310,13 @@ class JournalLocalDatasourceImpl implements JournalLocalDatasource {
           WHERE NOT EXISTS (
             SELECT 1 FROM product_variants v WHERE v.product_id = p.id
           )
-          AND NOT EXISTS (
-            SELECT 1 FROM product_batches b
-            WHERE b.product_id = p.id AND b.is_active = 1
+          AND (
+            NOT (p.inventory_tracking_type IN ('batch', 'batch_expiry')
+                 OR p.costing_method = 'fifo')
+            OR NOT EXISTS (
+              SELECT 1 FROM product_batches b
+              WHERE b.product_id = p.id AND b.is_active = 1
+            )
           )
         ), 0)
         AS total

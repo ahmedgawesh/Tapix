@@ -858,7 +858,13 @@ class _PurchaseFormView extends StatelessWidget {
                   product: product,
                   variant: variant,
                   quantity: 1,
-                  unitCostCents: variant.costCents,
+                  // GROSS supplier reference price (with NET fallback for
+                  // legacy variants pre-migration 10055). Same convention as
+                  // VariantEditDialog so the form value the user sees here
+                  // matches what they typed on the last purchase — removes
+                  // the variant-vs-no-variant asymmetry where the cost field
+                  // silently dropped to the post-discount IAS-2 net basis.
+                  unitCostCents: variant.lastPurchasePriceCents ?? variant.costCents,
                 ));
             return;
           }
@@ -870,7 +876,9 @@ class _PurchaseFormView extends StatelessWidget {
           context.read<PurchaseFormBloc>().add(PurchaseLineItemAdded(
                 product: product,
                 quantity: 1,
-                unitCostCents: product.costCents,
+                // GROSS supplier reference price (see sibling variant
+                // branch above for the full rationale).
+                unitCostCents: product.lastPurchasePriceCents ?? product.costCents,
               ));
           return;
         }
@@ -4157,7 +4165,16 @@ class _AddItemSheetState extends State<_AddItemSheet> {
                         ),
                         const SizedBox(width: 12),
                         Text(
-                          currencyService.format(product.costCents.toBigInt().toInt()),
+                          // Display the GROSS supplier reference price so the
+                          // picker and the line item start from the same
+                          // number as the user-entered cost on the last
+                          // purchase. Mirrors the rule used at
+                          // `onItemAdded` below and in `_buildVariantSelection`.
+                          currencyService.format(
+                            (product.lastPurchasePriceCents ?? product.costCents)
+                                .toBigInt()
+                                .toInt(),
+                          ),
                           style: TextStyle(
                             fontSize: 12,
                             color: cs.primary,
@@ -4187,7 +4204,14 @@ class _AddItemSheetState extends State<_AddItemSheet> {
                     if (product.hasVariants) {
                       setState(() => _selectedProduct = product);
                     } else {
-                      widget.onItemAdded(product, null, _quantity, product.costCents);
+                      // GROSS supplier reference price (see variant branch
+                      // below for the rationale).
+                      widget.onItemAdded(
+                        product,
+                        null,
+                        _quantity,
+                        product.lastPurchasePriceCents ?? product.costCents,
+                      );
                     }
                   },
                 );
@@ -4317,7 +4341,16 @@ class _AddItemSheetState extends State<_AddItemSheet> {
                         Icon(LucideIcons.coins, size: 12, color: cs.primary),
                         const SizedBox(width: 4),
                         Text(
-                          currencyService.format(variant.costCents.toBigInt().toInt()),
+                          // Display the GROSS supplier reference price —
+                          // see _buildProductList above for the full
+                          // rationale. Keeps the picker and the line item
+                          // consistent and removes the variant-vs-no-variant
+                          // asymmetry the user reported.
+                          currencyService.format(
+                            (variant.lastPurchasePriceCents ?? variant.costCents)
+                                .toBigInt()
+                                .toInt(),
+                          ),
                           style: TextStyle(
                             fontSize: 12,
                             color: cs.primary,
@@ -4328,7 +4361,13 @@ class _AddItemSheetState extends State<_AddItemSheet> {
                     ),
                     trailing: Icon(LucideIcons.plusCircle, size: 20, color: cs.primary),
                     onTap: () {
-                      widget.onItemAdded(_selectedProduct!, variant, _quantity, variant.costCents);
+                      // GROSS supplier reference price (see picker text above).
+                      widget.onItemAdded(
+                        _selectedProduct!,
+                        variant,
+                        _quantity,
+                        variant.lastPurchasePriceCents ?? variant.costCents,
+                      );
                     },
                   );
                 },

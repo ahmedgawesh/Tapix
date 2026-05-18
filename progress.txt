@@ -2306,3 +2306,480 @@ DOCS UPDATED
     new banned-pattern entries + test pins.
   • docs/adr/0001-pricing-engines-as-sot.md — §11 Phase 15 closure.
 
+
+
+================================================================================
+PHASE 15.1 — Purchase form variant/no-variant unit-cost parity   (2026-05-18)
+================================================================================
+
+ENTRY POINTS FOR FUTURE CONTRIBUTORS/AGENTS
+  • docs/adr/0001-pricing-engines-as-sot.md §7
+  • docs/SOURCE_OF_TRUTH_MAP.md
+  • docs/ACCOUNTING_INTEGRITY_GUIDELINES.md
+  • docs/adr/0003-retrospective.md §6
+  • progress.txt (this file)
+
+FIELD REPORT
+  User backup `tapix_backup_20260518_041832.db` with the picker showing:
+    p1 with v (tt55-1)  $99.00 × 1 → $99.99
+    p2 without v        $100.00 × 1 → $101.00
+    p1 with v (tt55-2)  $99.00 × 1 → $99.99
+  Subtotal $298.00 / Tax $2.98 / Total $300.98.
+  Complaint: "products with variants don't apply tax on the line the
+  same way no-variant products do — the total is wrong".
+
+ROOT CAUSE
+  The math was correct (1% applied uniformly via LineItemPricingEngine,
+  no `hasVariants` branch anywhere on the pricing path). The bug was a
+  pure UX asymmetry in `purchase_form_screen.dart`:
+
+    • VariantEditDialog (`lib/features/products/.../variant_edit_dialog.dart`)
+      displays cost as `lastPurchasePriceCents ?? costCents` — the GROSS
+      supplier reference price.
+
+    • purchase_form_screen.dart auto-filled unit cost from `costCents`
+      ALONE — the IAS-2 post-discount NET basis.
+
+  PurchaseDao.postPurchase splits the user-typed cost into two columns:
+    cost_cents                 = gross − (line_discount / qty)   (NET / IAS-2)
+    last_purchase_price_cents  = gross unit cost                  (USER VIEW)
+
+  For products with no past discounted purchase the two columns equal,
+  so no-variant rows showed the correct $100. For p1's variants a
+  prior posted purchase carrying a $1/unit discount left cost_cents at
+  $99 and last_purchase_price_cents at $100. The picker therefore
+  rendered the variant at $99 (NET) and the no-variant peer at $100
+  (gross-equals-net), feeding the asymmetric subtotal the user saw.
+
+FIX (6 single-line edits, all in purchase_form_screen.dart)
+  All four auto-fill sites and both display labels now resolve via
+  `lastPurchasePriceCents ?? costCents`:
+
+    • barcode-scan → variant branch          (~line 867)
+    • barcode-scan → no-variant branch       (~line 881)
+    • _AddItemSheet picker text (no-variant) (~line 4173)
+    • _AddItemSheet `onTap` (no-variant)     (~line 4213)
+    • _AddItemSheet variant picker text      (~line 4349)
+    • _AddItemSheet variant `onTap`          (~line 4369)
+
+  Same convention already used by VariantEditDialog (initState +
+  _loadDefaultsForNewVariant). No schema change, no engine semantic
+  change, no DAO change — pure UX consistency.
+
+REGRESSION SUITE
+  `test/features/purchases/purchase_form_variant_unit_cost_parity_test.dart`
+  (6 tests, all green):
+    • variant resolves to GROSS when lastPurchasePriceCents is set
+    • no-variant resolves to GROSS when lastPurchasePriceCents is set
+    • variant falls back to costCents when GROSS column is NULL (legacy)
+    • no-variant falls back to costCents when GROSS column is NULL
+    • variant + no-variant lines yield IDENTICAL totals + tax for the
+      same supplier reference price
+    • full 3-line field-report scenario now sub $300.00 / tax $3.00 /
+      total $303.00 (was $298.00 / $2.98 / $300.98)
+
+VERIFICATION
+  • `flutter analyze --no-pub` → 0 issues
+  • Full suite → 2159 / 2159 ✓ (+6 from Phase 15 close at 2153)
+
+YAGNI GATES HELD
+  • No new helper service. The 6-site pattern is short and a tighter
+    abstraction would obscure the IAS-2-vs-supplier-reference split
+    that the comments document explicitly.
+  • No schema change. last_purchase_price_cents already exists
+    (migration 10055).
+  • Did NOT touch sale_form_screen — sale form uses price_cents not
+    cost_cents, so the same asymmetry cannot exist there.
+
+FIELD-FACING REMEDIATION
+  Pure UX fix — historical data is unaffected. After upgrade, opening
+  any existing purchase will continue to show whatever
+  unit_cost_cents was persisted on the row. ONLY NEW additions to a
+  draft purchase will pick up the corrected auto-fill, which is the
+  user-typed `last_purchase_price_cents` from the most recent posted
+  purchase line for that variant/product.
+
+DOCS UPDATED
+  • progress.txt (this entry)
+
+
+
+================================================================================
+PHASE 15.2 — Void integrity: payment-JE reversal + WAC batch cleanup (2026-05-18)
+================================================================================
+
+ENTRY POINTS FOR FUTURE CONTRIBUTORS/AGENTS
+  • docs/adr/0001-pricing-engines-as-sot.md §7
+  • docs/SOURCE_OF_TRUTH_MAP.md
+  • docs/ACCOUNTING_INTEGRITY_GUIDELINES.md
+  • docs/adr/0003-retrospective.md §6
+  • progress.txt (this file)
+
+FIELD REPORT
+  Backup `tapix_backup_20260518_051956.db` (schema 10057). User edited
+  a cheque-paid purchase (PO-202605-0002 → re-issued as PO-202605-0003).
+  Supplier ledger reconciled, but Reconciliation & Health screen flagged
+  two GL drifts:
+    AP drift        = 89991¢   (= voided purchase PO-202605-0002 total)
+    Inventory drift = 29700¢   (= 3 × 9900 — qty × unit cost of WAC line)
+  Complaint: "البرنامج يظهر أخطاء حسابية" after editing a cheque-paid
+  invoice; user requested cheque-detail UX (cheque amount may differ
+  from invoice total).
+
+TWO ROOT CAUSES (both upstream, both in existing SoTs)
+
+  R1 — Payment-JE leak on void
+    `voidPurchase` / `voidSale` reversed only the purchase/sale JE.
+    The associated `purchase_payments` / `sale_payments` rows (created
+    by ChequeLifecycleService when the cheque cleared, in Phase 15)
+    had their own posted JEs (Dr 2000 / Cr Bank, or Dr Bank / Cr 1100).
+    These payment JEs stayed posted after void, so AP/AR dropped by
+    the full total in GL but the supplier/customer ledger correctly
+    recorded `payment_reversal` — GL ↔ subsidiary ledger desync.
+
+    Evidence in backup: JE6 (Purchase #2) reversed by JE8 ✓. But JE7
+    (Supplier Payment #1) was NEVER reversed → AP balance 207989¢
+    instead of 297980¢, exact 89991¢ gap.
+
+  R2 — Batch deactivation gated on FIFO costing method
+    `PurchaseDao.voidPurchase` deactivated batches only inside an
+    `if (await _isFifoProduct(productId))` guard. But `postPurchase`
+    creates a batch for EVERY tracked product regardless of costing
+    method — WAC/standard products with `track_inventory = 1` get a
+    `BATCH-…` row too (it's used as the receipt-tracking ledger for
+    expiry-aware standard products and for FIFO valuation switch-over).
+
+    On void, the WAC-product batch stayed `is_active = 1` with full
+    `remaining_quantity`. The Reconciliation & Health screen's
+    `getTotalInventoryValueCents` (Phase 15 SoT) sums active
+    batch.remaining × batch.unit_cost first, falling back to variant
+    fields → the stale batch inflated the sum by exactly its row total.
+
+    Evidence in backup: product 2 is `inventory_tracking_type=standard`,
+    `costing_method=wac`. Batch #6 (variant 4, qty 3, cost 9900¢) was
+    created on PO-2 post and NEVER deactivated on PO-2 void → 29700¢
+    drift exactly matches.
+
+FIX (additive, single SoT, no schema change)
+
+  A — purchase_repository_impl.voidPurchase
+      After calling `dao.voidPurchase(…)`, loop through
+      `purchasePaymentDao.getByPurchaseId(purchaseId)` and call
+      `journalEntryService.voidJournalEntriesForSource(
+          sourceTable: 'purchase_payments', sourceId: payment.id,
+          reason: 'Purchase voided', voidedBy: userId)`.
+      Same tx — failure rolls back the entire void.
+
+  B — sale_repository_impl.voidSale
+      Symmetric: enumerate `salePaymentDao.getBySaleId(saleId)` and
+      reverse each payment's JE with sourceTable `sale_payments`.
+
+  C — purchase_dao.voidPurchase
+      Removed the `_isFifoProduct(productId)` guard around batch
+      deactivation. Now:
+        UPDATE product_batches
+          SET is_active = 0, remaining_quantity = 0, updated_at = now
+          WHERE purchase_id = :purchaseId
+            AND source = 'purchase'
+      runs for EVERY product in the purchase. Untracked products
+      simply match zero rows — safe no-op. FIFO regression path
+      preserved (still cleared along with WAC/standard).
+
+  D — No symmetric change needed for `voidSale`: sales do NOT create
+      batches (only `batch_consumptions` from FIFO sale costing),
+      which are already restored via `BatchService.restoreConsumptions`
+      with `type=void_sale_reverse`.
+
+REGRESSION SUITE
+  `test/integration/void_payment_je_and_wac_batch_test.dart`
+  (6 tests, all green):
+    R1 — purchase void reverses ALL purchase_payments JEs (no orphan
+         posted payment JE remains for a voided source)
+    R1 — sale void reverses ALL sale_payments JEs (symmetric)
+    R1 — AP GL balance after purchase void with cleared cheque
+         matches pre-purchase balance (zero net AP / Bank movement)
+    R2 — voiding a tracked-WAC purchase deactivates its batch row
+    R2 — voiding a tracked-FIFO/batch_expiry purchase still
+         deactivates its batch (regression guard for original path)
+    R2 — Σ(active batch.remaining × batch.unit_cost) for the variant
+         matches `variant.stock × variant.cost` after void
+
+VERIFICATION
+  • `flutter analyze --no-pub` → 0 issues
+  • Full suite → 2165 / 2165 ✓ (+6 from Phase 15.1 close at 2159)
+
+YAGNI GATES HELD
+  • No schema change. `purchase_payments`, `sale_payments`,
+    `product_batches.is_active` all existed pre-Phase-15.
+  • No new service. The fix lives where the void already lives —
+    repository pre-flight + DAO tx body. Each is a single-tx SoT.
+  • No domain-event bus for "payment voided" cascades. The repo loop
+    is in the same Drift tx as the status flip; atomicity holds.
+  • Deferred cheque-detail UX (amount/date that may legitimately
+    differ from invoice total): the user explicitly requested it,
+    but it is a NEW feature (cheque metadata + reconciliation of
+    over/under-payment), NOT a fix to the field-reported drift. The
+    two drifts above are GL bugs that exist whether cheque amount
+    equals invoice or not. The cheque-detail UX is tracked as a
+    follow-up: see "Explicitly deferred" in
+    `docs/ACCOUNTING_INTEGRITY_GUIDELINES.md` Phase 15.2 section.
+
+FIELD-FACING REMEDIATION
+  Phase 15.2 prevents NEW drift. The existing drift in
+  `tapix_backup_20260518_051956.db` (JE7 payment for the voided
+  PO-202605-0002 stayed posted, plus stale batch #6) requires either:
+    a) Reconciliation & Health → "Rebuild Ledger"
+       (LedgerRebuildService.rebuild — re-emits every JE source,
+       skipping voided ones), or
+    b) Manual reversal JE for JE7 + manual deactivation of batch #6
+       through the inventory adjustment screen.
+  After upgrade, voiding any cheque-paid invoice (sale OR purchase)
+  goes through the fixed paths automatically.
+
+DOCS UPDATED
+  • progress.txt (this entry)
+  • docs/ACCOUNTING_INTEGRITY_GUIDELINES.md (new Phase 15.2 section:
+    SoT rule + 2 banned-pattern entries + test pin + deferred items)
+
+
+================================================================================
+PHASE 15.3 — Inventory valuation read-formula must mirror FIFO write predicate
+================================================================================
+Date: 2026-05-18
+Trigger: tapix_backup_20260518_061018.db
+Reconciliation & Health screen reported:
+  Trial Balance Check        ✓  Debits = Credits = $2,719.73
+  Journal Entries Check      ✓  All posted entries are balanced
+  Issue Details              ✗  Inventory mismatch:
+                                GL(journal_lines) = 267,300
+                                Σ(stock × cost)   = 277,200
+                                drift             =   9,900
+User complaint (Arabic): every fix introduces a new accounting bug. The
+drift appeared immediately after creating a 1-unit linked purchase return
+against the WAC variant tt66 of "p2 without v".
+
+ROOT CAUSE (single, upstream, in an existing SoT)
+
+  The Phase-15.0 read formula in
+  `lib/features/accounting/data/datasources/journal_local_datasource.dart`
+  (`getTotalInventoryValueCents`) preferred `Σ(batch.remaining × unit_cost)`
+  whenever ANY active batch existed for a variant. That predicate was the
+  ROOT cause of an asymmetry with the write side:
+
+    Write side (PurchaseDao.postPurchase):
+      `BatchService.createBatchFromPurchase(...)` runs UNCONDITIONALLY for
+      every tracked purchase line — Phase 6.4 unified the ledger so even
+      WAC products get a `product_batches` row per purchase.
+
+    Write side (PurchaseDao.postPurchaseReturn / SaleDao.postSaleReturn /
+                AdjustmentReturnDao):
+      `BatchService.consumeFifo(...)` is GATED by `_isFifoProduct(productId)`.
+      WAC products' batches are NEVER decremented. The return path only
+      adjusts `variant.stock_quantity` and posts the `1200 Inventory` GL
+      leg.
+
+    Read side (Phase 15.0):
+      Treated active batches as authoritative for ALL costing methods.
+
+  Result: every linked or adjustment purchase return against a WAC product
+  silently produced a phantom drift of EXACTLY (returned_qty × unit_cost).
+  In the field-report DB:
+    * Purchase #2 line 5 — product 2 (WAC/standard), qty 10 × 9 900¢
+      → variant v3 stock 10 → 9 (return)         ✓
+      → GL 1200 Inventory   297 000 → 267 300    ✓
+      → batch B5 remaining_quantity = 10  ✗  (should be 9, but WAC return
+                                              path doesn't touch it)
+    * Read formula: B5 × 9 900 = 99 000 instead of variant SoT 9 × 9 900
+      = 89 100 → drift 9 900¢ exactly matching the screen.
+
+FIX (additive, single SoT, no schema change, single file edited)
+
+  A — `journal_local_datasource.dart` :: `getTotalInventoryValueCents`
+      Mirror the `_isFifoProduct` predicate inside the SQL:
+
+        Branch 1 (batch ledger) — `WHERE b.is_active = 1
+            AND (p.inventory_tracking_type IN ('batch','batch_expiry')
+                 OR p.costing_method = 'fifo')`
+        Branch 2 (variant)      — `WHERE NOT (FIFO predicate)
+                                   OR NOT EXISTS active batch for v.id`
+        Branch 3 (product)      — same predicate as Branch 2 for products
+                                   without variants
+
+      The OR fallback inside Branches 2/3 keeps pre-Phase-6.4 legacy FIFO
+      data visible (FIFO product without batches → variant fallback).
+
+  No write-side change. There is intentionally no "consume batch on WAC
+  return" code path — WAC has no FIFO ordering, the batch row has no SoT
+  semantics for WAC products, and adding a write would only be a workaround
+  for a read-side bug. The single rule going forward is: batch ledger is
+  SoT iff product is FIFO. Read predicate matches write predicate.
+
+REGRESSION SUITE
+  `test/integration/inventory_valuation_batch_ledger_test.dart` extended
+  with 4 new tests:
+    R1 — WAC variant with stale batch row uses variant SoT, NOT batch SoT.
+         Pins the exact bug class (variant.stock = 9, batch.remaining = 10
+         → expected 89 100, NOT 99 000).
+    R2 — WAC product without variants with stale batch uses product SoT.
+         Same rule on the no-variant branch (4 × 5 000 = 20 000, NOT
+         5 × 5 000 = 25 000).
+    R3 — Field-report reproduction. Builds the exact DB state of
+         `tapix_backup_20260518_061018.db`:
+           p1 (FIFO/batch_expiry): two variants with 9 stock each,
+                                    batches B4/B6 remaining 9 × 9 900
+           p2 (WAC/standard):       variant v3 stock 9, batch B5
+                                    remaining 10 (STALE) × 9 900
+         Expects 178 200 + 89 100 = 267 300 — matches GL(1200) exactly,
+         drift = 0. Pre-Phase-15.3 produced 277 200 (drift 9 900).
+    R4 — Defense-in-depth: a product with `costing_method='fifo'` but
+         `inventory_tracking_type='standard'` is still treated as FIFO
+         (mirrors the OR in `_isFifoProduct`). Without this gate, a
+         FIFO/standard product would silently regress to the display cost
+         (5 × 1 000 = 5 000) instead of the batch SoT (5 × 800 = 4 000).
+
+  All pre-existing tests (#1–#5) remain green:
+    #1 FIFO batch-ledger total (the original Phase-15.0 regression)
+    #2 WAC product without batches → variant fallback
+    #3 Product without variants and without batches → product fallback
+    #4 Inactive batches are NOT counted
+    #5 Mixed scenario sums all three branches deterministically
+
+VERIFICATION
+  • `flutter analyze --no-pub` → 0 issues
+  • Full suite → 2169 / 2169 ✓ (+4 from Phase 15.2 close at 2165)
+
+YAGNI GATES HELD
+  • No schema change. The batch table, predicate columns, and accounts
+    all existed pre-Phase-15.3.
+  • No new service. The fix is a 9-line SQL widening of the existing
+    SoT (`getTotalInventoryValueCents`).
+  • No "WAC batch consumer" write-side path. Symmetry is enforced on
+    the read side; the batch row stays as a write-once purchase audit
+    trail for WAC products.
+  • No global SQL trigger. `BatchService.assertInvariantForProduct`
+    already runs per-FIFO-product in every write tx that touches batches.
+
+FIELD-FACING REMEDIATION
+  Phase 15.3 is read-only. The 9 900¢ drift in
+  `tapix_backup_20260518_061018.db` disappears the moment the user
+  upgrades and re-opens Reconciliation & Health — no DB sweep, no
+  ledger rebuild, no manual JE.
+
+DOCS UPDATED
+  • progress.txt (this entry)
+  • docs/ACCOUNTING_INTEGRITY_GUIDELINES.md (new Phase 15.3 section:
+    SoT rule + 2 banned patterns + test pin + deferred items +
+    field-facing remediation note)
+
+
+================================================================================
+PHASE 15.4 — Purchase adjustment return must surface GROSS supplier reference
+================================================================================
+Date: 2026-05-18
+Trigger: same backup tapix_backup_20260518_061018.db, new field report
+         on `PurchaseAdjReturnFormScreen` (Purchase Adjustment Return).
+
+FIELD REPORT (Arabic)
+  Screenshot of `PAR-202605-0001`:
+    • p2 without v (Green/Small #tt66): $99.00 × 1 +1.0%  →  $99.99
+    • p1 with v Blue/Large (#tt55-1)  : $150.00 × 1 +1.0% →  $151.50
+    • p1 with v Brown/Medium (#tt55-2): $150.00 × 1 +1.0% →  $151.50
+    • Total $402.99 / 3 items.
+  Complaint: variants use the SELL price ($150) instead of the cost
+  basis; no-variant looks correct only by coincidence (its sell price
+  happens to match its last purchase cost). Same class as the Phase 15.1
+  bug, one screen downstream.
+
+ROOT CAUSE (one rule, two violation sites)
+
+  Phase 15.1 established the SoT for the purchase context:
+      unit money = `lastPurchasePriceCents ?? costCents`
+  used by `VariantEditDialog` and the 6 sites in `purchase_form_screen.dart`.
+
+  Two SoTs still reached for `priceCents` (customer SELL price) in the
+  PURCHASE side:
+
+  V1 — `_PickerRow` inside
+       `lib/features/purchases/presentation/screens/`
+       `purchase_adj_return_form_screen.dart`.
+       Picker display and `onTap` auto-fill both read `row.priceCents`
+       for variant and no-variant rows. Variants surfaced $150; no-variant
+       happened to match cost because `cost_cents == price_cents` for that
+       sample product. Asymmetry visible the moment any variant carries a
+       margin.
+
+  V2 — `UnifiedReturnService.searchProducts` in
+       `lib/core/services/unified_return_service.dart`.
+       Purchase-side fallback (no party history) was
+       `defaultPrice = row.read<int>('cost_cents')` — IAS-2 NET basis.
+       Feeds the URL `?price=` query param via
+       `unified_return_search_sheet.dart` → router → form. Same asymmetry
+       on the external nav entry path.
+
+  Tax math was correct on both sides ($99 × 1.01 = $99.99 ✓ and
+  $150 × 1.01 = $151.50 ✓). The user-observed "tax wrong on no-variant"
+  was a visual misread of the BASE-price asymmetry, NOT a tax bug.
+
+FIX (additive, single SoT, zero scattered code, no schema change)
+
+  A — `purchase_adj_return_form_screen.dart` :: `_PickerRow`
+      Added nullable `lastPurchasePriceCents` field. Variant SQL now
+      reads `pv.last_purchase_price_cents` (column already on `pv.*`
+      since migration 10055). No-variant path reads the typed
+      `product.lastPurchasePriceCents` via Drift's `MoneyConverter`.
+
+      New helper on the row:
+        int unitMoneyCents({required bool isSale}) {
+          if (isSale) return priceCents;
+          return lastPurchasePriceCents ?? costCents;
+        }
+      Used at the picker trailing display AND at the `onTap` auto-fill.
+      Variant + no-variant now fall through the same resolver, exactly
+      mirroring Phase 15.1 in `purchase_form_screen.dart`.
+
+  B — `unified_return_service.dart` :: `searchProducts`
+      Both base-product and variant SQL queries now SELECT
+      `last_purchase_price_cents`. The purchase-side `defaultPrice`
+      resolves as `last_purchase_price_cents ?? cost_cents`. Sale-side
+      semantics are explicitly untouched (still returns `price_cents`).
+
+  Sale adjustment-return picker (`sale_adj_return_form_screen.dart`) was
+  intentionally NOT modified — sell price is the correct money for a
+  customer-facing refund.
+
+REGRESSION SUITE
+  New file `test/integration/purchase_adj_return_supplier_ref_test.dart`
+  (7 tests, all green):
+    • no-variant: `lastPurchasePriceCents` wins over `costCents`
+    • no-variant: falls back to `costCents` when GROSS column is NULL
+    • variant   : `lastPurchasePriceCents` wins over variant `costCents`
+    • variant   : falls back to `costCents` when GROSS column is NULL
+    • symmetry  : variant + no-variant at the same GROSS yield IDENTICAL
+                  supplier reference (the exact symmetry the field report
+                  demanded — no more $99 vs $150 split)
+    • sale side : no-variant still returns `price_cents` (untouched)
+    • sale side : variant   still returns variant `price_cents` (untouched)
+
+VERIFICATION
+  • `flutter analyze --no-pub` → 0 issues
+  • Full suite → 2176 / 2176 ✓ (+7 from Phase 15.3 close at 2169)
+
+YAGNI GATES HELD
+  • No shared helper across the two picker classes; the resolver lives
+    inside `_PickerRow.unitMoneyCents` for the purchase form only.
+    The sale form `_PickerRow` keeps its own (sell-price) semantics.
+  • No schema change. Column `last_purchase_price_cents` already exists
+    on both `products` and `product_variants` since migration 10055.
+  • No GROSS/NET toggle in the picker UI.
+  • No new domain event or migration.
+
+FIELD-FACING REMEDIATION
+  Phase 15.4 is UI-only. Existing posted PAR/SAR rows are unaffected.
+  Reopening the picker will now display the GROSS supplier reference
+  immediately — no DB sweep, no migration, no ledger rebuild.
+
+DOCS UPDATED
+  • progress.txt (this entry)
+  • docs/ACCOUNTING_INTEGRITY_GUIDELINES.md (new Phase 15.4 section:
+    SoT rule + 2 banned-pattern entries + test pin)
+

@@ -562,6 +562,105 @@ Confirmation dialog before clearing per-line discounts on mode switch — the ex
 
 ---
 
+## Phase 15.1 — Purchase Form Variant/No-Variant Unit-Cost Parity (2026-05-18)
+
+### Rule
+Every form that auto-fills a "user-typed cost" field (purchase line items, variant edit dialog, supplier-side rebate forms) MUST resolve the displayed value via `lastPurchasePriceCents ?? costCents`. The first branch is the GROSS supplier reference price (what the user typed on the most recent posted purchase line); the fallback handles legacy rows pre-migration 10055.
+
+`cost_cents` alone is the IAS-2 NET basis — already netted of any per-line discount by `PurchaseDao.postPurchase`. Surfacing it directly in the UI causes the variant-vs-no-variant asymmetry that the May 2026 field report uncovered (variant lines silently dropping from `$100` to `$99` while no-variant peers of the same product kept showing `$100`).
+
+### New banned patterns
+- ❌ Reading `variant.costCents` (or `product.costCents`) directly as the auto-fill value in any "add line item" / "scan barcode" / "edit purchase line" code path. The two columns can legitimately diverge (`cost_cents` is the post-discount NET basis maintained by `PurchaseDao.postPurchase`; `last_purchase_price_cents` is the gross supplier reference price). UI MUST prefer the gross column with a NET fallback.
+- ❌ Adding a `hasVariants` branch to the unit-cost auto-fill. The two paths must be symmetric: variants read `variant.lastPurchasePriceCents ?? variant.costCents`, no-variants read `product.lastPurchasePriceCents ?? product.costCents`. Same shape, same fallback semantics.
+- ❌ Mirroring this gross-vs-net split into the LineItemPricingEngine, the tax engine, or any persisted total. The engine is intentionally unaware of supplier reference prices — it only sees the user-typed `unitCostCents` and the per-line / invoice discount. Stamping `last_purchase_price_cents` is a side-effect of `postPurchase` and stays in the DAO.
+
+### Pinned by tests
+- `test/features/purchases/purchase_form_variant_unit_cost_parity_test.dart` (6 tests — variant auto-fill prefers GROSS; no-variant auto-fill prefers GROSS; legacy fallback for both shapes; variant and no-variant lines produce identical per-line totals and tax for the same supplier reference price; full 3-line field-report scenario yields $300 / $3 / $303).
+
+### Explicitly deferred (NOT killed)
+- Extracting the `lastPurchasePriceCents ?? costCents` pattern into a shared helper. Six occurrences in one screen file; an abstraction at this point obscures the IAS-2-vs-supplier-reference split that the inline comments document. Re-open trigger: a third surface (e.g. sale form, quotation form) starts needing the same resolver.
+- Showing both prices (GROSS and NET) in the picker. The current UX collapses to the user's intended view (what they typed last time). A power-user toggle is a YAGNI candidate until requested.
+
+---
+
+## Phase 15.2 — Void integrity: payment-JE reversal + WAC batch cleanup (2026-05-18)
+
+### Rule
+Voiding a sale or purchase MUST reverse the JEs of EVERY downstream side-effect row whose own JE was posted, AND deactivate EVERY `product_batches` row created by the source — not only those whose product currently uses FIFO costing.
+
+Concretely, in the same Drift transaction that flips `status='voided'`:
+1. Enumerate `purchase_payments` (or `sale_payments`) for the source and call `JournalEntryService.voidJournalEntriesForSource(sourceTable: 'purchase_payments'|'sale_payments', sourceId: …)` for each. This closes the GL ↔ subsidiary-ledger gap that opens when a cheque has already cleared (Phase 15) but the parent invoice is later voided.
+2. For purchases, deactivate `product_batches` WHERE `purchase_id = :id AND source = 'purchase'` UNCONDITIONALLY. `PurchaseDao.postPurchase` creates a batch for every tracked product regardless of `costing_method`; gating deactivation on `_isFifoProduct(...)` strands the WAC/standard batch rows and double-counts inventory in `getTotalInventoryValueCents` (which sums active batches first).
+
+### New banned patterns
+- ❌ Reversing only the parent invoice JE on void without iterating the payment table. After Phase 15 the cheque-clearance path writes a posted payment JE via `repo.recordPayment`; any void that ignores `purchase_payments`/`sale_payments` leaves an orphan posted JE → exact AP/AR vs GL drift equal to the cleared cheque amount.
+- ❌ Conditioning batch deactivation on costing method (`_isFifoProduct`, `costing_method == 'fifo'`, `inventory_tracking_type == 'batch_expiry'`, …). Batch creation is unconditional for tracked products, so deactivation MUST be unconditional too. Untracked products simply match zero rows — the UPDATE is a safe no-op.
+
+### Pinned by tests
+- `test/integration/void_payment_je_and_wac_batch_test.dart` (6 tests — purchase void reverses ALL `purchase_payments` JEs, sale void reverses ALL `sale_payments` JEs, AP GL balance returns to pre-purchase after voiding a cleared-cheque PO, voiding a tracked-WAC purchase deactivates its batch row, voiding a tracked-FIFO/batch_expiry purchase still deactivates its batch, Σ(active batch × cost) matches `variant.stock × variant.cost` after void).
+
+### Explicitly deferred (NOT killed)
+- **Cheque-detail UX** (cheque amount that may legitimately differ from invoice total, cheque date, cheque number, bank, branch). User explicitly requested this. It is a NEW feature, not a fix for the field-reported drift — the GL bugs above existed regardless of whether the cheque equals the invoice. Implementing requires: (a) a `cheque_details` sidecar table (number/bank/branch/amount/issue-date/due-date), (b) UI in the cheque-payment dialog AND the cheque-confirmation reminders, (c) handling over-payment (creates supplier credit balance via `customer_credit_notes` analog on the supplier side, or routes the excess through `JournalEntryService.recordDirectSupplierDiscountJournalEntry` — needs UX decision), and (d) handling under-payment (leaves a residual AP balance — already supported by `recordPayment`, just needs the UI to allow `amount ≠ invoice.total`). Re-open trigger: the user confirms which over-payment policy they want.
+- **Domain-event bus for void cascades**. The repo+DAO loop is in the same Drift tx as the status flip; atomicity already holds. An event bus only buys value when a 3rd-party integration also needs to react to "purchase voided" — none exist today.
+- **Materialised "linked-payment-JEs to reverse" view**. The N+1 fetch in `voidPurchase`/`voidSale` is bounded by the cheque-payment count per invoice (≤ a handful in practice). YAGNI.
+
+### Historical drift remediation (one-time)
+For databases that already contain the Phase-15.2 bug pattern (cheque-paid invoice voided pre-fix): the user opens Reconciliation & Health → "Rebuild Ledger" (`LedgerRebuildService.rebuild`). The rebuild skips voided sources and re-emits every other JE through the post-Phase-15.2 helpers, which now correctly handle the payment-JE cascade and batch deactivation.
+
+---
+
+## Phase 15.3 — Inventory valuation read-formula must mirror FIFO write predicate (2026-05-18)
+
+### Rule
+The read-side inventory-valuation formula (`JournalLocalDatasourceImpl.getTotalInventoryValueCents`) MUST gate the batch-ledger branch on the SAME predicate that gates the batch-ledger write paths — i.e. `_isFifoProduct(productId)` (`inventory_tracking_type IN ('batch','batch_expiry')` OR `costing_method = 'fifo'`).
+
+`PurchaseDao.postPurchase` creates a `product_batches` row for every tracked purchase line (Phase 6.4 unified the ledger), but `BatchService.consumeFifo` / `BatchService.unconsumeFifo` are ONLY invoked for FIFO/batch products. WAC return paths only update `variant.stock_quantity` and post the `1200 Inventory` GL leg — they NEVER decrement `batch.remaining_quantity`. WAC product batches are therefore write-once / read-stale.
+
+If the read formula treats those stale batch rows as authoritative, every linked or adjustment purchase return against a WAC product produces a phantom drift exactly equal to `(returned_qty × unit_cost)`. The Phase-15.0 formula (`prefer batches whenever any active batch exists`) had this asymmetry; Phase 15.3 closes it by mirroring the write predicate on the read side.
+
+### New banned pattern
+- ❌ Reading `product_batches` as the inventory-valuation SoT for products whose `costing_method != 'fifo'` AND `inventory_tracking_type NOT IN ('batch','batch_expiry')`. WAC return paths never decrement `remaining_quantity`, so the batch row drifts forever. The variant SoT (`variant.stock × variant.cost`) is the authoritative valuation for WAC products.
+- ❌ Adding a new "consume batch on WAC return" code path to keep batches in sync. WAC has no FIFO ordering, so any chosen layer is arbitrary; the batch ledger has no SoT semantics for WAC. Symmetry is enforced on the read side, not the write side.
+
+### Pinned by tests
+- `test/integration/inventory_valuation_batch_ledger_test.dart` adds 4 Phase-15.3 regressions:
+  - WAC variant with stale batch row uses variant SoT, NOT batch SoT.
+  - WAC product without variants with stale batch uses product SoT.
+  - Field-report reproduction (FIFO + WAC mix after a 1-unit linked purchase return) sums to GL exactly with no phantom drift.
+  - Defense-in-depth: a product with `costing_method='fifo'` but `inventory_tracking_type='standard'` is still treated as FIFO (mirrors the OR predicate in `_isFifoProduct`).
+
+### Field-facing remediation
+The fix is read-only — no schema change, no data migration. The drift in `tapix_backup_20260518_061018.db` (267 300 vs 277 200 = exactly the 1-unit returned WAC line) disappears the moment the user upgrades and re-opens Reconciliation & Health.
+
+### Explicitly deferred (NOT killed)
+- A trigger that asserts `Σ(batch.remaining × batch.unit_cost) == GL(1200)` on every batch UPDATE for FIFO products. The current per-product `BatchService.assertInvariantForProduct` already does this; a global trigger would be redundant.
+- Soft-deleting WAC product batches on the first WAC return so the read predicate would not need the costing-method gate. Rejected: the batch row is still useful for purchase-history audit and cost-trace UIs; deactivating it on first return would lose that audit trail. The read-side gate is cheaper and SoT-clean.
+
+---
+
+## Phase 15.4 — Purchase adjustment return must surface GROSS supplier reference (2026-05-18)
+
+### Rule
+Every PURCHASE-side product picker / auto-fill (purchase form, purchase adjustment return, supplier-history search) MUST resolve the displayed unit money via `lastPurchasePriceCents ?? costCents` — the same Phase 15.1 SoT used by `VariantEditDialog` and the six sites in `purchase_form_screen.dart`. Variant rows and no-variant rows MUST fall through the SAME resolver so the picker is symmetric.
+
+`priceCents` is the customer SELL price and has NO semantic on the purchase side; reaching for it from a purchase-side picker is a bug class — the variant row will surface the markup and the no-variant row will look correct only when `cost_cents == price_cents` by coincidence.
+
+### New banned patterns
+- ❌ Reading `priceCents` (or `vr['price_cents']`) inside any picker / search result row that feeds a purchase form, purchase adjustment return, or purchase-side journal entry. Use `lastPurchasePriceCents ?? costCents` instead. The May 2026 field report on `PAR-202605-0001` (variants at $150 SELL, no-variant at $99 SELL) was exactly this bug.
+- ❌ Using `cost_cents` alone as the purchase-side fallback in `UnifiedReturnService.searchProducts` (or any other supplier-history search). `cost_cents` is the IAS-2 NET basis (post per-line discount); the picker must surface the GROSS user-typed reference. Resolve `last_purchase_price_cents ?? cost_cents` in the SQL `SELECT` list, NOT downstream.
+
+### Pinned by tests
+- `test/integration/purchase_adj_return_supplier_ref_test.dart` (7 tests): no-variant + variant GROSS-wins + NULL-fallback + variant/no-variant symmetry at the same GROSS + sale-side untouched (still returns `price_cents`).
+
+### Field-facing remediation
+Phase 15.4 is UI-only. Existing posted PAR / SAR rows are unaffected; the next time the user opens `PurchaseAdjReturnFormScreen` the picker will display the GROSS supplier reference — no DB sweep, no migration, no ledger rebuild.
+
+### Explicitly deferred (NOT killed)
+- Shared resolver across `purchase_adj_return_form_screen.dart` and `sale_adj_return_form_screen.dart` `_PickerRow` classes. The sale form INTENTIONALLY keeps `priceCents` (customer-facing refund) and a shared helper would only add an indirection without removing duplication — both classes are 30-line value objects local to their screen.
+- A picker-level GROSS / NET toggle. YAGNI until a user requests it; the supplier reference is the only correct money for a supplier-facing return.
+
+---
+
 ## �� Questions?
 
 1. Check `project-context.md` first

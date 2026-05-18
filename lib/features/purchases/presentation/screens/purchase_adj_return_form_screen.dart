@@ -1661,6 +1661,15 @@ class _PickerRow {
   final String? sku;
   final int priceCents;
   final int costCents;
+  /// GROSS supplier reference price (last unit cost the user typed on a
+  /// purchase line, before per-line trade discounts). Nullable because rows
+  /// created before migration 10055 — or never touched by a purchase post —
+  /// have NULL here. Callers MUST resolve `lastPurchasePriceCents ?? costCents`
+  /// to obtain the user-facing supplier reference (the same convention used
+  /// by `VariantEditDialog` and `purchase_form_screen.dart` per Phase 15.1).
+  /// This is the single piece of data that makes the purchase adjustment
+  /// return show the cost basis (not the customer sell price).
+  final int? lastPurchasePriceCents;
   final int stockQuantity;
   final int taxRateBps;
   /// Whether the underlying product is a variant product (`products.has_variants = 1`).
@@ -1677,10 +1686,24 @@ class _PickerRow {
     this.sku,
     required this.priceCents,
     required this.costCents,
+    this.lastPurchasePriceCents,
     required this.stockQuantity,
     required this.taxRateBps,
     required this.hasVariants,
   });
+
+  /// Money to display and seed into the new line item.
+  /// • Sale context  → customer sell price.
+  /// • Purchase context → GROSS supplier reference
+  ///   `lastPurchasePriceCents ?? costCents` (Phase 15.1 SoT). Using
+  ///   `priceCents` here was the variant-vs-no-variant asymmetry bug fixed
+  ///   in Phase 15.2 — variants surfaced the sell price ($150) while the
+  ///   IAS-2 NET cost was hidden, and no-variant rows surfaced the sell
+  ///   price ($99) too, making the picker useless for a supplier return.
+  int unitMoneyCents({required bool isSale}) {
+    if (isSale) return priceCents;
+    return lastPurchasePriceCents ?? costCents;
+  }
 
   String get displayName {
     if (variantLabel != null && variantLabel!.isNotEmpty) {
@@ -1763,6 +1786,10 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
           : product.purchaseTaxRateBps;
 
       if (product.hasVariants) {
+        // `pv.*` already includes the nullable `last_purchase_price_cents`
+        // column added in migration 10055 — read it explicitly below so the
+        // purchase-adjustment-return picker can resolve the GROSS supplier
+        // reference (Phase 15.2).
         final variantRows = await db.customSelect(
           'SELECT pv.*, pc.name AS color_name, sz.name AS size_name '
           'FROM product_variants pv '
@@ -1788,6 +1815,8 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
             sku: vr.readNullable<String>('sku'),
             priceCents: vr.read<int>('price_cents'),
             costCents: vr.read<int>('cost_cents'),
+            lastPurchasePriceCents:
+                vr.readNullable<int>('last_purchase_price_cents'),
             stockQuantity: vr.read<int>('stock_quantity'),
             taxRateBps: taxBps,
             hasVariants: true,
@@ -1802,6 +1831,8 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
           sku: product.sku,
           priceCents: product.priceCents.toBigInt().toInt(),
           costCents: product.costCents.toBigInt().toInt(),
+          lastPurchasePriceCents:
+              product.lastPurchasePriceCents?.toBigInt().toInt(),
           stockQuantity: product.stockQuantity,
           taxRateBps: taxBps,
           hasVariants: false,
@@ -1901,7 +1932,12 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        Text(curr.format(row.priceCents),
+                        // Purchase-side picker MUST surface the supplier
+                        // reference (GROSS cost), never the customer sell
+                        // price. Phase 15.2 fix — `unitMoneyCents` collapses
+                        // variant + no-variant to the same convention used
+                        // by `purchase_form_screen.dart` (Phase 15.1).
+                        Text(curr.format(row.unitMoneyCents(isSale: widget.isSale)),
                             style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600)),
                         Text('${'returns.stock'.tr()}: ${row.stockQuantity}',
                             style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
@@ -1914,7 +1950,11 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
                       variantLabel: row.variantLabel,
                       variantSku: row.sku,
                       quantity: 1,
-                      unitPriceCents: row.priceCents,
+                      // Auto-fill the new line with the side-correct money.
+                      // Variant + no-variant resolve identically (Phase 15.2)
+                      // — both fall through `lastPurchasePriceCents ?? costCents`
+                      // for the purchase form, never the sell price.
+                      unitPriceCents: row.unitMoneyCents(isSale: widget.isSale),
                       unitCostCents: row.costCents,
                       taxRateBps: row.taxRateBps,
                     )),

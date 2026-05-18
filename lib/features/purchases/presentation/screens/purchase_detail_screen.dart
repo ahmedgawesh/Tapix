@@ -18,8 +18,6 @@ import '../../domain/repositories/purchase_repository.dart';
 import '../../../products/domain/repositories/product_variant_repository.dart';
 import '../services/purchase_pdf_service.dart';
 import '../../../barcode/data/models/invoice_print_data.dart';
-import '../../../shared/widgets/unified_return_search_sheet.dart';
-import '../../../../core/services/unified_return_service.dart';
 
 class PurchaseDetailScreen extends StatefulWidget {
   final int purchaseId;
@@ -1416,14 +1414,9 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
         }
         break;
       case 'return':
-        showUnifiedReturnSearchSheet(
-          context,
-          side: ReturnSide.purchase,
-          partyId: _purchase?.supplierId,
-          partyName: _purchase?.supplierName,
-          invoiceId: widget.purchaseId,
-          invoiceNumber: _purchase?.purchaseNumber,
-        );
+        // In-invoice button always creates a LINKED return for this invoice.
+        // Adjustment (unlinked) returns are created from the Returns list.
+        context.push('/purchases/returns/new?purchaseId=${widget.purchaseId}');
         break;
     }
   }

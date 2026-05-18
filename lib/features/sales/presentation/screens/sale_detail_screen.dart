@@ -18,8 +18,6 @@ import '../../../settings/presentation/bloc/app_settings_bloc.dart';
 import '../../domain/entities/sale_entity.dart';
 import '../../domain/repositories/sale_repository.dart';
 import '../services/sale_pdf_service.dart';
-import '../../../shared/widgets/unified_return_search_sheet.dart';
-import '../../../../core/services/unified_return_service.dart';
 import '../../../inventory/presentation/widgets/batch_flow_widget.dart';
 
 class SaleDetailScreen extends StatefulWidget {
@@ -141,16 +139,10 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
     if (sale.isCompleted) {
       actions.add(
         FilledButton.tonalIcon(
-          onPressed: () async {
-            if (!mounted) return;
-            showUnifiedReturnSearchSheet(
-              context,
-              side: ReturnSide.sale,
-              partyId: sale.customerId,
-              partyName: sale.customerName,
-              invoiceId: sale.id,
-              invoiceNumber: sale.invoiceNumber,
-            );
+          onPressed: () {
+            // In-invoice button always creates a LINKED return for this invoice.
+            // Adjustment (unlinked) returns are created from the Returns list.
+            context.push('/sales/returns/new?saleId=${sale.id}');
           },
           icon: const Icon(LucideIcons.undo2, size: 16),
           label: Text('sales.create_return'.tr()),

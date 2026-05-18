@@ -1167,22 +1167,37 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
             );
           }
 
-          // FIFO sync: deactivate batches sourced from this purchase line
-          // (already validated above to be untouched). Use is_active=0 +
-          // remaining_quantity=0 so they neither serve future FIFO consumption
-          // nor inflate Σ(remaining) on the invariant check.
+          // 2026-05-18 — Phase 15.2 — Batch deactivation must be SYMMETRIC
+          // with batch creation in `postPurchase`. The post path creates a
+          // batch row for EVERY tracked product (`if (tracks)`, line 707),
+          // regardless of `costing_method`. Pre-Phase-15.2 the void path
+          // only deactivated batches for FIFO products, so a posted purchase
+          // of a `wac`/`standard` tracked product left an orphan
+          // `is_active=1` batch on void — inflating
+          // `Σ(active batch remaining × cost)` (the Phase 15 inventory
+          // valuation formula) by exactly that batch's value. Root cause of
+          // the Inventory drift = 29700¢ (= 3 × 9900) reproduced in
+          // `tapix_backup_20260518_051956.db`.
+          //
+          // The UPDATE is a no-op for untracked products (no batches were
+          // created on post), so we can run it unconditionally. We still
+          // gate `voidBatchedProductIds` (for the I4 invariant assert) on
+          // `_isFifoProduct`, because `BatchService.assertInvariantForProduct`
+          // is only meaningful for FIFO products — WAC sales don't decrement
+          // batch.remaining_quantity, so the cross-table invariant doesn't
+          // hold for WAC after any sale.
+          await customUpdate(
+            'UPDATE product_batches '
+            '   SET is_active = 0, remaining_quantity = 0, updated_at = ? '
+            ' WHERE purchase_item_id = ? AND is_active = 1',
+            variables: [
+              Variable.withString(DateTime.now().toIso8601String()),
+              Variable.withInt(item.id),
+            ],
+            updates: {productBatches},
+            updateKind: UpdateKind.update,
+          );
           if (await _isFifoProduct(productId)) {
-            await customUpdate(
-              'UPDATE product_batches '
-              '   SET is_active = 0, remaining_quantity = 0, updated_at = ? '
-              ' WHERE purchase_item_id = ? AND is_active = 1',
-              variables: [
-                Variable.withString(DateTime.now().toIso8601String()),
-                Variable.withInt(item.id),
-              ],
-              updates: {productBatches},
-              updateKind: UpdateKind.update,
-            );
             voidBatchedProductIds.add(productId);
           }
         }

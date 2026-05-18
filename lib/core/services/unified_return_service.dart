@@ -353,6 +353,7 @@ class UnifiedReturnService {
     // chip rendered for variant products is also rendered here when present.
     final baseRows = await _db.customSelect(
       'SELECT p.id, p.name, p.sku, p.barcode, p.price_cents, p.cost_cents, '
+      '  p.last_purchase_price_cents, '
       '  p.sales_tax_rate_bps, p.purchase_tax_rate_bps, p.stock_quantity, '
       '  pc.name AS color_name, sz.name AS size_name '
       'FROM products p '
@@ -375,9 +376,17 @@ class UnifiedReturnService {
 
     for (final row in baseRows) {
       final productId = row.read<int>('id');
+      // Purchase side MUST surface the GROSS supplier reference
+      // (`last_purchase_price_cents ?? cost_cents`) — the same convention
+      // used by `purchase_form_screen.dart` (Phase 15.1) and the picker in
+      // `purchase_adj_return_form_screen.dart`. Falling back to `cost_cents`
+      // alone (IAS-2 NET basis) caused the variant-vs-no-variant asymmetry
+      // visible in the adjustment-return picker when entered via
+      // `unified_return_search_sheet.dart` (Phase 15.2).
       final defaultPrice = side == ReturnSide.sale
           ? row.read<int>('price_cents')
-          : row.read<int>('cost_cents');
+          : (row.readNullable<int>('last_purchase_price_cents')
+              ?? row.read<int>('cost_cents'));
 
       int lastPrice = defaultPrice;
       if (partyId != null) {
@@ -418,6 +427,7 @@ class UnifiedReturnService {
       '  p.sales_tax_rate_bps, p.purchase_tax_rate_bps, '
       '  pv.id AS variant_id, pv.sku AS variant_sku, pv.barcode AS variant_barcode, '
       '  pv.price_cents AS variant_price, pv.cost_cents AS variant_cost, '
+      '  pv.last_purchase_price_cents AS variant_last_purchase_price_cents, '
       '  pv.stock_quantity AS variant_stock, '
       '  pc.name AS color_name, sz.name AS size_name '
       'FROM products p '
@@ -439,9 +449,11 @@ class UnifiedReturnService {
     for (final row in variantRows) {
       final productId = row.read<int>('product_id');
       final variantId = row.read<int>('variant_id');
+      // See base-products comment above — same Phase 15.2 rule for variants.
       final defaultPrice = side == ReturnSide.sale
           ? row.read<int>('variant_price')
-          : row.read<int>('variant_cost');
+          : (row.readNullable<int>('variant_last_purchase_price_cents')
+              ?? row.read<int>('variant_cost'));
 
       int lastPrice = defaultPrice;
       if (partyId != null) {

@@ -324,6 +324,24 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
       userId: await _currentUserId(),
     );
 
+    // 2026-05-18 — Phase 15.2 — Reverse the GL journal entry for EVERY
+    // payment row attached to this purchase (cash, cheque-cleared, mixed
+    // tender, supplier-credit reapplications). The DAO already records a
+    // `payment_reversal` supplier_transaction so the sub-ledger zeroes out,
+    // but until Phase 15.2 the GL leg was orphaned: JE Dr 2000 / Cr Cash|Bank
+    // remained posted, so AP and the cash/bank ledger silently drifted by
+    // the cleared payment amount. Root cause of the AP drift = 89991¢
+    // reproduced in `tapix_backup_20260518_051956.db`.
+    final paymentsForVoid = await _datasource.getPurchasePayments(purchaseId);
+    for (final p in paymentsForVoid) {
+      await _journalService.voidJournalEntriesForSource(
+        sourceTable: 'purchase_payments',
+        sourceId: p.id,
+        reason: 'Purchase voided — payment JE reversed',
+        userId: await _currentUserId(),
+      );
+    }
+
     // 2026-05-13 — pass the journal service so the DAO's cascade-void of
     // linked purchase_returns also reverses their JEs (root-cause #3).
     await _datasource.voidPurchase(

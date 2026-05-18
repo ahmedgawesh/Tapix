@@ -67,15 +67,25 @@ void main() {
     required String sku,
     required int costCents,
     required int stockQty,
+    int? colorId,
+    int? sizeId,
   }) {
     return db.into(db.productVariants).insert(
           ProductVariantsCompanion.insert(
             productId: productId,
             sku: Value(sku),
+            colorId: Value(colorId),
+            sizeId: Value(sizeId),
             costCents: Decimal.fromInt(costCents),
             priceCents: Decimal.zero,
             stockQuantity: Value(stockQty),
           ),
+        );
+  }
+
+  Future<int> insertColor(String name) {
+    return db.into(db.productColors).insert(
+          ProductColorsCompanion.insert(name: name),
         );
   }
 
@@ -286,5 +296,182 @@ void main() {
     final value = await ds.getTotalInventoryValueCents();
     expect(value, 7600, reason: '7000 (FIFO batches) + 500 (WAC variant) '
         '+ 100 (simple product) = 7600');
+  });
+
+  // ── 6. Phase 15.2 regression — WAC variant with stale batch ──────────
+  //
+  // Field report 2026-05-18 (backup `tapix_backup_20260518_061018.db`):
+  //
+  //   Posted purchase #2 line 5: product 2 = WAC/standard, qty 10,
+  //   unit cost 9 900¢ → variant stock 10, batch row remaining=10.
+  //
+  //   Posted linked purchase return #1 line 2: 1 × WAC variant.
+  //   `PurchaseDao.postPurchaseReturn` decremented variant.stock to 9
+  //   AND posted Cr 1200 Inventory 9 900 (GL is correct).
+  //   `BatchService.consumeFifo` was SKIPPED because product is WAC,
+  //   so batch.remaining_quantity stayed at 10.
+  //
+  //   Pre-15.2 read formula picked the batch row → 10 × 9 900 = 99 000¢.
+  //   Variant SoT says 9 × 9 900 = 89 100¢. Phantom drift = 9 900¢.
+  //
+  // The fix gates the batch branch on `_isFifoProduct` so the WAC
+  // variant.stock × variant.cost truth wins.
+  test(
+      'WAC variant with stale batch row uses variant SoT, NOT batch SoT',
+      () async {
+    final productId = await insertProduct(
+      name: 'wac with stale batch',
+      costingMethod: 'wac',
+      inventoryTrackingType: 'standard',
+      hasVariants: true,
+      costCents: 9900,
+      stockQty: 9,
+    );
+    final variantId = await insertVariant(
+      productId: productId,
+      sku: 'wac-stale',
+      costCents: 9900,
+      stockQty: 9, // already decremented by the WAC return path
+    );
+    await insertBatch(
+      productId: productId,
+      variantId: variantId,
+      receivedQty: 10,
+      remainingQty: 10, // STALE: WAC return path never decrements this
+      unitCostCents: 9900,
+    );
+
+    final value = await ds.getTotalInventoryValueCents();
+    expect(value, 89100,
+        reason: 'WAC SoT = variant.stock × variant.cost = 9 × 9 900. '
+            'The stale batch ledger row (10 × 9 900 = 99 000) MUST be '
+            'ignored — WAC return paths never touch it, so reading it '
+            'as authoritative re-creates the Phase 15.2 phantom drift.');
+  });
+
+  // ── 7. Phase 15.2 regression — WAC product without variants + stale batch
+  test(
+      'WAC product without variants with stale batch uses product SoT',
+      () async {
+    final productId = await insertProduct(
+      name: 'wac no-variant with stale batch',
+      costingMethod: 'wac',
+      inventoryTrackingType: 'standard',
+      hasVariants: false,
+      costCents: 5000,
+      stockQty: 4, // already decremented by the WAC return path
+    );
+    await insertBatch(
+      productId: productId,
+      variantId: null,
+      receivedQty: 5,
+      remainingQty: 5, // STALE
+      unitCostCents: 5000,
+    );
+
+    final value = await ds.getTotalInventoryValueCents();
+    expect(value, 20000,
+        reason: 'WAC product SoT = product.stock × product.cost = 4 × 5 000. '
+            'The stale batch row (5 × 5 000 = 25 000) MUST be ignored — '
+            'same reason as test #6 but on the no-variant fallback branch.');
+  });
+
+  // ── 8. Phase 15.2 regression — full field-report parity ──────────────
+  //
+  // Reproduces `tapix_backup_20260518_061018.db` exactly:
+  //   p1 (FIFO/batch_expiry, has_variants):
+  //     v1: stock 9, batch B4 remaining 9 × 9 900 = 89 100
+  //     v2: stock 9, batch B6 remaining 9 × 9 900 = 89 100
+  //   p2 (WAC/standard, has_variants):
+  //     v3: stock 9, batch B5 remaining 10 × 9 900 (STALE) — should be ignored
+  //
+  // Expected total = 89 100 + 89 100 + (9 × 9 900) = 267 300, which is
+  // the exact GL(1200) balance after the 1-unit linked purchase return.
+  // Pre-15.2 picked the stale 10 from B5 → 277 200, drift 9 900.
+  test(
+      'Field-report reproduction (FIFO + WAC mix after linked return) '
+      'matches GL exactly with no phantom drift',
+      () async {
+    final p1 = await insertProduct(
+      name: 'p1 with v',
+      costingMethod: 'fifo',
+      inventoryTrackingType: 'batch_expiry',
+      hasVariants: true,
+      costCents: 9900,
+      stockQty: 18,
+    );
+    final c1 = await insertColor('red');
+    final c2 = await insertColor('blue');
+    final v1 = await insertVariant(
+      productId: p1, sku: 'tt55-1', costCents: 9900, stockQty: 9,
+      colorId: c1,
+    );
+    final v2 = await insertVariant(
+      productId: p1, sku: 'tt55-2', costCents: 9900, stockQty: 9,
+      colorId: c2,
+    );
+    await insertBatch(
+      productId: p1, variantId: v1,
+      receivedQty: 10, remainingQty: 9, unitCostCents: 9900,
+    );
+    await insertBatch(
+      productId: p1, variantId: v2,
+      receivedQty: 10, remainingQty: 9, unitCostCents: 9900,
+    );
+
+    final p2 = await insertProduct(
+      name: 'p2 without v',
+      costingMethod: 'wac',
+      inventoryTrackingType: 'standard',
+      hasVariants: false,
+      costCents: 9900,
+      stockQty: 9,
+    );
+    final v3 = await insertVariant(
+      productId: p2, sku: 'tt66', costCents: 9900, stockQty: 9,
+    );
+    await insertBatch(
+      productId: p2, variantId: v3,
+      receivedQty: 10,
+      remainingQty: 10, // STALE — WAC return path didn't decrement
+      unitCostCents: 9900,
+    );
+
+    final value = await ds.getTotalInventoryValueCents();
+    expect(value, 267300,
+        reason: 'p1 FIFO via batches: 89 100 + 89 100 = 178 200. '
+            'p2 WAC via variant: 9 × 9 900 = 89 100. '
+            'Total = 267 300 — matches GL(1200) exactly. '
+            'The stale WAC batch (B5 remaining=10) is correctly ignored.');
+  });
+
+  // ── 9. Defense-in-depth — predicate gates by costing_method too ──────
+  test(
+      'Product with costing_method=fifo but inventory_tracking_type=standard '
+      'is still treated as FIFO (mirrors `_isFifoProduct`)',
+      () async {
+    final productId = await insertProduct(
+      name: 'fifo + standard tracking',
+      costingMethod: 'fifo',
+      inventoryTrackingType: 'standard',
+      hasVariants: false,
+      costCents: 1000, // display value (latest paid)
+      stockQty: 5,
+    );
+    await insertBatch(
+      productId: productId,
+      receivedQty: 5,
+      remainingQty: 5,
+      unitCostCents: 800, // earlier batch — TRUE cost basis
+    );
+
+    final value = await ds.getTotalInventoryValueCents();
+    expect(value, 4000,
+        reason: '`_isFifoProduct` returns true on either signal '
+            '(inventory_tracking_type ∈ batch/batch_expiry OR '
+            'costing_method == fifo). The read formula must mirror that '
+            'or FIFO/standard products would silently regress to the '
+            'display cost (5 × 1 000 = 5 000) instead of the batch SoT '
+            '(5 × 800 = 4 000).');
   });
 }
