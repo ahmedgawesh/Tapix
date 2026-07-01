@@ -273,6 +273,24 @@ class PurchasePdfService {
                 fonts: fonts,
                 includeTaxBreakdown: appSettings.includeTaxBreakdown,
               ),
+              if (purchase.notes != null && purchase.notes!.isNotEmpty) ...[
+                pw.SizedBox(height: 12),
+                pw.Container(
+                  padding: const pw.EdgeInsets.all(8),
+                  decoration: pw.BoxDecoration(
+                    border: pw.Border.all(color: PdfColors.grey300),
+                    borderRadius: pw.BorderRadius.circular(4),
+                  ),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      _bidiText('purchases.notes'.tr(), fonts.bold, fontSize: 10),
+                      pw.SizedBox(height: 4),
+                      _bidiText(purchase.notes!, fonts.regular, fontSize: 9),
+                    ],
+                  ),
+                ),
+              ],
               if (supplierBalanceWidget != null) ...[
                 pw.SizedBox(height: 12),
                 supplierBalanceWidget,
@@ -477,9 +495,6 @@ class PurchasePdfService {
                     _pdfInfoRow('purchases.disposition_type'.tr(),
                         'purchases.disposition_${returnEntity.dispositionType}'.tr(),
                         fonts.regular),
-                    if (returnEntity.reason != null && returnEntity.reason!.isNotEmpty)
-                      _pdfInfoRow('purchases.return_reason'.tr(),
-                          returnEntity.reason!, fonts.regular),
                   ],
                 ),
               ),
@@ -526,6 +541,24 @@ class PurchasePdfService {
                   ],
                 ),
               ),
+              if (returnEntity.reason != null && returnEntity.reason!.isNotEmpty) ...[
+                pw.SizedBox(height: 12),
+                pw.Container(
+                  padding: const pw.EdgeInsets.all(8),
+                  decoration: pw.BoxDecoration(
+                    border: pw.Border.all(color: PdfColors.grey300),
+                    borderRadius: pw.BorderRadius.circular(4),
+                  ),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      _bidiText('purchases.return_reason'.tr(), fonts.bold, fontSize: 10),
+                      pw.SizedBox(height: 4),
+                      _bidiText(returnEntity.reason!, fonts.regular, fontSize: 9),
+                    ],
+                  ),
+                ),
+              ],
               if (supplierBalanceWidget != null) ...[
                 pw.SizedBox(height: 12),
                 supplierBalanceWidget,
@@ -1096,9 +1129,6 @@ class PurchasePdfService {
                     if (reasonText != null)
                       _pdfInfoRow('returns.reason_label'.tr(),
                           reasonText, fonts.regular),
-                    if (userNotes != null)
-                      _pdfInfoRow('common.notes'.tr(),
-                          userNotes, fonts.regular),
                   ],
                 ),
               ),
@@ -1164,6 +1194,24 @@ class PurchasePdfService {
                   ],
                 ),
               ),
+              if (userNotes != null && userNotes.isNotEmpty) ...[
+                pw.SizedBox(height: 12),
+                pw.Container(
+                  padding: const pw.EdgeInsets.all(8),
+                  decoration: pw.BoxDecoration(
+                    border: pw.Border.all(color: PdfColors.grey300),
+                    borderRadius: pw.BorderRadius.circular(4),
+                  ),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      _bidiText('common.notes'.tr(), fonts.bold, fontSize: 10),
+                      pw.SizedBox(height: 4),
+                      _bidiText(userNotes, fonts.regular, fontSize: 9),
+                    ],
+                  ),
+                ),
+              ],
               if (supplierBalanceWidget != null) ...[
                 pw.SizedBox(height: 12),
                 supplierBalanceWidget,

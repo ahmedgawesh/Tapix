@@ -10,6 +10,7 @@ import 'package:decimal/decimal.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../../../core/services/pricing/discount_converter.dart';
 import '../../../../core/widgets/inputs/select_all_on_focus.dart';
 import '../../../../core/database/app_database.dart' show Supplier;
 import '../../../products/domain/entities/product_entity.dart';
@@ -272,26 +273,38 @@ class _PurchaseFormView extends StatelessWidget {
   Widget _buildNarrowLayout(BuildContext context, PurchaseFormState state, CurrencyService cs) {
     return Column(
       children: [
-        Expanded(
-          child: ListView(
-            padding: const EdgeInsets.all(16),
+        // Fixed top section: invoice header, discount mode + supplier ref row,
+        // and the product search bar. This stays pinned and does NOT scroll
+        // away when new items are added.
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+          child: Column(
             children: [
               _buildInvoiceHeaderCard(context, state),
               const SizedBox(height: 12),
-              _buildSearchBarWithScan(context),
-              const SizedBox(height: 12),
-              _buildItemsCard(context, state, cs),
-              const SizedBox(height: 12),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(child: _buildDueDateCard(context, state)),
-                  const SizedBox(width: 8),
-                  Expanded(child: _buildRefCard(context, state)),
-                ],
+              IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(child: _buildDiscountModeCard(context, state, cs, compact: true)),
+                    const SizedBox(width: 8),
+                    Expanded(child: _buildRefCard(context, state)),
+                  ],
+                ),
               ),
               const SizedBox(height: 12),
-              _buildDiscountModeCard(context, state, cs),
+              _buildSearchBarWithScan(context),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            children: [
+              _buildItemsCard(context, state, cs),
+              const SizedBox(height: 12),
+              _buildDueDateCard(context, state),
               const SizedBox(height: 12),
               _buildTotalsCard(context, state, cs),
               const SizedBox(height: 80),
@@ -1023,9 +1036,32 @@ class _PurchaseFormView extends StatelessWidget {
   // ═══════════════════════════════════════════════════════
   // DISCOUNT MODE CARD (Toggle per-item vs invoice)
   // ═══════════════════════════════════════════════════════
-  Widget _buildDiscountModeCard(BuildContext context, PurchaseFormState state, CurrencyService cs) {
+  Widget _buildDiscountModeCard(BuildContext context, PurchaseFormState state, CurrencyService cs, {bool compact = false}) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+
+    final segmentedButton = SegmentedButton<DiscountMode>(
+      segments: [
+        ButtonSegment(
+          value: DiscountMode.perItem,
+          label: Text('purchases.discount_per_item'.tr()),
+          icon: compact ? null : const Icon(LucideIcons.list, size: 16),
+        ),
+        ButtonSegment(
+          value: DiscountMode.invoice,
+          label: Text('purchases.discount_on_invoice'.tr()),
+          icon: compact ? null : const Icon(LucideIcons.receipt, size: 16),
+        ),
+      ],
+      selected: {state.discountMode},
+      showSelectedIcon: !compact,
+      onSelectionChanged: (v) => context
+          .read<PurchaseFormBloc>()
+          .add(PurchaseDiscountModeChanged(v.first)),
+      style: const ButtonStyle(
+        visualDensity: VisualDensity.compact,
+      ),
+    );
 
     return Card(
       elevation: 0,
@@ -1048,28 +1084,15 @@ class _PurchaseFormView extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 12),
-            // Toggle
-            SegmentedButton<DiscountMode>(
-              segments: [
-                ButtonSegment(
-                  value: DiscountMode.perItem,
-                  label: Text('purchases.discount_per_item'.tr()),
-                  icon: const Icon(LucideIcons.list, size: 16),
-                ),
-                ButtonSegment(
-                  value: DiscountMode.invoice,
-                  label: Text('purchases.discount_on_invoice'.tr()),
-                  icon: const Icon(LucideIcons.receipt, size: 16),
-                ),
-              ],
-              selected: {state.discountMode},
-              onSelectionChanged: (v) => context
-                  .read<PurchaseFormBloc>()
-                  .add(PurchaseDiscountModeChanged(v.first)),
-              style: const ButtonStyle(
-                visualDensity: VisualDensity.compact,
-              ),
-            ),
+            // Toggle — in compact (side-by-side) mode scale down to avoid
+            // horizontal overflow inside the half-width column.
+            compact
+                ? FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: AlignmentDirectional.centerStart,
+                    child: segmentedButton,
+                  )
+                : segmentedButton,
             if (state.discountMode == DiscountMode.invoice) ...[
               const SizedBox(height: 8),
               state.effectiveInvoiceDiscountCents > Decimal.zero
@@ -2622,15 +2645,16 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
       if (_paidCtrl.text != paidText) _paidCtrl.text = paidText;
       if (_notesCtrl.text != notesText) _notesCtrl.text = notesText;
 
-      final storedPct = state.invoiceDiscountPercent;
+      // Fixed cents is the single source of truth; the percent shown is a
+      // pure display helper derived from it via the central converter.
       final discCents = state.effectiveInvoiceDiscountCents.toBigInt().toInt();
       final subtotalCents = state.subtotalCents.toBigInt().toInt();
       final fixedText = discCents > 0 ? (discCents / 100).toStringAsFixed(2) : '';
-      final pctText = storedPct > Decimal.zero
-          ? double.parse(storedPct.toString()).toStringAsFixed(2)
-          : (discCents > 0 && subtotalCents > 0
-              ? ((discCents / subtotalCents) * 100).toStringAsFixed(2)
-              : '');
+      final pct = sl<DiscountConverter>().percentFromFixed(
+        subtotalCents: subtotalCents,
+        fixedCents: discCents,
+      );
+      final pctText = pct == Decimal.zero ? '' : pct.toString();
 
       if (_discountFixedCtrl.text != fixedText) _discountFixedCtrl.text = fixedText;
       if (_discountPercentCtrl.text != pctText) _discountPercentCtrl.text = pctText;
@@ -2642,14 +2666,15 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
   void _syncDiscountFromPercent() {
     if (_updatingDiscount) return;
     _updatingDiscount = true;
-    final pct = double.tryParse(_discountPercentCtrl.text) ?? 0;
+    // Percent → fixed handled by the central converter so this screen can
+    // never drift from the sales/line-edit discount helpers.
+    final pct = Decimal.tryParse(_discountPercentCtrl.text.trim()) ?? Decimal.zero;
     final sub = context.read<PurchaseFormBloc>().state.subtotalCents.toBigInt().toInt();
-    if (sub > 0 && pct > 0) {
-      final cents = (sub * (pct / 100)).round().clamp(0, sub);
-      _discountFixedCtrl.text = (cents / 100).toStringAsFixed(2);
-    } else {
-      _discountFixedCtrl.text = '';
-    }
+    final cents = sl<DiscountConverter>().fixedFromPercent(
+      subtotalCents: sub,
+      percent: pct,
+    );
+    _discountFixedCtrl.text = cents > 0 ? (cents / 100).toStringAsFixed(2) : '';
     _applyInvoiceDiscount();
     _updatingDiscount = false;
   }
@@ -2657,31 +2682,27 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
   void _syncDiscountFromFixed() {
     if (_updatingDiscount) return;
     _updatingDiscount = true;
-    final fixedVal = double.tryParse(_discountFixedCtrl.text) ?? 0;
-    final fixedCents = (fixedVal * 100).round();
+    final fixedVal = Decimal.tryParse(_discountFixedCtrl.text.trim()) ?? Decimal.zero;
+    final fixedCents =
+        (fixedVal * Decimal.fromInt(100)).round().toBigInt().toInt();
     final sub = context.read<PurchaseFormBloc>().state.subtotalCents.toBigInt().toInt();
-    if (sub > 0 && fixedCents > 0) {
-      final pct = (fixedCents / sub) * 100;
-      _discountPercentCtrl.text = pct.toStringAsFixed(2);
-    } else {
-      _discountPercentCtrl.text = '';
-    }
+    final pct = sl<DiscountConverter>().percentFromFixed(
+      subtotalCents: sub,
+      fixedCents: fixedCents,
+    );
+    _discountPercentCtrl.text = pct == Decimal.zero ? '' : pct.toString();
     _applyInvoiceDiscount();
     _updatingDiscount = false;
   }
 
   void _applyInvoiceDiscount() {
+    // The fixed-cents amount is the single source of truth that reaches the
+    // bloc. The percent field is display-only and never re-derives the
+    // amount, so a fixed `405.00` input stays `405.00` (no `405.31` drift).
     final fixedVal = double.tryParse(_discountFixedCtrl.text) ?? 0;
     final cents = (fixedVal * 100).round();
-    final pct = double.tryParse(_discountPercentCtrl.text) ?? 0;
-    final discountPercent = pct > 0
-        ? Decimal.parse(pct.toStringAsFixed(4))
-        : Decimal.zero;
     context.read<PurchaseFormBloc>().add(
-          PurchaseInvoiceDiscountChanged(
-            Decimal.fromInt(cents),
-            discountPercent: discountPercent,
-          ),
+          PurchaseInvoiceDiscountChanged(Decimal.fromInt(cents)),
         );
   }
 
@@ -4123,40 +4144,48 @@ class _AddItemSheetState extends State<_AddItemSheet> {
                   title: Text(product.name, style: const TextStyle(fontWeight: FontWeight.w500)),
                   subtitle: Row(
                     children: [
-                      if (product.sku != null) ...[
-                        Flexible(
-                          child: Text(
-                            'SKU: ${product.sku}',
-                            style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                      // Identifier group takes the available space so the SKU is
+                      // never truncated just to make room for a color dot.
+                      Expanded(
+                        child: Row(
+                          children: [
+                            if (product.sku != null) ...[
+                              Flexible(
+                                child: Text(
+                                  'SKU: ${product.sku}',
+                                  style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                            ],
+                            if (sizeName != null && sizeName.isNotEmpty) ...[
+                              Flexible(
+                                child: Text(
+                                  sizeName,
+                                  style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              if (shade != null) const SizedBox(width: 6),
+                            ],
+                            if (shade != null)
+                              Container(
+                                width: 10,
+                                height: 10,
+                                decoration: BoxDecoration(
+                                  color: shade,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: cs.outline),
+                                ),
+                              ),
+                          ],
                         ),
-                        const SizedBox(width: 8),
-                      ],
-                      if (sizeName != null && sizeName.isNotEmpty) ...[
-                        Flexible(
-                          child: Text(
-                            sizeName,
-                            style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        if (shade != null) const SizedBox(width: 6),
-                      ],
-                      if (shade != null)
-                        Container(
-                          width: 10,
-                          height: 10,
-                          decoration: BoxDecoration(
-                            color: shade,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: cs.outline),
-                          ),
-                        ),
-                      const Spacer(),
+                      ),
                       if (!product.hasVariants) ...[
+                        const SizedBox(width: 8),
                         Icon(LucideIcons.warehouse, size: 12, color: cs.onSurfaceVariant),
                         const SizedBox(width: 4),
                         Text(

@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/revenuecat_service.dart';
+import '../../../../core/services/feature_gate_service.dart';
 import '../bloc/subscription_bloc.dart';
 
 /// Custom paywall screen — fully translated, integrated with RevenueCat.
@@ -142,7 +143,10 @@ class _CustomPaywallScreenState extends State<CustomPaywallScreen> {
       if (!mounted) return;
 
       if (result.success) {
-        // Refresh subscription state
+        // Refresh subscription state. FeatureGateService is the SoT the router
+        // and dashboard listen to, so refresh it explicitly for an immediate
+        // unlock (in addition to the customer-info stream listener).
+        await sl<FeatureGateService>().refresh();
         sl<SubscriptionBloc>().add(const SubscriptionRefresh());
         if (!mounted) return;
         _showSuccessAndPop('paywall.purchase_success'.tr());
@@ -151,7 +155,9 @@ class _CustomPaywallScreenState extends State<CustomPaywallScreen> {
       } else {
         setState(() {
           _isPurchasing = false;
-          _error = result.errorMessage ?? 'paywall.error_purchase'.tr();
+          _error = result.errorMessage != null
+              ? result.errorMessage!.tr()
+              : 'paywall.error_purchase'.tr();
         });
       }
     } catch (e) {
@@ -175,6 +181,7 @@ class _CustomPaywallScreenState extends State<CustomPaywallScreen> {
 
       if (result.success) {
         final status = SubscriptionStatus.fromCustomerInfo(result.customerInfo);
+        await sl<FeatureGateService>().refresh();
         sl<SubscriptionBloc>().add(const SubscriptionRefresh());
         if (!mounted) return;
 
@@ -189,7 +196,9 @@ class _CustomPaywallScreenState extends State<CustomPaywallScreen> {
       } else {
         setState(() {
           _isRestoring = false;
-          _error = result.errorMessage ?? 'paywall.error_purchase'.tr();
+          _error = result.errorMessage != null
+              ? result.errorMessage!.tr()
+              : 'paywall.error_purchase'.tr();
         });
       }
     } catch (e) {

@@ -1727,11 +1727,18 @@ class _QuickActionsSection extends StatelessWidget {
   }
 }
 
-class _RecentTransactionsSection extends StatelessWidget {
+class _RecentTransactionsSection extends StatefulWidget {
   final int customerId;
   final Customer customer;
 
   const _RecentTransactionsSection({required this.customerId, required this.customer});
+
+  @override
+  State<_RecentTransactionsSection> createState() => _RecentTransactionsSectionState();
+}
+
+class _RecentTransactionsSectionState extends State<_RecentTransactionsSection> {
+  bool _showAll = false;
 
   @override
   Widget build(BuildContext context) {
@@ -1739,7 +1746,7 @@ class _RecentTransactionsSection extends StatelessWidget {
     final currencyService = sl<CurrencyService>();
 
     return StreamBuilder<List<CustomerTransaction>>(
-      stream: sl<CustomerRepository>().watchCustomerTransactions(customerId),
+      stream: sl<CustomerRepository>().watchCustomerTransactions(widget.customerId),
       builder: (context, snapshot) {
         final transactions = snapshot.data ?? [];
 
@@ -1766,8 +1773,12 @@ class _RecentTransactionsSection extends StatelessWidget {
                       ),
                     ),
                     TextButton(
-                      onPressed: () {},
-                      child: Text('customers.view_all'.tr()),
+                      onPressed: () {
+                        setState(() {
+                          _showAll = !_showAll;
+                        });
+                      },
+                      child: Text(_showAll ? 'common.show_less'.tr() : 'customers.view_all'.tr()),
                     ),
                   ],
                 ),
@@ -1791,11 +1802,11 @@ class _RecentTransactionsSection extends StatelessWidget {
                     ),
                   )
                 else
-                  ...transactions.take(5).map((tx) => _TransactionTile(
+                  ...((_showAll ? transactions : transactions.take(5)).map((tx) => _TransactionTile(
                     transaction: tx,
                     currencyService: currencyService,
-                    customer: customer,
-                  )),
+                    customer: widget.customer,
+                  ))),
               ],
             ),
           ),

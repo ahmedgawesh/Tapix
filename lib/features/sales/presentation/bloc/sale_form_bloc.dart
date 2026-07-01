@@ -10,6 +10,7 @@ import '../../../../core/pricing/line_item_pricing_engine.dart';
 import '../../../../core/services/audit_log_service.dart';
 import '../../../../core/services/below_cost_sale_service.dart';
 import '../../../../core/services/crashlytics_service.dart';
+import '../../../../core/services/free_quota_service.dart';
 import '../../domain/repositories/sale_repository.dart';
 import '../../../auth/domain/entities/user_entity.dart';
 import '../../../customers/domain/repositories/loyalty_repository.dart';
@@ -1423,6 +1424,13 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
           hasUnsavedChanges: false,
         ));
       }
+    } on FreeQuotaExceededException catch (e) {
+      // Free-tier cumulative cap reached. Surface a recognizable code so the
+      // screen can present the paywall instead of a generic error.
+      emit(state.copyWith(
+        isSubmitting: false,
+        error: 'quota_exceeded:sales:${e.limit}',
+      ));
     } catch (e, st) {
       CrashlyticsService.instance.recordError(
         e,

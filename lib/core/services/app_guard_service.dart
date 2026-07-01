@@ -25,29 +25,58 @@ enum AppLockReason {
 }
 
 /// Overall guard status emitted by [AppGuardService].
+///
+/// Three terminal states:
+/// - **Unlocked Pro** — `isUnlocked = true`, `isFreeTier = false`. Full access.
+/// - **Unlocked Free** — `isUnlocked = true`, `isFreeTier = true`. App boots,
+///   but Pro features are gated by `FeatureGateService` at widget / router
+///   level, and creation is capped by `FreeQuotaService`.
+/// - **Locked** — `isUnlocked = false`. Only for SECURITY violations
+///   (code tampered, device blocked, version killed, device mismatch,
+///   license tampered, force update). NEVER for "no subscription".
 class AppGuardStatus {
   final bool isUnlocked;
+
+  /// `true` when the app is unlocked but the user does NOT have an active
+  /// Pro entitlement. Free-tier rules apply.
+  final bool isFreeTier;
+
   final AppLockReason lockReason;
   final bool requiresInternet;
   final SubscriptionStatus? subscriptionStatus;
 
   const AppGuardStatus({
     this.isUnlocked = false,
+    this.isFreeTier = false,
     this.lockReason = AppLockReason.none,
     this.requiresInternet = false,
     this.subscriptionStatus,
   });
 
+  /// Unlocked Pro user — full feature set.
   const AppGuardStatus.unlocked({this.subscriptionStatus})
       : isUnlocked = true,
+        isFreeTier = false,
         lockReason = AppLockReason.none,
         requiresInternet = false;
 
+  /// Unlocked free-tier user — app boots, Pro features are gated downstream.
+  /// `lockReason` may carry a hint (e.g. `noSubscription`, `licenseExpired`,
+  /// `offlineTooLong`) so the UI can show a contextual upsell banner.
+  const AppGuardStatus.freeTier({
+    this.subscriptionStatus,
+    this.lockReason = AppLockReason.noSubscription,
+    this.requiresInternet = false,
+  })  : isUnlocked = true,
+        isFreeTier = true;
+
+  /// Hard lock — used only for SECURITY violations.
   const AppGuardStatus.locked({
     required this.lockReason,
     this.requiresInternet = false,
     this.subscriptionStatus,
-  }) : isUnlocked = false;
+  })  : isUnlocked = false,
+        isFreeTier = false;
 }
 
 /// Central orchestrator that enforces:
@@ -94,10 +123,14 @@ class AppGuardService {
 
   /// Run the full guard sequence. Call once at app startup.
   Future<AppGuardStatus> initialize() async {
-    // On unsupported platforms (web/desktop), skip all guards
+    // On unsupported platforms (web/desktop), purchases are impossible, so the
+    // freemium gate must not apply. Treat the user as fully-entitled Pro so the
+    // whole app — and any consumer reading `subscriptionStatus.isPro` — unlocks.
     if (!RevenueCatConfig.isSupported) {
-      debugPrint('AppGuard: Unsupported platform – skipping guards');
-      const status = AppGuardStatus.unlocked();
+      debugPrint('AppGuard: Unsupported platform – granting full access');
+      const status = AppGuardStatus.unlocked(
+        subscriptionStatus: SubscriptionStatus(isActive: true, isPro: true),
+      );
       _emit(status);
       return status;
     }
@@ -156,7 +189,9 @@ class AppGuardService {
   /// Called when the device comes back online.
   Future<AppGuardStatus> revalidateOnline() async {
     if (!RevenueCatConfig.isSupported) {
-      return const AppGuardStatus.unlocked();
+      return const AppGuardStatus.unlocked(
+        subscriptionStatus: SubscriptionStatus(isActive: true, isPro: true),
+      );
     }
 
     debugPrint('AppGuard: Revalidating online');
@@ -181,10 +216,12 @@ class AppGuardService {
         return status;
       }
 
-      // Not subscribed
-      final status = AppGuardStatus.locked(
-        lockReason: AppLockReason.noSubscription,
+      // Not subscribed → free tier (NOT a hard lock).
+      // The app boots; Pro features are gated by FeatureGateService /
+      // FreeQuotaService at the widget / router level.
+      final status = AppGuardStatus.freeTier(
         subscriptionStatus: subStatus,
+        lockReason: AppLockReason.noSubscription,
       );
       _emit(status);
       return status;
@@ -214,7 +251,8 @@ class AppGuardService {
         return status;
 
       case LicenseValidationResult.noLicense:
-        const status = AppGuardStatus.locked(
+        // No license yet (never subscribed, or first run offline) → free tier.
+        const status = AppGuardStatus.freeTier(
           lockReason: AppLockReason.noSubscription,
           requiresInternet: true,
         );
@@ -222,7 +260,9 @@ class AppGuardService {
         return status;
 
       case LicenseValidationResult.expired:
-        const status = AppGuardStatus.locked(
+        // Was Pro, license expired naturally → drop to free tier.
+        // User can keep using free features; Pro UI surfaces an upsell.
+        const status = AppGuardStatus.freeTier(
           lockReason: AppLockReason.licenseExpired,
           requiresInternet: true,
         );
@@ -230,6 +270,7 @@ class AppGuardService {
         return status;
 
       case LicenseValidationResult.deviceMismatch:
+        // SECURITY: license tied to a different device → hard lock.
         const status = AppGuardStatus.locked(
           lockReason: AppLockReason.deviceMismatch,
         );
@@ -237,7 +278,9 @@ class AppGuardService {
         return status;
 
       case LicenseValidationResult.offlinePeriodExceeded:
-        const status = AppGuardStatus.locked(
+        // Was Pro, just offline too long → drop to free tier and require
+        // internet to re-verify Pro entitlement.
+        const status = AppGuardStatus.freeTier(
           lockReason: AppLockReason.offlineTooLong,
           requiresInternet: true,
         );
@@ -245,6 +288,7 @@ class AppGuardService {
         return status;
 
       case LicenseValidationResult.integrityFailed:
+        // SECURITY: license blob tampered → hard lock.
         const status = AppGuardStatus.locked(
           lockReason: AppLockReason.licenseTampered,
         );
@@ -255,29 +299,36 @@ class AppGuardService {
 
   /// Start listening for connectivity changes and RevenueCat updates.
   void startListening() {
-    // Auto-revalidate when connectivity returns
+    // Auto-revalidate when connectivity returns.
     _connectivitySubscription?.cancel();
     _connectivitySubscription = _connectivityService.onConnectivityChanged.listen(
       (online) {
-        if (online && !_lastStatus.isUnlocked) {
+        if (!online) return;
+        // If hard-locked OR currently free-tier waiting for internet,
+        // try a full revalidation to upgrade to Pro if entitled.
+        if (!_lastStatus.isUnlocked ||
+            (_lastStatus.isFreeTier && _lastStatus.requiresInternet)) {
           revalidateOnline();
-        } else if (online && _lastStatus.isUnlocked) {
-          // Silently refresh license while app is unlocked
+        } else {
+          // Silently refresh license while already unlocked and stable.
           _silentRefresh();
         }
       },
     );
 
-    // Listen to RevenueCat customer info updates
+    // Listen to RevenueCat customer info updates.
     if (RevenueCatConfig.isSupported && _revenueCat.isInitialized) {
       _rcSubscription?.cancel();
       _rcSubscription = _revenueCat.subscriptionStatusStream.listen(
         (subStatus) {
-          if (subStatus.isPro && !_lastStatus.isUnlocked) {
+          final wasProUnlocked =
+              _lastStatus.isUnlocked && !_lastStatus.isFreeTier;
+          if (subStatus.isPro && !wasProUnlocked) {
+            // Free → Pro upgrade (or recovery from lock). Re-run full guard.
             revalidateOnline();
-          } else if (!subStatus.isPro && _lastStatus.isUnlocked) {
-            // Subscription was revoked while app was open
-            _emit(AppGuardStatus.locked(
+          } else if (!subStatus.isPro && wasProUnlocked) {
+            // Subscription was revoked while app was open → demote to free.
+            _emit(AppGuardStatus.freeTier(
               lockReason: AppLockReason.noSubscription,
               subscriptionStatus: subStatus,
             ));

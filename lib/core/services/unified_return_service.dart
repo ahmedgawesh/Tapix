@@ -1100,10 +1100,19 @@ class UnifiedReturnService {
                     ? c.taxCents.value.toBigInt().toInt()
                     : 0),
           );
+          // Inventory leg = ACTUAL valuation removed by the stock ledger
+          // (FIFO batch consumption / WAC current cost), NOT the refund net.
+          // Passing it keeps 1200 reconciled with Σ(stock×cost); the refund
+          // vs cost difference flows to 4100 as a purchase price variance.
+          final returnInvCost =
+              await _purchaseDao.computePurchaseReturnInventoryCostCents(
+            returnId,
+          );
           await _journalService.recordPurchaseReturnJournalEntry(
             returnId: returnId,
             totalCents: totalRefund,
             taxCents: returnTaxCents,
+            inventoryCostCents: returnInvCost,
             currencyId: currencyId,
             refundMethod: refundMethod,
           );

@@ -161,23 +161,29 @@ class _FormView extends StatelessWidget {
                 ? const Center(child: CircularProgressIndicator())
                 : Column(
                     children: [
-                      Expanded(
-                        child: ListView(
-                          padding: const EdgeInsets.all(16),
+                      // ── Fixed top section (does not scroll) ──
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                        child: Column(
                           children: [
                             _buildReturnHeaderCard(context, state),
                             const SizedBox(height: 12),
                             _buildWarningBanner(context),
                             const SizedBox(height: 12),
-                            _buildItemsCard(context, state, cs),
+                            _buildDiscountToggle(context, state),
                             const SizedBox(height: 12),
                             _SaleFraudWarnings(
                               customerId: state.customerId,
                               items: state.items,
                             ),
-                            _buildDiscountToggle(context, state),
-                            const SizedBox(height: 80),
                           ],
+                        ),
+                      ),
+                      // ── Items card: fixed header + scrollable list ──
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                          child: _buildItemsCard(context, state, cs),
                         ),
                       ),
                       _buildBottomBar(context, state, cs),
@@ -393,61 +399,65 @@ class _FormView extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 12),
+            // Only the added items scroll; the header above stays fixed.
             if (state.items.isEmpty)
-              Container(
-                padding: const EdgeInsets.symmetric(vertical: 32),
-                alignment: Alignment.center,
-                child: Column(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: colorScheme.errorContainer.withValues(alpha: 0.15),
-                        shape: BoxShape.circle,
+              Expanded(
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color:
+                              colorScheme.errorContainer.withValues(alpha: 0.15),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(LucideIcons.packageX,
+                            size: 36,
+                            color: colorScheme.error.withValues(alpha: 0.3)),
                       ),
-                      child: Icon(LucideIcons.packageX,
-                          size: 36,
-                          color: colorScheme.error.withValues(alpha: 0.3)),
-                    ),
-                    const SizedBox(height: 12),
-                    Text('returns.no_items_yet'.tr(),
-                        style: theme.textTheme.bodyMedium
-                            ?.copyWith(color: colorScheme.onSurfaceVariant)),
-                  ],
+                      const SizedBox(height: 12),
+                      Text('returns.no_items_yet'.tr(),
+                          style: theme.textTheme.bodyMedium
+                              ?.copyWith(color: colorScheme.onSurfaceVariant)),
+                    ],
+                  ),
                 ),
               )
             else
-              ListView.separated(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: state.items.length,
-                separatorBuilder: (context2, index2) => Divider(
-                    height: 1,
-                    color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
-                itemBuilder: (context, index) {
-                  final item = state.items[index];
-                  return _AdjReturnItemTile(
-                    item: item,
-                    index: index,
-                    currencyService: cs,
-                    onQuantityChanged: (qty) => context
-                        .read<SaleAdjReturnFormBloc>()
-                        .add(SaleAdjReturnItemQuantityChanged(index, qty)),
-                    onPriceChanged: (price) => context
-                        .read<SaleAdjReturnFormBloc>()
-                        .add(SaleAdjReturnItemPriceChanged(index, price)),
-                    onDiscountChanged: (disc, bps) => context
-                        .read<SaleAdjReturnFormBloc>()
-                        .add(SaleAdjReturnItemDiscountChanged(
-                          index,
-                          disc,
-                          discountPercentBps: bps,
-                        )),
-                    onRemove: () => context
-                        .read<SaleAdjReturnFormBloc>()
-                        .add(SaleAdjReturnItemRemoved(index)),
-                  );
-                },
+              Expanded(
+                child: ListView.separated(
+                  padding: EdgeInsets.zero,
+                  itemCount: state.items.length,
+                  separatorBuilder: (context2, index2) => Divider(
+                      height: 1,
+                      color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                  itemBuilder: (context, index) {
+                    final item = state.items[index];
+                    return _AdjReturnItemTile(
+                      item: item,
+                      index: index,
+                      currencyService: cs,
+                      onQuantityChanged: (qty) => context
+                          .read<SaleAdjReturnFormBloc>()
+                          .add(SaleAdjReturnItemQuantityChanged(index, qty)),
+                      onPriceChanged: (price) => context
+                          .read<SaleAdjReturnFormBloc>()
+                          .add(SaleAdjReturnItemPriceChanged(index, price)),
+                      onDiscountChanged: (disc, bps) => context
+                          .read<SaleAdjReturnFormBloc>()
+                          .add(SaleAdjReturnItemDiscountChanged(
+                            index,
+                            disc,
+                            discountPercentBps: bps,
+                          )),
+                      onRemove: () => context
+                          .read<SaleAdjReturnFormBloc>()
+                          .add(SaleAdjReturnItemRemoved(index)),
+                    );
+                  },
+                ),
               ),
           ],
         ),
@@ -1214,12 +1224,14 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
 
   String _pmLabel(AdjReturnPaymentMethod m) => switch (m) {
     AdjReturnPaymentMethod.cash => 'sales.payment_cash'.tr(),
+    AdjReturnPaymentMethod.card => 'sales.payment_card'.tr(),
     AdjReturnPaymentMethod.credit => 'sales.payment_credit'.tr(),
     AdjReturnPaymentMethod.cheque => 'sales.payment_cheque'.tr(),
   };
 
   IconData _pmIcon(AdjReturnPaymentMethod m) => switch (m) {
     AdjReturnPaymentMethod.cash => LucideIcons.banknote,
+    AdjReturnPaymentMethod.card => LucideIcons.creditCard,
     AdjReturnPaymentMethod.credit => LucideIcons.clock,
     AdjReturnPaymentMethod.cheque => LucideIcons.fileText,
   };

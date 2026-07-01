@@ -190,6 +190,13 @@ class _ReportsHubView extends StatelessWidget {
                 subtitle: 'reports.customer_ledger_report_desc'.tr(),
                 onTap: () => context.push('/reports/customer-ledger'),
               ),
+              const SizedBox(height: 8),
+              _ReportTile(
+                icon: LucideIcons.receipt,
+                title: 'reports.customer_invoices_report'.tr(),
+                subtitle: 'reports.customer_invoices_report_desc'.tr(),
+                onTap: () => context.push('/reports/customer-invoices'),
+              ),
               const SizedBox(height: 24),
 
               // Supplier Reports Section
@@ -242,6 +249,13 @@ class _ReportsHubView extends StatelessWidget {
                 title: 'reports.supplier_ledger_report'.tr(),
                 subtitle: 'reports.supplier_ledger_report_desc'.tr(),
                 onTap: () => context.push('/reports/supplier-ledger'),
+              ),
+              const SizedBox(height: 8),
+              _ReportTile(
+                icon: LucideIcons.receipt,
+                title: 'reports.supplier_invoices_report'.tr(),
+                subtitle: 'reports.supplier_invoices_report_desc'.tr(),
+                onTap: () => context.push('/reports/supplier-invoices'),
               ),
               const SizedBox(height: 8),
               _ReportTile(

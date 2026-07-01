@@ -7,6 +7,7 @@ import '../database/app_database.dart';
 import '../../features/accounting/data/repositories/accounting_repository.dart';
 import '../../features/accounting/domain/models/journal_entry_data.dart';
 import 'journal_entry_service.dart';
+import 'returns/posted_return.dart';
 
 /// STEP 8: Ledger Rebuild Service
 ///
@@ -72,6 +73,8 @@ class LedgerRebuildService {
     await _replayExpenses(report);
     await _replaySaleReturns(report);
     await _replayPurchaseReturns(report);
+    await _replayPurchaseAdjustmentReturns(report);
+    await _replaySaleAdjustmentReturns(report);
     await _replaySalePayments(report);
     await _replayPurchasePayments(report);
     await _replayDirectCustomerTransactions(report);
@@ -485,10 +488,19 @@ class LedgerRebuildService {
         final totalCents = ret.totalCents.toBigInt().toInt();
         final taxCents = ret.taxCents.toBigInt().toInt();
 
+        // Inventory leg = ACTUAL valuation removed by the stock ledger
+        // (FIFO batch consumption / WAC current cost), the same single
+        // source of truth used at post time. Replaying with the refund net
+        // (the old default) would re-introduce the 1200 vs Σ(stock×cost)
+        // drift on every rebuild for FIFO/price-variance lines.
+        final inventoryCostCents = await _db.purchaseDao
+            .computePurchaseReturnInventoryCostCents(ret.id);
+
         await _journalService.recordPurchaseReturnJournalEntry(
           returnId: ret.id,
           totalCents: totalCents,
           taxCents: taxCents,
+          inventoryCostCents: inventoryCostCents,
           currencyId: ret.currencyId,
           refundMethod: ret.refundMethod,
         );
@@ -500,6 +512,181 @@ class LedgerRebuildService {
     }
 
     developer.log('Replayed ${report.purchaseReturnsReplayed} purchase returns', name: 'LedgerRebuild');
+  }
+
+  /// Per-product costing info needed to value a replayed return line the same
+  /// way the post path does. Mirrors `PurchaseDao._isFifoProduct` and the
+  /// `track_inventory` gate.
+  Future<({bool tracks, bool fifo})> _costingInfo(int productId) async {
+    final row = await _db.customSelect(
+      'SELECT track_inventory, inventory_tracking_type, costing_method '
+      'FROM products WHERE id = ?',
+      variables: [Variable.withInt(productId)],
+    ).getSingleOrNull();
+    if (row == null) return (tracks: true, fifo: false);
+    final tracks = (row.read<int?>('track_inventory') ?? 1) == 1;
+    final tracking = row.read<String?>('inventory_tracking_type');
+    final fifo = tracking == 'batch' ||
+        tracking == 'batch_expiry' ||
+        (row.read<String?>('costing_method') ?? 'wac') == 'fifo';
+    return (tracks: tracks, fifo: fifo);
+  }
+
+  /// Phase 3e2: Replay posted PURCHASE ADJUSTMENT (unlinked) returns.
+  ///
+  /// These live in `purchase_return_adjustments` and were previously NEVER
+  /// replayed — `_deleteAllJournalEntries` wiped their JE and nothing
+  /// recreated it, so every rebuild silently dropped the entire return from
+  /// the ledger (inventory + AP/cash + VAT all drifting). We rebuild the JE
+  /// from the persisted items, valuing the inventory leg from the SAME single
+  /// source of truth used at post time:
+  ///   • FIFO → Σ(batch_consumptions.quantity × unit_cost_cents) of the
+  ///     'out' rows this return produced (the batch ledger is untouched by a
+  ///     rebuild, so those rows still exist).
+  ///   • WAC  → frozen unit_cost_cents × qty.
+  Future<void> _replayPurchaseAdjustmentReturns(
+      LedgerRebuildReport report) async {
+    final returns = await (_db.select(_db.purchaseReturnAdjustments)
+          ..where((r) => r.status.equals('posted')))
+        .get();
+
+    for (final ret in returns) {
+      try {
+        final items = await (_db.select(_db.purchaseReturnAdjustmentItems)
+              ..where((i) => i.returnId.equals(ret.id)))
+            .get();
+
+        int totalTax = 0;
+        int totalInvCost = 0;
+        final explicitLines = <PostedReturnLine>[];
+        for (final item in items) {
+          final qty = item.quantity;
+          final tax = item.taxCents.toBigInt().toInt();
+          totalTax += tax;
+
+          final info = await _costingInfo(item.productId);
+          int lineInv;
+          if (!info.tracks) {
+            lineInv = 0;
+          } else if (info.fifo) {
+            final r = await _db.customSelect(
+              'SELECT COALESCE(SUM(quantity * unit_cost_cents), 0) AS c '
+              'FROM batch_consumptions '
+              'WHERE purchase_return_adjustment_item_id = ? '
+              "AND direction = 'out'",
+              variables: [Variable.withInt(item.id)],
+            ).getSingle();
+            lineInv = r.read<int>('c');
+          } else {
+            lineInv = item.unitCostCents.toBigInt().toInt() * qty;
+          }
+          totalInvCost += lineInv;
+
+          explicitLines.add(PostedReturnLine(
+            totalCents: item.totalCents.toBigInt().toInt(),
+            taxCents: tax,
+            inventoryCostCents: lineInv,
+            disposition:
+                ReturnDispositionX.fromWire(item.dispositionType),
+            productId: item.productId,
+            variantId: item.variantId,
+            qty: qty,
+          ));
+        }
+
+        await _journalService.recordPurchaseAdjustmentReturnJournalEntry(
+          returnId: ret.id,
+          totalCents: ret.totalCents.toBigInt().toInt(),
+          taxCents: totalTax,
+          inventoryCostCents: totalInvCost,
+          currencyId: ret.currencyId,
+          refundMethod: ret.refundMethod,
+          supplierId: ret.supplierId,
+          explicitLines: explicitLines,
+          approvalStatus: ret.approvalStatus,
+          approvalReason: ret.approvalReason,
+          postingDate: ret.returnDate,
+        );
+        report.purchaseReturnsReplayed++;
+      } catch (e) {
+        report.errors.add('Purchase Adj Return #${ret.id}: $e');
+        developer.log('Error replaying purchase adj return #${ret.id}: $e',
+            name: 'LedgerRebuild');
+      }
+    }
+
+    developer.log('Replayed posted purchase adjustment returns',
+        name: 'LedgerRebuild');
+  }
+
+  /// Phase 3d2: Replay posted SALE ADJUSTMENT (unlinked) returns.
+  ///
+  /// Same rebuild gap as purchase adjustment returns. The inventory leg here
+  /// is the value of goods coming BACK into stock — for FIFO a fresh batch is
+  /// created at the frozen `unit_cost_cents`, so qty × that frozen cost is the
+  /// exact valuation added for BOTH FIFO and WAC (no batch consumption rows
+  /// are produced on the way in). Credit-note issuance inside
+  /// `ReturnPostingService.post` is idempotent on (source_table, source_id),
+  /// so a rebuild never double-issues.
+  Future<void> _replaySaleAdjustmentReturns(LedgerRebuildReport report) async {
+    final returns = await (_db.select(_db.saleReturnAdjustments)
+          ..where((r) => r.status.equals('posted')))
+        .get();
+
+    for (final ret in returns) {
+      try {
+        final items = await (_db.select(_db.saleReturnAdjustmentItems)
+              ..where((i) => i.returnId.equals(ret.id)))
+            .get();
+
+        int totalTax = 0;
+        int totalInvCost = 0;
+        final explicitLines = <PostedReturnLine>[];
+        for (final item in items) {
+          final qty = item.quantity;
+          final tax = item.taxCents.toBigInt().toInt();
+          totalTax += tax;
+
+          final info = await _costingInfo(item.productId);
+          final lineInv =
+              info.tracks ? item.unitCostCents.toBigInt().toInt() * qty : 0;
+          totalInvCost += lineInv;
+
+          explicitLines.add(PostedReturnLine(
+            totalCents: item.totalCents.toBigInt().toInt(),
+            taxCents: tax,
+            inventoryCostCents: lineInv,
+            disposition:
+                ReturnDispositionX.fromWire(item.dispositionType),
+            productId: item.productId,
+            variantId: item.variantId,
+            qty: qty,
+          ));
+        }
+
+        await _journalService.recordSaleAdjustmentReturnJournalEntry(
+          returnId: ret.id,
+          totalCents: ret.totalCents.toBigInt().toInt(),
+          taxCents: totalTax,
+          inventoryCostCents: totalInvCost,
+          currencyId: ret.currencyId,
+          refundMethod: ret.refundMethod,
+          partyId: ret.customerId,
+          explicitLines: explicitLines,
+          approvalStatus: ret.approvalStatus,
+          approvalReason: ret.approvalReason,
+          postingDate: ret.returnDate,
+        );
+        report.saleReturnsReplayed++;
+      } catch (e) {
+        report.errors.add('Sale Adj Return #${ret.id}: $e');
+        developer.log('Error replaying sale adj return #${ret.id}: $e',
+            name: 'LedgerRebuild');
+      }
+    }
+
+    developer.log('Replayed posted sale adjustment returns',
+        name: 'LedgerRebuild');
   }
 
   /// Phase 3f: Replay all customer (sale) payments

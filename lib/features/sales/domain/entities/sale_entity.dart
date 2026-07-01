@@ -71,6 +71,7 @@ class SaleItemEntity extends Equatable {
   final String? productName;
   final int? variantId;
   final String? variantSku;
+  final String? productSku;
   final String? colorName;
   final String? colorHex;
   final String? sizeName;
@@ -91,6 +92,7 @@ class SaleItemEntity extends Equatable {
     this.productName,
     this.variantId,
     this.variantSku,
+    this.productSku,
     this.colorName,
     this.colorHex,
     this.sizeName,
@@ -109,8 +111,8 @@ class SaleItemEntity extends Equatable {
     final parts = <String>[];
     if (colorName != null) parts.add(colorName!);
     if (sizeName != null) parts.add(sizeName!);
-    if (parts.isEmpty && variantSku != null) {
-      parts.add(variantSku!);
+    if (parts.isEmpty && (variantSku != null || productSku != null)) {
+      parts.add((variantSku ?? productSku)!);
     }
     if (parts.isNotEmpty) {
       return '${productName ?? ''} (${parts.join(' / ')})';
@@ -120,7 +122,7 @@ class SaleItemEntity extends Equatable {
 
   @override
   List<Object?> get props => [
-        id, saleId, productId, productName, variantId, variantSku,
+        id, saleId, productId, productName, variantId, variantSku, productSku,
         colorName, colorHex, sizeName,
         quantity, unitPriceCents, subtotalCents, discountCents,
         taxCents, totalCents, employeeId, employeeName, createdAt,
@@ -206,6 +208,7 @@ class SaleReturnItemEntity extends Equatable {
   final String? reason;
   final String? productName;
   final String? variantSku;
+  final String? productSku;
   final String? variantBarcode;
   final String? colorName;
   final String? colorHex;
@@ -224,6 +227,7 @@ class SaleReturnItemEntity extends Equatable {
     this.reason,
     this.productName,
     this.variantSku,
+    this.productSku,
     this.variantBarcode,
     this.colorName,
     this.colorHex,
@@ -237,8 +241,8 @@ class SaleReturnItemEntity extends Equatable {
     final parts = <String>[];
     if (colorName != null) parts.add(colorName!);
     if (sizeName != null) parts.add(sizeName!);
-    if (parts.isEmpty && variantSku != null) {
-      parts.add(variantSku!);
+    if (parts.isEmpty && (variantSku != null || productSku != null)) {
+      parts.add((variantSku ?? productSku)!);
     }
     if (parts.isNotEmpty) {
       return '${productName ?? ''} (${parts.join(' / ')})';
@@ -250,7 +254,7 @@ class SaleReturnItemEntity extends Equatable {
   List<Object?> get props => [
         id, returnId, saleItemId, quantity,
         subtotalCents, discountCents, taxCents, refundCents,
-        reason, productName, variantSku, variantBarcode,
+        reason, productName, variantSku, productSku, variantBarcode,
         colorName, colorHex, sizeName, createdAt,
       ];
 }

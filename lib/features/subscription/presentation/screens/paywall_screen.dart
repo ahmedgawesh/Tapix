@@ -209,7 +209,7 @@ class _DefaultLockedWidget extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'Upgrade to Tapix Pro to unlock this feature',
+              'Upgrade to TapBix Pro to unlock this feature',
               style: Theme.of(context).textTheme.bodySmall,
               textAlign: TextAlign.center,
             ),
@@ -294,7 +294,7 @@ class AppLockScreen extends StatelessWidget {
                             CustomPaywallScreen.show(context);
                           },
                           icon: const Icon(Icons.star),
-                          label: const Text('Subscribe to Tapix Pro'),
+                          label: const Text('Subscribe to TapBix Pro'),
                           style: ElevatedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 14),
                           ),
@@ -399,7 +399,7 @@ class AppLockScreen extends StatelessWidget {
   String _descriptionForReason(AppLockReason reason) {
     switch (reason) {
       case AppLockReason.noSubscription:
-        return 'Subscribe to Tapix Pro to use this application.';
+        return 'Subscribe to TapBix Pro to use this application.';
       case AppLockReason.licenseExpired:
         return 'Your subscription has expired. Please renew to continue.';
       case AppLockReason.deviceMismatch:
@@ -411,9 +411,9 @@ class AppLockScreen extends StatelessWidget {
       case AppLockReason.deviceBlocked:
         return 'This device has been blocked. Please contact support.';
       case AppLockReason.versionUnsupported:
-        return 'This version of Tapix is no longer supported. Please update to the latest version.';
+        return 'This version of TapBix is no longer supported. Please update to the latest version.';
       case AppLockReason.versionKilled:
-        return 'This version of Tapix has been disabled. Please update to the latest version.';
+        return 'This version of TapBix has been disabled. Please update to the latest version.';
       case AppLockReason.forceUpdate:
         return 'A critical update is available. Please update to continue.';
       case AppLockReason.codeTampered:

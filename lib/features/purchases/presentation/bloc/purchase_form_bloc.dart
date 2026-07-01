@@ -41,7 +41,6 @@ class PurchaseFormState extends Equatable {
   final List<PurchaseLineItem> items;
   final DiscountMode discountMode;
   final Decimal invoiceDiscountCents;
-  final Decimal invoiceDiscountPercent;
   final String? supplierInvoiceRef;
   final String? notes;
   final DateTime purchaseDate;
@@ -70,7 +69,6 @@ class PurchaseFormState extends Equatable {
     this.items = const [],
     this.discountMode = DiscountMode.perItem,
     Decimal? invoiceDiscountCents,
-    Decimal? invoiceDiscountPercent,
     this.supplierInvoiceRef,
     this.notes,
     required this.purchaseDate,
@@ -88,7 +86,6 @@ class PurchaseFormState extends Equatable {
     this.taxInclusivePricing = false,
     this.isEditingPosted = false,
   }) : invoiceDiscountCents = invoiceDiscountCents ?? Decimal.zero,
-       invoiceDiscountPercent = invoiceDiscountPercent ?? Decimal.zero,
        taxRatePercent = taxRatePercent ?? Decimal.zero,
        paidAmountCents = paidAmountCents ?? Decimal.zero;
 
@@ -137,13 +134,12 @@ class PurchaseFormState extends Equatable {
   }
 
   Discount _buildOverallDiscount() {
-    if (invoiceDiscountPercent > Decimal.zero) {
-      final bps = (invoiceDiscountPercent * Decimal.fromInt(100))
-          .round()
-          .toBigInt()
-          .toInt();
-      if (bps > 0) return Discount.percent(bps);
-    }
+    // Single source of truth: the fixed-cents amount the user committed is
+    // the authoritative invoice-level discount — matching `SaleFormState`.
+    // The percentage shown in the UI is a pure display helper that is
+    // converted to cents before reaching the bloc; it must NOT re-derive
+    // the discount here, otherwise a fixed `405.00` input gets silently
+    // rewritten to e.g. `5.01 %` → `405.31` (the rounding drift bug).
     if (invoiceDiscountCents > Decimal.zero) {
       return Discount.fixed(Money.fromDecimalCents(invoiceDiscountCents));
     }
@@ -209,7 +205,6 @@ class PurchaseFormState extends Equatable {
     List<PurchaseLineItem>? items,
     DiscountMode? discountMode,
     Decimal? invoiceDiscountCents,
-    Decimal? invoiceDiscountPercent,
     String? supplierInvoiceRef,
     String? notes,
     DateTime? purchaseDate,
@@ -237,7 +232,6 @@ class PurchaseFormState extends Equatable {
       items: items ?? this.items,
       discountMode: discountMode ?? this.discountMode,
       invoiceDiscountCents: invoiceDiscountCents ?? this.invoiceDiscountCents,
-      invoiceDiscountPercent: invoiceDiscountPercent ?? this.invoiceDiscountPercent,
       supplierInvoiceRef: supplierInvoiceRef ?? this.supplierInvoiceRef,
       notes: notes ?? this.notes,
       purchaseDate: purchaseDate ?? this.purchaseDate,
@@ -260,7 +254,7 @@ class PurchaseFormState extends Equatable {
   @override
   List<Object?> get props => [
         purchaseId, purchaseNumber, supplierId, supplierName, currencyId, items,
-        discountMode, invoiceDiscountCents, invoiceDiscountPercent, supplierInvoiceRef,
+        discountMode, invoiceDiscountCents, supplierInvoiceRef,
         notes, purchaseDate, dueDate,
         paymentMethod, taxRatePercent, paidAmountCents, overpaymentHandling,
         isSubmitting, error, isSuccess, hasUnsavedChanges,
@@ -553,12 +547,10 @@ class PurchaseDiscountModeChanged extends PurchaseFormEvent {
 
 class PurchaseInvoiceDiscountChanged extends PurchaseFormEvent {
   final Decimal discountCents;
-  final Decimal discountPercent;
-  PurchaseInvoiceDiscountChanged(this.discountCents, {Decimal? discountPercent})
-      : discountPercent = discountPercent ?? Decimal.zero;
+  const PurchaseInvoiceDiscountChanged(this.discountCents);
 
   @override
-  List<Object?> get props => [discountCents, discountPercent];
+  List<Object?> get props => [discountCents];
 }
 
 class PurchaseLineItemAdded extends PurchaseFormEvent {
@@ -994,7 +986,6 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
       discountMode: event.mode,
       items: clearedItems,
       invoiceDiscountCents: Decimal.zero,
-      invoiceDiscountPercent: Decimal.zero,
       hasUnsavedChanges: true,
     ));
   }
@@ -1005,7 +996,6 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
   ) {
     emit(state.copyWith(
       invoiceDiscountCents: event.discountCents,
-      invoiceDiscountPercent: event.discountPercent,
     ));
   }
 

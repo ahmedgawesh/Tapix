@@ -2140,6 +2140,62 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
     return rows.isEmpty ? 0 : rows.first.read<int>('total');
   }
 
+  /// Actual inventory valuation removed by a posted (linked) purchase return.
+  ///
+  /// SINGLE SOURCE OF TRUTH for the 1200 Inventory GL leg. It MUST mirror the
+  /// cost basis used by `getTotalInventoryValueCents`, otherwise 1200 drifts
+  /// away from Σ(stock×cost):
+  ///   • FIFO products → Σ(batch_consumptions.quantity × unit_cost_cents)
+  ///     recorded by `BatchService.consumeFifo` for this return's items. The
+  ///     goods leave specific batches at their FROZEN per-batch cost, which is
+  ///     exactly how the batch ledger is valued.
+  ///   • WAC products  → qty × the variant/product CURRENT cost (an outflow
+  ///     never changes the WAC unit cost, so current == the value removed).
+  ///
+  /// The difference between the refund (net) and this cost is a purchase price
+  /// variance that the journal policy routes to 4100 (contra-COGS).
+  Future<int> computePurchaseReturnInventoryCostCents(int returnId) async {
+    final rows = await (select(purchaseReturnItems).join([
+      innerJoin(purchaseItems,
+          purchaseItems.id.equalsExp(purchaseReturnItems.purchaseItemId)),
+    ])
+          ..where(purchaseReturnItems.returnId.equals(returnId)))
+        .get();
+
+    int total = 0;
+    for (final row in rows) {
+      final ri = row.readTable(purchaseReturnItems);
+      final pi = row.readTable(purchaseItems);
+
+      if (await _isFifoProduct(pi.productId)) {
+        final costRow = await customSelect(
+          'SELECT COALESCE(SUM(quantity * unit_cost_cents), 0) AS c '
+          'FROM batch_consumptions '
+          "WHERE purchase_return_item_id = ? AND direction = 'out'",
+          variables: [Variable.withInt(ri.id)],
+        ).getSingle();
+        total += costRow.read<int>('c');
+      } else {
+        int unitCost = 0;
+        if (pi.variantId != null) {
+          final r = await customSelect(
+            'SELECT cost_cents FROM product_variants WHERE id = ?',
+            variables: [Variable.withInt(pi.variantId!)],
+          ).getSingleOrNull();
+          unitCost = r?.read<int>('cost_cents') ?? 0;
+        } else {
+          final r = await customSelect(
+            'SELECT cost_cents FROM products WHERE id = ?',
+            variables: [Variable.withInt(pi.productId)],
+          ).getSingleOrNull();
+          unitCost = r?.read<int>('cost_cents') ?? 0;
+        }
+        total += unitCost * ri.quantity;
+      }
+    }
+    return total;
+  }
+
   /// Watch set of purchase IDs that have at least one non-voided return
   Stream<Set<int>> watchPurchaseIdsWithReturns() {
     return (select(purchaseReturns)

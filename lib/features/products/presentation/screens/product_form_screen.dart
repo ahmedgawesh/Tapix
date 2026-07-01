@@ -14,6 +14,7 @@ import '../../../../core/di/injection_container.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/widgets/theme_toggle_button.dart';
 import '../../../../core/widgets/inputs/select_all_on_focus.dart';
+import '../../../subscription/presentation/widgets/upgrade_prompt.dart';
 import '../../domain/entities/price_history_entity.dart';
 import '../../domain/entities/product_entity.dart';
 import '../../domain/entities/product_variant_entity.dart';
@@ -264,12 +265,21 @@ class _ProductFormViewState extends State<_ProductFormView> {
         }
 
         if (state.error != null) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('product_form.error_saving'.tr()),
-              backgroundColor: colorScheme.error,
-            ),
-          );
+          final quota = parseQuotaError(state.error);
+          if (quota != null) {
+            showQuotaExceededDialog(
+              context,
+              isProducts: quota.isProducts,
+              limit: quota.limit,
+            );
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('product_form.error_saving'.tr()),
+                backgroundColor: colorScheme.error,
+              ),
+            );
+          }
         }
 
         _initControllers(state);

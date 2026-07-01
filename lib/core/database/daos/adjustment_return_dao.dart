@@ -767,6 +767,18 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
       int totalInventoryCostCents = 0;
       int totalTaxCents = 0;
 
+      // ── Single source of truth for the inventory (1200) GL leg ──
+      // The amount credited to 1200 MUST equal the ACTUAL inventory
+      // valuation removed by the stock ledger, never the product's current
+      // cost. For FIFO products the goods leave specific batches at their
+      // FROZEN per-batch cost — which is exactly how
+      // `getTotalInventoryValueCents` values them — so the GL leg must use
+      // Σ(consumed batch cost). Using the product's current cost instead
+      // (the old behaviour) drifts 1200 away from Σ(stock×cost) by
+      // (batch_cost − product_cost) × qty on every FIFO line. Keyed by
+      // return-item id so the per-line journal entry stays exact.
+      final actualInvCostByItem = <int, int>{};
+
       // Per-product track_inventory map. Non-tracked products (services,
       // labour, expense-only items) skip every stock / batch / negative-stock
       // hook below but still hit the GL — accounting must still book the
@@ -778,22 +790,20 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
       for (final item in items) {
         final tracksInventory = trackedByProduct[item.productId] ?? true;
 
-        // Aggregate tax for GL entry. Inventory cost is only aggregated for
-        // tracked products — non-tracked items contribute zero to the
-        // inventory leg (they have no perpetual inventory account movement).
-        if (tracksInventory) {
-          totalInventoryCostCents +=
-              item.unitCostCents.toBigInt().toInt() * item.quantity;
-        }
+        // Tax is aggregated for every line (tracked or not).
         totalTaxCents += item.taxCents.toBigInt().toInt();
 
         // Non-tracked products never touch stock / batches / variant-stock
-        // resolution. Skip straight to the next line; the financial leg of
-        // the journal entry is recorded once after the loop. They also
-        // intentionally stay out of `affectedProductIds` so the post-loop
-        // `syncProductStockFromVariants` doesn't attempt to overwrite a
-        // stock value that is meaningless for the product.
-        if (!tracksInventory) continue;
+        // resolution and contribute zero to the inventory leg. Skip straight
+        // to the next line; the financial leg of the journal entry is
+        // recorded once after the loop. They also intentionally stay out of
+        // `affectedProductIds` so the post-loop `syncProductStockFromVariants`
+        // doesn't attempt to overwrite a stock value that is meaningless for
+        // the product.
+        if (!tracksInventory) {
+          actualInvCostByItem[item.id] = 0;
+          continue;
+        }
         affectedProductIds.add(item.productId);
 
         // Resolve a concrete variant for the stock movement BEFORE any
@@ -857,12 +867,13 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
           direction: StockDirection.decrease,
         );
 
-        // FIFO sync: deduct oldest batches for FIFO products and link the
-        // consumption to this return item so a later void can mirror it
-        // back precisely to the same batches at the FROZEN unit cost.
-        // WAC products keep their batches untouched (legacy path).
+        // Inventory cost = ACTUAL valuation removed (see `actualInvCostByItem`).
         if (await _isFifoProduct(item.productId)) {
-          await BatchService.consumeFifo(
+          // FIFO: deduct oldest batches and link the consumption to this
+          // return item so a later void can mirror it back precisely to the
+          // same batches at the FROZEN unit cost. The returned rows carry
+          // the per-batch cost, so Σ(totalCostCents) is the exact 1200 leg.
+          final consumed = await BatchService.consumeFifo(
             this,
             productId: item.productId,
             variantId: resolvedVariantId,
@@ -870,7 +881,19 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
             consumptionType: 'purchase_adj_return',
             purchaseReturnAdjustmentItemId: item.id,
           );
+          final lineCost =
+              consumed.fold<int>(0, (s, c) => s + c.totalCostCents);
+          actualInvCostByItem[item.id] = lineCost;
+          totalInventoryCostCents += lineCost;
           batchedProductIds.add(item.productId);
+        } else {
+          // WAC: the variant carries a single blended cost, so qty × the
+          // frozen snapshot is already the exact valuation delta (an outflow
+          // never changes the WAC unit cost).
+          final lineCost =
+              item.unitCostCents.toBigInt().toInt() * item.quantity;
+          actualInvCostByItem[item.id] = lineCost;
+          totalInventoryCostCents += lineCost;
         }
       }
 
@@ -971,10 +994,11 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
       // inside ReturnPostingService can reject posts into closed periods.
       final explicitLines = <PostedReturnLine>[];
       for (final item in items) {
-        final tracks = trackedByProduct[item.productId] ?? true;
-        final lineInvCost = tracks
-            ? item.unitCostCents.toBigInt().toInt() * item.quantity
-            : 0;
+        // Use the ACTUAL inventory cost captured during the stock movement
+        // (FIFO batch consumption / WAC snapshot) so the per-line 1200 leg
+        // reconciles 1:1 with Σ(stock×cost). Falls back to 0 for any line
+        // that never moved stock (non-tracked products).
+        final lineInvCost = actualInvCostByItem[item.id] ?? 0;
         final lineTotal = item.totalCents.toBigInt().toInt();
         final lineTax = item.taxCents.toBigInt().toInt();
         explicitLines.add(PostedReturnLine(

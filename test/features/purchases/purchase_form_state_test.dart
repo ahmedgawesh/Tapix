@@ -116,12 +116,14 @@ void main() {
       expect(state.totalDiscountCents, equals(Decimal.fromInt(1000)));
     });
 
-    test('effectiveInvoiceDiscountCents calculates from percent', () {
+    test('effectiveInvoiceDiscountCents reflects the fixed invoice discount', () {
       final state = PurchaseFormState(
         currencyId: 1,
         purchaseDate: DateTime(2026, 1, 15),
         discountMode: DiscountMode.invoice,
-        invoiceDiscountPercent: Decimal.fromInt(10), // 10%
+        // Fixed cents is the single source of truth; the UI converts any
+        // typed percentage to cents before it reaches the state.
+        invoiceDiscountCents: Decimal.fromInt(1000), // 10% of 10000¢
         items: [
           PurchaseLineItem(
             tempId: '1',
@@ -134,7 +136,6 @@ void main() {
         ],
       );
 
-      // 10% of 10000 = 1000
       expect(state.effectiveInvoiceDiscountCents, equals(Decimal.fromInt(1000)));
     });
 

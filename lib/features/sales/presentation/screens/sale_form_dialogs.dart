@@ -432,28 +432,34 @@ class _AddItemSheetState extends State<_AddItemSheet> {
                   ),
                   title: Text(product.name, style: const TextStyle(fontWeight: FontWeight.w500)),
                   subtitle: Row(children: [
-                    if (product.sku != null) ...[
-                      Flexible(
-                        child: Text('SKU: ${product.sku}',
-                          style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
-                          maxLines: 1, overflow: TextOverflow.ellipsis),
-                      ),
-                      const SizedBox(width: 8),
-                    ],
-                    if (sizeName != null && sizeName.isNotEmpty) ...[
-                      Flexible(
-                        child: Text(sizeName,
-                          style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
-                          maxLines: 1, overflow: TextOverflow.ellipsis),
-                      ),
-                      if (shade != null) const SizedBox(width: 6),
-                    ],
-                    if (shade != null)
-                      Container(width: 10, height: 10,
-                        decoration: BoxDecoration(color: shade, shape: BoxShape.circle,
-                          border: Border.all(color: cs.outline))),
-                    const Spacer(),
+                    // Identifier group takes the available space so the SKU is
+                    // never truncated just to make room for a color dot.
+                    Expanded(
+                      child: Row(children: [
+                        if (product.sku != null) ...[
+                          Flexible(
+                            child: Text('SKU: ${product.sku}',
+                              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                              maxLines: 1, overflow: TextOverflow.ellipsis),
+                          ),
+                          const SizedBox(width: 8),
+                        ],
+                        if (sizeName != null && sizeName.isNotEmpty) ...[
+                          Flexible(
+                            child: Text(sizeName,
+                              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                              maxLines: 1, overflow: TextOverflow.ellipsis),
+                          ),
+                          if (shade != null) const SizedBox(width: 6),
+                        ],
+                        if (shade != null)
+                          Container(width: 10, height: 10,
+                            decoration: BoxDecoration(color: shade, shape: BoxShape.circle,
+                              border: Border.all(color: cs.outline))),
+                      ]),
+                    ),
                     if (!product.hasVariants) ...[
+                      const SizedBox(width: 8),
                       Icon(LucideIcons.warehouse, size: 12, color: cs.onSurfaceVariant),
                       const SizedBox(width: 4),
                       Text('${product.stockQuantity}',
@@ -704,11 +710,24 @@ class _EditItemSheetState extends State<_EditItemSheet> {
                 Text(widget.item.displayName,
                   style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
                   maxLines: 1, overflow: TextOverflow.ellipsis),
-                if (widget.item.colorHex != null || widget.item.sizeName != null)
-                  Text(
-                    [widget.item.sizeName, widget.item.colorHex]
-                      .where((s) => s != null && s.isNotEmpty).join(' / '),
-                    style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                // Product/variant identifier (SKU) — shown under the name like
+                // every other model. Color/size are already surfaced in
+                // `displayName` (e.g. "فستان مطرز (Pink)"), so we must never
+                // print the raw color hex (e.g. "#FFC0CB") here.
+                Builder(builder: (context) {
+                  final variantSku = widget.item.variant?.sku?.trim();
+                  final productSku = widget.item.product.sku?.trim();
+                  final sku = (variantSku != null && variantSku.isNotEmpty)
+                      ? variantSku
+                      : (productSku ?? '');
+                  if (sku.isEmpty) return const SizedBox.shrink();
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text('SKU: $sku',
+                      style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                  );
+                }),
                 if (variant?.barcode != null && variant!.barcode!.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 2),

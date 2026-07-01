@@ -730,7 +730,18 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                             ),
-                            if (item.colorName != null || item.sizeName != null || item.variantSku != null)
+                            if ((item.variantSku ?? item.productSku) != null && (item.variantSku ?? item.productSku)!.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 2, bottom: 2),
+                                child: Text(
+                                  'SKU: ${item.variantSku ?? item.productSku}',
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: colorScheme.onSurfaceVariant,
+                                    fontSize: 10,
+                                  ),
+                                ),
+                              ),
+                            if (item.colorName != null || item.sizeName != null)
                               Padding(
                                 padding: const EdgeInsets.only(top: 2),
                                 child: Wrap(
@@ -763,21 +774,6 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
                                           item.sizeName!,
                                           style: theme.textTheme.labelSmall?.copyWith(
                                             color: colorScheme.onSecondaryContainer,
-                                            fontSize: 10,
-                                          ),
-                                        ),
-                                      ),
-                                    if (item.variantSku != null && item.colorName == null && item.sizeName == null)
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                                        decoration: BoxDecoration(
-                                          color: colorScheme.tertiaryContainer.withValues(alpha: 0.4),
-                                          borderRadius: BorderRadius.circular(4),
-                                        ),
-                                        child: Text(
-                                          item.variantSku!,
-                                          style: theme.textTheme.labelSmall?.copyWith(
-                                            color: colorScheme.onTertiaryContainer,
                                             fontSize: 10,
                                           ),
                                         ),

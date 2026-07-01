@@ -3,7 +3,7 @@
     <uses-permission android:name="com.android.vending.BILLING" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <application
-        android:label="tapix"
+        android:label="TapBix"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:enableOnBackInvokedCallback="true">

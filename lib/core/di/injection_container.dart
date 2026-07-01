@@ -169,6 +169,8 @@ import '../../features/reports/presentation/bloc/supplier_aging_report_bloc.dart
 import '../../features/reports/presentation/bloc/supplier_statement_report_bloc.dart';
 import '../../features/reports/presentation/bloc/supplier_ledger_report_bloc.dart';
 import '../../features/reports/presentation/bloc/customer_ledger_report_bloc.dart';
+import '../../features/reports/presentation/bloc/customer_invoices_report_bloc.dart';
+import '../../features/reports/presentation/bloc/supplier_invoices_report_bloc.dart';
 import '../../features/reports/presentation/bloc/supplier_stocktake_report_bloc.dart';
 import '../../features/reports/presentation/bloc/supplier_balance_drilldown_bloc.dart';
 import '../../features/reports/presentation/bloc/salespeople_commission_report_bloc.dart';
@@ -186,6 +188,8 @@ import '../services/connectivity_service.dart';
 import '../services/remote_security_service.dart';
 import '../services/code_integrity_service.dart';
 import '../services/app_guard_service.dart';
+import '../services/feature_gate_service.dart';
+import '../services/free_quota_service.dart';
 import '../../features/subscription/subscription.dart';
 
 final sl = GetIt.instance;
@@ -286,6 +290,8 @@ Future<void> init() async {
       // 1200 Inventory ledger in sync with Σ(stock × cost).
       variantDatasource: sl<VariantLocalDatasource>(),
       adjustmentService: sl<InventoryAdjustmentService>(),
+      // Phase B4 — enforce free-tier 100-product cumulative cap.
+      freeQuotaService: sl<FreeQuotaService>(),
     ),
   );
   sl.registerLazySingleton<ProductVariantRepository>(
@@ -439,6 +445,8 @@ Future<void> init() async {
       sl<CommissionService>(),
       sl<LoyaltyPointsService>(),
       einvoiceDispatch: sl<EInvoiceDispatchService>(),
+      // Phase B4 — enforce free-tier 100-invoice cumulative cap.
+      freeQuotaService: sl<FreeQuotaService>(),
     ),
   );
 
@@ -698,6 +706,14 @@ Future<void> init() async {
   });
   sl.registerFactory(() {
     final defaultRange = sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
+    return CustomerInvoicesReportBloc(sl<AppDatabase>(), defaultDateRange: defaultRange);
+  });
+  sl.registerFactory(() {
+    final defaultRange = sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
+    return SupplierInvoicesReportBloc(sl<AppDatabase>(), defaultDateRange: defaultRange);
+  });
+  sl.registerFactory(() {
+    final defaultRange = sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
     return SupplierStocktakeReportBloc(sl<AppDatabase>(), defaultDateRange: defaultRange);
   });
   sl.registerFactory(() {
@@ -797,6 +813,13 @@ Future<void> init() async {
   sl.registerLazySingleton(() => SubscriptionBloc(
     revenueCatService: sl<RevenueCatService>(),
     appGuardService: sl<AppGuardService>(),
+  ));
+  sl.registerLazySingleton(() => FeatureGateService(
+    revenueCatService: sl<RevenueCatService>(),
+  ));
+  sl.registerLazySingleton(() => FreeQuotaService(
+    prefs: sl<SharedPreferences>(),
+    featureGateService: sl<FeatureGateService>(),
   ));
   
   // Configure SessionService to use AppSettings for timeout

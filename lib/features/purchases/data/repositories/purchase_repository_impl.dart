@@ -598,6 +598,15 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
       // Auto-post the return (update stock)
       await _datasource.postPurchaseReturn(id, allowNegativeStock: allowNegativeStock);
 
+      // Inventory leg = ACTUAL valuation removed by the stock ledger
+      // (FIFO batch consumption / WAC current cost), computed AFTER the post
+      // so the batch_consumptions rows exist. Without this the JE defaults
+      // 1200 to the refund net, which drifts away from Σ(stock×cost) whenever
+      // a returned FIFO lot — or the current WAC cost — differs from the
+      // original purchase price. The refund vs cost gap flows to 4100.
+      final inventoryCostCents =
+          await _db.purchaseDao.computePurchaseReturnInventoryCostCents(id);
+
       // Create journal entries — MANDATORY.
       //
       // taxCents MUST be passed: it generates the Cr 1300 VAT Receivable
@@ -612,6 +621,7 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
         returnId: id,
         totalCents: totalCents.toBigInt().toInt(),
         taxCents: taxCents.toBigInt().toInt(),
+        inventoryCostCents: inventoryCostCents,
         currencyId: currencyId,
         refundMethod: refundMethod,
         userId: userId,

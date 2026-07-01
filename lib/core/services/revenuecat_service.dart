@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../utils/platform_utils.dart';
 
@@ -14,7 +15,12 @@ class RevenueCatConfig {
   static const String apiKey = 'goog_bmcvleZZMqUhtEkYvqaknUJRzvB';
 
   /// Entitlement identifier for Tapix Pro
-  static const String entitlementId = 'pro';
+  static const String entitlementId = 'Tapix Pro';
+
+  /// Android application package name (must match `applicationId` in
+  /// `android/app/build.gradle.kts`). Used to deep-link to the Google Play
+  /// subscription-management page per Play policy.
+  static const String androidPackageName = 'com.tapix.pos';
 
   /// Product identifiers (must match Google Play Console)
   static const String weeklyProductId = 'com.tapix.pos';
@@ -45,10 +51,10 @@ enum SubscriptionType {
   static SubscriptionType fromProductId(String? productId) {
     if (productId == null) return none;
     // Check longer (more specific) IDs first to avoid false matches
-    if (productId == RevenueCatConfig.lifetimeProductId) return lifetime;
-    if (productId == RevenueCatConfig.yearlyProductId) return yearly;
-    if (productId == RevenueCatConfig.monthlyProductId) return monthly;
-    if (productId == RevenueCatConfig.weeklyProductId) return weekly;
+    if (productId.contains(RevenueCatConfig.lifetimeProductId)) return lifetime;
+    if (productId.contains(RevenueCatConfig.yearlyProductId)) return yearly;
+    if (productId.contains(RevenueCatConfig.monthlyProductId)) return monthly;
+    if (productId.contains(RevenueCatConfig.weeklyProductId)) return weekly;
     return none;
   }
 
@@ -298,11 +304,54 @@ class RevenueCatService {
     }
   }
 
-  /// Open Google Play subscription management
-  Future<void> openSubscriptionManagement() async {
-    // On Android, deep-link to Google Play subscriptions page
-    // Users can cancel/change subscriptions there
-    debugPrint('RevenueCat: Opening subscription management');
+  /// Open the platform-native subscription management page.
+  ///
+  /// **Required by Google Play subscription policy**: users must be able
+  /// to reach the manage-subscription page from within the app.
+  ///
+  /// - Android → deep-links to Google Play subscriptions page for this app.
+  ///   When [productId] is provided, opens that specific subscription;
+  ///   otherwise opens the account-wide subscriptions list.
+  /// - iOS → opens Apple's subscription management page.
+  /// - Other platforms → no-op.
+  ///
+  /// Returns `true` if a URL was successfully launched.
+  Future<bool> openSubscriptionManagement({String? productId}) async {
+    if (!RevenueCatConfig.isSupported) {
+      debugPrint('RevenueCat: openSubscriptionManagement skipped — unsupported platform');
+      return false;
+    }
+
+    final Uri uri;
+    if (PlatformUtils.isAndroid) {
+      // Google Play subscription deep-link.
+      // Per-product form requires both sku & package; account-wide form is the fallback.
+      if (productId != null && productId.isNotEmpty) {
+        uri = Uri.parse(
+          'https://play.google.com/store/account/subscriptions'
+          '?sku=$productId&package=${RevenueCatConfig.androidPackageName}',
+        );
+      } else {
+        uri = Uri.parse('https://play.google.com/store/account/subscriptions');
+      }
+    } else if (PlatformUtils.isIOS) {
+      // Apple subscription management.
+      uri = Uri.parse('https://apps.apple.com/account/subscriptions');
+    } else {
+      return false;
+    }
+
+    try {
+      final launched = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+      debugPrint('RevenueCat: openSubscriptionManagement → $uri (launched=$launched)');
+      return launched;
+    } catch (e) {
+      debugPrint('RevenueCat: openSubscriptionManagement failed: $e');
+      return false;
+    }
   }
 
   /// Log in a user (for user identification)
@@ -364,44 +413,47 @@ class RevenueCatService {
     }
   }
 
+  /// Returns a localization KEY (not a literal string) for the given error
+  /// code. The UI layer is responsible for translating it via `.tr()`, keeping
+  /// this service free of any localization/context dependency.
   String _getErrorMessage(PurchasesErrorCode code) {
     switch (code) {
       case PurchasesErrorCode.purchaseCancelledError:
-        return 'Purchase was cancelled';
+        return 'paywall.errors.cancelled';
       case PurchasesErrorCode.storeProblemError:
-        return 'There was a problem with the app store';
+        return 'paywall.errors.store_problem';
       case PurchasesErrorCode.purchaseNotAllowedError:
-        return 'Purchase not allowed on this device';
+        return 'paywall.errors.not_allowed';
       case PurchasesErrorCode.purchaseInvalidError:
-        return 'Invalid purchase';
+        return 'paywall.errors.invalid';
       case PurchasesErrorCode.productNotAvailableForPurchaseError:
-        return 'Product not available for purchase';
+        return 'paywall.errors.not_available';
       case PurchasesErrorCode.productAlreadyPurchasedError:
-        return 'Product already purchased';
+        return 'paywall.errors.already_purchased';
       case PurchasesErrorCode.networkError:
-        return 'Network error. Please check your connection';
+        return 'paywall.errors.network';
       case PurchasesErrorCode.receiptAlreadyInUseError:
-        return 'Receipt already in use by another user';
+        return 'paywall.errors.receipt_in_use';
       case PurchasesErrorCode.invalidReceiptError:
-        return 'Invalid receipt';
+        return 'paywall.errors.invalid_receipt';
       case PurchasesErrorCode.missingReceiptFileError:
-        return 'Missing receipt file';
+        return 'paywall.errors.missing_receipt';
       case PurchasesErrorCode.invalidCredentialsError:
-        return 'Invalid credentials';
+        return 'paywall.errors.invalid_credentials';
       case PurchasesErrorCode.unexpectedBackendResponseError:
-        return 'Unexpected server response';
+        return 'paywall.errors.server';
       case PurchasesErrorCode.paymentPendingError:
-        return 'Payment is pending';
+        return 'paywall.errors.payment_pending';
       case PurchasesErrorCode.invalidAppleSubscriptionKeyError:
-        return 'Invalid subscription key';
+        return 'paywall.errors.invalid_key';
       case PurchasesErrorCode.ineligibleError:
-        return 'User is ineligible for this offer';
+        return 'paywall.errors.ineligible';
       case PurchasesErrorCode.insufficientPermissionsError:
-        return 'Insufficient permissions';
+        return 'paywall.errors.permissions';
       case PurchasesErrorCode.operationAlreadyInProgressError:
-        return 'Operation already in progress';
+        return 'paywall.errors.in_progress';
       default:
-        return 'An error occurred. Please try again';
+        return 'paywall.errors.generic';
     }
   }
 

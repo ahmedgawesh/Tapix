@@ -183,7 +183,7 @@ class _TapixAppState extends State<TapixApp> {
                     : ThemeMode.system;
 
             return MaterialApp.router(
-              title: 'Tapix',
+              title: 'TapBix',
               debugShowCheckedModeBanner: false,
               localizationsDelegates: context.localizationDelegates,
               supportedLocales: context.supportedLocales,

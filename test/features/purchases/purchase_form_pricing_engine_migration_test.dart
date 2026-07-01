@@ -71,7 +71,6 @@ PurchaseFormState _state({
   required List<PurchaseLineItem> items,
   DiscountMode discountMode = DiscountMode.perItem,
   int invoiceDiscountCents = 0,
-  int invoiceDiscountPercent = 0,
   bool enableTaxCalculations = true,
   int defaultPurchaseTaxRateBps = 0,
   bool taxInclusivePricing = false,
@@ -82,7 +81,6 @@ PurchaseFormState _state({
       items: items,
       discountMode: discountMode,
       invoiceDiscountCents: Decimal.fromInt(invoiceDiscountCents),
-      invoiceDiscountPercent: Decimal.fromInt(invoiceDiscountPercent),
       enableTaxCalculations: enableTaxCalculations,
       defaultPurchaseTaxRateBps: defaultPurchaseTaxRateBps,
       taxInclusivePricing: taxInclusivePricing,
@@ -167,7 +165,10 @@ void main() {
               tempId: '1', product: nonTaxable, qty: 1, unitCostCents: 10000),
         ],
         discountMode: DiscountMode.invoice,
-        invoiceDiscountPercent: 200,
+        // 200 currency units (20000¢) against a 10000¢ subtotal — the
+        // engine FixedDiscount clamps to ≤ subtotal, matching what the UI's
+        // DiscountConverter produces when a 200% rate is typed.
+        invoiceDiscountCents: 20000,
         enableTaxCalculations: false,
       );
       expect(s.effectiveInvoiceDiscountCents, Decimal.fromInt(10000));
@@ -224,7 +225,7 @@ void main() {
                 unitCostCents: 79984),
           ],
           discountMode: DiscountMode.invoice,
-          invoiceDiscountPercent: 1,
+          invoiceDiscountCents: 800, // ≈ 1% of 79984¢ net
         ),
       ];
       for (final s in scenarios) {
@@ -247,7 +248,7 @@ void main() {
           _line(tempId: '3', product: nonTaxable, qty: 2, unitCostCents: 999),
         ],
         discountMode: DiscountMode.invoice,
-        invoiceDiscountPercent: 7,
+        invoiceDiscountCents: 1444, // ≈ 7% of the 20635¢ subtotal
       );
       final summed = s.pricing.lines
           .fold<int>(0, (acc, l) => acc + l.total.cents);

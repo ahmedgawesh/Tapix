@@ -10,6 +10,7 @@ import '../../../../core/services/audit_log_service.dart';
 import '../../../../core/services/commissions/commission_service.dart';
 import '../../../../core/services/einvoice/einvoice_dispatch_service.dart';
 import '../../../../core/services/einvoice/einvoice_document.dart';
+import '../../../../core/services/free_quota_service.dart';
 import '../../../../core/services/journal_entry_service.dart';
 import '../../../../core/services/loyalty/loyalty_points_service.dart';
 import '../../../../core/services/void_impact_analyzer.dart';
@@ -36,6 +37,13 @@ class SaleRepositoryImpl implements SaleRepository {
   /// When null (old tests) dispatch is a silent no-op.
   final EInvoiceDispatchService? _einvoiceDispatch;
 
+  /// Phase B4 — free-tier cumulative quota guard. Optional so existing tests
+  /// that construct the repository without DI keep working. When provided,
+  /// `createSale` calls `guardSaleCreation()` (may throw
+  /// [FreeQuotaExceededException]) and `incrementSalesCreated()` after a
+  /// successful transaction.
+  final FreeQuotaService? _freeQuotaService;
+
   SaleRepositoryImpl(
     this._datasource,
     this._dao,
@@ -46,7 +54,9 @@ class SaleRepositoryImpl implements SaleRepository {
     this._commissionService,
     this._loyaltyPointsService, {
     EInvoiceDispatchService? einvoiceDispatch,
-  }) : _einvoiceDispatch = einvoiceDispatch;
+    FreeQuotaService? freeQuotaService,
+  })  : _einvoiceDispatch = einvoiceDispatch,
+        _freeQuotaService = freeQuotaService;
 
   Future<int?> _currentUserId() => _sessionService.getCurrentUserId();
 
@@ -89,6 +99,12 @@ class SaleRepositoryImpl implements SaleRepository {
     bool allowNegativeStock = false,
     bool taxInclusiveAtPost = false,
   }) async {
+    // Phase B4 — enforce free-tier cumulative cap BEFORE opening the tx.
+    // Pro users bypass; free users at or past the cap get
+    // [FreeQuotaExceededException]. Done up-front so we don't waste a tx
+    // and a row-lock just to fail the quota check.
+    _freeQuotaService?.guardSaleCreation();
+
     // Invoice number is generated INSIDE the transaction (see below)
     // to prevent race conditions when two sales are created concurrently.
 
@@ -223,6 +239,11 @@ class SaleRepositoryImpl implements SaleRepository {
         rethrow;
       }
     }
+
+    // Phase B4 — bump the cumulative counter ONLY after a successful tx.
+    // Pro users still increment so that, if their subscription lapses, the
+    // free-tier counter accurately reflects lifetime usage.
+    await _freeQuotaService?.incrementSalesCreated();
 
     // Award loyalty points outside transaction (non-critical) via
     // the LoyaltyPointsService (Phase 6 SoT).

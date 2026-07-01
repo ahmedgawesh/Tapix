@@ -102,7 +102,7 @@ class _SplashScreenState extends State<SplashScreen>
               ),
               SizedBox(height: isDesktop ? 32 : 24),
               Text(
-                'Tapix',
+                'Tapbix: POS & Inventory ERP',
                 style: titleStyle?.copyWith(
                   fontWeight: FontWeight.bold,
                   color: colorScheme.primary,

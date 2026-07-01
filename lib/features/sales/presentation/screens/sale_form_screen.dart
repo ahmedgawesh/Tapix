@@ -17,6 +17,7 @@ import '../../../../core/services/currency_service.dart';
 import '../../../../core/services/pricing/discount_converter.dart';
 import '../../../../core/services/parties/party_balance_classifier.dart';
 import '../../../../core/widgets/inputs/select_all_on_focus.dart';
+import '../../../subscription/presentation/widgets/upgrade_prompt.dart';
 import '../../../../core/money/money.dart';
 import '../../../../core/pricing/discount.dart';
 import '../../../../core/pricing/line_item_pricing_engine.dart';
@@ -237,13 +238,22 @@ class _SaleFormView extends StatelessWidget {
           });
         }
         if (state.error != null) {
-          final key = state.error!;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(key.tr() == key ? key : key.tr()),
-              backgroundColor: cs.error,
-            ),
-          );
+          final quota = parseQuotaError(state.error);
+          if (quota != null) {
+            showQuotaExceededDialog(
+              context,
+              isProducts: quota.isProducts,
+              limit: quota.limit,
+            );
+          } else {
+            final key = state.error!;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(key.tr() == key ? key : key.tr()),
+                backgroundColor: cs.error,
+              ),
+            );
+          }
         }
         if (state.belowCostWarning != null && state.belowCostWarning!.isBelowCost) {
           _showBelowCostWarningDialog(context, state.belowCostWarning!);
@@ -276,14 +286,23 @@ class _SaleFormView extends StatelessWidget {
           ),
           body: Column(
             children: [
-              Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.all(16),
+              // Fixed (non-scrolling) top section keeps the product
+              // search/scan bar always visible while many items are added.
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     _invoiceHeaderCard(context, state, theme, cs),
                     const SizedBox(height: 12),
                     _searchBarWithScan(context, theme, cs),
-                    const SizedBox(height: 12),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                  children: [
                     _customerEmployeeRow(context, state, theme, cs),
                     const SizedBox(height: 8),
                     _salespersonModeToggle(context, state, theme, cs),

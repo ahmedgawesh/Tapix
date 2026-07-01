@@ -432,6 +432,7 @@ class _SaleReturnFormView extends StatelessWidget {
 
     const refundMethods = [
       ('cash', LucideIcons.banknote),
+      ('card', LucideIcons.creditCard),
       ('credit', LucideIcons.wallet),
       ('cheque', LucideIcons.fileCheck),
     ];

@@ -99,9 +99,8 @@ void main() {
         }
         // Engine view also confirms — itemDiscountCents must be zero.
         expect(s.itemDiscountCents, Decimal.zero);
-        // Invoice discount fields stay zero (no double-credit).
+        // Invoice discount stays zero (no double-credit).
         expect(s.invoiceDiscountCents, Decimal.zero);
-        expect(s.invoiceDiscountPercent, Decimal.zero);
       },
     );
 
@@ -113,7 +112,6 @@ void main() {
         purchaseDate: DateTime(2026, 5, 18),
         discountMode: DiscountMode.invoice,
         invoiceDiscountCents: Decimal.fromInt(2000),
-        invoiceDiscountPercent: Decimal.fromInt(5),
         items: [
           buildLine(tempId: 'L1', qty: 1, unitCostCents: 10000),
         ],
@@ -124,7 +122,6 @@ void main() {
         final s = bloc.state;
         expect(s.discountMode, DiscountMode.perItem);
         expect(s.invoiceDiscountCents, Decimal.zero);
-        expect(s.invoiceDiscountPercent, Decimal.zero);
         for (final item in s.items) {
           expect(item.discountCents, Decimal.zero);
         }

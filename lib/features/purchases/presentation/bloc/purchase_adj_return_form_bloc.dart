@@ -19,8 +19,10 @@ import '../../../../core/services/journal_entry_service.dart';
 // ==================== ENUMS ====================
 
 /// Payment / refund method for adjustment returns.
-/// Maps to the `refund_method` column (cash, credit, cheque).
-enum AdjReturnPaymentMethod { cash, credit, cheque }
+/// Maps to the `refund_method` column (cash, card, credit, cheque).
+/// `card` is routed to the Bank account (1010) by the accounting policy,
+/// exactly like bank transfers — see `RefundChannelX.fromWire`.
+enum AdjReturnPaymentMethod { cash, card, credit, cheque }
 
 /// Mandatory reason code for unlinked (adjustment) returns.
 /// Required by industry-standard practice (SAP, NetSuite, Odoo, QuickBooks)

@@ -4,6 +4,7 @@ import 'package:equatable/equatable.dart';
 
 import '../../../barcode/services/barcode_generation_service.dart';
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/services/free_quota_service.dart';
 import '../../domain/entities/price_history_entity.dart';
 import '../../domain/entities/product_entity.dart';
 import '../../domain/repositories/product_repository.dart';
@@ -868,6 +869,14 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
       _originalHasVariants = state.hasVariants;
       _originalInventoryTrackingType = state.inventoryTrackingType;
       emit(state.copyWith(isSubmitting: false, isSuccess: true));
+    } on FreeQuotaExceededException catch (e) {
+      // Free-tier cumulative cap reached. Surface a recognizable code so the
+      // screen can present the paywall instead of a generic error.
+      emit(state.copyWith(
+        isSubmitting: false,
+        error: 'quota_exceeded:products:${e.limit}',
+      ));
+      return;
     } on _CostingMethodLockedException catch (e) {
       final key = e.lockReason == 'has_consumptions'
           ? 'products.costing_method_locked_consumptions'

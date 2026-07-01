@@ -96,6 +96,8 @@ import '../../features/reports/presentation/screens/supplier_aging_report_screen
 import '../../features/reports/presentation/screens/supplier_statement_report_screen.dart';
 import '../../features/reports/presentation/screens/supplier_ledger_report_screen.dart';
 import '../../features/reports/presentation/screens/customer_ledger_report_screen.dart';
+import '../../features/reports/presentation/screens/customer_invoices_report_screen.dart';
+import '../../features/reports/presentation/screens/supplier_invoices_report_screen.dart';
 import '../../features/reports/presentation/screens/supplier_stocktake_report_screen.dart';
 import '../../features/reports/presentation/screens/supplier_balance_drilldown_screen.dart';
 import '../../features/reports/presentation/screens/salespeople_commission_report_screen.dart';
@@ -113,7 +115,10 @@ import '../../features/reports/presentation/screens/profit_report_screen.dart';
 import '../../features/financial_management/presentation/screens/financial_management_hub_screen.dart';
 import '../../features/financial_management/presentation/screens/chart_of_accounts_screen.dart';
 import '../../features/financial_management/presentation/screens/accounting_periods_screen.dart';
+import '../../features/subscription/presentation/screens/upgrade_required_screen.dart';
+import '../services/feature_gate_service.dart';
 import '../di/injection_container.dart';
+import 'pro_route_policy.dart';
 import 'route_permissions.dart';
 
 class AppRouter {
@@ -147,7 +152,13 @@ class AppRouter {
   static final GoRouter router = GoRouter(
     navigatorKey: _rootNavigatorKey,
     initialLocation: '/',
-    refreshListenable: GoRouterRefreshStream(_authBloc.stream),
+    // Re-evaluate redirects on (a) auth changes and (b) Pro-entitlement
+    // changes. FeatureGateService is a ChangeNotifier and the single source of
+    // truth for `isPro`, so locked routes unlock the instant a purchase lands.
+    refreshListenable: Listenable.merge([
+      GoRouterRefreshStream(_authBloc.stream),
+      sl<FeatureGateService>(),
+    ]),
     redirect: (context, state) async {
       final currentPath = state.uri.path;
       final authState = _authBloc.state;
@@ -198,6 +209,23 @@ class AppRouter {
           if (!hasAccess) {
             return '/access-denied';
           }
+        }
+
+        // Freemium gating (RevenueCat): free-tier users may only reach the
+        // products / sales sections. Everything else redirects to the paywall.
+        final isPro = sl<FeatureGateService>().isPro;
+
+        // If a now-Pro user is sitting on the paywall (e.g. they were sent here
+        // before the entitlement cache resolved), forward them to where they
+        // were originally headed.
+        if (currentPath == '/upgrade' && isPro) {
+          final from = state.uri.queryParameters['from'];
+          return (from != null && from.isNotEmpty) ? from : '/dashboard';
+        }
+
+        if (ProRoutePolicy.requiresPro(currentPath) && !isPro) {
+          final encoded = Uri.encodeComponent(currentPath);
+          return '/upgrade?from=$encoded';
         }
 
         // Redirect away from auth screens to dashboard
@@ -700,6 +728,10 @@ class AppRouter {
             builder: (context, state) => const CustomerLedgerReportScreen(),
           ),
           GoRoute(
+            path: 'customer-invoices',
+            builder: (context, state) => const CustomerInvoicesReportScreen(),
+          ),
+          GoRoute(
             path: 'supplier-balance',
             builder: (context, state) => const SupplierBalanceReportScreen(),
           ),
@@ -726,6 +758,10 @@ class AppRouter {
           GoRoute(
             path: 'supplier-ledger',
             builder: (context, state) => const SupplierLedgerReportScreen(),
+          ),
+          GoRoute(
+            path: 'supplier-invoices',
+            builder: (context, state) => const SupplierInvoicesReportScreen(),
           ),
           GoRoute(
             path: 'supplier-stocktake',
@@ -1085,6 +1121,11 @@ class AppRouter {
           message: 'You do not have permission to access this page.',
         ),
       ),
+      GoRoute(
+        path: '/upgrade',
+        builder: (context, state) =>
+            UpgradeRequiredScreen(from: state.uri.queryParameters['from']),
+      ),
     ],
   );
 
@@ -1118,16 +1159,25 @@ class PlaceholderScreen extends StatelessWidget {
 }
 
 class GoRouterRefreshStream extends ChangeNotifier {
-  GoRouterRefreshStream(Stream<dynamic> stream) {
+  GoRouterRefreshStream(Stream<dynamic> stream) : this.multi([stream]);
+
+  /// Re-evaluates routes whenever ANY of [streams] emits. Used to combine the
+  /// auth stream with the subscription stream so locked routes unlock the
+  /// instant a user upgrades.
+  GoRouterRefreshStream.multi(List<Stream<dynamic>> streams) {
     notifyListeners();
-    _subscription = stream.listen((_) => notifyListeners());
+    _subscriptions = streams
+        .map((s) => s.listen((_) => notifyListeners()))
+        .toList(growable: false);
   }
 
-  late final StreamSubscription<dynamic> _subscription;
+  late final List<StreamSubscription<dynamic>> _subscriptions;
 
   @override
   void dispose() {
-    _subscription.cancel();
+    for (final sub in _subscriptions) {
+      sub.cancel();
+    }
     super.dispose();
   }
 }

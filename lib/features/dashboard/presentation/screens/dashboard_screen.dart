@@ -11,6 +11,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../auth/auth.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
+import '../../../../core/router/pro_route_policy.dart';
+import '../../../../core/di/injection_container.dart';
+import '../../../../core/services/feature_gate_service.dart';
 import '../../../settings/presentation/bloc/company_bloc.dart';
 import '../../../settings/domain/entities/company_profile.dart';
 import '../widgets/stock_alerts_section.dart';
@@ -462,24 +465,32 @@ class _DashboardScreenState extends State<DashboardScreen>
 
                   // ─── Grid mode (normal) ────────────────────────────
                   if (!_isEditMode)
-                    GridView.count(
-                      crossAxisCount: crossAxisCount,
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      mainAxisSpacing: 12,
-                      crossAxisSpacing: 12,
-                      childAspectRatio: isDesktop ? 1.3 : 1.1,
-                      children: visibleItems.map((item) {
-                        final color =
-                            _resolveColor(item, colorScheme);
-                        return _DashboardCard(
-                          icon: item.icon,
-                          title: item.titleKey.tr(),
-                          color: color,
-                          onTap: () => context.push(item.route),
-                          onLongPress: _enterEditMode,
+                    ListenableBuilder(
+                      listenable: sl<FeatureGateService>(),
+                      builder: (context, _) {
+                        final isPro = sl<FeatureGateService>().isPro;
+                        return GridView.count(
+                          crossAxisCount: crossAxisCount,
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          mainAxisSpacing: 12,
+                          crossAxisSpacing: 12,
+                          childAspectRatio: isDesktop ? 1.3 : 1.1,
+                          children: visibleItems.map((item) {
+                            final color = _resolveColor(item, colorScheme);
+                            final locked = !isPro &&
+                                ProRoutePolicy.requiresPro(item.route);
+                            return _DashboardCard(
+                              icon: item.icon,
+                              title: item.titleKey.tr(),
+                              color: color,
+                              locked: locked,
+                              onTap: () => context.push(item.route),
+                              onLongPress: _enterEditMode,
+                            );
+                          }).toList(),
                         );
-                      }).toList(),
+                      },
                     ),
 
                   // ─── List mode (edit / reorder) ────────────────────
@@ -650,12 +661,17 @@ class _DashboardCard extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback? onLongPress;
 
+  /// When true, the card is a Pro-only shortcut for a free-tier user. It is
+  /// dimmed and shows a lock badge; tapping still routes to the paywall.
+  final bool locked;
+
   const _DashboardCard({
     required this.icon,
     required this.title,
     required this.color,
     required this.onTap,
     this.onLongPress,
+    this.locked = false,
   });
 
   @override
@@ -663,7 +679,7 @@ class _DashboardCard extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    return Card(
+    final card = Card(
       elevation: 0,
       color: colorScheme.surfaceContainerHighest,
       clipBehavior: Clip.antiAlias,
@@ -702,6 +718,30 @@ class _DashboardCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+
+    if (!locked) return card;
+
+    return Stack(
+      children: [
+        Opacity(opacity: 0.55, child: card),
+        Positioned(
+          top: 8,
+          right: 8,
+          child: Container(
+            padding: const EdgeInsets.all(5),
+            decoration: const BoxDecoration(
+              color: Colors.amber,
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              LucideIcons.lock,
+              size: 13,
+              color: Colors.white,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

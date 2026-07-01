@@ -1275,11 +1275,18 @@ class _ContactRow extends StatelessWidget {
   }
 }
 
-class _RecentTransactionsSection extends StatelessWidget {
+class _RecentTransactionsSection extends StatefulWidget {
   final int supplierId;
   final String supplierName;
 
   const _RecentTransactionsSection({required this.supplierId, required this.supplierName});
+
+  @override
+  State<_RecentTransactionsSection> createState() => _RecentTransactionsSectionState();
+}
+
+class _RecentTransactionsSectionState extends State<_RecentTransactionsSection> {
+  bool _showAll = false;
 
   @override
   Widget build(BuildContext context) {
@@ -1287,7 +1294,7 @@ class _RecentTransactionsSection extends StatelessWidget {
     final currencyService = sl<CurrencyService>();
 
     return StreamBuilder<List<SupplierTransaction>>(
-      stream: sl<SupplierRepository>().watchSupplierTransactions(supplierId),
+      stream: sl<SupplierRepository>().watchSupplierTransactions(widget.supplierId),
       builder: (context, snapshot) {
         final transactions = snapshot.data ?? [];
 
@@ -1314,8 +1321,12 @@ class _RecentTransactionsSection extends StatelessWidget {
                       ),
                     ),
                     TextButton(
-                      onPressed: () {},
-                      child: Text('suppliers.view_all'.tr()),
+                      onPressed: () {
+                        setState(() {
+                          _showAll = !_showAll;
+                        });
+                      },
+                      child: Text(_showAll ? 'common.show_less'.tr() : 'suppliers.view_all'.tr()),
                     ),
                   ],
                 ),
@@ -1343,11 +1354,11 @@ class _RecentTransactionsSection extends StatelessWidget {
                     ),
                   )
                 else
-                  ...transactions.take(5).map((tx) => _TransactionTile(
+                  ...((_showAll ? transactions : transactions.take(5)).map((tx) => _TransactionTile(
                     transaction: tx,
                     currencyService: currencyService,
-                    supplierName: supplierName,
-                  )),
+                    supplierName: widget.supplierName,
+                  ))),
               ],
             ),
           ),

@@ -74,7 +74,6 @@ PurchaseFormState _state({
   required List<PurchaseLineItem> items,
   DiscountMode discountMode = DiscountMode.perItem,
   int invoiceDiscountCents = 0,
-  int invoiceDiscountPercent = 0,
   bool enableTaxCalculations = true,
   int defaultPurchaseTaxRateBps = 0,
 }) =>
@@ -84,7 +83,6 @@ PurchaseFormState _state({
       items: items,
       discountMode: discountMode,
       invoiceDiscountCents: Decimal.fromInt(invoiceDiscountCents),
-      invoiceDiscountPercent: Decimal.fromInt(invoiceDiscountPercent),
       enableTaxCalculations: enableTaxCalculations,
       defaultPurchaseTaxRateBps: defaultPurchaseTaxRateBps,
     );
@@ -192,7 +190,7 @@ void main() {
               unitCostCents: 5000),
         ],
         discountMode: DiscountMode.invoice,
-        invoiceDiscountPercent: 10,
+        invoiceDiscountCents: 2000, // 10% of 20000¢, converted by the UI
         enableTaxCalculations: false,
       );
       _expectState(s,
@@ -333,7 +331,7 @@ void main() {
                 unitCostCents: 10000),
           ],
           discountMode: DiscountMode.invoice,
-          invoiceDiscountPercent: 10,
+          invoiceDiscountCents: 1000, // 10% of 10000¢, converted by the UI
         ),
       ];
       for (final s in scenarios) {

@@ -2,6 +2,7 @@ import 'package:decimal/decimal.dart';
 import 'package:drift/drift.dart';
 import '../../../../core/database/app_database.dart' as db;
 import '../../../../core/services/audit_log_service.dart';
+import '../../../../core/services/free_quota_service.dart';
 import '../../../../core/services/inventory/inventory_adjustment_service.dart';
 import '../../../auth/data/services/session_service.dart';
 import '../../domain/entities/product_entity.dart';
@@ -20,14 +21,23 @@ class ProductRepositoryImpl implements ProductRepository {
   final VariantLocalDatasource? _variantDatasource;
   final InventoryAdjustmentService? _adjustmentService;
 
+  /// Phase B4 — free-tier cumulative quota guard. Optional so existing tests
+  /// that construct the repository without DI keep working. When provided,
+  /// `createProduct` calls `guardProductCreation()` (may throw
+  /// [FreeQuotaExceededException]) and `incrementProductsCreated()` after a
+  /// successful insert.
+  final FreeQuotaService? _freeQuotaService;
+
   ProductRepositoryImpl(
     this._datasource,
     this._audit,
     this._sessionService, {
     VariantLocalDatasource? variantDatasource,
     InventoryAdjustmentService? adjustmentService,
+    FreeQuotaService? freeQuotaService,
   })  : _variantDatasource = variantDatasource,
-        _adjustmentService = adjustmentService;
+        _adjustmentService = adjustmentService,
+        _freeQuotaService = freeQuotaService;
 
   Future<int?> _currentUserId() => _sessionService.getCurrentUserId();
 
@@ -162,6 +172,10 @@ class ProductRepositoryImpl implements ProductRepository {
           inventoryTrackingType == 'batch_expiry',
       'inventoryTrackingType must be standard | batch | batch_expiry',
     );
+    // Phase B4 — enforce free-tier cumulative cap BEFORE the insert.
+    // Pro users bypass; free users at or past the cap get
+    // [FreeQuotaExceededException].
+    _freeQuotaService?.guardProductCreation();
     final productId = await _datasource.createProduct(
       db.ProductsCompanion(
         name: Value(name),
@@ -192,6 +206,11 @@ class ProductRepositoryImpl implements ProductRepository {
 
     // Audit: log product creation
     _audit.logProductCreated(productId: productId, productName: name, userId: await _currentUserId());
+
+    // Phase B4 — bump the cumulative counter ONLY after a successful insert.
+    // Pro users still increment so that, if their subscription lapses, the
+    // free-tier counter accurately reflects lifetime usage.
+    await _freeQuotaService?.incrementProductsCreated();
 
     return productId;
   }

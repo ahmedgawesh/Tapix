@@ -383,6 +383,7 @@ class SalePdfService {
           final variantLine = variantParts.isNotEmpty
               ? variantParts.join(' \u00b7 ')
               : null;
+          final sku = item.variantSku ?? item.productSku;
 
           return pw.TableRow(
             children: [
@@ -395,6 +396,11 @@ class SalePdfService {
                     _bidiText(productName, fonts.regular, fontSize: 8),
                     if (variantLine != null)
                       _bidiText(variantLine, fonts.regular, fontSize: 7, color: PdfColors.grey600),
+                    if (sku != null && sku.isNotEmpty)
+                      pw.Container(
+                        margin: const pw.EdgeInsets.only(top: 2),
+                        child: _bidiText('SKU: $sku', fonts.regular, fontSize: 7, color: PdfColors.grey600),
+                      ),
                   ],
                 ),
               ),
@@ -482,6 +488,7 @@ class SalePdfService {
                 items: state.items.map((item) => _PdfLineItem(
                   name: item.product.name,
                   variantSku: item.variant?.sku,
+                  productSku: item.product.sku,
                   colorName: item.colorName,
                   sizeName: item.sizeName,
                   employeeName: item.employeeName,
@@ -604,6 +611,7 @@ class SalePdfService {
                 items: items.map((item) => _PdfLineItem(
                   name: item.productName ?? '',
                   variantSku: item.variantSku,
+                  productSku: item.productSku,
                   colorName: item.colorName,
                   sizeName: item.sizeName,
                   employeeName: item.employeeName,
@@ -835,10 +843,24 @@ class SalePdfService {
           final idx = entry.key;
           final item = entry.value;
           final displayName = item.displayName;
+          final sku = item.sku;
           return pw.TableRow(
             children: [
               _tableCell('${idx + 1}', fonts.regular),
-              _tableCell(displayName, fonts.regular),
+              pw.Padding(
+                padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    _bidiText(displayName, fonts.regular, fontSize: 8),
+                    if (sku != null && sku.isNotEmpty)
+                      pw.Container(
+                        margin: const pw.EdgeInsets.only(top: 2),
+                        child: _bidiText('SKU: $sku', fonts.regular, fontSize: 7, color: PdfColors.grey600),
+                      ),
+                  ],
+                ),
+              ),
               if (hasPerItemSalesperson)
                 _tableCell(item.employeeName ?? '', fonts.regular),
               _tableCell('${item.quantity}', fonts.regular),
@@ -1357,6 +1379,7 @@ class _PdfFonts {
 class _PdfLineItem {
   final String name;
   final String? variantSku;
+  final String? productSku;
   final String? colorName;
   final String? sizeName;
   final String? employeeName;
@@ -1367,6 +1390,7 @@ class _PdfLineItem {
   const _PdfLineItem({
     required this.name,
     this.variantSku,
+    this.productSku,
     this.colorName,
     this.sizeName,
     this.employeeName,
@@ -1375,13 +1399,12 @@ class _PdfLineItem {
     required this.totalCents,
   });
 
+  String? get sku => variantSku ?? productSku;
+
   String get displayName {
     final parts = <String>[];
     if (colorName != null) parts.add(colorName!);
     if (sizeName != null) parts.add(sizeName!);
-    if (parts.isEmpty && variantSku != null) {
-      parts.add(variantSku!);
-    }
     if (parts.isNotEmpty) {
       return '$name (${parts.join(' / ')})';
     }
