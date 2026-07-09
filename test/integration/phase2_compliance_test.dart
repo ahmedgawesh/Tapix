@@ -275,8 +275,9 @@ void main() {
   // ──────────────────────────────────────────────────────────────────────
   group('Phase 2.3 — Customer credit-note sub-ledger', () {
     test(
-      'unlinked sale return with refund=credit + customer auto-issues a '
-      'credit note whose balance matches the refund total AND 2400 GL',
+      'unlinked sale return with refund=credit routes to 1100 AR, reduces '
+      'the customer balance, writes a customer transaction, and issues NO '
+      'store-credit note (Option A — credit reduces receivable directly)',
       () async {
         final returnId = await adjDao.createSaleAdjReturn(
           SaleReturnAdjustmentsCompanion.insert(
@@ -304,96 +305,83 @@ void main() {
           allowOverHistory: true,
         );
 
-        // ── Sub-ledger: exactly one open credit note, full face value ──
+        // ── No store-credit note is issued for an AR-routed credit return ──
         final notes = await creditNoteService.listOpenForCustomer(
           customerId: customerId,
           currencyId: currencyId,
         );
-        expect(notes.length, equals(1),
-            reason: 'One credit note should have been auto-issued');
-        expect(notes.first.balanceCents.toBigInt().toInt(), equals(7500));
-        expect(notes.first.originalAmountCents.toBigInt().toInt(),
-            equals(7500));
-        expect(notes.first.status, equals('open'));
-        expect(notes.first.sourceTable, equals('sale_return_adjustments'));
-        expect(notes.first.sourceId, equals(returnId));
-        expect(notes.first.issueJournalEntryId, isNotNull);
+        expect(notes, isEmpty,
+            reason: 'Credit adjustment returns now reduce AR directly — '
+                'no store-credit note is auto-issued.');
 
-        // ── GL: 2400 Customer Credit Liability has Cr 7500 from the JE ──
+        // ── GL: settlement routes to 1100 AR (NOT 2400) ──
         final lines = await journalLinesForSource(
           'sale_return_adjustments',
           returnId,
         );
+        final acct1100 = await accountIdByCode('1100');
         final acct2400 = await accountIdByCode('2400');
-        final liabLines =
-            lines.where((l) => l.accountId == acct2400).toList();
-        expect(liabLines.length, equals(1),
-            reason: 'Settlement must route to 2400 (not 1100 AR) '
-                'for unlinked + credit refund');
-        expect(liabLines.first.creditCents, equals(7500));
+        final arLines = lines.where((l) => l.accountId == acct1100).toList();
+        expect(arLines.length, equals(1),
+            reason: 'Credit refund must settle to 1100 AR.');
+        expect(arLines.first.creditCents, equals(7500));
+        expect(lines.where((l) => l.accountId == acct2400), isEmpty,
+            reason: 'No 2400 Customer Credit Liability leg on this path.');
 
-        // ── Reconciliation: Σ(open note balances) == 2400 GL balance ──
-        final openBal = await creditNoteService.getOpenBalance(
-          customerId: customerId,
-          currencyId: currencyId,
-        );
-        expect(openBal, equals(7500),
-            reason: 'Sub-ledger total must match the 2400 Cr posted');
+        // ── AR sub-ledger: customer balance reduced by the refund ──
+        final customer = await (db.select(db.customers)
+              ..where((c) => c.id.equals(customerId)))
+            .getSingle();
+        expect(customer.balanceCents.toBigInt().toInt(), equals(50000 - 7500),
+            reason: 'Balance reduced (customer owes us less).');
+
+        // ── customer_transactions surfaces the return ──
+        final txns = await (db.select(db.customerTransactions)
+              ..where((t) => t.customerId.equals(customerId)))
+            .get();
+        final adjTxn = txns
+            .where((t) => t.transactionType == 'adjustment_return')
+            .toList();
+        expect(adjTxn.length, equals(1));
+        expect(adjTxn.first.amountCents.toBigInt().toInt(), equals(-7500));
       },
     );
 
     test('apply() decrements balance + posts Dr 2400 / Cr 1100 JE', () async {
-      // Issue a note manually for simplicity.
-      final returnId = await adjDao.createSaleAdjReturn(
-        SaleReturnAdjustmentsCompanion.insert(
-          returnNumber: 'SAR-P2-CN-002',
-          customerId: Value(customerId),
-          currencyId: currencyId,
-          totalCents: Decimal.fromInt(10000),
-          refundMethod: const Value('credit'),
-        ),
-        [
-          SaleReturnAdjustmentItemsCompanion.insert(
-            returnId: 0,
-            productId: productId,
-            variantId: Value(variantId),
-            quantity: 2,
-            unitPriceCents: Decimal.fromInt(5000),
-            totalCents: Decimal.fromInt(10000),
-          ),
-        ],
-      );
-      await adjDao.postSaleAdjReturn(
-        returnId,
-        journalEntryService: journalService,
-        allowOverHistory: true,
-      );
-
-      final notes = await creditNoteService.listOpenForCustomer(
+      // The store-credit `apply()` machinery still exists (e.g. for
+      // manually-issued goodwill notes). Issue a note directly — decoupled
+      // from `postSaleAdjReturn`, which now routes credit to AR — so this
+      // test pins `apply()` in isolation.
+      final noteId = await creditNoteService.issueForReturn(
         customerId: customerId,
         currencyId: currencyId,
+        amountCents: 10000,
+        sourceTable: 'sale_return_adjustments',
+        sourceId: 999,
+        issueJournalEntryId: 1,
       );
-      expect(notes.length, equals(1));
-      final note = notes.first;
+
+      final note = await creditNoteService.getById(noteId);
+      expect(note, isNotNull);
 
       // Apply $30 of the $100 credit.
       await creditNoteService.apply(
-        creditNoteId: note.id,
+        creditNoteId: noteId,
         saleId: null,
         amountCents: 3000,
       );
 
-      final after = await creditNoteService.getById(note.id);
+      final after = await creditNoteService.getById(noteId);
       expect(after!.balanceCents.toBigInt().toInt(), equals(7000));
       expect(after.status, equals('partially_applied'));
 
       // Apply the remainder.
       await creditNoteService.apply(
-        creditNoteId: note.id,
+        creditNoteId: noteId,
         saleId: null,
         amountCents: 7000,
       );
-      final fullyApplied = await creditNoteService.getById(note.id);
+      final fullyApplied = await creditNoteService.getById(noteId);
       expect(fullyApplied!.balanceCents.toBigInt().toInt(), equals(0));
       expect(fullyApplied.status, equals('fully_applied'));
 
@@ -415,40 +403,20 @@ void main() {
     test(
       'applying more than available throws CreditNoteInsufficientBalanceException',
       () async {
-        final returnId = await adjDao.createSaleAdjReturn(
-          SaleReturnAdjustmentsCompanion.insert(
-            returnNumber: 'SAR-P2-CN-003',
-            customerId: Value(customerId),
-            currencyId: currencyId,
-            totalCents: Decimal.fromInt(2000),
-            refundMethod: const Value('credit'),
-          ),
-          [
-            SaleReturnAdjustmentItemsCompanion.insert(
-              returnId: 0,
-              productId: productId,
-              variantId: Value(variantId),
-              quantity: 1,
-              unitPriceCents: Decimal.fromInt(2000),
-              totalCents: Decimal.fromInt(2000),
-            ),
-          ],
-        );
-        await adjDao.postSaleAdjReturn(
-          returnId,
-          journalEntryService: journalService,
-          allowOverHistory: true,
-        );
-
-        final notes = await creditNoteService.listOpenForCustomer(
+        // Manually issue a $20 note (auto-issue via postSaleAdjReturn is
+        // retired — credit now routes to AR).
+        final noteId = await creditNoteService.issueForReturn(
           customerId: customerId,
           currencyId: currencyId,
+          amountCents: 2000,
+          sourceTable: 'sale_return_adjustments',
+          sourceId: 998,
+          issueJournalEntryId: 1,
         );
-        expect(notes.length, equals(1));
 
         expect(
           () => creditNoteService.apply(
-            creditNoteId: notes.first.id,
+            creditNoteId: noteId,
             saleId: null,
             amountCents: 999999,
           ),

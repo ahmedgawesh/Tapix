@@ -21,6 +21,8 @@ import '../database/daos/sale_dao.dart';
 import '../database/daos/adjustment_return_dao.dart';
 import '../pricing/pricing_snapshot.dart';
 import 'journal_entry_service.dart';
+import 'commissions/commission_service.dart';
+import 'loyalty/loyalty_points_service.dart';
 import 'return_calculation_service.dart';
 
 // ─── Enums & Data Classes ────────────────────────────────────────────────────
@@ -232,6 +234,8 @@ class UnifiedReturnService {
   final SaleDao _saleDao;
   final AdjustmentReturnDao _adjDao;
   final JournalEntryService _journalService;
+  final CommissionService _commissionService;
+  final LoyaltyPointsService _loyaltyPointsService;
 
   UnifiedReturnService(
     this._db,
@@ -239,6 +243,8 @@ class UnifiedReturnService {
     this._saleDao,
     this._adjDao,
     this._journalService,
+    this._commissionService,
+    this._loyaltyPointsService,
   );
 
   // ════════════════════════════════════════════════════════════════════════════
@@ -990,6 +996,8 @@ class UnifiedReturnService {
           adjReturnId,
           journalEntryService: _journalService,
           allowOverHistory: allowOverHistory,
+          commissionService: _commissionService,
+          loyaltyPointsService: _loyaltyPointsService,
         );
       }
 

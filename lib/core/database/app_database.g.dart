@@ -20673,6 +20673,16 @@ class $CommissionsTable extends Commissions
       'REFERENCES sales (id) ON DELETE CASCADE',
     ),
   );
+  static const VerificationMeta _saleReturnAdjustmentIdMeta =
+      const VerificationMeta('saleReturnAdjustmentId');
+  @override
+  late final GeneratedColumn<int> saleReturnAdjustmentId = GeneratedColumn<int>(
+    'sale_return_adjustment_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   @override
   late final GeneratedColumnWithTypeConverter<double, int> commissionRateBps =
       GeneratedColumn<int>(
@@ -20724,6 +20734,18 @@ class $CommissionsTable extends Commissions
     requiredDuringInsert: false,
     defaultValue: const Constant('pending'),
   );
+  static const VerificationMeta _effectiveDateMeta = const VerificationMeta(
+    'effectiveDate',
+  );
+  @override
+  late final GeneratedColumn<DateTime> effectiveDate =
+      GeneratedColumn<DateTime>(
+        'effective_date',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -20741,11 +20763,13 @@ class $CommissionsTable extends Commissions
     id,
     employeeId,
     saleId,
+    saleReturnAdjustmentId,
     commissionRateBps,
     commissionAmountCents,
     currencyId,
     period,
     status,
+    effectiveDate,
     createdAt,
   ];
   @override
@@ -20777,6 +20801,15 @@ class $CommissionsTable extends Commissions
         saleId.isAcceptableOrUnknown(data['sale_id']!, _saleIdMeta),
       );
     }
+    if (data.containsKey('sale_return_adjustment_id')) {
+      context.handle(
+        _saleReturnAdjustmentIdMeta,
+        saleReturnAdjustmentId.isAcceptableOrUnknown(
+          data['sale_return_adjustment_id']!,
+          _saleReturnAdjustmentIdMeta,
+        ),
+      );
+    }
     if (data.containsKey('currency_id')) {
       context.handle(
         _currencyIdMeta,
@@ -20795,6 +20828,15 @@ class $CommissionsTable extends Commissions
       context.handle(
         _statusMeta,
         status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    }
+    if (data.containsKey('effective_date')) {
+      context.handle(
+        _effectiveDateMeta,
+        effectiveDate.isAcceptableOrUnknown(
+          data['effective_date']!,
+          _effectiveDateMeta,
+        ),
       );
     }
     if (data.containsKey('created_at')) {
@@ -20824,6 +20866,10 @@ class $CommissionsTable extends Commissions
         DriftSqlType.int,
         data['${effectivePrefix}sale_id'],
       ),
+      saleReturnAdjustmentId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sale_return_adjustment_id'],
+      ),
       commissionRateBps: $CommissionsTable.$convertercommissionRateBps.fromSql(
         attachedDatabase.typeMapping.read(
           DriftSqlType.int,
@@ -20849,6 +20895,10 @@ class $CommissionsTable extends Commissions
         DriftSqlType.string,
         data['${effectivePrefix}status'],
       )!,
+      effectiveDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}effective_date'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -20871,6 +20921,15 @@ class Commission extends DataClass implements Insertable<Commission> {
   final int id;
   final int employeeId;
   final int? saleId;
+
+  /// Set on REVERSAL rows created for an unlinked (adjustment) sale return.
+  /// An adjustment return has no `saleId` to prorate against, so the negative
+  /// commission row is instead keyed by the adjustment-return id. This lets a
+  /// void of the adjustment return delete exactly the reversal it created
+  /// (rate-change safe — no recomputation on void). Plain nullable int (no FK)
+  /// so `people.dart` stays decoupled from the returns tables; the cascade is
+  /// managed manually by `voidSaleAdjReturn`.
+  final int? saleReturnAdjustmentId;
   final double commissionRateBps;
   final Decimal commissionAmountCents;
   final int currencyId;
@@ -20880,16 +20939,26 @@ class Commission extends DataClass implements Insertable<Commission> {
 
   /// Status: pending, approved, paid
   final String status;
+
+  /// Economic-event date for period attribution — the SAP / NetSuite /
+  /// QuickBooks "posting / transaction date" convention. For EARNED rows this
+  /// is the sale date; for REVERSAL rows it is the return date. All commission
+  /// reports MUST filter on this column (not [createdAt], which is the physical
+  /// insertion time and diverges for backdated documents). Nullable only to
+  /// permit backfill of pre-migration rows; every new row stamps it.
+  final DateTime? effectiveDate;
   final DateTime createdAt;
   const Commission({
     required this.id,
     required this.employeeId,
     this.saleId,
+    this.saleReturnAdjustmentId,
     required this.commissionRateBps,
     required this.commissionAmountCents,
     required this.currencyId,
     this.period,
     required this.status,
+    this.effectiveDate,
     required this.createdAt,
   });
   @override
@@ -20899,6 +20968,9 @@ class Commission extends DataClass implements Insertable<Commission> {
     map['employee_id'] = Variable<int>(employeeId);
     if (!nullToAbsent || saleId != null) {
       map['sale_id'] = Variable<int>(saleId);
+    }
+    if (!nullToAbsent || saleReturnAdjustmentId != null) {
+      map['sale_return_adjustment_id'] = Variable<int>(saleReturnAdjustmentId);
     }
     {
       map['commission_rate_bps'] = Variable<int>(
@@ -20917,6 +20989,9 @@ class Commission extends DataClass implements Insertable<Commission> {
       map['period'] = Variable<String>(period);
     }
     map['status'] = Variable<String>(status);
+    if (!nullToAbsent || effectiveDate != null) {
+      map['effective_date'] = Variable<DateTime>(effectiveDate);
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     return map;
   }
@@ -20928,6 +21003,9 @@ class Commission extends DataClass implements Insertable<Commission> {
       saleId: saleId == null && nullToAbsent
           ? const Value.absent()
           : Value(saleId),
+      saleReturnAdjustmentId: saleReturnAdjustmentId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(saleReturnAdjustmentId),
       commissionRateBps: Value(commissionRateBps),
       commissionAmountCents: Value(commissionAmountCents),
       currencyId: Value(currencyId),
@@ -20935,6 +21013,9 @@ class Commission extends DataClass implements Insertable<Commission> {
           ? const Value.absent()
           : Value(period),
       status: Value(status),
+      effectiveDate: effectiveDate == null && nullToAbsent
+          ? const Value.absent()
+          : Value(effectiveDate),
       createdAt: Value(createdAt),
     );
   }
@@ -20948,6 +21029,9 @@ class Commission extends DataClass implements Insertable<Commission> {
       id: serializer.fromJson<int>(json['id']),
       employeeId: serializer.fromJson<int>(json['employeeId']),
       saleId: serializer.fromJson<int?>(json['saleId']),
+      saleReturnAdjustmentId: serializer.fromJson<int?>(
+        json['saleReturnAdjustmentId'],
+      ),
       commissionRateBps: serializer.fromJson<double>(json['commissionRateBps']),
       commissionAmountCents: serializer.fromJson<Decimal>(
         json['commissionAmountCents'],
@@ -20955,6 +21039,7 @@ class Commission extends DataClass implements Insertable<Commission> {
       currencyId: serializer.fromJson<int>(json['currencyId']),
       period: serializer.fromJson<String?>(json['period']),
       status: serializer.fromJson<String>(json['status']),
+      effectiveDate: serializer.fromJson<DateTime?>(json['effectiveDate']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
   }
@@ -20965,6 +21050,7 @@ class Commission extends DataClass implements Insertable<Commission> {
       'id': serializer.toJson<int>(id),
       'employeeId': serializer.toJson<int>(employeeId),
       'saleId': serializer.toJson<int?>(saleId),
+      'saleReturnAdjustmentId': serializer.toJson<int?>(saleReturnAdjustmentId),
       'commissionRateBps': serializer.toJson<double>(commissionRateBps),
       'commissionAmountCents': serializer.toJson<Decimal>(
         commissionAmountCents,
@@ -20972,6 +21058,7 @@ class Commission extends DataClass implements Insertable<Commission> {
       'currencyId': serializer.toJson<int>(currencyId),
       'period': serializer.toJson<String?>(period),
       'status': serializer.toJson<String>(status),
+      'effectiveDate': serializer.toJson<DateTime?>(effectiveDate),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
   }
@@ -20980,21 +21067,29 @@ class Commission extends DataClass implements Insertable<Commission> {
     int? id,
     int? employeeId,
     Value<int?> saleId = const Value.absent(),
+    Value<int?> saleReturnAdjustmentId = const Value.absent(),
     double? commissionRateBps,
     Decimal? commissionAmountCents,
     int? currencyId,
     Value<String?> period = const Value.absent(),
     String? status,
+    Value<DateTime?> effectiveDate = const Value.absent(),
     DateTime? createdAt,
   }) => Commission(
     id: id ?? this.id,
     employeeId: employeeId ?? this.employeeId,
     saleId: saleId.present ? saleId.value : this.saleId,
+    saleReturnAdjustmentId: saleReturnAdjustmentId.present
+        ? saleReturnAdjustmentId.value
+        : this.saleReturnAdjustmentId,
     commissionRateBps: commissionRateBps ?? this.commissionRateBps,
     commissionAmountCents: commissionAmountCents ?? this.commissionAmountCents,
     currencyId: currencyId ?? this.currencyId,
     period: period.present ? period.value : this.period,
     status: status ?? this.status,
+    effectiveDate: effectiveDate.present
+        ? effectiveDate.value
+        : this.effectiveDate,
     createdAt: createdAt ?? this.createdAt,
   );
   Commission copyWithCompanion(CommissionsCompanion data) {
@@ -21004,6 +21099,9 @@ class Commission extends DataClass implements Insertable<Commission> {
           ? data.employeeId.value
           : this.employeeId,
       saleId: data.saleId.present ? data.saleId.value : this.saleId,
+      saleReturnAdjustmentId: data.saleReturnAdjustmentId.present
+          ? data.saleReturnAdjustmentId.value
+          : this.saleReturnAdjustmentId,
       commissionRateBps: data.commissionRateBps.present
           ? data.commissionRateBps.value
           : this.commissionRateBps,
@@ -21015,6 +21113,9 @@ class Commission extends DataClass implements Insertable<Commission> {
           : this.currencyId,
       period: data.period.present ? data.period.value : this.period,
       status: data.status.present ? data.status.value : this.status,
+      effectiveDate: data.effectiveDate.present
+          ? data.effectiveDate.value
+          : this.effectiveDate,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
@@ -21025,11 +21126,13 @@ class Commission extends DataClass implements Insertable<Commission> {
           ..write('id: $id, ')
           ..write('employeeId: $employeeId, ')
           ..write('saleId: $saleId, ')
+          ..write('saleReturnAdjustmentId: $saleReturnAdjustmentId, ')
           ..write('commissionRateBps: $commissionRateBps, ')
           ..write('commissionAmountCents: $commissionAmountCents, ')
           ..write('currencyId: $currencyId, ')
           ..write('period: $period, ')
           ..write('status: $status, ')
+          ..write('effectiveDate: $effectiveDate, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
@@ -21040,11 +21143,13 @@ class Commission extends DataClass implements Insertable<Commission> {
     id,
     employeeId,
     saleId,
+    saleReturnAdjustmentId,
     commissionRateBps,
     commissionAmountCents,
     currencyId,
     period,
     status,
+    effectiveDate,
     createdAt,
   );
   @override
@@ -21054,11 +21159,13 @@ class Commission extends DataClass implements Insertable<Commission> {
           other.id == this.id &&
           other.employeeId == this.employeeId &&
           other.saleId == this.saleId &&
+          other.saleReturnAdjustmentId == this.saleReturnAdjustmentId &&
           other.commissionRateBps == this.commissionRateBps &&
           other.commissionAmountCents == this.commissionAmountCents &&
           other.currencyId == this.currencyId &&
           other.period == this.period &&
           other.status == this.status &&
+          other.effectiveDate == this.effectiveDate &&
           other.createdAt == this.createdAt);
 }
 
@@ -21066,32 +21173,38 @@ class CommissionsCompanion extends UpdateCompanion<Commission> {
   final Value<int> id;
   final Value<int> employeeId;
   final Value<int?> saleId;
+  final Value<int?> saleReturnAdjustmentId;
   final Value<double> commissionRateBps;
   final Value<Decimal> commissionAmountCents;
   final Value<int> currencyId;
   final Value<String?> period;
   final Value<String> status;
+  final Value<DateTime?> effectiveDate;
   final Value<DateTime> createdAt;
   const CommissionsCompanion({
     this.id = const Value.absent(),
     this.employeeId = const Value.absent(),
     this.saleId = const Value.absent(),
+    this.saleReturnAdjustmentId = const Value.absent(),
     this.commissionRateBps = const Value.absent(),
     this.commissionAmountCents = const Value.absent(),
     this.currencyId = const Value.absent(),
     this.period = const Value.absent(),
     this.status = const Value.absent(),
+    this.effectiveDate = const Value.absent(),
     this.createdAt = const Value.absent(),
   });
   CommissionsCompanion.insert({
     this.id = const Value.absent(),
     required int employeeId,
     this.saleId = const Value.absent(),
+    this.saleReturnAdjustmentId = const Value.absent(),
     required double commissionRateBps,
     required Decimal commissionAmountCents,
     required int currencyId,
     this.period = const Value.absent(),
     this.status = const Value.absent(),
+    this.effectiveDate = const Value.absent(),
     this.createdAt = const Value.absent(),
   }) : employeeId = Value(employeeId),
        commissionRateBps = Value(commissionRateBps),
@@ -21101,23 +21214,28 @@ class CommissionsCompanion extends UpdateCompanion<Commission> {
     Expression<int>? id,
     Expression<int>? employeeId,
     Expression<int>? saleId,
+    Expression<int>? saleReturnAdjustmentId,
     Expression<int>? commissionRateBps,
     Expression<int>? commissionAmountCents,
     Expression<int>? currencyId,
     Expression<String>? period,
     Expression<String>? status,
+    Expression<DateTime>? effectiveDate,
     Expression<DateTime>? createdAt,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (employeeId != null) 'employee_id': employeeId,
       if (saleId != null) 'sale_id': saleId,
+      if (saleReturnAdjustmentId != null)
+        'sale_return_adjustment_id': saleReturnAdjustmentId,
       if (commissionRateBps != null) 'commission_rate_bps': commissionRateBps,
       if (commissionAmountCents != null)
         'commission_amount_cents': commissionAmountCents,
       if (currencyId != null) 'currency_id': currencyId,
       if (period != null) 'period': period,
       if (status != null) 'status': status,
+      if (effectiveDate != null) 'effective_date': effectiveDate,
       if (createdAt != null) 'created_at': createdAt,
     });
   }
@@ -21126,23 +21244,28 @@ class CommissionsCompanion extends UpdateCompanion<Commission> {
     Value<int>? id,
     Value<int>? employeeId,
     Value<int?>? saleId,
+    Value<int?>? saleReturnAdjustmentId,
     Value<double>? commissionRateBps,
     Value<Decimal>? commissionAmountCents,
     Value<int>? currencyId,
     Value<String?>? period,
     Value<String>? status,
+    Value<DateTime?>? effectiveDate,
     Value<DateTime>? createdAt,
   }) {
     return CommissionsCompanion(
       id: id ?? this.id,
       employeeId: employeeId ?? this.employeeId,
       saleId: saleId ?? this.saleId,
+      saleReturnAdjustmentId:
+          saleReturnAdjustmentId ?? this.saleReturnAdjustmentId,
       commissionRateBps: commissionRateBps ?? this.commissionRateBps,
       commissionAmountCents:
           commissionAmountCents ?? this.commissionAmountCents,
       currencyId: currencyId ?? this.currencyId,
       period: period ?? this.period,
       status: status ?? this.status,
+      effectiveDate: effectiveDate ?? this.effectiveDate,
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -21158,6 +21281,11 @@ class CommissionsCompanion extends UpdateCompanion<Commission> {
     }
     if (saleId.present) {
       map['sale_id'] = Variable<int>(saleId.value);
+    }
+    if (saleReturnAdjustmentId.present) {
+      map['sale_return_adjustment_id'] = Variable<int>(
+        saleReturnAdjustmentId.value,
+      );
     }
     if (commissionRateBps.present) {
       map['commission_rate_bps'] = Variable<int>(
@@ -21182,6 +21310,9 @@ class CommissionsCompanion extends UpdateCompanion<Commission> {
     if (status.present) {
       map['status'] = Variable<String>(status.value);
     }
+    if (effectiveDate.present) {
+      map['effective_date'] = Variable<DateTime>(effectiveDate.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -21194,11 +21325,13 @@ class CommissionsCompanion extends UpdateCompanion<Commission> {
           ..write('id: $id, ')
           ..write('employeeId: $employeeId, ')
           ..write('saleId: $saleId, ')
+          ..write('saleReturnAdjustmentId: $saleReturnAdjustmentId, ')
           ..write('commissionRateBps: $commissionRateBps, ')
           ..write('commissionAmountCents: $commissionAmountCents, ')
           ..write('currencyId: $currencyId, ')
           ..write('period: $period, ')
           ..write('status: $status, ')
+          ..write('effectiveDate: $effectiveDate, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
@@ -55682,10 +55815,7 @@ final class $$UsersTableReferences
   _productPriceHistoriesRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.productPriceHistories,
-        aliasName: $_aliasNameGenerator(
-          db.users.id,
-          db.productPriceHistories.userId,
-        ),
+        aliasName: 'users__id__product_price_histories__user_id',
       );
 
   $$ProductPriceHistoriesTableProcessedTableManager
@@ -55706,7 +55836,7 @@ final class $$UsersTableReferences
   static MultiTypedResultKey<$EmployeesTable, List<Employee>>
   _employeeUserTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.employees,
-    aliasName: $_aliasNameGenerator(db.users.id, db.employees.userId),
+    aliasName: 'users__id__employees__user_id',
   );
 
   $$EmployeesTableProcessedTableManager get employeeUser {
@@ -55724,10 +55854,7 @@ final class $$UsersTableReferences
   static MultiTypedResultKey<$EmployeeDocumentsTable, List<EmployeeDocument>>
   _uploadedDocumentsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.employeeDocuments,
-    aliasName: $_aliasNameGenerator(
-      db.users.id,
-      db.employeeDocuments.uploadedBy,
-    ),
+    aliasName: 'users__id__employee_documents__uploaded_by',
   );
 
   $$EmployeeDocumentsTableProcessedTableManager get uploadedDocuments {
@@ -55746,10 +55873,7 @@ final class $$UsersTableReferences
   _recordedPerformanceMetricsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.performanceMetrics,
-        aliasName: $_aliasNameGenerator(
-          db.users.id,
-          db.performanceMetrics.recordedBy,
-        ),
+        aliasName: 'users__id__performance_metrics__recorded_by',
       );
 
   $$PerformanceMetricsTableProcessedTableManager
@@ -55770,7 +55894,7 @@ final class $$UsersTableReferences
   static MultiTypedResultKey<$SaleReturnsTable, List<SaleReturn>>
   _saleReturnApprovedByTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.saleReturns,
-    aliasName: $_aliasNameGenerator(db.users.id, db.saleReturns.approvedBy),
+    aliasName: 'users__id__sale_returns__approved_by',
   );
 
   $$SaleReturnsTableProcessedTableManager get saleReturnApprovedBy {
@@ -55790,7 +55914,7 @@ final class $$UsersTableReferences
   static MultiTypedResultKey<$SaleReturnsTable, List<SaleReturn>>
   _saleReturnOverrideByTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.saleReturns,
-    aliasName: $_aliasNameGenerator(db.users.id, db.saleReturns.overrideBy),
+    aliasName: 'users__id__sale_returns__override_by',
   );
 
   $$SaleReturnsTableProcessedTableManager get saleReturnOverrideBy {
@@ -55810,7 +55934,7 @@ final class $$UsersTableReferences
   static MultiTypedResultKey<$SaleReturnsTable, List<SaleReturn>>
   _saleReturnPostedByTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.saleReturns,
-    aliasName: $_aliasNameGenerator(db.users.id, db.saleReturns.postedBy),
+    aliasName: 'users__id__sale_returns__posted_by',
   );
 
   $$SaleReturnsTableProcessedTableManager get saleReturnPostedBy {
@@ -55828,7 +55952,7 @@ final class $$UsersTableReferences
   static MultiTypedResultKey<$SaleReturnsTable, List<SaleReturn>>
   _saleReturnVoidedByTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.saleReturns,
-    aliasName: $_aliasNameGenerator(db.users.id, db.saleReturns.voidedBy),
+    aliasName: 'users__id__sale_returns__voided_by',
   );
 
   $$SaleReturnsTableProcessedTableManager get saleReturnVoidedBy {
@@ -55847,10 +55971,7 @@ final class $$UsersTableReferences
   _purchaseReturnApprovedByTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.purchaseReturns,
-        aliasName: $_aliasNameGenerator(
-          db.users.id,
-          db.purchaseReturns.approvedBy,
-        ),
+        aliasName: 'users__id__purchase_returns__approved_by',
       );
 
   $$PurchaseReturnsTableProcessedTableManager get purchaseReturnApprovedBy {
@@ -55871,10 +55992,7 @@ final class $$UsersTableReferences
   _purchaseReturnOverrideByTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.purchaseReturns,
-        aliasName: $_aliasNameGenerator(
-          db.users.id,
-          db.purchaseReturns.overrideBy,
-        ),
+        aliasName: 'users__id__purchase_returns__override_by',
       );
 
   $$PurchaseReturnsTableProcessedTableManager get purchaseReturnOverrideBy {
@@ -55895,10 +56013,7 @@ final class $$UsersTableReferences
   _purchaseReturnPostedByTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.purchaseReturns,
-        aliasName: $_aliasNameGenerator(
-          db.users.id,
-          db.purchaseReturns.postedBy,
-        ),
+        aliasName: 'users__id__purchase_returns__posted_by',
       );
 
   $$PurchaseReturnsTableProcessedTableManager get purchaseReturnPostedBy {
@@ -55919,10 +56034,7 @@ final class $$UsersTableReferences
   _purchaseReturnVoidedByTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.purchaseReturns,
-        aliasName: $_aliasNameGenerator(
-          db.users.id,
-          db.purchaseReturns.voidedBy,
-        ),
+        aliasName: 'users__id__purchase_returns__voided_by',
       );
 
   $$PurchaseReturnsTableProcessedTableManager get purchaseReturnVoidedBy {
@@ -55943,10 +56055,7 @@ final class $$UsersTableReferences
   _closedAccountingPeriodsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.accountingPeriods,
-        aliasName: $_aliasNameGenerator(
-          db.users.id,
-          db.accountingPeriods.closedBy,
-        ),
+        aliasName: 'users__id__accounting_periods__closed_by',
       );
 
   $$AccountingPeriodsTableProcessedTableManager get closedAccountingPeriods {
@@ -55967,10 +56076,7 @@ final class $$UsersTableReferences
   _createdJournalEntriesTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.journalEntries,
-        aliasName: $_aliasNameGenerator(
-          db.users.id,
-          db.journalEntries.createdBy,
-        ),
+        aliasName: 'users__id__journal_entries__created_by',
       );
 
   $$JournalEntriesTableProcessedTableManager get createdJournalEntries {
@@ -55990,7 +56096,7 @@ final class $$UsersTableReferences
   static MultiTypedResultKey<$JournalEntriesTable, List<JournalEntry>>
   _postedJournalEntriesTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.journalEntries,
-    aliasName: $_aliasNameGenerator(db.users.id, db.journalEntries.postedBy),
+    aliasName: 'users__id__journal_entries__posted_by',
   );
 
   $$JournalEntriesTableProcessedTableManager get postedJournalEntries {
@@ -56010,7 +56116,7 @@ final class $$UsersTableReferences
   static MultiTypedResultKey<$AuditLogsTable, List<AuditLog>>
   _auditLogUserTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.auditLogs,
-    aliasName: $_aliasNameGenerator(db.users.id, db.auditLogs.userId),
+    aliasName: 'users__id__audit_logs__user_id',
   );
 
   $$AuditLogsTableProcessedTableManager get auditLogUser {
@@ -56029,7 +56135,7 @@ final class $$UsersTableReferences
     _$AppDatabase db,
   ) => MultiTypedResultKey.fromTable(
     db.voidLogs,
-    aliasName: $_aliasNameGenerator(db.users.id, db.voidLogs.voidedBy),
+    aliasName: 'users__id__void_logs__voided_by',
   );
 
   $$VoidLogsTableProcessedTableManager get voidLogUser {
@@ -56047,7 +56153,7 @@ final class $$UsersTableReferences
   static MultiTypedResultKey<$NotificationsTable, List<Notification>>
   _notificationUserTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.notifications,
-    aliasName: $_aliasNameGenerator(db.users.id, db.notifications.userId),
+    aliasName: 'users__id__notifications__user_id',
   );
 
   $$NotificationsTableProcessedTableManager get notificationUser {
@@ -56069,10 +56175,7 @@ final class $$UsersTableReferences
   _purchaseReturnAdjApprovedByTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.purchaseReturnAdjustments,
-        aliasName: $_aliasNameGenerator(
-          db.users.id,
-          db.purchaseReturnAdjustments.approvedBy,
-        ),
+        aliasName: 'users__id__purchase_return_adjustments__approved_by',
       );
 
   $$PurchaseReturnAdjustmentsTableProcessedTableManager
@@ -56097,10 +56200,7 @@ final class $$UsersTableReferences
   _purchaseReturnAdjOverrideByTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.purchaseReturnAdjustments,
-        aliasName: $_aliasNameGenerator(
-          db.users.id,
-          db.purchaseReturnAdjustments.overrideBy,
-        ),
+        aliasName: 'users__id__purchase_return_adjustments__override_by',
       );
 
   $$PurchaseReturnAdjustmentsTableProcessedTableManager
@@ -56125,10 +56225,7 @@ final class $$UsersTableReferences
   _purchaseReturnAdjPostedByTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.purchaseReturnAdjustments,
-        aliasName: $_aliasNameGenerator(
-          db.users.id,
-          db.purchaseReturnAdjustments.postedBy,
-        ),
+        aliasName: 'users__id__purchase_return_adjustments__posted_by',
       );
 
   $$PurchaseReturnAdjustmentsTableProcessedTableManager
@@ -56153,10 +56250,7 @@ final class $$UsersTableReferences
   _purchaseReturnAdjVoidedByTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.purchaseReturnAdjustments,
-        aliasName: $_aliasNameGenerator(
-          db.users.id,
-          db.purchaseReturnAdjustments.voidedBy,
-        ),
+        aliasName: 'users__id__purchase_return_adjustments__voided_by',
       );
 
   $$PurchaseReturnAdjustmentsTableProcessedTableManager
@@ -56181,10 +56275,7 @@ final class $$UsersTableReferences
   _saleReturnAdjApprovedByTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.saleReturnAdjustments,
-        aliasName: $_aliasNameGenerator(
-          db.users.id,
-          db.saleReturnAdjustments.approvedBy,
-        ),
+        aliasName: 'users__id__sale_return_adjustments__approved_by',
       );
 
   $$SaleReturnAdjustmentsTableProcessedTableManager
@@ -56209,10 +56300,7 @@ final class $$UsersTableReferences
   _saleReturnAdjOverrideByTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.saleReturnAdjustments,
-        aliasName: $_aliasNameGenerator(
-          db.users.id,
-          db.saleReturnAdjustments.overrideBy,
-        ),
+        aliasName: 'users__id__sale_return_adjustments__override_by',
       );
 
   $$SaleReturnAdjustmentsTableProcessedTableManager
@@ -56237,10 +56325,7 @@ final class $$UsersTableReferences
   _saleReturnAdjPostedByTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.saleReturnAdjustments,
-        aliasName: $_aliasNameGenerator(
-          db.users.id,
-          db.saleReturnAdjustments.postedBy,
-        ),
+        aliasName: 'users__id__sale_return_adjustments__posted_by',
       );
 
   $$SaleReturnAdjustmentsTableProcessedTableManager get saleReturnAdjPostedBy {
@@ -56264,10 +56349,7 @@ final class $$UsersTableReferences
   _saleReturnAdjVoidedByTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.saleReturnAdjustments,
-        aliasName: $_aliasNameGenerator(
-          db.users.id,
-          db.saleReturnAdjustments.voidedBy,
-        ),
+        aliasName: 'users__id__sale_return_adjustments__voided_by',
       );
 
   $$SaleReturnAdjustmentsTableProcessedTableManager get saleReturnAdjVoidedBy {
@@ -56291,10 +56373,7 @@ final class $$UsersTableReferences
   _inventoryAdjustmentsRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.inventoryAdjustments,
-        aliasName: $_aliasNameGenerator(
-          db.users.id,
-          db.inventoryAdjustments.userId,
-        ),
+        aliasName: 'users__id__inventory_adjustments__user_id',
       );
 
   $$InventoryAdjustmentsTableProcessedTableManager
@@ -56318,10 +56397,7 @@ final class $$UsersTableReferences
   >
   _chequeConfirmedByTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.chequeConfirmations,
-    aliasName: $_aliasNameGenerator(
-      db.users.id,
-      db.chequeConfirmations.confirmedBy,
-    ),
+    aliasName: 'users__id__cheque_confirmations__confirmed_by',
   );
 
   $$ChequeConfirmationsTableProcessedTableManager get chequeConfirmedBy {
@@ -58790,7 +58866,7 @@ final class $$CurrenciesTableReferences
   static MultiTypedResultKey<$SuppliersTable, List<Supplier>>
   _suppliersRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.suppliers,
-    aliasName: $_aliasNameGenerator(db.currencies.id, db.suppliers.currencyId),
+    aliasName: 'currencies__id__suppliers__currency_id',
   );
 
   $$SuppliersTableProcessedTableManager get suppliersRefs {
@@ -58809,7 +58885,7 @@ final class $$CurrenciesTableReferences
     _$AppDatabase db,
   ) => MultiTypedResultKey.fromTable(
     db.products,
-    aliasName: $_aliasNameGenerator(db.currencies.id, db.products.currencyId),
+    aliasName: 'currencies__id__products__currency_id',
   );
 
   $$ProductsTableProcessedTableManager get productsRefs {
@@ -58827,7 +58903,7 @@ final class $$CurrenciesTableReferences
   static MultiTypedResultKey<$CustomersTable, List<Customer>>
   _customersRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.customers,
-    aliasName: $_aliasNameGenerator(db.currencies.id, db.customers.currencyId),
+    aliasName: 'currencies__id__customers__currency_id',
   );
 
   $$CustomersTableProcessedTableManager get customersRefs {
@@ -58849,10 +58925,7 @@ final class $$CurrenciesTableReferences
   _customerTransactionsRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.customerTransactions,
-        aliasName: $_aliasNameGenerator(
-          db.currencies.id,
-          db.customerTransactions.currencyId,
-        ),
+        aliasName: 'currencies__id__customer_transactions__currency_id',
       );
 
   $$CustomerTransactionsTableProcessedTableManager
@@ -58877,10 +58950,7 @@ final class $$CurrenciesTableReferences
   _supplierTransactionsRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.supplierTransactions,
-        aliasName: $_aliasNameGenerator(
-          db.currencies.id,
-          db.supplierTransactions.currencyId,
-        ),
+        aliasName: 'currencies__id__supplier_transactions__currency_id',
       );
 
   $$SupplierTransactionsTableProcessedTableManager
@@ -58901,7 +58971,7 @@ final class $$CurrenciesTableReferences
   static MultiTypedResultKey<$EmployeesTable, List<Employee>>
   _employeesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.employees,
-    aliasName: $_aliasNameGenerator(db.currencies.id, db.employees.currencyId),
+    aliasName: 'currencies__id__employees__currency_id',
   );
 
   $$EmployeesTableProcessedTableManager get employeesRefs {
@@ -58920,7 +58990,7 @@ final class $$CurrenciesTableReferences
     _$AppDatabase db,
   ) => MultiTypedResultKey.fromTable(
     db.sales,
-    aliasName: $_aliasNameGenerator(db.currencies.id, db.sales.currencyId),
+    aliasName: 'currencies__id__sales__currency_id',
   );
 
   $$SalesTableProcessedTableManager get salesRefs {
@@ -58938,10 +59008,7 @@ final class $$CurrenciesTableReferences
   static MultiTypedResultKey<$CommissionsTable, List<Commission>>
   _commissionsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.commissions,
-    aliasName: $_aliasNameGenerator(
-      db.currencies.id,
-      db.commissions.currencyId,
-    ),
+    aliasName: 'currencies__id__commissions__currency_id',
   );
 
   $$CommissionsTableProcessedTableManager get commissionsRefs {
@@ -58960,7 +59027,7 @@ final class $$CurrenciesTableReferences
     _$AppDatabase db,
   ) => MultiTypedResultKey.fromTable(
     db.payrolls,
-    aliasName: $_aliasNameGenerator(db.currencies.id, db.payrolls.currencyId),
+    aliasName: 'currencies__id__payrolls__currency_id',
   );
 
   $$PayrollsTableProcessedTableManager get payrollsRefs {
@@ -58978,10 +59045,7 @@ final class $$CurrenciesTableReferences
   static MultiTypedResultKey<$SaleReturnsTable, List<SaleReturn>>
   _saleReturnsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.saleReturns,
-    aliasName: $_aliasNameGenerator(
-      db.currencies.id,
-      db.saleReturns.currencyId,
-    ),
+    aliasName: 'currencies__id__sale_returns__currency_id',
   );
 
   $$SaleReturnsTableProcessedTableManager get saleReturnsRefs {
@@ -58999,10 +59063,7 @@ final class $$CurrenciesTableReferences
   static MultiTypedResultKey<$SalePaymentsTable, List<SalePayment>>
   _salePaymentsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.salePayments,
-    aliasName: $_aliasNameGenerator(
-      db.currencies.id,
-      db.salePayments.currencyId,
-    ),
+    aliasName: 'currencies__id__sale_payments__currency_id',
   );
 
   $$SalePaymentsTableProcessedTableManager get salePaymentsRefs {
@@ -59020,7 +59081,7 @@ final class $$CurrenciesTableReferences
   static MultiTypedResultKey<$PurchasesTable, List<Purchase>>
   _purchasesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.purchases,
-    aliasName: $_aliasNameGenerator(db.currencies.id, db.purchases.currencyId),
+    aliasName: 'currencies__id__purchases__currency_id',
   );
 
   $$PurchasesTableProcessedTableManager get purchasesRefs {
@@ -59038,10 +59099,7 @@ final class $$CurrenciesTableReferences
   static MultiTypedResultKey<$PurchaseReturnsTable, List<PurchaseReturn>>
   _purchaseReturnsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.purchaseReturns,
-    aliasName: $_aliasNameGenerator(
-      db.currencies.id,
-      db.purchaseReturns.currencyId,
-    ),
+    aliasName: 'currencies__id__purchase_returns__currency_id',
   );
 
   $$PurchaseReturnsTableProcessedTableManager get purchaseReturnsRefs {
@@ -59061,10 +59119,7 @@ final class $$CurrenciesTableReferences
   static MultiTypedResultKey<$PurchasePaymentsTable, List<PurchasePayment>>
   _purchasePaymentsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.purchasePayments,
-    aliasName: $_aliasNameGenerator(
-      db.currencies.id,
-      db.purchasePayments.currencyId,
-    ),
+    aliasName: 'currencies__id__purchase_payments__currency_id',
   );
 
   $$PurchasePaymentsTableProcessedTableManager get purchasePaymentsRefs {
@@ -59085,7 +59140,7 @@ final class $$CurrenciesTableReferences
     _$AppDatabase db,
   ) => MultiTypedResultKey.fromTable(
     db.accounts,
-    aliasName: $_aliasNameGenerator(db.currencies.id, db.accounts.currencyId),
+    aliasName: 'currencies__id__accounts__currency_id',
   );
 
   $$AccountsTableProcessedTableManager get accountsRefs {
@@ -59104,10 +59159,7 @@ final class $$CurrenciesTableReferences
   _journalEntryLinesRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.journalEntryLines,
-        aliasName: $_aliasNameGenerator(
-          db.currencies.id,
-          db.journalEntryLines.currencyId,
-        ),
+        aliasName: 'currencies__id__journal_entry_lines__currency_id',
       );
 
   $$JournalEntryLinesTableProcessedTableManager get journalEntryLinesRefs {
@@ -59128,7 +59180,7 @@ final class $$CurrenciesTableReferences
     _$AppDatabase db,
   ) => MultiTypedResultKey.fromTable(
     db.expenses,
-    aliasName: $_aliasNameGenerator(db.currencies.id, db.expenses.currencyId),
+    aliasName: 'currencies__id__expenses__currency_id',
   );
 
   $$ExpensesTableProcessedTableManager get expensesRefs {
@@ -59150,10 +59202,7 @@ final class $$CurrenciesTableReferences
   _purchaseReturnAdjustmentsRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.purchaseReturnAdjustments,
-        aliasName: $_aliasNameGenerator(
-          db.currencies.id,
-          db.purchaseReturnAdjustments.currencyId,
-        ),
+        aliasName: 'currencies__id__purchase_return_adjustments__currency_id',
       );
 
   $$PurchaseReturnAdjustmentsTableProcessedTableManager
@@ -59178,10 +59227,7 @@ final class $$CurrenciesTableReferences
   _saleReturnAdjustmentsRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.saleReturnAdjustments,
-        aliasName: $_aliasNameGenerator(
-          db.currencies.id,
-          db.saleReturnAdjustments.currencyId,
-        ),
+        aliasName: 'currencies__id__sale_return_adjustments__currency_id',
       );
 
   $$SaleReturnAdjustmentsTableProcessedTableManager
@@ -59206,10 +59252,7 @@ final class $$CurrenciesTableReferences
   _inventoryAdjustmentsRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.inventoryAdjustments,
-        aliasName: $_aliasNameGenerator(
-          db.currencies.id,
-          db.inventoryAdjustments.currencyId,
-        ),
+        aliasName: 'currencies__id__inventory_adjustments__currency_id',
       );
 
   $$InventoryAdjustmentsTableProcessedTableManager
@@ -59234,10 +59277,7 @@ final class $$CurrenciesTableReferences
   _customerCreditNotesRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.customerCreditNotes,
-        aliasName: $_aliasNameGenerator(
-          db.currencies.id,
-          db.customerCreditNotes.currencyId,
-        ),
+        aliasName: 'currencies__id__customer_credit_notes__currency_id',
       );
 
   $$CustomerCreditNotesTableProcessedTableManager get customerCreditNotesRefs {
@@ -61528,10 +61568,7 @@ final class $$ExpenseCategoriesTableReferences
     _$AppDatabase db,
   ) => MultiTypedResultKey.fromTable(
     db.expenses,
-    aliasName: $_aliasNameGenerator(
-      db.expenseCategories.id,
-      db.expenses.categoryId,
-    ),
+    aliasName: 'expense_categories__id__expenses__category_id',
   );
 
   $$ExpensesTableProcessedTableManager get expensesRefs {
@@ -61860,13 +61897,9 @@ final class $$ProductCategoriesTableReferences
     super.$_typedResult,
   );
 
-  static $ProductCategoriesTable _parentIdTable(_$AppDatabase db) =>
-      db.productCategories.createAlias(
-        $_aliasNameGenerator(
-          db.productCategories.parentId,
-          db.productCategories.id,
-        ),
-      );
+  static $ProductCategoriesTable _parentIdTable(_$AppDatabase db) => db
+      .productCategories
+      .createAlias('product_categories__parent_id__product_categories__id');
 
   $$ProductCategoriesTableProcessedTableManager? get parentId {
     final $_column = $_itemColumn<int>('parent_id');
@@ -61886,10 +61919,7 @@ final class $$ProductCategoriesTableReferences
     _$AppDatabase db,
   ) => MultiTypedResultKey.fromTable(
     db.products,
-    aliasName: $_aliasNameGenerator(
-      db.productCategories.id,
-      db.products.categoryId,
-    ),
+    aliasName: 'product_categories__id__products__category_id',
   );
 
   $$ProductsTableProcessedTableManager get productsRefs {
@@ -62319,10 +62349,7 @@ final class $$ProductColorsTableReferences
   static MultiTypedResultKey<$ProductVariantsTable, List<ProductVariant>>
   _productVariantsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.productVariants,
-    aliasName: $_aliasNameGenerator(
-      db.productColors.id,
-      db.productVariants.colorId,
-    ),
+    aliasName: 'product_colors__id__product_variants__color_id',
   );
 
   $$ProductVariantsTableProcessedTableManager get productVariantsRefs {
@@ -62623,7 +62650,7 @@ final class $$SizesTableReferences
   static MultiTypedResultKey<$ProductVariantsTable, List<ProductVariant>>
   _productVariantsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.productVariants,
-    aliasName: $_aliasNameGenerator(db.sizes.id, db.productVariants.sizeId),
+    aliasName: 'sizes__id__product_variants__size_id',
   );
 
   $$ProductVariantsTableProcessedTableManager get productVariantsRefs {
@@ -62947,9 +62974,7 @@ final class $$SuppliersTableReferences
   $$SuppliersTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
   static $CurrenciesTable _currencyIdTable(_$AppDatabase db) =>
-      db.currencies.createAlias(
-        $_aliasNameGenerator(db.suppliers.currencyId, db.currencies.id),
-      );
+      db.currencies.createAlias('suppliers__currency_id__currencies__id');
 
   $$CurrenciesTableProcessedTableManager get currencyId {
     final $_column = $_itemColumn<int>('currency_id')!;
@@ -62969,7 +62994,7 @@ final class $$SuppliersTableReferences
     _$AppDatabase db,
   ) => MultiTypedResultKey.fromTable(
     db.products,
-    aliasName: $_aliasNameGenerator(db.suppliers.id, db.products.supplierId),
+    aliasName: 'suppliers__id__products__supplier_id',
   );
 
   $$ProductsTableProcessedTableManager get productsRefs {
@@ -62987,10 +63012,7 @@ final class $$SuppliersTableReferences
   static MultiTypedResultKey<$ProductBatchesTable, List<ProductBatch>>
   _productBatchesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.productBatches,
-    aliasName: $_aliasNameGenerator(
-      db.suppliers.id,
-      db.productBatches.supplierId,
-    ),
+    aliasName: 'suppliers__id__product_batches__supplier_id',
   );
 
   $$ProductBatchesTableProcessedTableManager get productBatchesRefs {
@@ -63012,10 +63034,7 @@ final class $$SuppliersTableReferences
   _supplierTransactionsRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.supplierTransactions,
-        aliasName: $_aliasNameGenerator(
-          db.suppliers.id,
-          db.supplierTransactions.supplierId,
-        ),
+        aliasName: 'suppliers__id__supplier_transactions__supplier_id',
       );
 
   $$SupplierTransactionsTableProcessedTableManager
@@ -63036,7 +63055,7 @@ final class $$SuppliersTableReferences
   static MultiTypedResultKey<$PurchasesTable, List<Purchase>>
   _purchasesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.purchases,
-    aliasName: $_aliasNameGenerator(db.suppliers.id, db.purchases.supplierId),
+    aliasName: 'suppliers__id__purchases__supplier_id',
   );
 
   $$PurchasesTableProcessedTableManager get purchasesRefs {
@@ -63058,10 +63077,7 @@ final class $$SuppliersTableReferences
   _purchaseReturnAdjustmentsRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.purchaseReturnAdjustments,
-        aliasName: $_aliasNameGenerator(
-          db.suppliers.id,
-          db.purchaseReturnAdjustments.supplierId,
-        ),
+        aliasName: 'suppliers__id__purchase_return_adjustments__supplier_id',
       );
 
   $$PurchaseReturnAdjustmentsTableProcessedTableManager
@@ -63923,10 +63939,9 @@ final class $$ProductsTableReferences
     extends BaseReferences<_$AppDatabase, $ProductsTable, Product> {
   $$ProductsTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
-  static $ProductCategoriesTable _categoryIdTable(_$AppDatabase db) =>
-      db.productCategories.createAlias(
-        $_aliasNameGenerator(db.products.categoryId, db.productCategories.id),
-      );
+  static $ProductCategoriesTable _categoryIdTable(_$AppDatabase db) => db
+      .productCategories
+      .createAlias('products__category_id__product_categories__id');
 
   $$ProductCategoriesTableProcessedTableManager? get categoryId {
     final $_column = $_itemColumn<int>('category_id');
@@ -63943,9 +63958,7 @@ final class $$ProductsTableReferences
   }
 
   static $SuppliersTable _supplierIdTable(_$AppDatabase db) =>
-      db.suppliers.createAlias(
-        $_aliasNameGenerator(db.products.supplierId, db.suppliers.id),
-      );
+      db.suppliers.createAlias('products__supplier_id__suppliers__id');
 
   $$SuppliersTableProcessedTableManager? get supplierId {
     final $_column = $_itemColumn<int>('supplier_id');
@@ -63962,9 +63975,7 @@ final class $$ProductsTableReferences
   }
 
   static $CurrenciesTable _currencyIdTable(_$AppDatabase db) =>
-      db.currencies.createAlias(
-        $_aliasNameGenerator(db.products.currencyId, db.currencies.id),
-      );
+      db.currencies.createAlias('products__currency_id__currencies__id');
 
   $$CurrenciesTableProcessedTableManager? get currencyId {
     final $_column = $_itemColumn<int>('currency_id');
@@ -63983,10 +63994,7 @@ final class $$ProductsTableReferences
   static MultiTypedResultKey<$ProductVariantsTable, List<ProductVariant>>
   _productVariantsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.productVariants,
-    aliasName: $_aliasNameGenerator(
-      db.products.id,
-      db.productVariants.productId,
-    ),
+    aliasName: 'products__id__product_variants__product_id',
   );
 
   $$ProductVariantsTableProcessedTableManager get productVariantsRefs {
@@ -64010,10 +64018,7 @@ final class $$ProductsTableReferences
   _productPriceHistoriesRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.productPriceHistories,
-        aliasName: $_aliasNameGenerator(
-          db.products.id,
-          db.productPriceHistories.productId,
-        ),
+        aliasName: 'products__id__product_price_histories__product_id',
       );
 
   $$ProductPriceHistoriesTableProcessedTableManager
@@ -64034,10 +64039,7 @@ final class $$ProductsTableReferences
   static MultiTypedResultKey<$ProductBatchesTable, List<ProductBatch>>
   _productBatchesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.productBatches,
-    aliasName: $_aliasNameGenerator(
-      db.products.id,
-      db.productBatches.productId,
-    ),
+    aliasName: 'products__id__product_batches__product_id',
   );
 
   $$ProductBatchesTableProcessedTableManager get productBatchesRefs {
@@ -64055,7 +64057,7 @@ final class $$ProductsTableReferences
   static MultiTypedResultKey<$SaleItemsTable, List<SaleItem>>
   _saleItemsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.saleItems,
-    aliasName: $_aliasNameGenerator(db.products.id, db.saleItems.productId),
+    aliasName: 'products__id__sale_items__product_id',
   );
 
   $$SaleItemsTableProcessedTableManager get saleItemsRefs {
@@ -64073,7 +64075,7 @@ final class $$ProductsTableReferences
   static MultiTypedResultKey<$PurchaseItemsTable, List<PurchaseItem>>
   _purchaseItemsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.purchaseItems,
-    aliasName: $_aliasNameGenerator(db.products.id, db.purchaseItems.productId),
+    aliasName: 'products__id__purchase_items__product_id',
   );
 
   $$PurchaseItemsTableProcessedTableManager get purchaseItemsRefs {
@@ -64091,10 +64093,7 @@ final class $$ProductsTableReferences
   static MultiTypedResultKey<$PrintHistoriesTable, List<PrintHistory>>
   _printHistoriesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.printHistories,
-    aliasName: $_aliasNameGenerator(
-      db.products.id,
-      db.printHistories.productId,
-    ),
+    aliasName: 'products__id__print_histories__product_id',
   );
 
   $$PrintHistoriesTableProcessedTableManager get printHistoriesRefs {
@@ -64116,10 +64115,7 @@ final class $$ProductsTableReferences
   _purchaseReturnAdjustmentItemsRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.purchaseReturnAdjustmentItems,
-        aliasName: $_aliasNameGenerator(
-          db.products.id,
-          db.purchaseReturnAdjustmentItems.productId,
-        ),
+        aliasName: 'products__id__purchase_return_adjustment_items__product_id',
       );
 
   $$PurchaseReturnAdjustmentItemsTableProcessedTableManager
@@ -64144,10 +64140,7 @@ final class $$ProductsTableReferences
   _saleReturnAdjustmentItemsRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.saleReturnAdjustmentItems,
-        aliasName: $_aliasNameGenerator(
-          db.products.id,
-          db.saleReturnAdjustmentItems.productId,
-        ),
+        aliasName: 'products__id__sale_return_adjustment_items__product_id',
       );
 
   $$SaleReturnAdjustmentItemsTableProcessedTableManager
@@ -64172,10 +64165,7 @@ final class $$ProductsTableReferences
   _inventoryAdjustmentsRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.inventoryAdjustments,
-        aliasName: $_aliasNameGenerator(
-          db.products.id,
-          db.inventoryAdjustments.productId,
-        ),
+        aliasName: 'products__id__inventory_adjustments__product_id',
       );
 
   $$InventoryAdjustmentsTableProcessedTableManager
@@ -65835,9 +65825,7 @@ final class $$ProductVariantsTableReferences
   );
 
   static $ProductsTable _productIdTable(_$AppDatabase db) =>
-      db.products.createAlias(
-        $_aliasNameGenerator(db.productVariants.productId, db.products.id),
-      );
+      db.products.createAlias('product_variants__product_id__products__id');
 
   $$ProductsTableProcessedTableManager get productId {
     final $_column = $_itemColumn<int>('product_id')!;
@@ -65853,10 +65841,8 @@ final class $$ProductVariantsTableReferences
     );
   }
 
-  static $ProductColorsTable _colorIdTable(_$AppDatabase db) =>
-      db.productColors.createAlias(
-        $_aliasNameGenerator(db.productVariants.colorId, db.productColors.id),
-      );
+  static $ProductColorsTable _colorIdTable(_$AppDatabase db) => db.productColors
+      .createAlias('product_variants__color_id__product_colors__id');
 
   $$ProductColorsTableProcessedTableManager? get colorId {
     final $_column = $_itemColumn<int>('color_id');
@@ -65872,9 +65858,8 @@ final class $$ProductVariantsTableReferences
     );
   }
 
-  static $SizesTable _sizeIdTable(_$AppDatabase db) => db.sizes.createAlias(
-    $_aliasNameGenerator(db.productVariants.sizeId, db.sizes.id),
-  );
+  static $SizesTable _sizeIdTable(_$AppDatabase db) =>
+      db.sizes.createAlias('product_variants__size_id__sizes__id');
 
   $$SizesTableProcessedTableManager? get sizeId {
     final $_column = $_itemColumn<int>('size_id');
@@ -65897,10 +65882,7 @@ final class $$ProductVariantsTableReferences
   _productPriceHistoriesRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.productPriceHistories,
-        aliasName: $_aliasNameGenerator(
-          db.productVariants.id,
-          db.productPriceHistories.variantId,
-        ),
+        aliasName: 'product_variants__id__product_price_histories__variant_id',
       );
 
   $$ProductPriceHistoriesTableProcessedTableManager
@@ -65921,10 +65903,7 @@ final class $$ProductVariantsTableReferences
   static MultiTypedResultKey<$ProductBatchesTable, List<ProductBatch>>
   _productBatchesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.productBatches,
-    aliasName: $_aliasNameGenerator(
-      db.productVariants.id,
-      db.productBatches.variantId,
-    ),
+    aliasName: 'product_variants__id__product_batches__variant_id',
   );
 
   $$ProductBatchesTableProcessedTableManager get productBatchesRefs {
@@ -65942,10 +65921,7 @@ final class $$ProductVariantsTableReferences
   static MultiTypedResultKey<$SaleItemsTable, List<SaleItem>>
   _saleItemsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.saleItems,
-    aliasName: $_aliasNameGenerator(
-      db.productVariants.id,
-      db.saleItems.variantId,
-    ),
+    aliasName: 'product_variants__id__sale_items__variant_id',
   );
 
   $$SaleItemsTableProcessedTableManager get saleItemsRefs {
@@ -65963,10 +65939,7 @@ final class $$ProductVariantsTableReferences
   static MultiTypedResultKey<$PurchaseItemsTable, List<PurchaseItem>>
   _purchaseItemsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.purchaseItems,
-    aliasName: $_aliasNameGenerator(
-      db.productVariants.id,
-      db.purchaseItems.variantId,
-    ),
+    aliasName: 'product_variants__id__purchase_items__variant_id',
   );
 
   $$PurchaseItemsTableProcessedTableManager get purchaseItemsRefs {
@@ -65984,10 +65957,7 @@ final class $$ProductVariantsTableReferences
   static MultiTypedResultKey<$PrintHistoriesTable, List<PrintHistory>>
   _printHistoriesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.printHistories,
-    aliasName: $_aliasNameGenerator(
-      db.productVariants.id,
-      db.printHistories.variantId,
-    ),
+    aliasName: 'product_variants__id__print_histories__variant_id',
   );
 
   $$PrintHistoriesTableProcessedTableManager get printHistoriesRefs {
@@ -66006,14 +65976,13 @@ final class $$ProductVariantsTableReferences
     $PurchaseReturnAdjustmentItemsTable,
     List<PurchaseReturnAdjustmentItem>
   >
-  _purchaseReturnAdjustmentItemsRefsTable(_$AppDatabase db) =>
-      MultiTypedResultKey.fromTable(
-        db.purchaseReturnAdjustmentItems,
-        aliasName: $_aliasNameGenerator(
-          db.productVariants.id,
-          db.purchaseReturnAdjustmentItems.variantId,
-        ),
-      );
+  _purchaseReturnAdjustmentItemsRefsTable(
+    _$AppDatabase db,
+  ) => MultiTypedResultKey.fromTable(
+    db.purchaseReturnAdjustmentItems,
+    aliasName:
+        'product_variants__id__purchase_return_adjustment_items__variant_id',
+  );
 
   $$PurchaseReturnAdjustmentItemsTableProcessedTableManager
   get purchaseReturnAdjustmentItemsRefs {
@@ -66037,10 +66006,8 @@ final class $$ProductVariantsTableReferences
   _saleReturnAdjustmentItemsRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.saleReturnAdjustmentItems,
-        aliasName: $_aliasNameGenerator(
-          db.productVariants.id,
-          db.saleReturnAdjustmentItems.variantId,
-        ),
+        aliasName:
+            'product_variants__id__sale_return_adjustment_items__variant_id',
       );
 
   $$SaleReturnAdjustmentItemsTableProcessedTableManager
@@ -66065,10 +66032,7 @@ final class $$ProductVariantsTableReferences
   _inventoryAdjustmentsRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.inventoryAdjustments,
-        aliasName: $_aliasNameGenerator(
-          db.productVariants.id,
-          db.inventoryAdjustments.variantId,
-        ),
+        aliasName: 'product_variants__id__inventory_adjustments__variant_id',
       );
 
   $$InventoryAdjustmentsTableProcessedTableManager
@@ -67435,13 +67399,8 @@ final class $$ProductPriceHistoriesTableReferences
     super.$_typedResult,
   );
 
-  static $ProductsTable _productIdTable(_$AppDatabase db) =>
-      db.products.createAlias(
-        $_aliasNameGenerator(
-          db.productPriceHistories.productId,
-          db.products.id,
-        ),
-      );
+  static $ProductsTable _productIdTable(_$AppDatabase db) => db.products
+      .createAlias('product_price_histories__product_id__products__id');
 
   $$ProductsTableProcessedTableManager get productId {
     final $_column = $_itemColumn<int>('product_id')!;
@@ -67457,13 +67416,9 @@ final class $$ProductPriceHistoriesTableReferences
     );
   }
 
-  static $ProductVariantsTable _variantIdTable(_$AppDatabase db) =>
-      db.productVariants.createAlias(
-        $_aliasNameGenerator(
-          db.productPriceHistories.variantId,
-          db.productVariants.id,
-        ),
-      );
+  static $ProductVariantsTable _variantIdTable(_$AppDatabase db) => db
+      .productVariants
+      .createAlias('product_price_histories__variant_id__product_variants__id');
 
   $$ProductVariantsTableProcessedTableManager? get variantId {
     final $_column = $_itemColumn<int>('variant_id');
@@ -67479,9 +67434,8 @@ final class $$ProductPriceHistoriesTableReferences
     );
   }
 
-  static $UsersTable _userIdTable(_$AppDatabase db) => db.users.createAlias(
-    $_aliasNameGenerator(db.productPriceHistories.userId, db.users.id),
-  );
+  static $UsersTable _userIdTable(_$AppDatabase db) =>
+      db.users.createAlias('product_price_histories__user_id__users__id');
 
   $$UsersTableProcessedTableManager? get userId {
     final $_column = $_itemColumn<int>('user_id');
@@ -68117,9 +68071,7 @@ final class $$ProductBatchesTableReferences
   );
 
   static $ProductsTable _productIdTable(_$AppDatabase db) =>
-      db.products.createAlias(
-        $_aliasNameGenerator(db.productBatches.productId, db.products.id),
-      );
+      db.products.createAlias('product_batches__product_id__products__id');
 
   $$ProductsTableProcessedTableManager get productId {
     final $_column = $_itemColumn<int>('product_id')!;
@@ -68135,13 +68087,9 @@ final class $$ProductBatchesTableReferences
     );
   }
 
-  static $ProductVariantsTable _variantIdTable(_$AppDatabase db) =>
-      db.productVariants.createAlias(
-        $_aliasNameGenerator(
-          db.productBatches.variantId,
-          db.productVariants.id,
-        ),
-      );
+  static $ProductVariantsTable _variantIdTable(_$AppDatabase db) => db
+      .productVariants
+      .createAlias('product_batches__variant_id__product_variants__id');
 
   $$ProductVariantsTableProcessedTableManager? get variantId {
     final $_column = $_itemColumn<int>('variant_id');
@@ -68158,9 +68106,7 @@ final class $$ProductBatchesTableReferences
   }
 
   static $SuppliersTable _supplierIdTable(_$AppDatabase db) =>
-      db.suppliers.createAlias(
-        $_aliasNameGenerator(db.productBatches.supplierId, db.suppliers.id),
-      );
+      db.suppliers.createAlias('product_batches__supplier_id__suppliers__id');
 
   $$SuppliersTableProcessedTableManager? get supplierId {
     final $_column = $_itemColumn<int>('supplier_id');
@@ -68180,10 +68126,7 @@ final class $$ProductBatchesTableReferences
   _batchConsumptionsRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.batchConsumptions,
-        aliasName: $_aliasNameGenerator(
-          db.productBatches.id,
-          db.batchConsumptions.batchId,
-        ),
+        aliasName: 'product_batches__id__batch_consumptions__batch_id',
       );
 
   $$BatchConsumptionsTableProcessedTableManager get batchConsumptionsRefs {
@@ -68944,13 +68887,9 @@ final class $$BatchConsumptionsTableReferences
     super.$_typedResult,
   );
 
-  static $ProductBatchesTable _batchIdTable(_$AppDatabase db) =>
-      db.productBatches.createAlias(
-        $_aliasNameGenerator(
-          db.batchConsumptions.batchId,
-          db.productBatches.id,
-        ),
-      );
+  static $ProductBatchesTable _batchIdTable(_$AppDatabase db) => db
+      .productBatches
+      .createAlias('batch_consumptions__batch_id__product_batches__id');
 
   $$ProductBatchesTableProcessedTableManager get batchId {
     final $_column = $_itemColumn<int>('batch_id')!;
@@ -69479,10 +69418,7 @@ final class $$LoyaltyTiersTableReferences
   static MultiTypedResultKey<$CustomersTable, List<Customer>>
   _customersRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.customers,
-    aliasName: $_aliasNameGenerator(
-      db.loyaltyTiers.id,
-      db.customers.loyaltyTierId,
-    ),
+    aliasName: 'loyalty_tiers__id__customers__loyalty_tier_id',
   );
 
   $$CustomersTableProcessedTableManager get customersRefs {
@@ -70129,9 +70065,7 @@ final class $$CustomersTableReferences
   $$CustomersTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
   static $CurrenciesTable _currencyIdTable(_$AppDatabase db) =>
-      db.currencies.createAlias(
-        $_aliasNameGenerator(db.customers.currencyId, db.currencies.id),
-      );
+      db.currencies.createAlias('customers__currency_id__currencies__id');
 
   $$CurrenciesTableProcessedTableManager get currencyId {
     final $_column = $_itemColumn<int>('currency_id')!;
@@ -70147,10 +70081,9 @@ final class $$CustomersTableReferences
     );
   }
 
-  static $LoyaltyTiersTable _loyaltyTierIdTable(_$AppDatabase db) =>
-      db.loyaltyTiers.createAlias(
-        $_aliasNameGenerator(db.customers.loyaltyTierId, db.loyaltyTiers.id),
-      );
+  static $LoyaltyTiersTable _loyaltyTierIdTable(_$AppDatabase db) => db
+      .loyaltyTiers
+      .createAlias('customers__loyalty_tier_id__loyalty_tiers__id');
 
   $$LoyaltyTiersTableProcessedTableManager? get loyaltyTierId {
     final $_column = $_itemColumn<int>('loyalty_tier_id');
@@ -70173,10 +70106,7 @@ final class $$CustomersTableReferences
   _customerTransactionsRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.customerTransactions,
-        aliasName: $_aliasNameGenerator(
-          db.customers.id,
-          db.customerTransactions.customerId,
-        ),
+        aliasName: 'customers__id__customer_transactions__customer_id',
       );
 
   $$CustomerTransactionsTableProcessedTableManager
@@ -70198,7 +70128,7 @@ final class $$CustomersTableReferences
     _$AppDatabase db,
   ) => MultiTypedResultKey.fromTable(
     db.sales,
-    aliasName: $_aliasNameGenerator(db.customers.id, db.sales.customerId),
+    aliasName: 'customers__id__sales__customer_id',
   );
 
   $$SalesTableProcessedTableManager get salesRefs {
@@ -70220,10 +70150,7 @@ final class $$CustomersTableReferences
   _saleReturnAdjustmentsRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.saleReturnAdjustments,
-        aliasName: $_aliasNameGenerator(
-          db.customers.id,
-          db.saleReturnAdjustments.customerId,
-        ),
+        aliasName: 'customers__id__sale_return_adjustments__customer_id',
       );
 
   $$SaleReturnAdjustmentsTableProcessedTableManager
@@ -70248,10 +70175,7 @@ final class $$CustomersTableReferences
   _customerCreditNotesRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.customerCreditNotes,
-        aliasName: $_aliasNameGenerator(
-          db.customers.id,
-          db.customerCreditNotes.customerId,
-        ),
+        aliasName: 'customers__id__customer_credit_notes__customer_id',
       );
 
   $$CustomerCreditNotesTableProcessedTableManager get customerCreditNotesRefs {
@@ -71211,13 +71135,8 @@ final class $$CustomerTransactionsTableReferences
     super.$_typedResult,
   );
 
-  static $CustomersTable _customerIdTable(_$AppDatabase db) =>
-      db.customers.createAlias(
-        $_aliasNameGenerator(
-          db.customerTransactions.customerId,
-          db.customers.id,
-        ),
-      );
+  static $CustomersTable _customerIdTable(_$AppDatabase db) => db.customers
+      .createAlias('customer_transactions__customer_id__customers__id');
 
   $$CustomersTableProcessedTableManager get customerId {
     final $_column = $_itemColumn<int>('customer_id')!;
@@ -71233,13 +71152,8 @@ final class $$CustomerTransactionsTableReferences
     );
   }
 
-  static $CurrenciesTable _currencyIdTable(_$AppDatabase db) =>
-      db.currencies.createAlias(
-        $_aliasNameGenerator(
-          db.customerTransactions.currencyId,
-          db.currencies.id,
-        ),
-      );
+  static $CurrenciesTable _currencyIdTable(_$AppDatabase db) => db.currencies
+      .createAlias('customer_transactions__currency_id__currencies__id');
 
   $$CurrenciesTableProcessedTableManager get currencyId {
     final $_column = $_itemColumn<int>('currency_id')!;
@@ -73408,13 +73322,8 @@ final class $$SupplierTransactionsTableReferences
     super.$_typedResult,
   );
 
-  static $SuppliersTable _supplierIdTable(_$AppDatabase db) =>
-      db.suppliers.createAlias(
-        $_aliasNameGenerator(
-          db.supplierTransactions.supplierId,
-          db.suppliers.id,
-        ),
-      );
+  static $SuppliersTable _supplierIdTable(_$AppDatabase db) => db.suppliers
+      .createAlias('supplier_transactions__supplier_id__suppliers__id');
 
   $$SuppliersTableProcessedTableManager get supplierId {
     final $_column = $_itemColumn<int>('supplier_id')!;
@@ -73430,13 +73339,8 @@ final class $$SupplierTransactionsTableReferences
     );
   }
 
-  static $CurrenciesTable _currencyIdTable(_$AppDatabase db) =>
-      db.currencies.createAlias(
-        $_aliasNameGenerator(
-          db.supplierTransactions.currencyId,
-          db.currencies.id,
-        ),
-      );
+  static $CurrenciesTable _currencyIdTable(_$AppDatabase db) => db.currencies
+      .createAlias('supplier_transactions__currency_id__currencies__id');
 
   $$CurrenciesTableProcessedTableManager get currencyId {
     final $_column = $_itemColumn<int>('currency_id')!;
@@ -73977,7 +73881,7 @@ final class $$RolesTableReferences
   static MultiTypedResultKey<$EmployeesTable, List<Employee>>
   _employeesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.employees,
-    aliasName: $_aliasNameGenerator(db.roles.id, db.employees.roleId),
+    aliasName: 'roles__id__employees__role_id',
   );
 
   $$EmployeesTableProcessedTableManager get employeesRefs {
@@ -74409,9 +74313,8 @@ final class $$EmployeesTableReferences
     extends BaseReferences<_$AppDatabase, $EmployeesTable, Employee> {
   $$EmployeesTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
-  static $UsersTable _userIdTable(_$AppDatabase db) => db.users.createAlias(
-    $_aliasNameGenerator(db.employees.userId, db.users.id),
-  );
+  static $UsersTable _userIdTable(_$AppDatabase db) =>
+      db.users.createAlias('employees__user_id__users__id');
 
   $$UsersTableProcessedTableManager? get userId {
     final $_column = $_itemColumn<int>('user_id');
@@ -74427,9 +74330,8 @@ final class $$EmployeesTableReferences
     );
   }
 
-  static $RolesTable _roleIdTable(_$AppDatabase db) => db.roles.createAlias(
-    $_aliasNameGenerator(db.employees.roleId, db.roles.id),
-  );
+  static $RolesTable _roleIdTable(_$AppDatabase db) =>
+      db.roles.createAlias('employees__role_id__roles__id');
 
   $$RolesTableProcessedTableManager? get roleId {
     final $_column = $_itemColumn<int>('role_id');
@@ -74446,9 +74348,7 @@ final class $$EmployeesTableReferences
   }
 
   static $CurrenciesTable _currencyIdTable(_$AppDatabase db) =>
-      db.currencies.createAlias(
-        $_aliasNameGenerator(db.employees.currencyId, db.currencies.id),
-      );
+      db.currencies.createAlias('employees__currency_id__currencies__id');
 
   $$CurrenciesTableProcessedTableManager get currencyId {
     final $_column = $_itemColumn<int>('currency_id')!;
@@ -74468,7 +74368,7 @@ final class $$EmployeesTableReferences
     _$AppDatabase db,
   ) => MultiTypedResultKey.fromTable(
     db.sales,
-    aliasName: $_aliasNameGenerator(db.employees.id, db.sales.employeeId),
+    aliasName: 'employees__id__sales__employee_id',
   );
 
   $$SalesTableProcessedTableManager get salesAsEmployee {
@@ -74486,7 +74386,7 @@ final class $$EmployeesTableReferences
   static MultiTypedResultKey<$CommissionsTable, List<Commission>>
   _commissionsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.commissions,
-    aliasName: $_aliasNameGenerator(db.employees.id, db.commissions.employeeId),
+    aliasName: 'employees__id__commissions__employee_id',
   );
 
   $$CommissionsTableProcessedTableManager get commissionsRefs {
@@ -74504,7 +74404,7 @@ final class $$EmployeesTableReferences
   static MultiTypedResultKey<$AttendancesTable, List<Attendance>>
   _attendancesTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.attendances,
-    aliasName: $_aliasNameGenerator(db.employees.id, db.attendances.employeeId),
+    aliasName: 'employees__id__attendances__employee_id',
   );
 
   $$AttendancesTableProcessedTableManager get attendances {
@@ -74522,7 +74422,7 @@ final class $$EmployeesTableReferences
   static MultiTypedResultKey<$AttendancesTable, List<Attendance>>
   _approvedAttendancesTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.attendances,
-    aliasName: $_aliasNameGenerator(db.employees.id, db.attendances.approvedBy),
+    aliasName: 'employees__id__attendances__approved_by',
   );
 
   $$AttendancesTableProcessedTableManager get approvedAttendances {
@@ -74542,10 +74442,7 @@ final class $$EmployeesTableReferences
   static MultiTypedResultKey<$LeaveRequestsTable, List<LeaveRequest>>
   _leaveRequestsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.leaveRequests,
-    aliasName: $_aliasNameGenerator(
-      db.employees.id,
-      db.leaveRequests.employeeId,
-    ),
+    aliasName: 'employees__id__leave_requests__employee_id',
   );
 
   $$LeaveRequestsTableProcessedTableManager get leaveRequests {
@@ -74564,10 +74461,7 @@ final class $$EmployeesTableReferences
   _approvedLeaveRequestsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.leaveRequests,
-        aliasName: $_aliasNameGenerator(
-          db.employees.id,
-          db.leaveRequests.approvedBy,
-        ),
+        aliasName: 'employees__id__leave_requests__approved_by',
       );
 
   $$LeaveRequestsTableProcessedTableManager get approvedLeaveRequests {
@@ -74588,7 +74482,7 @@ final class $$EmployeesTableReferences
     _$AppDatabase db,
   ) => MultiTypedResultKey.fromTable(
     db.payrolls,
-    aliasName: $_aliasNameGenerator(db.employees.id, db.payrolls.employeeId),
+    aliasName: 'employees__id__payrolls__employee_id',
   );
 
   $$PayrollsTableProcessedTableManager get payrollsRefs {
@@ -74606,10 +74500,7 @@ final class $$EmployeesTableReferences
   static MultiTypedResultKey<$ShiftSchedulesTable, List<ShiftSchedule>>
   _shiftSchedulesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.shiftSchedules,
-    aliasName: $_aliasNameGenerator(
-      db.employees.id,
-      db.shiftSchedules.employeeId,
-    ),
+    aliasName: 'employees__id__shift_schedules__employee_id',
   );
 
   $$ShiftSchedulesTableProcessedTableManager get shiftSchedulesRefs {
@@ -74628,10 +74519,7 @@ final class $$EmployeesTableReferences
   _employeeDocumentsRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.employeeDocuments,
-        aliasName: $_aliasNameGenerator(
-          db.employees.id,
-          db.employeeDocuments.employeeId,
-        ),
+        aliasName: 'employees__id__employee_documents__employee_id',
       );
 
   $$EmployeeDocumentsTableProcessedTableManager get employeeDocumentsRefs {
@@ -74652,10 +74540,7 @@ final class $$EmployeesTableReferences
   _performanceMetricsRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.performanceMetrics,
-        aliasName: $_aliasNameGenerator(
-          db.employees.id,
-          db.performanceMetrics.employeeId,
-        ),
+        aliasName: 'employees__id__performance_metrics__employee_id',
       );
 
   $$PerformanceMetricsTableProcessedTableManager get performanceMetricsRefs {
@@ -74675,7 +74560,7 @@ final class $$EmployeesTableReferences
   static MultiTypedResultKey<$SaleItemsTable, List<SaleItem>>
   _saleItemsAsEmployeeTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.saleItems,
-    aliasName: $_aliasNameGenerator(db.employees.id, db.saleItems.employeeId),
+    aliasName: 'employees__id__sale_items__employee_id',
   );
 
   $$SaleItemsTableProcessedTableManager get saleItemsAsEmployee {
@@ -74699,10 +74584,7 @@ final class $$EmployeesTableReferences
   _saleReturnAdjAsEmployeeTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.saleReturnAdjustments,
-        aliasName: $_aliasNameGenerator(
-          db.employees.id,
-          db.saleReturnAdjustments.employeeId,
-        ),
+        aliasName: 'employees__id__sale_return_adjustments__employee_id',
       );
 
   $$SaleReturnAdjustmentsTableProcessedTableManager
@@ -76657,8 +76539,8 @@ final class $$SalesTableReferences
     extends BaseReferences<_$AppDatabase, $SalesTable, Sale> {
   $$SalesTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
-  static $CustomersTable _customerIdTable(_$AppDatabase db) => db.customers
-      .createAlias($_aliasNameGenerator(db.sales.customerId, db.customers.id));
+  static $CustomersTable _customerIdTable(_$AppDatabase db) =>
+      db.customers.createAlias('sales__customer_id__customers__id');
 
   $$CustomersTableProcessedTableManager? get customerId {
     final $_column = $_itemColumn<int>('customer_id');
@@ -76674,8 +76556,8 @@ final class $$SalesTableReferences
     );
   }
 
-  static $EmployeesTable _employeeIdTable(_$AppDatabase db) => db.employees
-      .createAlias($_aliasNameGenerator(db.sales.employeeId, db.employees.id));
+  static $EmployeesTable _employeeIdTable(_$AppDatabase db) =>
+      db.employees.createAlias('sales__employee_id__employees__id');
 
   $$EmployeesTableProcessedTableManager? get employeeId {
     final $_column = $_itemColumn<int>('employee_id');
@@ -76691,8 +76573,8 @@ final class $$SalesTableReferences
     );
   }
 
-  static $CurrenciesTable _currencyIdTable(_$AppDatabase db) => db.currencies
-      .createAlias($_aliasNameGenerator(db.sales.currencyId, db.currencies.id));
+  static $CurrenciesTable _currencyIdTable(_$AppDatabase db) =>
+      db.currencies.createAlias('sales__currency_id__currencies__id');
 
   $$CurrenciesTableProcessedTableManager get currencyId {
     final $_column = $_itemColumn<int>('currency_id')!;
@@ -76711,7 +76593,7 @@ final class $$SalesTableReferences
   static MultiTypedResultKey<$CommissionsTable, List<Commission>>
   _commissionsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.commissions,
-    aliasName: $_aliasNameGenerator(db.sales.id, db.commissions.saleId),
+    aliasName: 'sales__id__commissions__sale_id',
   );
 
   $$CommissionsTableProcessedTableManager get commissionsRefs {
@@ -76729,7 +76611,7 @@ final class $$SalesTableReferences
   static MultiTypedResultKey<$SaleItemsTable, List<SaleItem>>
   _saleItemsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.saleItems,
-    aliasName: $_aliasNameGenerator(db.sales.id, db.saleItems.saleId),
+    aliasName: 'sales__id__sale_items__sale_id',
   );
 
   $$SaleItemsTableProcessedTableManager get saleItemsRefs {
@@ -76747,7 +76629,7 @@ final class $$SalesTableReferences
   static MultiTypedResultKey<$SaleTaxBandsTable, List<SaleTaxBand>>
   _saleTaxBandsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.saleTaxBands,
-    aliasName: $_aliasNameGenerator(db.sales.id, db.saleTaxBands.saleId),
+    aliasName: 'sales__id__sale_tax_bands__sale_id',
   );
 
   $$SaleTaxBandsTableProcessedTableManager get saleTaxBandsRefs {
@@ -76765,7 +76647,7 @@ final class $$SalesTableReferences
   static MultiTypedResultKey<$SaleReturnsTable, List<SaleReturn>>
   _saleReturnsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.saleReturns,
-    aliasName: $_aliasNameGenerator(db.sales.id, db.saleReturns.saleId),
+    aliasName: 'sales__id__sale_returns__sale_id',
   );
 
   $$SaleReturnsTableProcessedTableManager get saleReturnsRefs {
@@ -76783,7 +76665,7 @@ final class $$SalesTableReferences
   static MultiTypedResultKey<$SalePaymentsTable, List<SalePayment>>
   _salePaymentsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.salePayments,
-    aliasName: $_aliasNameGenerator(db.sales.id, db.salePayments.saleId),
+    aliasName: 'sales__id__sale_payments__sale_id',
   );
 
   $$SalePaymentsTableProcessedTableManager get salePaymentsRefs {
@@ -77879,11 +77761,13 @@ typedef $$CommissionsTableCreateCompanionBuilder =
       Value<int> id,
       required int employeeId,
       Value<int?> saleId,
+      Value<int?> saleReturnAdjustmentId,
       required double commissionRateBps,
       required Decimal commissionAmountCents,
       required int currencyId,
       Value<String?> period,
       Value<String> status,
+      Value<DateTime?> effectiveDate,
       Value<DateTime> createdAt,
     });
 typedef $$CommissionsTableUpdateCompanionBuilder =
@@ -77891,11 +77775,13 @@ typedef $$CommissionsTableUpdateCompanionBuilder =
       Value<int> id,
       Value<int> employeeId,
       Value<int?> saleId,
+      Value<int?> saleReturnAdjustmentId,
       Value<double> commissionRateBps,
       Value<Decimal> commissionAmountCents,
       Value<int> currencyId,
       Value<String?> period,
       Value<String> status,
+      Value<DateTime?> effectiveDate,
       Value<DateTime> createdAt,
     });
 
@@ -77904,9 +77790,7 @@ final class $$CommissionsTableReferences
   $$CommissionsTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
   static $EmployeesTable _employeeIdTable(_$AppDatabase db) =>
-      db.employees.createAlias(
-        $_aliasNameGenerator(db.commissions.employeeId, db.employees.id),
-      );
+      db.employees.createAlias('commissions__employee_id__employees__id');
 
   $$EmployeesTableProcessedTableManager get employeeId {
     final $_column = $_itemColumn<int>('employee_id')!;
@@ -77922,9 +77806,8 @@ final class $$CommissionsTableReferences
     );
   }
 
-  static $SalesTable _saleIdTable(_$AppDatabase db) => db.sales.createAlias(
-    $_aliasNameGenerator(db.commissions.saleId, db.sales.id),
-  );
+  static $SalesTable _saleIdTable(_$AppDatabase db) =>
+      db.sales.createAlias('commissions__sale_id__sales__id');
 
   $$SalesTableProcessedTableManager? get saleId {
     final $_column = $_itemColumn<int>('sale_id');
@@ -77941,9 +77824,7 @@ final class $$CommissionsTableReferences
   }
 
   static $CurrenciesTable _currencyIdTable(_$AppDatabase db) =>
-      db.currencies.createAlias(
-        $_aliasNameGenerator(db.commissions.currencyId, db.currencies.id),
-      );
+      db.currencies.createAlias('commissions__currency_id__currencies__id');
 
   $$CurrenciesTableProcessedTableManager get currencyId {
     final $_column = $_itemColumn<int>('currency_id')!;
@@ -77974,6 +77855,11 @@ class $$CommissionsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<int> get saleReturnAdjustmentId => $composableBuilder(
+    column: $table.saleReturnAdjustmentId,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnWithTypeConverterFilters<double, double, int> get commissionRateBps =>
       $composableBuilder(
         column: $table.commissionRateBps,
@@ -77993,6 +77879,11 @@ class $$CommissionsTableFilterComposer
 
   ColumnFilters<String> get status => $composableBuilder(
     column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get effectiveDate => $composableBuilder(
+    column: $table.effectiveDate,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -78085,6 +77976,11 @@ class $$CommissionsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get saleReturnAdjustmentId => $composableBuilder(
+    column: $table.saleReturnAdjustmentId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get commissionRateBps => $composableBuilder(
     column: $table.commissionRateBps,
     builder: (column) => ColumnOrderings(column),
@@ -78102,6 +77998,11 @@ class $$CommissionsTableOrderingComposer
 
   ColumnOrderings<String> get status => $composableBuilder(
     column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get effectiveDate => $composableBuilder(
+    column: $table.effectiveDate,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -78192,6 +78093,11 @@ class $$CommissionsTableAnnotationComposer
   GeneratedColumn<int> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
 
+  GeneratedColumn<int> get saleReturnAdjustmentId => $composableBuilder(
+    column: $table.saleReturnAdjustmentId,
+    builder: (column) => column,
+  );
+
   GeneratedColumnWithTypeConverter<double, int> get commissionRateBps =>
       $composableBuilder(
         column: $table.commissionRateBps,
@@ -78209,6 +78115,11 @@ class $$CommissionsTableAnnotationComposer
 
   GeneratedColumn<String> get status =>
       $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get effectiveDate => $composableBuilder(
+    column: $table.effectiveDate,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -78318,21 +78229,25 @@ class $$CommissionsTableTableManager
                 Value<int> id = const Value.absent(),
                 Value<int> employeeId = const Value.absent(),
                 Value<int?> saleId = const Value.absent(),
+                Value<int?> saleReturnAdjustmentId = const Value.absent(),
                 Value<double> commissionRateBps = const Value.absent(),
                 Value<Decimal> commissionAmountCents = const Value.absent(),
                 Value<int> currencyId = const Value.absent(),
                 Value<String?> period = const Value.absent(),
                 Value<String> status = const Value.absent(),
+                Value<DateTime?> effectiveDate = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
               }) => CommissionsCompanion(
                 id: id,
                 employeeId: employeeId,
                 saleId: saleId,
+                saleReturnAdjustmentId: saleReturnAdjustmentId,
                 commissionRateBps: commissionRateBps,
                 commissionAmountCents: commissionAmountCents,
                 currencyId: currencyId,
                 period: period,
                 status: status,
+                effectiveDate: effectiveDate,
                 createdAt: createdAt,
               ),
           createCompanionCallback:
@@ -78340,21 +78255,25 @@ class $$CommissionsTableTableManager
                 Value<int> id = const Value.absent(),
                 required int employeeId,
                 Value<int?> saleId = const Value.absent(),
+                Value<int?> saleReturnAdjustmentId = const Value.absent(),
                 required double commissionRateBps,
                 required Decimal commissionAmountCents,
                 required int currencyId,
                 Value<String?> period = const Value.absent(),
                 Value<String> status = const Value.absent(),
+                Value<DateTime?> effectiveDate = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
               }) => CommissionsCompanion.insert(
                 id: id,
                 employeeId: employeeId,
                 saleId: saleId,
+                saleReturnAdjustmentId: saleReturnAdjustmentId,
                 commissionRateBps: commissionRateBps,
                 commissionAmountCents: commissionAmountCents,
                 currencyId: currencyId,
                 period: period,
                 status: status,
+                effectiveDate: effectiveDate,
                 createdAt: createdAt,
               ),
           withReferenceMapper: (p0) => p0
@@ -78495,9 +78414,7 @@ final class $$AttendancesTableReferences
   $$AttendancesTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
   static $EmployeesTable _employeeIdTable(_$AppDatabase db) =>
-      db.employees.createAlias(
-        $_aliasNameGenerator(db.attendances.employeeId, db.employees.id),
-      );
+      db.employees.createAlias('attendances__employee_id__employees__id');
 
   $$EmployeesTableProcessedTableManager get employeeId {
     final $_column = $_itemColumn<int>('employee_id')!;
@@ -78514,9 +78431,7 @@ final class $$AttendancesTableReferences
   }
 
   static $EmployeesTable _approvedByTable(_$AppDatabase db) =>
-      db.employees.createAlias(
-        $_aliasNameGenerator(db.attendances.approvedBy, db.employees.id),
-      );
+      db.employees.createAlias('attendances__approved_by__employees__id');
 
   $$EmployeesTableProcessedTableManager? get approvedBy {
     final $_column = $_itemColumn<int>('approved_by');
@@ -79062,9 +78977,7 @@ final class $$LeaveRequestsTableReferences
   );
 
   static $EmployeesTable _employeeIdTable(_$AppDatabase db) =>
-      db.employees.createAlias(
-        $_aliasNameGenerator(db.leaveRequests.employeeId, db.employees.id),
-      );
+      db.employees.createAlias('leave_requests__employee_id__employees__id');
 
   $$EmployeesTableProcessedTableManager get employeeId {
     final $_column = $_itemColumn<int>('employee_id')!;
@@ -79081,9 +78994,7 @@ final class $$LeaveRequestsTableReferences
   }
 
   static $EmployeesTable _approvedByTable(_$AppDatabase db) =>
-      db.employees.createAlias(
-        $_aliasNameGenerator(db.leaveRequests.approvedBy, db.employees.id),
-      );
+      db.employees.createAlias('leave_requests__approved_by__employees__id');
 
   $$EmployeesTableProcessedTableManager? get approvedBy {
     final $_column = $_itemColumn<int>('approved_by');
@@ -79627,9 +79538,7 @@ final class $$PayrollsTableReferences
   $$PayrollsTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
   static $EmployeesTable _employeeIdTable(_$AppDatabase db) =>
-      db.employees.createAlias(
-        $_aliasNameGenerator(db.payrolls.employeeId, db.employees.id),
-      );
+      db.employees.createAlias('payrolls__employee_id__employees__id');
 
   $$EmployeesTableProcessedTableManager get employeeId {
     final $_column = $_itemColumn<int>('employee_id')!;
@@ -79646,9 +79555,7 @@ final class $$PayrollsTableReferences
   }
 
   static $CurrenciesTable _currencyIdTable(_$AppDatabase db) =>
-      db.currencies.createAlias(
-        $_aliasNameGenerator(db.payrolls.currencyId, db.currencies.id),
-      );
+      db.currencies.createAlias('payrolls__currency_id__currencies__id');
 
   $$CurrenciesTableProcessedTableManager get currencyId {
     final $_column = $_itemColumn<int>('currency_id')!;
@@ -79668,10 +79575,7 @@ final class $$PayrollsTableReferences
   _payrollDeductionsRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.payrollDeductions,
-        aliasName: $_aliasNameGenerator(
-          db.payrolls.id,
-          db.payrollDeductions.payrollId,
-        ),
+        aliasName: 'payrolls__id__payroll_deductions__payroll_id',
       );
 
   $$PayrollDeductionsTableProcessedTableManager get payrollDeductionsRefs {
@@ -80385,9 +80289,7 @@ final class $$PayrollDeductionsTableReferences
   );
 
   static $PayrollsTable _payrollIdTable(_$AppDatabase db) =>
-      db.payrolls.createAlias(
-        $_aliasNameGenerator(db.payrollDeductions.payrollId, db.payrolls.id),
-      );
+      db.payrolls.createAlias('payroll_deductions__payroll_id__payrolls__id');
 
   $$PayrollsTableProcessedTableManager get payrollId {
     final $_column = $_itemColumn<int>('payroll_id')!;
@@ -80746,9 +80648,7 @@ final class $$ShiftSchedulesTableReferences
   );
 
   static $EmployeesTable _employeeIdTable(_$AppDatabase db) =>
-      db.employees.createAlias(
-        $_aliasNameGenerator(db.shiftSchedules.employeeId, db.employees.id),
-      );
+      db.employees.createAlias('shift_schedules__employee_id__employees__id');
 
   $$EmployeesTableProcessedTableManager get employeeId {
     final $_column = $_itemColumn<int>('employee_id')!;
@@ -81184,10 +81084,8 @@ final class $$EmployeeDocumentsTableReferences
     super.$_typedResult,
   );
 
-  static $EmployeesTable _employeeIdTable(_$AppDatabase db) =>
-      db.employees.createAlias(
-        $_aliasNameGenerator(db.employeeDocuments.employeeId, db.employees.id),
-      );
+  static $EmployeesTable _employeeIdTable(_$AppDatabase db) => db.employees
+      .createAlias('employee_documents__employee_id__employees__id');
 
   $$EmployeesTableProcessedTableManager get employeeId {
     final $_column = $_itemColumn<int>('employee_id')!;
@@ -81203,9 +81101,8 @@ final class $$EmployeeDocumentsTableReferences
     );
   }
 
-  static $UsersTable _uploadedByTable(_$AppDatabase db) => db.users.createAlias(
-    $_aliasNameGenerator(db.employeeDocuments.uploadedBy, db.users.id),
-  );
+  static $UsersTable _uploadedByTable(_$AppDatabase db) =>
+      db.users.createAlias('employee_documents__uploaded_by__users__id');
 
   $$UsersTableProcessedTableManager? get uploadedBy {
     final $_column = $_itemColumn<int>('uploaded_by');
@@ -82061,10 +81958,8 @@ final class $$PerformanceMetricsTableReferences
     super.$_typedResult,
   );
 
-  static $EmployeesTable _employeeIdTable(_$AppDatabase db) =>
-      db.employees.createAlias(
-        $_aliasNameGenerator(db.performanceMetrics.employeeId, db.employees.id),
-      );
+  static $EmployeesTable _employeeIdTable(_$AppDatabase db) => db.employees
+      .createAlias('performance_metrics__employee_id__employees__id');
 
   $$EmployeesTableProcessedTableManager get employeeId {
     final $_column = $_itemColumn<int>('employee_id')!;
@@ -82080,9 +81975,8 @@ final class $$PerformanceMetricsTableReferences
     );
   }
 
-  static $UsersTable _recordedByTable(_$AppDatabase db) => db.users.createAlias(
-    $_aliasNameGenerator(db.performanceMetrics.recordedBy, db.users.id),
-  );
+  static $UsersTable _recordedByTable(_$AppDatabase db) =>
+      db.users.createAlias('performance_metrics__recorded_by__users__id');
 
   $$UsersTableProcessedTableManager? get recordedBy {
     final $_column = $_itemColumn<int>('recorded_by');
@@ -82585,9 +82479,8 @@ final class $$SaleItemsTableReferences
     extends BaseReferences<_$AppDatabase, $SaleItemsTable, SaleItem> {
   $$SaleItemsTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
-  static $SalesTable _saleIdTable(_$AppDatabase db) => db.sales.createAlias(
-    $_aliasNameGenerator(db.saleItems.saleId, db.sales.id),
-  );
+  static $SalesTable _saleIdTable(_$AppDatabase db) =>
+      db.sales.createAlias('sale_items__sale_id__sales__id');
 
   $$SalesTableProcessedTableManager get saleId {
     final $_column = $_itemColumn<int>('sale_id')!;
@@ -82604,9 +82497,7 @@ final class $$SaleItemsTableReferences
   }
 
   static $ProductsTable _productIdTable(_$AppDatabase db) =>
-      db.products.createAlias(
-        $_aliasNameGenerator(db.saleItems.productId, db.products.id),
-      );
+      db.products.createAlias('sale_items__product_id__products__id');
 
   $$ProductsTableProcessedTableManager get productId {
     final $_column = $_itemColumn<int>('product_id')!;
@@ -82622,10 +82513,9 @@ final class $$SaleItemsTableReferences
     );
   }
 
-  static $ProductVariantsTable _variantIdTable(_$AppDatabase db) =>
-      db.productVariants.createAlias(
-        $_aliasNameGenerator(db.saleItems.variantId, db.productVariants.id),
-      );
+  static $ProductVariantsTable _variantIdTable(_$AppDatabase db) => db
+      .productVariants
+      .createAlias('sale_items__variant_id__product_variants__id');
 
   $$ProductVariantsTableProcessedTableManager? get variantId {
     final $_column = $_itemColumn<int>('variant_id');
@@ -82642,9 +82532,7 @@ final class $$SaleItemsTableReferences
   }
 
   static $EmployeesTable _employeeIdTable(_$AppDatabase db) =>
-      db.employees.createAlias(
-        $_aliasNameGenerator(db.saleItems.employeeId, db.employees.id),
-      );
+      db.employees.createAlias('sale_items__employee_id__employees__id');
 
   $$EmployeesTableProcessedTableManager? get employeeId {
     final $_column = $_itemColumn<int>('employee_id');
@@ -82663,10 +82551,7 @@ final class $$SaleItemsTableReferences
   static MultiTypedResultKey<$SaleReturnItemsTable, List<SaleReturnItem>>
   _saleReturnItemsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.saleReturnItems,
-    aliasName: $_aliasNameGenerator(
-      db.saleItems.id,
-      db.saleReturnItems.saleItemId,
-    ),
+    aliasName: 'sale_items__id__sale_return_items__sale_item_id',
   );
 
   $$SaleReturnItemsTableProcessedTableManager get saleReturnItemsRefs {
@@ -83471,9 +83356,8 @@ final class $$SaleTaxBandsTableReferences
     extends BaseReferences<_$AppDatabase, $SaleTaxBandsTable, SaleTaxBand> {
   $$SaleTaxBandsTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
-  static $SalesTable _saleIdTable(_$AppDatabase db) => db.sales.createAlias(
-    $_aliasNameGenerator(db.saleTaxBands.saleId, db.sales.id),
-  );
+  static $SalesTable _saleIdTable(_$AppDatabase db) =>
+      db.sales.createAlias('sale_tax_bands__sale_id__sales__id');
 
   $$SalesTableProcessedTableManager get saleId {
     final $_column = $_itemColumn<int>('sale_id')!;
@@ -83830,10 +83714,7 @@ final class $$ReturnReasonCodesTableReferences
   static MultiTypedResultKey<$SaleReturnsTable, List<SaleReturn>>
   _saleReturnReasonCodeTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.saleReturns,
-    aliasName: $_aliasNameGenerator(
-      db.returnReasonCodes.id,
-      db.saleReturns.reasonCodeId,
-    ),
+    aliasName: 'return_reason_codes__id__sale_returns__reason_code_id',
   );
 
   $$SaleReturnsTableProcessedTableManager get saleReturnReasonCode {
@@ -83854,10 +83735,7 @@ final class $$ReturnReasonCodesTableReferences
   _purchaseReturnReasonCodeTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.purchaseReturns,
-        aliasName: $_aliasNameGenerator(
-          db.returnReasonCodes.id,
-          db.purchaseReturns.reasonCodeId,
-        ),
+        aliasName: 'return_reason_codes__id__purchase_returns__reason_code_id',
       );
 
   $$PurchaseReturnsTableProcessedTableManager get purchaseReturnReasonCode {
@@ -83878,14 +83756,13 @@ final class $$ReturnReasonCodesTableReferences
     $PurchaseReturnAdjustmentsTable,
     List<PurchaseReturnAdjustment>
   >
-  _purchaseReturnAdjReasonCodeTable(_$AppDatabase db) =>
-      MultiTypedResultKey.fromTable(
-        db.purchaseReturnAdjustments,
-        aliasName: $_aliasNameGenerator(
-          db.returnReasonCodes.id,
-          db.purchaseReturnAdjustments.reasonCodeId,
-        ),
-      );
+  _purchaseReturnAdjReasonCodeTable(
+    _$AppDatabase db,
+  ) => MultiTypedResultKey.fromTable(
+    db.purchaseReturnAdjustments,
+    aliasName:
+        'return_reason_codes__id__purchase_return_adjustments__reason_code_id',
+  );
 
   $$PurchaseReturnAdjustmentsTableProcessedTableManager
   get purchaseReturnAdjReasonCode {
@@ -83909,10 +83786,8 @@ final class $$ReturnReasonCodesTableReferences
   _saleReturnAdjReasonCodeTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.saleReturnAdjustments,
-        aliasName: $_aliasNameGenerator(
-          db.returnReasonCodes.id,
-          db.saleReturnAdjustments.reasonCodeId,
-        ),
+        aliasName:
+            'return_reason_codes__id__sale_return_adjustments__reason_code_id',
       );
 
   $$SaleReturnAdjustmentsTableProcessedTableManager
@@ -84598,9 +84473,8 @@ final class $$SaleReturnsTableReferences
     extends BaseReferences<_$AppDatabase, $SaleReturnsTable, SaleReturn> {
   $$SaleReturnsTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
-  static $SalesTable _saleIdTable(_$AppDatabase db) => db.sales.createAlias(
-    $_aliasNameGenerator(db.saleReturns.saleId, db.sales.id),
-  );
+  static $SalesTable _saleIdTable(_$AppDatabase db) =>
+      db.sales.createAlias('sale_returns__sale_id__sales__id');
 
   $$SalesTableProcessedTableManager get saleId {
     final $_column = $_itemColumn<int>('sale_id')!;
@@ -84617,9 +84491,7 @@ final class $$SaleReturnsTableReferences
   }
 
   static $CurrenciesTable _currencyIdTable(_$AppDatabase db) =>
-      db.currencies.createAlias(
-        $_aliasNameGenerator(db.saleReturns.currencyId, db.currencies.id),
-      );
+      db.currencies.createAlias('sale_returns__currency_id__currencies__id');
 
   $$CurrenciesTableProcessedTableManager get currencyId {
     final $_column = $_itemColumn<int>('currency_id')!;
@@ -84635,9 +84507,8 @@ final class $$SaleReturnsTableReferences
     );
   }
 
-  static $UsersTable _approvedByTable(_$AppDatabase db) => db.users.createAlias(
-    $_aliasNameGenerator(db.saleReturns.approvedBy, db.users.id),
-  );
+  static $UsersTable _approvedByTable(_$AppDatabase db) =>
+      db.users.createAlias('sale_returns__approved_by__users__id');
 
   $$UsersTableProcessedTableManager? get approvedBy {
     final $_column = $_itemColumn<int>('approved_by');
@@ -84653,9 +84524,8 @@ final class $$SaleReturnsTableReferences
     );
   }
 
-  static $UsersTable _overrideByTable(_$AppDatabase db) => db.users.createAlias(
-    $_aliasNameGenerator(db.saleReturns.overrideBy, db.users.id),
-  );
+  static $UsersTable _overrideByTable(_$AppDatabase db) =>
+      db.users.createAlias('sale_returns__override_by__users__id');
 
   $$UsersTableProcessedTableManager? get overrideBy {
     final $_column = $_itemColumn<int>('override_by');
@@ -84671,9 +84541,8 @@ final class $$SaleReturnsTableReferences
     );
   }
 
-  static $UsersTable _postedByTable(_$AppDatabase db) => db.users.createAlias(
-    $_aliasNameGenerator(db.saleReturns.postedBy, db.users.id),
-  );
+  static $UsersTable _postedByTable(_$AppDatabase db) =>
+      db.users.createAlias('sale_returns__posted_by__users__id');
 
   $$UsersTableProcessedTableManager? get postedBy {
     final $_column = $_itemColumn<int>('posted_by');
@@ -84689,9 +84558,8 @@ final class $$SaleReturnsTableReferences
     );
   }
 
-  static $UsersTable _voidedByTable(_$AppDatabase db) => db.users.createAlias(
-    $_aliasNameGenerator(db.saleReturns.voidedBy, db.users.id),
-  );
+  static $UsersTable _voidedByTable(_$AppDatabase db) =>
+      db.users.createAlias('sale_returns__voided_by__users__id');
 
   $$UsersTableProcessedTableManager? get voidedBy {
     final $_column = $_itemColumn<int>('voided_by');
@@ -84707,13 +84575,9 @@ final class $$SaleReturnsTableReferences
     );
   }
 
-  static $ReturnReasonCodesTable _reasonCodeIdTable(_$AppDatabase db) =>
-      db.returnReasonCodes.createAlias(
-        $_aliasNameGenerator(
-          db.saleReturns.reasonCodeId,
-          db.returnReasonCodes.id,
-        ),
-      );
+  static $ReturnReasonCodesTable _reasonCodeIdTable(_$AppDatabase db) => db
+      .returnReasonCodes
+      .createAlias('sale_returns__reason_code_id__return_reason_codes__id');
 
   $$ReturnReasonCodesTableProcessedTableManager? get reasonCodeId {
     final $_column = $_itemColumn<int>('reason_code_id');
@@ -84732,10 +84596,7 @@ final class $$SaleReturnsTableReferences
   static MultiTypedResultKey<$SaleReturnItemsTable, List<SaleReturnItem>>
   _saleReturnItemsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.saleReturnItems,
-    aliasName: $_aliasNameGenerator(
-      db.saleReturns.id,
-      db.saleReturnItems.returnId,
-    ),
+    aliasName: 'sale_returns__id__sale_return_items__return_id',
   );
 
   $$SaleReturnItemsTableProcessedTableManager get saleReturnItemsRefs {
@@ -86115,10 +85976,8 @@ final class $$SaleReturnItemsTableReferences
     super.$_typedResult,
   );
 
-  static $SaleReturnsTable _returnIdTable(_$AppDatabase db) =>
-      db.saleReturns.createAlias(
-        $_aliasNameGenerator(db.saleReturnItems.returnId, db.saleReturns.id),
-      );
+  static $SaleReturnsTable _returnIdTable(_$AppDatabase db) => db.saleReturns
+      .createAlias('sale_return_items__return_id__sale_returns__id');
 
   $$SaleReturnsTableProcessedTableManager get returnId {
     final $_column = $_itemColumn<int>('return_id')!;
@@ -86134,10 +85993,8 @@ final class $$SaleReturnItemsTableReferences
     );
   }
 
-  static $SaleItemsTable _saleItemIdTable(_$AppDatabase db) =>
-      db.saleItems.createAlias(
-        $_aliasNameGenerator(db.saleReturnItems.saleItemId, db.saleItems.id),
-      );
+  static $SaleItemsTable _saleItemIdTable(_$AppDatabase db) => db.saleItems
+      .createAlias('sale_return_items__sale_item_id__sale_items__id');
 
   $$SaleItemsTableProcessedTableManager get saleItemId {
     final $_column = $_itemColumn<int>('sale_item_id')!;
@@ -86668,9 +86525,8 @@ final class $$SalePaymentsTableReferences
     extends BaseReferences<_$AppDatabase, $SalePaymentsTable, SalePayment> {
   $$SalePaymentsTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
-  static $SalesTable _saleIdTable(_$AppDatabase db) => db.sales.createAlias(
-    $_aliasNameGenerator(db.salePayments.saleId, db.sales.id),
-  );
+  static $SalesTable _saleIdTable(_$AppDatabase db) =>
+      db.sales.createAlias('sale_payments__sale_id__sales__id');
 
   $$SalesTableProcessedTableManager get saleId {
     final $_column = $_itemColumn<int>('sale_id')!;
@@ -86687,9 +86543,7 @@ final class $$SalePaymentsTableReferences
   }
 
   static $CurrenciesTable _currencyIdTable(_$AppDatabase db) =>
-      db.currencies.createAlias(
-        $_aliasNameGenerator(db.salePayments.currencyId, db.currencies.id),
-      );
+      db.currencies.createAlias('sale_payments__currency_id__currencies__id');
 
   $$CurrenciesTableProcessedTableManager get currencyId {
     final $_column = $_itemColumn<int>('currency_id')!;
@@ -87175,9 +87029,7 @@ final class $$PurchasesTableReferences
   $$PurchasesTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
   static $SuppliersTable _supplierIdTable(_$AppDatabase db) =>
-      db.suppliers.createAlias(
-        $_aliasNameGenerator(db.purchases.supplierId, db.suppliers.id),
-      );
+      db.suppliers.createAlias('purchases__supplier_id__suppliers__id');
 
   $$SuppliersTableProcessedTableManager get supplierId {
     final $_column = $_itemColumn<int>('supplier_id')!;
@@ -87194,9 +87046,7 @@ final class $$PurchasesTableReferences
   }
 
   static $CurrenciesTable _currencyIdTable(_$AppDatabase db) =>
-      db.currencies.createAlias(
-        $_aliasNameGenerator(db.purchases.currencyId, db.currencies.id),
-      );
+      db.currencies.createAlias('purchases__currency_id__currencies__id');
 
   $$CurrenciesTableProcessedTableManager get currencyId {
     final $_column = $_itemColumn<int>('currency_id')!;
@@ -87215,10 +87065,7 @@ final class $$PurchasesTableReferences
   static MultiTypedResultKey<$PurchaseItemsTable, List<PurchaseItem>>
   _purchaseItemsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.purchaseItems,
-    aliasName: $_aliasNameGenerator(
-      db.purchases.id,
-      db.purchaseItems.purchaseId,
-    ),
+    aliasName: 'purchases__id__purchase_items__purchase_id',
   );
 
   $$PurchaseItemsTableProcessedTableManager get purchaseItemsRefs {
@@ -87236,10 +87083,7 @@ final class $$PurchasesTableReferences
   static MultiTypedResultKey<$PurchaseReturnsTable, List<PurchaseReturn>>
   _purchaseReturnsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.purchaseReturns,
-    aliasName: $_aliasNameGenerator(
-      db.purchases.id,
-      db.purchaseReturns.purchaseId,
-    ),
+    aliasName: 'purchases__id__purchase_returns__purchase_id',
   );
 
   $$PurchaseReturnsTableProcessedTableManager get purchaseReturnsRefs {
@@ -87259,10 +87103,7 @@ final class $$PurchasesTableReferences
   static MultiTypedResultKey<$PurchasePaymentsTable, List<PurchasePayment>>
   _purchasePaymentsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.purchasePayments,
-    aliasName: $_aliasNameGenerator(
-      db.purchases.id,
-      db.purchasePayments.purchaseId,
-    ),
+    aliasName: 'purchases__id__purchase_payments__purchase_id',
   );
 
   $$PurchasePaymentsTableProcessedTableManager get purchasePaymentsRefs {
@@ -88198,9 +88039,7 @@ final class $$PurchaseItemsTableReferences
   );
 
   static $PurchasesTable _purchaseIdTable(_$AppDatabase db) =>
-      db.purchases.createAlias(
-        $_aliasNameGenerator(db.purchaseItems.purchaseId, db.purchases.id),
-      );
+      db.purchases.createAlias('purchase_items__purchase_id__purchases__id');
 
   $$PurchasesTableProcessedTableManager get purchaseId {
     final $_column = $_itemColumn<int>('purchase_id')!;
@@ -88217,9 +88056,7 @@ final class $$PurchaseItemsTableReferences
   }
 
   static $ProductsTable _productIdTable(_$AppDatabase db) =>
-      db.products.createAlias(
-        $_aliasNameGenerator(db.purchaseItems.productId, db.products.id),
-      );
+      db.products.createAlias('purchase_items__product_id__products__id');
 
   $$ProductsTableProcessedTableManager get productId {
     final $_column = $_itemColumn<int>('product_id')!;
@@ -88235,10 +88072,9 @@ final class $$PurchaseItemsTableReferences
     );
   }
 
-  static $ProductVariantsTable _variantIdTable(_$AppDatabase db) =>
-      db.productVariants.createAlias(
-        $_aliasNameGenerator(db.purchaseItems.variantId, db.productVariants.id),
-      );
+  static $ProductVariantsTable _variantIdTable(_$AppDatabase db) => db
+      .productVariants
+      .createAlias('purchase_items__variant_id__product_variants__id');
 
   $$ProductVariantsTableProcessedTableManager? get variantId {
     final $_column = $_itemColumn<int>('variant_id');
@@ -88261,10 +88097,8 @@ final class $$PurchaseItemsTableReferences
   _purchaseReturnItemsRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.purchaseReturnItems,
-        aliasName: $_aliasNameGenerator(
-          db.purchaseItems.id,
-          db.purchaseReturnItems.purchaseItemId,
-        ),
+        aliasName:
+            'purchase_items__id__purchase_return_items__purchase_item_id',
       );
 
   $$PurchaseReturnItemsTableProcessedTableManager get purchaseReturnItemsRefs {
@@ -89155,9 +88989,7 @@ final class $$PurchaseReturnsTableReferences
   );
 
   static $PurchasesTable _purchaseIdTable(_$AppDatabase db) =>
-      db.purchases.createAlias(
-        $_aliasNameGenerator(db.purchaseReturns.purchaseId, db.purchases.id),
-      );
+      db.purchases.createAlias('purchase_returns__purchase_id__purchases__id');
 
   $$PurchasesTableProcessedTableManager get purchaseId {
     final $_column = $_itemColumn<int>('purchase_id')!;
@@ -89173,10 +89005,8 @@ final class $$PurchaseReturnsTableReferences
     );
   }
 
-  static $CurrenciesTable _currencyIdTable(_$AppDatabase db) =>
-      db.currencies.createAlias(
-        $_aliasNameGenerator(db.purchaseReturns.currencyId, db.currencies.id),
-      );
+  static $CurrenciesTable _currencyIdTable(_$AppDatabase db) => db.currencies
+      .createAlias('purchase_returns__currency_id__currencies__id');
 
   $$CurrenciesTableProcessedTableManager get currencyId {
     final $_column = $_itemColumn<int>('currency_id')!;
@@ -89192,9 +89022,8 @@ final class $$PurchaseReturnsTableReferences
     );
   }
 
-  static $UsersTable _approvedByTable(_$AppDatabase db) => db.users.createAlias(
-    $_aliasNameGenerator(db.purchaseReturns.approvedBy, db.users.id),
-  );
+  static $UsersTable _approvedByTable(_$AppDatabase db) =>
+      db.users.createAlias('purchase_returns__approved_by__users__id');
 
   $$UsersTableProcessedTableManager? get approvedBy {
     final $_column = $_itemColumn<int>('approved_by');
@@ -89210,9 +89039,8 @@ final class $$PurchaseReturnsTableReferences
     );
   }
 
-  static $UsersTable _overrideByTable(_$AppDatabase db) => db.users.createAlias(
-    $_aliasNameGenerator(db.purchaseReturns.overrideBy, db.users.id),
-  );
+  static $UsersTable _overrideByTable(_$AppDatabase db) =>
+      db.users.createAlias('purchase_returns__override_by__users__id');
 
   $$UsersTableProcessedTableManager? get overrideBy {
     final $_column = $_itemColumn<int>('override_by');
@@ -89228,9 +89056,8 @@ final class $$PurchaseReturnsTableReferences
     );
   }
 
-  static $UsersTable _postedByTable(_$AppDatabase db) => db.users.createAlias(
-    $_aliasNameGenerator(db.purchaseReturns.postedBy, db.users.id),
-  );
+  static $UsersTable _postedByTable(_$AppDatabase db) =>
+      db.users.createAlias('purchase_returns__posted_by__users__id');
 
   $$UsersTableProcessedTableManager? get postedBy {
     final $_column = $_itemColumn<int>('posted_by');
@@ -89246,9 +89073,8 @@ final class $$PurchaseReturnsTableReferences
     );
   }
 
-  static $UsersTable _voidedByTable(_$AppDatabase db) => db.users.createAlias(
-    $_aliasNameGenerator(db.purchaseReturns.voidedBy, db.users.id),
-  );
+  static $UsersTable _voidedByTable(_$AppDatabase db) =>
+      db.users.createAlias('purchase_returns__voided_by__users__id');
 
   $$UsersTableProcessedTableManager? get voidedBy {
     final $_column = $_itemColumn<int>('voided_by');
@@ -89264,13 +89090,9 @@ final class $$PurchaseReturnsTableReferences
     );
   }
 
-  static $ReturnReasonCodesTable _reasonCodeIdTable(_$AppDatabase db) =>
-      db.returnReasonCodes.createAlias(
-        $_aliasNameGenerator(
-          db.purchaseReturns.reasonCodeId,
-          db.returnReasonCodes.id,
-        ),
-      );
+  static $ReturnReasonCodesTable _reasonCodeIdTable(_$AppDatabase db) => db
+      .returnReasonCodes
+      .createAlias('purchase_returns__reason_code_id__return_reason_codes__id');
 
   $$ReturnReasonCodesTableProcessedTableManager? get reasonCodeId {
     final $_column = $_itemColumn<int>('reason_code_id');
@@ -89293,10 +89115,7 @@ final class $$PurchaseReturnsTableReferences
   _purchaseReturnItemsRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.purchaseReturnItems,
-        aliasName: $_aliasNameGenerator(
-          db.purchaseReturns.id,
-          db.purchaseReturnItems.returnId,
-        ),
+        aliasName: 'purchase_returns__id__purchase_return_items__return_id',
       );
 
   $$PurchaseReturnItemsTableProcessedTableManager get purchaseReturnItemsRefs {
@@ -90683,13 +90502,9 @@ final class $$PurchaseReturnItemsTableReferences
     super.$_typedResult,
   );
 
-  static $PurchaseReturnsTable _returnIdTable(_$AppDatabase db) =>
-      db.purchaseReturns.createAlias(
-        $_aliasNameGenerator(
-          db.purchaseReturnItems.returnId,
-          db.purchaseReturns.id,
-        ),
-      );
+  static $PurchaseReturnsTable _returnIdTable(_$AppDatabase db) => db
+      .purchaseReturns
+      .createAlias('purchase_return_items__return_id__purchase_returns__id');
 
   $$PurchaseReturnsTableProcessedTableManager get returnId {
     final $_column = $_itemColumn<int>('return_id')!;
@@ -90707,10 +90522,7 @@ final class $$PurchaseReturnItemsTableReferences
 
   static $PurchaseItemsTable _purchaseItemIdTable(_$AppDatabase db) =>
       db.purchaseItems.createAlias(
-        $_aliasNameGenerator(
-          db.purchaseReturnItems.purchaseItemId,
-          db.purchaseItems.id,
-        ),
+        'purchase_return_items__purchase_item_id__purchase_items__id',
       );
 
   $$PurchaseItemsTableProcessedTableManager get purchaseItemId {
@@ -91254,9 +91066,7 @@ final class $$PurchasePaymentsTableReferences
   );
 
   static $PurchasesTable _purchaseIdTable(_$AppDatabase db) =>
-      db.purchases.createAlias(
-        $_aliasNameGenerator(db.purchasePayments.purchaseId, db.purchases.id),
-      );
+      db.purchases.createAlias('purchase_payments__purchase_id__purchases__id');
 
   $$PurchasesTableProcessedTableManager get purchaseId {
     final $_column = $_itemColumn<int>('purchase_id')!;
@@ -91272,10 +91082,8 @@ final class $$PurchasePaymentsTableReferences
     );
   }
 
-  static $CurrenciesTable _currencyIdTable(_$AppDatabase db) =>
-      db.currencies.createAlias(
-        $_aliasNameGenerator(db.purchasePayments.currencyId, db.currencies.id),
-      );
+  static $CurrenciesTable _currencyIdTable(_$AppDatabase db) => db.currencies
+      .createAlias('purchase_payments__currency_id__currencies__id');
 
   $$CurrenciesTableProcessedTableManager get currencyId {
     final $_column = $_itemColumn<int>('currency_id')!;
@@ -91753,9 +91561,7 @@ final class $$AccountsTableReferences
   $$AccountsTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
   static $AccountsTable _parentAccountIdTable(_$AppDatabase db) =>
-      db.accounts.createAlias(
-        $_aliasNameGenerator(db.accounts.parentAccountId, db.accounts.id),
-      );
+      db.accounts.createAlias('accounts__parent_account_id__accounts__id');
 
   $$AccountsTableProcessedTableManager? get parentAccountId {
     final $_column = $_itemColumn<int>('parent_account_id');
@@ -91772,9 +91578,7 @@ final class $$AccountsTableReferences
   }
 
   static $CurrenciesTable _currencyIdTable(_$AppDatabase db) =>
-      db.currencies.createAlias(
-        $_aliasNameGenerator(db.accounts.currencyId, db.currencies.id),
-      );
+      db.currencies.createAlias('accounts__currency_id__currencies__id');
 
   $$CurrenciesTableProcessedTableManager get currencyId {
     final $_column = $_itemColumn<int>('currency_id')!;
@@ -91794,10 +91598,7 @@ final class $$AccountsTableReferences
   _journalEntryLinesRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.journalEntryLines,
-        aliasName: $_aliasNameGenerator(
-          db.accounts.id,
-          db.journalEntryLines.accountId,
-        ),
+        aliasName: 'accounts__id__journal_entry_lines__account_id',
       );
 
   $$JournalEntryLinesTableProcessedTableManager get journalEntryLinesRefs {
@@ -91818,7 +91619,7 @@ final class $$AccountsTableReferences
     _$AppDatabase db,
   ) => MultiTypedResultKey.fromTable(
     db.expenses,
-    aliasName: $_aliasNameGenerator(db.accounts.id, db.expenses.accountId),
+    aliasName: 'accounts__id__expenses__account_id',
   );
 
   $$ExpensesTableProcessedTableManager get expensesRefs {
@@ -92528,9 +92329,8 @@ final class $$AccountingPeriodsTableReferences
     super.$_typedResult,
   );
 
-  static $UsersTable _closedByTable(_$AppDatabase db) => db.users.createAlias(
-    $_aliasNameGenerator(db.accountingPeriods.closedBy, db.users.id),
-  );
+  static $UsersTable _closedByTable(_$AppDatabase db) =>
+      db.users.createAlias('accounting_periods__closed_by__users__id');
 
   $$UsersTableProcessedTableManager? get closedBy {
     final $_column = $_itemColumn<int>('closed_by');
@@ -92549,10 +92349,7 @@ final class $$AccountingPeriodsTableReferences
   static MultiTypedResultKey<$JournalEntriesTable, List<JournalEntry>>
   _journalEntriesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.journalEntries,
-    aliasName: $_aliasNameGenerator(
-      db.accountingPeriods.id,
-      db.journalEntries.accountingPeriodId,
-    ),
+    aliasName: 'accounting_periods__id__journal_entries__accounting_period_id',
   );
 
   $$JournalEntriesTableProcessedTableManager get journalEntriesRefs {
@@ -93045,10 +92842,7 @@ final class $$JournalEntriesTableReferences
 
   static $AccountingPeriodsTable _accountingPeriodIdTable(_$AppDatabase db) =>
       db.accountingPeriods.createAlias(
-        $_aliasNameGenerator(
-          db.journalEntries.accountingPeriodId,
-          db.accountingPeriods.id,
-        ),
+        'journal_entries__accounting_period_id__accounting_periods__id',
       );
 
   $$AccountingPeriodsTableProcessedTableManager? get accountingPeriodId {
@@ -93065,13 +92859,9 @@ final class $$JournalEntriesTableReferences
     );
   }
 
-  static $JournalEntriesTable _reversedEntryIdTable(_$AppDatabase db) =>
-      db.journalEntries.createAlias(
-        $_aliasNameGenerator(
-          db.journalEntries.reversedEntryId,
-          db.journalEntries.id,
-        ),
-      );
+  static $JournalEntriesTable _reversedEntryIdTable(_$AppDatabase db) => db
+      .journalEntries
+      .createAlias('journal_entries__reversed_entry_id__journal_entries__id');
 
   $$JournalEntriesTableProcessedTableManager? get reversedEntryId {
     final $_column = $_itemColumn<int>('reversed_entry_id');
@@ -93087,9 +92877,8 @@ final class $$JournalEntriesTableReferences
     );
   }
 
-  static $UsersTable _createdByTable(_$AppDatabase db) => db.users.createAlias(
-    $_aliasNameGenerator(db.journalEntries.createdBy, db.users.id),
-  );
+  static $UsersTable _createdByTable(_$AppDatabase db) =>
+      db.users.createAlias('journal_entries__created_by__users__id');
 
   $$UsersTableProcessedTableManager? get createdBy {
     final $_column = $_itemColumn<int>('created_by');
@@ -93105,9 +92894,8 @@ final class $$JournalEntriesTableReferences
     );
   }
 
-  static $UsersTable _postedByTable(_$AppDatabase db) => db.users.createAlias(
-    $_aliasNameGenerator(db.journalEntries.postedBy, db.users.id),
-  );
+  static $UsersTable _postedByTable(_$AppDatabase db) =>
+      db.users.createAlias('journal_entries__posted_by__users__id');
 
   $$UsersTableProcessedTableManager? get postedBy {
     final $_column = $_itemColumn<int>('posted_by');
@@ -93127,10 +92915,7 @@ final class $$JournalEntriesTableReferences
   _journalEntryLinesRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.journalEntryLines,
-        aliasName: $_aliasNameGenerator(
-          db.journalEntries.id,
-          db.journalEntryLines.journalEntryId,
-        ),
+        aliasName: 'journal_entries__id__journal_entry_lines__journal_entry_id',
       );
 
   $$JournalEntryLinesTableProcessedTableManager get journalEntryLinesRefs {
@@ -94009,10 +93794,7 @@ final class $$JournalEntryLinesTableReferences
 
   static $JournalEntriesTable _journalEntryIdTable(_$AppDatabase db) =>
       db.journalEntries.createAlias(
-        $_aliasNameGenerator(
-          db.journalEntryLines.journalEntryId,
-          db.journalEntries.id,
-        ),
+        'journal_entry_lines__journal_entry_id__journal_entries__id',
       );
 
   $$JournalEntriesTableProcessedTableManager get journalEntryId {
@@ -94030,9 +93812,7 @@ final class $$JournalEntryLinesTableReferences
   }
 
   static $AccountsTable _accountIdTable(_$AppDatabase db) =>
-      db.accounts.createAlias(
-        $_aliasNameGenerator(db.journalEntryLines.accountId, db.accounts.id),
-      );
+      db.accounts.createAlias('journal_entry_lines__account_id__accounts__id');
 
   $$AccountsTableProcessedTableManager get accountId {
     final $_column = $_itemColumn<int>('account_id')!;
@@ -94048,10 +93828,8 @@ final class $$JournalEntryLinesTableReferences
     );
   }
 
-  static $CurrenciesTable _currencyIdTable(_$AppDatabase db) =>
-      db.currencies.createAlias(
-        $_aliasNameGenerator(db.journalEntryLines.currencyId, db.currencies.id),
-      );
+  static $CurrenciesTable _currencyIdTable(_$AppDatabase db) => db.currencies
+      .createAlias('journal_entry_lines__currency_id__currencies__id');
 
   $$CurrenciesTableProcessedTableManager get currencyId {
     final $_column = $_itemColumn<int>('currency_id')!;
@@ -94613,10 +94391,9 @@ final class $$ExpensesTableReferences
     extends BaseReferences<_$AppDatabase, $ExpensesTable, Expense> {
   $$ExpensesTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
-  static $ExpenseCategoriesTable _categoryIdTable(_$AppDatabase db) =>
-      db.expenseCategories.createAlias(
-        $_aliasNameGenerator(db.expenses.categoryId, db.expenseCategories.id),
-      );
+  static $ExpenseCategoriesTable _categoryIdTable(_$AppDatabase db) => db
+      .expenseCategories
+      .createAlias('expenses__category_id__expense_categories__id');
 
   $$ExpenseCategoriesTableProcessedTableManager get categoryId {
     final $_column = $_itemColumn<int>('category_id')!;
@@ -94633,9 +94410,7 @@ final class $$ExpensesTableReferences
   }
 
   static $CurrenciesTable _currencyIdTable(_$AppDatabase db) =>
-      db.currencies.createAlias(
-        $_aliasNameGenerator(db.expenses.currencyId, db.currencies.id),
-      );
+      db.currencies.createAlias('expenses__currency_id__currencies__id');
 
   $$CurrenciesTableProcessedTableManager get currencyId {
     final $_column = $_itemColumn<int>('currency_id')!;
@@ -94651,8 +94426,8 @@ final class $$ExpensesTableReferences
     );
   }
 
-  static $AccountsTable _accountIdTable(_$AppDatabase db) => db.accounts
-      .createAlias($_aliasNameGenerator(db.expenses.accountId, db.accounts.id));
+  static $AccountsTable _accountIdTable(_$AppDatabase db) =>
+      db.accounts.createAlias('expenses__account_id__accounts__id');
 
   $$AccountsTableProcessedTableManager? get accountId {
     final $_column = $_itemColumn<int>('account_id');
@@ -95205,9 +94980,8 @@ final class $$AuditLogsTableReferences
     extends BaseReferences<_$AppDatabase, $AuditLogsTable, AuditLog> {
   $$AuditLogsTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
-  static $UsersTable _userIdTable(_$AppDatabase db) => db.users.createAlias(
-    $_aliasNameGenerator(db.auditLogs.userId, db.users.id),
-  );
+  static $UsersTable _userIdTable(_$AppDatabase db) =>
+      db.users.createAlias('audit_logs__user_id__users__id');
 
   $$UsersTableProcessedTableManager? get userId {
     final $_column = $_itemColumn<int>('user_id');
@@ -95560,9 +95334,8 @@ final class $$VoidLogsTableReferences
     extends BaseReferences<_$AppDatabase, $VoidLogsTable, VoidLog> {
   $$VoidLogsTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
-  static $UsersTable _voidedByTable(_$AppDatabase db) => db.users.createAlias(
-    $_aliasNameGenerator(db.voidLogs.voidedBy, db.users.id),
-  );
+  static $UsersTable _voidedByTable(_$AppDatabase db) =>
+      db.users.createAlias('void_logs__voided_by__users__id');
 
   $$UsersTableProcessedTableManager? get voidedBy {
     final $_column = $_itemColumn<int>('voided_by');
@@ -95899,9 +95672,8 @@ final class $$NotificationsTableReferences
     super.$_typedResult,
   );
 
-  static $UsersTable _userIdTable(_$AppDatabase db) => db.users.createAlias(
-    $_aliasNameGenerator(db.notifications.userId, db.users.id),
-  );
+  static $UsersTable _userIdTable(_$AppDatabase db) =>
+      db.users.createAlias('notifications__user_id__users__id');
 
   $$UsersTableProcessedTableManager? get userId {
     final $_column = $_itemColumn<int>('user_id');
@@ -96277,10 +96049,7 @@ final class $$BarcodeTemplatesTableReferences
   static MultiTypedResultKey<$PrintHistoriesTable, List<PrintHistory>>
   _printHistoriesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.printHistories,
-    aliasName: $_aliasNameGenerator(
-      db.barcodeTemplates.id,
-      db.printHistories.templateId,
-    ),
+    aliasName: 'barcode_templates__id__print_histories__template_id',
   );
 
   $$PrintHistoriesTableProcessedTableManager get printHistoriesRefs {
@@ -96811,9 +96580,7 @@ final class $$PrintHistoriesTableReferences
   );
 
   static $ProductsTable _productIdTable(_$AppDatabase db) =>
-      db.products.createAlias(
-        $_aliasNameGenerator(db.printHistories.productId, db.products.id),
-      );
+      db.products.createAlias('print_histories__product_id__products__id');
 
   $$ProductsTableProcessedTableManager get productId {
     final $_column = $_itemColumn<int>('product_id')!;
@@ -96829,13 +96596,9 @@ final class $$PrintHistoriesTableReferences
     );
   }
 
-  static $ProductVariantsTable _variantIdTable(_$AppDatabase db) =>
-      db.productVariants.createAlias(
-        $_aliasNameGenerator(
-          db.printHistories.variantId,
-          db.productVariants.id,
-        ),
-      );
+  static $ProductVariantsTable _variantIdTable(_$AppDatabase db) => db
+      .productVariants
+      .createAlias('print_histories__variant_id__product_variants__id');
 
   $$ProductVariantsTableProcessedTableManager? get variantId {
     final $_column = $_itemColumn<int>('variant_id');
@@ -96851,13 +96614,9 @@ final class $$PrintHistoriesTableReferences
     );
   }
 
-  static $BarcodeTemplatesTable _templateIdTable(_$AppDatabase db) =>
-      db.barcodeTemplates.createAlias(
-        $_aliasNameGenerator(
-          db.printHistories.templateId,
-          db.barcodeTemplates.id,
-        ),
-      );
+  static $BarcodeTemplatesTable _templateIdTable(_$AppDatabase db) => db
+      .barcodeTemplates
+      .createAlias('print_histories__template_id__barcode_templates__id');
 
   $$BarcodeTemplatesTableProcessedTableManager? get templateId {
     final $_column = $_itemColumn<int>('template_id');
@@ -97480,13 +97239,8 @@ final class $$PurchaseReturnAdjustmentsTableReferences
     super.$_typedResult,
   );
 
-  static $SuppliersTable _supplierIdTable(_$AppDatabase db) =>
-      db.suppliers.createAlias(
-        $_aliasNameGenerator(
-          db.purchaseReturnAdjustments.supplierId,
-          db.suppliers.id,
-        ),
-      );
+  static $SuppliersTable _supplierIdTable(_$AppDatabase db) => db.suppliers
+      .createAlias('purchase_return_adjustments__supplier_id__suppliers__id');
 
   $$SuppliersTableProcessedTableManager get supplierId {
     final $_column = $_itemColumn<int>('supplier_id')!;
@@ -97502,13 +97256,8 @@ final class $$PurchaseReturnAdjustmentsTableReferences
     );
   }
 
-  static $CurrenciesTable _currencyIdTable(_$AppDatabase db) =>
-      db.currencies.createAlias(
-        $_aliasNameGenerator(
-          db.purchaseReturnAdjustments.currencyId,
-          db.currencies.id,
-        ),
-      );
+  static $CurrenciesTable _currencyIdTable(_$AppDatabase db) => db.currencies
+      .createAlias('purchase_return_adjustments__currency_id__currencies__id');
 
   $$CurrenciesTableProcessedTableManager get currencyId {
     final $_column = $_itemColumn<int>('currency_id')!;
@@ -97525,7 +97274,7 @@ final class $$PurchaseReturnAdjustmentsTableReferences
   }
 
   static $UsersTable _approvedByTable(_$AppDatabase db) => db.users.createAlias(
-    $_aliasNameGenerator(db.purchaseReturnAdjustments.approvedBy, db.users.id),
+    'purchase_return_adjustments__approved_by__users__id',
   );
 
   $$UsersTableProcessedTableManager? get approvedBy {
@@ -97543,7 +97292,7 @@ final class $$PurchaseReturnAdjustmentsTableReferences
   }
 
   static $UsersTable _overrideByTable(_$AppDatabase db) => db.users.createAlias(
-    $_aliasNameGenerator(db.purchaseReturnAdjustments.overrideBy, db.users.id),
+    'purchase_return_adjustments__override_by__users__id',
   );
 
   $$UsersTableProcessedTableManager? get overrideBy {
@@ -97560,9 +97309,8 @@ final class $$PurchaseReturnAdjustmentsTableReferences
     );
   }
 
-  static $UsersTable _postedByTable(_$AppDatabase db) => db.users.createAlias(
-    $_aliasNameGenerator(db.purchaseReturnAdjustments.postedBy, db.users.id),
-  );
+  static $UsersTable _postedByTable(_$AppDatabase db) =>
+      db.users.createAlias('purchase_return_adjustments__posted_by__users__id');
 
   $$UsersTableProcessedTableManager? get postedBy {
     final $_column = $_itemColumn<int>('posted_by');
@@ -97578,9 +97326,8 @@ final class $$PurchaseReturnAdjustmentsTableReferences
     );
   }
 
-  static $UsersTable _voidedByTable(_$AppDatabase db) => db.users.createAlias(
-    $_aliasNameGenerator(db.purchaseReturnAdjustments.voidedBy, db.users.id),
-  );
+  static $UsersTable _voidedByTable(_$AppDatabase db) =>
+      db.users.createAlias('purchase_return_adjustments__voided_by__users__id');
 
   $$UsersTableProcessedTableManager? get voidedBy {
     final $_column = $_itemColumn<int>('voided_by');
@@ -97598,10 +97345,7 @@ final class $$PurchaseReturnAdjustmentsTableReferences
 
   static $ReturnReasonCodesTable _reasonCodeIdTable(_$AppDatabase db) =>
       db.returnReasonCodes.createAlias(
-        $_aliasNameGenerator(
-          db.purchaseReturnAdjustments.reasonCodeId,
-          db.returnReasonCodes.id,
-        ),
+        'purchase_return_adjustments__reason_code_id__return_reason_codes__id',
       );
 
   $$ReturnReasonCodesTableProcessedTableManager? get reasonCodeId {
@@ -97622,14 +97366,13 @@ final class $$PurchaseReturnAdjustmentsTableReferences
     $PurchaseReturnAdjustmentItemsTable,
     List<PurchaseReturnAdjustmentItem>
   >
-  _purchaseReturnAdjustmentItemsRefsTable(_$AppDatabase db) =>
-      MultiTypedResultKey.fromTable(
-        db.purchaseReturnAdjustmentItems,
-        aliasName: $_aliasNameGenerator(
-          db.purchaseReturnAdjustments.id,
-          db.purchaseReturnAdjustmentItems.returnId,
-        ),
-      );
+  _purchaseReturnAdjustmentItemsRefsTable(
+    _$AppDatabase db,
+  ) => MultiTypedResultKey.fromTable(
+    db.purchaseReturnAdjustmentItems,
+    aliasName:
+        'purchase_return_adjustments__id__purchase_return_adjustment_items__return_id',
+  );
 
   $$PurchaseReturnAdjustmentItemsTableProcessedTableManager
   get purchaseReturnAdjustmentItemsRefs {
@@ -99098,13 +98841,11 @@ final class $$PurchaseReturnAdjustmentItemsTableReferences
     super.$_typedResult,
   );
 
-  static $PurchaseReturnAdjustmentsTable _returnIdTable(_$AppDatabase db) =>
-      db.purchaseReturnAdjustments.createAlias(
-        $_aliasNameGenerator(
-          db.purchaseReturnAdjustmentItems.returnId,
-          db.purchaseReturnAdjustments.id,
-        ),
-      );
+  static $PurchaseReturnAdjustmentsTable _returnIdTable(
+    _$AppDatabase db,
+  ) => db.purchaseReturnAdjustments.createAlias(
+    'purchase_return_adjustment_items__return_id__purchase_return_adjustments__id',
+  );
 
   $$PurchaseReturnAdjustmentsTableProcessedTableManager get returnId {
     final $_column = $_itemColumn<int>('return_id')!;
@@ -99122,10 +98863,7 @@ final class $$PurchaseReturnAdjustmentItemsTableReferences
 
   static $ProductsTable _productIdTable(_$AppDatabase db) =>
       db.products.createAlias(
-        $_aliasNameGenerator(
-          db.purchaseReturnAdjustmentItems.productId,
-          db.products.id,
-        ),
+        'purchase_return_adjustment_items__product_id__products__id',
       );
 
   $$ProductsTableProcessedTableManager get productId {
@@ -99144,10 +98882,7 @@ final class $$PurchaseReturnAdjustmentItemsTableReferences
 
   static $ProductVariantsTable _variantIdTable(_$AppDatabase db) =>
       db.productVariants.createAlias(
-        $_aliasNameGenerator(
-          db.purchaseReturnAdjustmentItems.variantId,
-          db.productVariants.id,
-        ),
+        'purchase_return_adjustment_items__variant_id__product_variants__id',
       );
 
   $$ProductVariantsTableProcessedTableManager? get variantId {
@@ -99913,13 +99648,8 @@ final class $$SaleReturnAdjustmentsTableReferences
     super.$_typedResult,
   );
 
-  static $CustomersTable _customerIdTable(_$AppDatabase db) =>
-      db.customers.createAlias(
-        $_aliasNameGenerator(
-          db.saleReturnAdjustments.customerId,
-          db.customers.id,
-        ),
-      );
+  static $CustomersTable _customerIdTable(_$AppDatabase db) => db.customers
+      .createAlias('sale_return_adjustments__customer_id__customers__id');
 
   $$CustomersTableProcessedTableManager? get customerId {
     final $_column = $_itemColumn<int>('customer_id');
@@ -99935,13 +99665,8 @@ final class $$SaleReturnAdjustmentsTableReferences
     );
   }
 
-  static $EmployeesTable _employeeIdTable(_$AppDatabase db) =>
-      db.employees.createAlias(
-        $_aliasNameGenerator(
-          db.saleReturnAdjustments.employeeId,
-          db.employees.id,
-        ),
-      );
+  static $EmployeesTable _employeeIdTable(_$AppDatabase db) => db.employees
+      .createAlias('sale_return_adjustments__employee_id__employees__id');
 
   $$EmployeesTableProcessedTableManager? get employeeId {
     final $_column = $_itemColumn<int>('employee_id');
@@ -99957,13 +99682,8 @@ final class $$SaleReturnAdjustmentsTableReferences
     );
   }
 
-  static $CurrenciesTable _currencyIdTable(_$AppDatabase db) =>
-      db.currencies.createAlias(
-        $_aliasNameGenerator(
-          db.saleReturnAdjustments.currencyId,
-          db.currencies.id,
-        ),
-      );
+  static $CurrenciesTable _currencyIdTable(_$AppDatabase db) => db.currencies
+      .createAlias('sale_return_adjustments__currency_id__currencies__id');
 
   $$CurrenciesTableProcessedTableManager get currencyId {
     final $_column = $_itemColumn<int>('currency_id')!;
@@ -99979,9 +99699,8 @@ final class $$SaleReturnAdjustmentsTableReferences
     );
   }
 
-  static $UsersTable _approvedByTable(_$AppDatabase db) => db.users.createAlias(
-    $_aliasNameGenerator(db.saleReturnAdjustments.approvedBy, db.users.id),
-  );
+  static $UsersTable _approvedByTable(_$AppDatabase db) =>
+      db.users.createAlias('sale_return_adjustments__approved_by__users__id');
 
   $$UsersTableProcessedTableManager? get approvedBy {
     final $_column = $_itemColumn<int>('approved_by');
@@ -99997,9 +99716,8 @@ final class $$SaleReturnAdjustmentsTableReferences
     );
   }
 
-  static $UsersTable _overrideByTable(_$AppDatabase db) => db.users.createAlias(
-    $_aliasNameGenerator(db.saleReturnAdjustments.overrideBy, db.users.id),
-  );
+  static $UsersTable _overrideByTable(_$AppDatabase db) =>
+      db.users.createAlias('sale_return_adjustments__override_by__users__id');
 
   $$UsersTableProcessedTableManager? get overrideBy {
     final $_column = $_itemColumn<int>('override_by');
@@ -100015,9 +99733,8 @@ final class $$SaleReturnAdjustmentsTableReferences
     );
   }
 
-  static $UsersTable _postedByTable(_$AppDatabase db) => db.users.createAlias(
-    $_aliasNameGenerator(db.saleReturnAdjustments.postedBy, db.users.id),
-  );
+  static $UsersTable _postedByTable(_$AppDatabase db) =>
+      db.users.createAlias('sale_return_adjustments__posted_by__users__id');
 
   $$UsersTableProcessedTableManager? get postedBy {
     final $_column = $_itemColumn<int>('posted_by');
@@ -100033,9 +99750,8 @@ final class $$SaleReturnAdjustmentsTableReferences
     );
   }
 
-  static $UsersTable _voidedByTable(_$AppDatabase db) => db.users.createAlias(
-    $_aliasNameGenerator(db.saleReturnAdjustments.voidedBy, db.users.id),
-  );
+  static $UsersTable _voidedByTable(_$AppDatabase db) =>
+      db.users.createAlias('sale_return_adjustments__voided_by__users__id');
 
   $$UsersTableProcessedTableManager? get voidedBy {
     final $_column = $_itemColumn<int>('voided_by');
@@ -100053,10 +99769,7 @@ final class $$SaleReturnAdjustmentsTableReferences
 
   static $ReturnReasonCodesTable _reasonCodeIdTable(_$AppDatabase db) =>
       db.returnReasonCodes.createAlias(
-        $_aliasNameGenerator(
-          db.saleReturnAdjustments.reasonCodeId,
-          db.returnReasonCodes.id,
-        ),
+        'sale_return_adjustments__reason_code_id__return_reason_codes__id',
       );
 
   $$ReturnReasonCodesTableProcessedTableManager? get reasonCodeId {
@@ -100077,14 +99790,13 @@ final class $$SaleReturnAdjustmentsTableReferences
     $SaleReturnAdjustmentItemsTable,
     List<SaleReturnAdjustmentItem>
   >
-  _saleReturnAdjustmentItemsRefsTable(_$AppDatabase db) =>
-      MultiTypedResultKey.fromTable(
-        db.saleReturnAdjustmentItems,
-        aliasName: $_aliasNameGenerator(
-          db.saleReturnAdjustments.id,
-          db.saleReturnAdjustmentItems.returnId,
-        ),
-      );
+  _saleReturnAdjustmentItemsRefsTable(
+    _$AppDatabase db,
+  ) => MultiTypedResultKey.fromTable(
+    db.saleReturnAdjustmentItems,
+    aliasName:
+        'sale_return_adjustments__id__sale_return_adjustment_items__return_id',
+  );
 
   $$SaleReturnAdjustmentItemsTableProcessedTableManager
   get saleReturnAdjustmentItemsRefs {
@@ -101639,10 +101351,7 @@ final class $$SaleReturnAdjustmentItemsTableReferences
 
   static $SaleReturnAdjustmentsTable _returnIdTable(_$AppDatabase db) =>
       db.saleReturnAdjustments.createAlias(
-        $_aliasNameGenerator(
-          db.saleReturnAdjustmentItems.returnId,
-          db.saleReturnAdjustments.id,
-        ),
+        'sale_return_adjustment_items__return_id__sale_return_adjustments__id',
       );
 
   $$SaleReturnAdjustmentsTableProcessedTableManager get returnId {
@@ -101659,13 +101368,8 @@ final class $$SaleReturnAdjustmentItemsTableReferences
     );
   }
 
-  static $ProductsTable _productIdTable(_$AppDatabase db) =>
-      db.products.createAlias(
-        $_aliasNameGenerator(
-          db.saleReturnAdjustmentItems.productId,
-          db.products.id,
-        ),
-      );
+  static $ProductsTable _productIdTable(_$AppDatabase db) => db.products
+      .createAlias('sale_return_adjustment_items__product_id__products__id');
 
   $$ProductsTableProcessedTableManager get productId {
     final $_column = $_itemColumn<int>('product_id')!;
@@ -101683,10 +101387,7 @@ final class $$SaleReturnAdjustmentItemsTableReferences
 
   static $ProductVariantsTable _variantIdTable(_$AppDatabase db) =>
       db.productVariants.createAlias(
-        $_aliasNameGenerator(
-          db.saleReturnAdjustmentItems.variantId,
-          db.productVariants.id,
-        ),
+        'sale_return_adjustment_items__variant_id__product_variants__id',
       );
 
   $$ProductVariantsTableProcessedTableManager? get variantId {
@@ -102410,10 +102111,8 @@ final class $$InventoryAdjustmentsTableReferences
     super.$_typedResult,
   );
 
-  static $ProductsTable _productIdTable(_$AppDatabase db) =>
-      db.products.createAlias(
-        $_aliasNameGenerator(db.inventoryAdjustments.productId, db.products.id),
-      );
+  static $ProductsTable _productIdTable(_$AppDatabase db) => db.products
+      .createAlias('inventory_adjustments__product_id__products__id');
 
   $$ProductsTableProcessedTableManager get productId {
     final $_column = $_itemColumn<int>('product_id')!;
@@ -102429,13 +102128,9 @@ final class $$InventoryAdjustmentsTableReferences
     );
   }
 
-  static $ProductVariantsTable _variantIdTable(_$AppDatabase db) =>
-      db.productVariants.createAlias(
-        $_aliasNameGenerator(
-          db.inventoryAdjustments.variantId,
-          db.productVariants.id,
-        ),
-      );
+  static $ProductVariantsTable _variantIdTable(_$AppDatabase db) => db
+      .productVariants
+      .createAlias('inventory_adjustments__variant_id__product_variants__id');
 
   $$ProductVariantsTableProcessedTableManager? get variantId {
     final $_column = $_itemColumn<int>('variant_id');
@@ -102451,13 +102146,8 @@ final class $$InventoryAdjustmentsTableReferences
     );
   }
 
-  static $CurrenciesTable _currencyIdTable(_$AppDatabase db) =>
-      db.currencies.createAlias(
-        $_aliasNameGenerator(
-          db.inventoryAdjustments.currencyId,
-          db.currencies.id,
-        ),
-      );
+  static $CurrenciesTable _currencyIdTable(_$AppDatabase db) => db.currencies
+      .createAlias('inventory_adjustments__currency_id__currencies__id');
 
   $$CurrenciesTableProcessedTableManager get currencyId {
     final $_column = $_itemColumn<int>('currency_id')!;
@@ -102473,9 +102163,8 @@ final class $$InventoryAdjustmentsTableReferences
     );
   }
 
-  static $UsersTable _userIdTable(_$AppDatabase db) => db.users.createAlias(
-    $_aliasNameGenerator(db.inventoryAdjustments.userId, db.users.id),
-  );
+  static $UsersTable _userIdTable(_$AppDatabase db) =>
+      db.users.createAlias('inventory_adjustments__user_id__users__id');
 
   $$UsersTableProcessedTableManager? get userId {
     final $_column = $_itemColumn<int>('user_id');
@@ -103570,13 +103259,8 @@ final class $$CustomerCreditNotesTableReferences
     super.$_typedResult,
   );
 
-  static $CustomersTable _customerIdTable(_$AppDatabase db) =>
-      db.customers.createAlias(
-        $_aliasNameGenerator(
-          db.customerCreditNotes.customerId,
-          db.customers.id,
-        ),
-      );
+  static $CustomersTable _customerIdTable(_$AppDatabase db) => db.customers
+      .createAlias('customer_credit_notes__customer_id__customers__id');
 
   $$CustomersTableProcessedTableManager get customerId {
     final $_column = $_itemColumn<int>('customer_id')!;
@@ -103592,13 +103276,8 @@ final class $$CustomerCreditNotesTableReferences
     );
   }
 
-  static $CurrenciesTable _currencyIdTable(_$AppDatabase db) =>
-      db.currencies.createAlias(
-        $_aliasNameGenerator(
-          db.customerCreditNotes.currencyId,
-          db.currencies.id,
-        ),
-      );
+  static $CurrenciesTable _currencyIdTable(_$AppDatabase db) => db.currencies
+      .createAlias('customer_credit_notes__currency_id__currencies__id');
 
   $$CurrenciesTableProcessedTableManager get currencyId {
     final $_column = $_itemColumn<int>('currency_id')!;
@@ -103618,14 +103297,13 @@ final class $$CustomerCreditNotesTableReferences
     $CustomerCreditNoteApplicationsTable,
     List<CustomerCreditNoteApplication>
   >
-  _customerCreditNoteApplicationsRefsTable(_$AppDatabase db) =>
-      MultiTypedResultKey.fromTable(
-        db.customerCreditNoteApplications,
-        aliasName: $_aliasNameGenerator(
-          db.customerCreditNotes.id,
-          db.customerCreditNoteApplications.creditNoteId,
-        ),
-      );
+  _customerCreditNoteApplicationsRefsTable(
+    _$AppDatabase db,
+  ) => MultiTypedResultKey.fromTable(
+    db.customerCreditNoteApplications,
+    aliasName:
+        'customer_credit_notes__id__customer_credit_note_applications__credit_note_id',
+  );
 
   $$CustomerCreditNoteApplicationsTableProcessedTableManager
   get customerCreditNoteApplicationsRefs {
@@ -104312,13 +103990,11 @@ final class $$CustomerCreditNoteApplicationsTableReferences
     super.$_typedResult,
   );
 
-  static $CustomerCreditNotesTable _creditNoteIdTable(_$AppDatabase db) =>
-      db.customerCreditNotes.createAlias(
-        $_aliasNameGenerator(
-          db.customerCreditNoteApplications.creditNoteId,
-          db.customerCreditNotes.id,
-        ),
-      );
+  static $CustomerCreditNotesTable _creditNoteIdTable(
+    _$AppDatabase db,
+  ) => db.customerCreditNotes.createAlias(
+    'customer_credit_note_applications__credit_note_id__customer_credit_notes__id',
+  );
 
   $$CustomerCreditNotesTableProcessedTableManager get creditNoteId {
     final $_column = $_itemColumn<int>('credit_note_id')!;
@@ -105244,9 +104920,7 @@ final class $$ChequeConfirmationsTableReferences
   );
 
   static $UsersTable _confirmedByTable(_$AppDatabase db) =>
-      db.users.createAlias(
-        $_aliasNameGenerator(db.chequeConfirmations.confirmedBy, db.users.id),
-      );
+      db.users.createAlias('cheque_confirmations__confirmed_by__users__id');
 
   $$UsersTableProcessedTableManager? get confirmedBy {
     final $_column = $_itemColumn<int>('confirmed_by');

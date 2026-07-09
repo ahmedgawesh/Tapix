@@ -4,6 +4,7 @@ import 'package:drift/native.dart';
 import 'package:decimal/decimal.dart';
 import 'package:tapix/core/database/app_database.dart';
 import 'package:tapix/core/database/daos/adjustment_return_dao.dart';
+import 'package:tapix/core/services/commissions/commission_service.dart';
 import 'package:tapix/core/services/journal_entry_service.dart';
 import 'package:tapix/features/accounting/data/repositories/accounting_repository.dart';
 
@@ -250,23 +251,30 @@ void main() {
       expect(variant.stockQuantity, equals(102),
           reason: 'Stock should be 100 + 2 = 102');
 
-      // VERIFY: Customer balance UNCHANGED.
-      // An adjustment sale return NEVER touches `customers.balance_cents`
-      // (the 1100 AR sub-ledger). The unified policy routes the credit
-      // settlement to 2400 Customer Credit Liability (sub-ledger lives in
-      // `customer_credit_notes`), and cash/bank refunds settle to 1000/1010
-      // — none of which is the AR sub-ledger. The legacy fallback in this
-      // test environment still credits 1100 in the GL (a known divergence
-      // from production where ReturnPostingService is wired and routes to
-      // 2400), but the customer-side sub-ledger must remain pristine. This
-      // assertion guards against regression of the AR-vs-customer-balance
-      // mismatch that produced AR delta = +15150 in the field.
+      // VERIFY: Customer balance REDUCED by the refund.
+      // A CREDIT adjustment sale return now reduces `customers.balance_cents`
+      // (the 1100 AR sub-ledger) by the refund total — the customer owes us
+      // less. This keeps the AR sub-ledger reconciled 1:1 with the GL 1100
+      // credit posted above (Cr AR = 10000). Seed was 50000; after a $100
+      // credit return the customer owes 40000.
       final customer = await (db.select(db.customers)
             ..where((c) => c.id.equals(customerId)))
           .getSingle();
-      expect(customer.balanceCents.toBigInt().toInt(), equals(50000),
-          reason: 'Customer balance MUST be unchanged on adjustment '
-              'sale return — see comment above.');
+      expect(customer.balanceCents.toBigInt().toInt(), equals(40000),
+          reason: 'Credit adjustment sale return must reduce customer '
+              'balance by the refund (50000 - 10000 = 40000).');
+
+      // VERIFY: A customer_transactions row surfaces the credit return.
+      final txns = await (db.select(db.customerTransactions)
+            ..where((t) => t.customerId.equals(customerId)))
+          .get();
+      final adjTxn = txns
+          .where((t) => t.transactionType == 'adjustment_return')
+          .toList();
+      expect(adjTxn.length, equals(1),
+          reason: 'One adjustment_return customer transaction expected.');
+      expect(adjTxn.first.amountCents.toBigInt().toInt(), equals(-10000),
+          reason: 'Transaction amount = -refund (reduces receivable).');
     });
 
     test('voidSaleAdjReturn creates reversal and restores stock/balance',
@@ -325,15 +333,32 @@ void main() {
       expect(variant.stockQuantity, equals(100),
           reason: 'Stock should return to original 100');
 
-      // VERIFY: Customer balance UNCHANGED through post + void.
-      // postSaleAdjReturn does not touch the AR sub-ledger, so neither
-      // does the void (no-op symmetry). 50000 is the seed value.
+      // VERIFY: Customer balance RESTORED to seed through post + void.
+      // The credit post reduced the balance by 5000 (50000 -> 45000); the
+      // void writes the exact reversal (+5000), restoring 50000. This pins
+      // the post/void symmetry on the AR sub-ledger.
       final customer = await (db.select(db.customers)
             ..where((c) => c.id.equals(customerId)))
           .getSingle();
       expect(customer.balanceCents.toBigInt().toInt(), equals(50000),
-          reason: 'Customer balance must remain at the seed value across '
-              'post and void of an adjustment sale return.');
+          reason: 'Customer balance must return to the seed value after '
+              'post (-5000) then void (+5000) of a credit adjustment return.');
+
+      // VERIFY: reversal customer transaction present.
+      final txns = await (db.select(db.customerTransactions)
+            ..where((t) => t.customerId.equals(customerId)))
+          .get();
+      expect(
+          txns.where((t) => t.transactionType == 'adjustment_return').length,
+          equals(1),
+          reason: 'Original adjustment_return row remains.');
+      expect(
+          txns
+              .where((t) =>
+                  t.transactionType == 'adjustment_return_reversal')
+              .length,
+          equals(1),
+          reason: 'Void writes one adjustment_return_reversal row.');
     });
   });
 
@@ -642,6 +667,212 @@ void main() {
       expect(txCount.read<int>('cnt'), equals(0),
           reason: 'No supplier_transactions row may be written for cash '
               'adjustment purchase returns — would drift on recalc.');
+    });
+  });
+
+  // =========================================================================
+  // COMMISSION: adjustment sale return attributed to a salesperson must
+  // DEDUCT their commission (field report tapix_backup_20260705_235704.db).
+  // =========================================================================
+  group('Adjustment sale return — salesperson commission deduction', () {
+    late CommissionService commissionService;
+    late int employeeId;
+
+    Future<List<Commission>> commissionsByAdj(int adjId) {
+      return (db.select(db.commissions)
+            ..where((c) => c.saleReturnAdjustmentId.equals(adjId)))
+          .get();
+    }
+
+    Future<void> seedEmployee({int rateBps = 100}) async {
+      commissionService = CommissionService(db.employeeDao);
+      employeeId = await db.employeeDao.createEmployee(
+        EmployeesCompanion.insert(
+          name: 'bero',
+          currencyId: currencyId,
+          commissionType: const Value('percentage'),
+          defaultCommissionRateBps: Value(rateBps),
+        ),
+      );
+    }
+
+    test('post deducts commission = (subtotal − discount) × rate; void removes it',
+        () async {
+      await seedData();
+      await seedEmployee(rateBps: 100); // 1%
+
+      // Field shape: subtotal 20000, discount 100 → net 19900 × 1% = 199.
+      final returnId = await adjDao.createSaleAdjReturn(
+        SaleReturnAdjustmentsCompanion.insert(
+          returnNumber: 'SAR-COMM-0001',
+          customerId: Value(customerId),
+          employeeId: Value(employeeId),
+          currencyId: currencyId,
+          subtotalCents: Value(Decimal.fromInt(20000)),
+          discountCents: Value(Decimal.fromInt(100)),
+          taxCents: Value(Decimal.fromInt(199)),
+          totalCents: Decimal.fromInt(20099),
+          refundMethod: const Value('cash'),
+          returnDate: Value(DateTime(2026, 6, 30)),
+        ),
+        [
+          SaleReturnAdjustmentItemsCompanion.insert(
+            returnId: 0,
+            productId: productId,
+            variantId: Value(variantId),
+            quantity: 1,
+            unitPriceCents: Decimal.fromInt(20000),
+            totalCents: Decimal.fromInt(20099),
+          ),
+        ],
+      );
+
+      await adjDao.postSaleAdjReturn(
+        returnId,
+        journalEntryService: journalService,
+        allowOverHistory: true,
+        commissionService: commissionService,
+      );
+
+      final rows = await commissionsByAdj(returnId);
+      expect(rows.length, equals(1),
+          reason: 'A negative commission row must be created for the '
+              'salesperson attributed to the adjustment return.');
+      expect(rows.single.commissionAmountCents.toBigInt().toInt(), equals(-199),
+          reason: 'Deduction = (20000 − 100) × 1% = 199, stored negative.');
+      expect(rows.single.saleId, equals(null));
+      expect(rows.single.period, equals('2026-06'));
+
+      // Void must delete the reversal exactly.
+      await adjDao.voidSaleAdjReturn(
+        returnId,
+        journalEntryService: journalService,
+        commissionService: commissionService,
+      );
+      expect(await commissionsByAdj(returnId), isEmpty,
+          reason: 'Voiding the adjustment return must remove the deduction.');
+    });
+
+    test('no commission row when return has no attributed employee', () async {
+      await seedData();
+      commissionService = CommissionService(db.employeeDao);
+
+      final returnId = await adjDao.createSaleAdjReturn(
+        SaleReturnAdjustmentsCompanion.insert(
+          returnNumber: 'SAR-COMM-0002',
+          customerId: Value(customerId),
+          currencyId: currencyId,
+          totalCents: Decimal.fromInt(10000),
+          refundMethod: const Value('cash'),
+        ),
+        [
+          SaleReturnAdjustmentItemsCompanion.insert(
+            returnId: 0,
+            productId: productId,
+            variantId: Value(variantId),
+            quantity: 2,
+            unitPriceCents: Decimal.fromInt(5000),
+            totalCents: Decimal.fromInt(10000),
+          ),
+        ],
+      );
+
+      await adjDao.postSaleAdjReturn(
+        returnId,
+        journalEntryService: journalService,
+        allowOverHistory: true,
+        commissionService: commissionService,
+      );
+
+      expect(await commissionsByAdj(returnId), isEmpty);
+    });
+  });
+
+  // =========================================================================
+  // BATCH NAMING: an unlinked sale-adjustment return on a batch-tracked
+  // (FIFO) product must materialise a batch NAMED AFTER its SAR document, so
+  // the Batch Management report identifies it as an *unlinked* return and it
+  // can never be confused with a LINKED `SR-…` sale-return document.
+  //
+  // Field report tapix_backup_20260706_033510.db: SAR-202607-0001/0003
+  // created batches numbered `SR-202607-V…`, which the user read as LINKED
+  // returns (their linked returns use the `SR-YYYYMM-NNNN` scheme).
+  // =========================================================================
+  group('Unlinked sale return batch naming (traceable to SAR document)', () {
+    late int fifoProductId;
+    late int fifoVariantId;
+
+    Future<void> seedFifoProduct() async {
+      fifoProductId = await db.into(db.products).insert(
+        ProductsCompanion.insert(
+          sku: const Value<String?>('ADJ-FIFO-001'),
+          name: 'Batch-tracked Adj Return Product',
+          costCents: Decimal.fromInt(3000),
+          priceCents: Decimal.fromInt(5000),
+          currencyId: Value(currencyId),
+          // Batch-tracked so postSaleAdjReturn materialises a batch.
+          costingMethod: const Value('fifo'),
+          inventoryTrackingType: const Value('batch'),
+          // Start at 0 so the FIFO invariant Σ(batch.remaining)==stock holds
+          // (the return itself is the only batch/stock movement).
+          stockQuantity: const Value(0),
+        ),
+      );
+      fifoVariantId = await db.into(db.productVariants).insert(
+        ProductVariantsCompanion.insert(
+          productId: fifoProductId,
+          stockQuantity: const Value(0),
+          costCents: Decimal.fromInt(3000),
+          priceCents: Decimal.fromInt(5000),
+        ),
+      );
+    }
+
+    test('batch_number is derived from the SAR return number, never SR-',
+        () async {
+      await seedData();
+      await seedFifoProduct();
+
+      const returnNumber = 'SAR-202607-0001';
+      final returnId = await adjDao.createSaleAdjReturn(
+        SaleReturnAdjustmentsCompanion.insert(
+          returnNumber: returnNumber,
+          customerId: Value(customerId),
+          currencyId: currencyId,
+          totalCents: Decimal.fromInt(5000),
+          refundMethod: const Value('cash'),
+        ),
+        [
+          SaleReturnAdjustmentItemsCompanion.insert(
+            returnId: 0,
+            productId: fifoProductId,
+            variantId: Value(fifoVariantId),
+            quantity: 1,
+            unitPriceCents: Decimal.fromInt(5000),
+            totalCents: Decimal.fromInt(5000),
+          ),
+        ],
+      );
+
+      await adjDao.postSaleAdjReturn(
+        returnId,
+        journalEntryService: journalService,
+        allowOverHistory: true,
+      );
+
+      final batches = await (db.select(db.productBatches)
+            ..where((b) => b.productId.equals(fifoProductId)))
+          .get();
+      expect(batches.length, equals(1),
+          reason: 'One batch must be materialised for the unlinked return.');
+      final batch = batches.single;
+      expect(batch.source, equals('sale_return'));
+      expect(batch.batchNumber.startsWith('$returnNumber-'), isTrue,
+          reason: 'Batch must be named after its SAR document so it is '
+              'traceable in the Batch Management report. Got '
+              '"${batch.batchNumber}".');
+      expect(batch.batchNumber.startsWith('SR-'), isFalse,
+          reason: 'Must NOT collide with linked SR- return document numbers.');
     });
   });
 }

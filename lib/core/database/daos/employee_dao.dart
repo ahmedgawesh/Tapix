@@ -5,6 +5,41 @@ import '../tables/people.dart';
 
 part 'employee_dao.g.dart';
 
+/// One line-level row for the employee sales / returns drill-down screen.
+///
+/// Produced by [EmployeeDao.getEmployeeSalesLineDetails] and
+/// [EmployeeDao.getEmployeeReturnsLineDetails]. [lineTotalCents] is the
+/// post-discount, post-tax line total (`sale_items.total_cents` /
+/// `sale_return_items.refund_cents` / `sale_return_adjustment_items.total_cents`)
+/// so it matches the aggregate the summary card shows.
+class EmployeeLineDetail {
+  final String productName;
+  final String? colorName;
+  final String? sizeName;
+  final int quantity;
+  final int lineTotalCents;
+  final String documentNumber;
+  final DateTime documentDate;
+  final String? customerName;
+
+  const EmployeeLineDetail({
+    required this.productName,
+    this.colorName,
+    this.sizeName,
+    required this.quantity,
+    required this.lineTotalCents,
+    required this.documentNumber,
+    required this.documentDate,
+    this.customerName,
+  });
+
+  /// e.g. "Blue / Large" — null when the line has no variant.
+  String? get variantLabel {
+    final parts = [colorName, sizeName].where((p) => p != null && p.isNotEmpty);
+    return parts.isEmpty ? null : parts.join(' / ');
+  }
+}
+
 @DriftAccessor(tables: [
   Employees,
   Roles,
@@ -621,6 +656,156 @@ class EmployeeDao extends DatabaseAccessor<AppDatabase>
     };
   }
 
+  /// Line-level breakdown of the items this employee **sold** in the period.
+  ///
+  /// Drill-down for the green "Sales Total" tile on the employee detail
+  /// screen. Mirrors the sales attribution used by [getEmployeeSalesStats]:
+  /// * per-invoice mode (`sales.employee_id = ?`) → every line of the sale,
+  /// * per-item mode (`sales.employee_id IS NULL` and `sale_items.employee_id
+  ///   = ?`) → only that employee's lines.
+  ///
+  /// The line total is `sale_items.total_cents` (post-discount, post-tax),
+  /// so the summed rows reconcile with the card's `salesTotalCents`.
+  Future<List<EmployeeLineDetail>> getEmployeeSalesLineDetails(
+    int employeeId,
+    DateTime periodStart,
+    DateTime periodEnd,
+  ) async {
+    final rows = await customSelect(
+      '''
+      SELECT
+        p.name         AS product_name,
+        pc.name        AS color_name,
+        sz.name        AS size_name,
+        si.quantity    AS quantity,
+        si.total_cents AS line_total,
+        s.invoice_number AS doc_number,
+        s.sale_date    AS doc_date,
+        c.name         AS customer_name
+      FROM sale_items si
+      INNER JOIN sales s ON s.id = si.sale_id
+      LEFT JOIN products p ON p.id = si.product_id
+      LEFT JOIN product_variants pv ON pv.id = si.variant_id
+      LEFT JOIN product_colors pc ON pc.id = pv.color_id
+      LEFT JOIN sizes sz ON sz.id = pv.size_id
+      LEFT JOIN customers c ON c.id = s.customer_id
+      WHERE s.status != 'voided'
+        AND s.sale_date >= ?
+        AND s.sale_date <= ?
+        AND (
+          s.employee_id = ?
+          OR (s.employee_id IS NULL AND si.employee_id = ?)
+        )
+      ORDER BY s.sale_date DESC, s.id DESC, si.id ASC
+      ''',
+      variables: [
+        Variable.withDateTime(periodStart),
+        Variable.withDateTime(periodEnd),
+        Variable.withInt(employeeId),
+        Variable.withInt(employeeId),
+      ],
+    ).get();
+
+    return rows.map(_mapLineDetail).toList();
+  }
+
+  /// Line-level breakdown of the items this employee **returned** in the
+  /// period. Drill-down for the red "Returns Total" tile.
+  ///
+  /// Covers all three return attribution paths used by
+  /// [getEmployeeSalesStats]:
+  /// * linked return on a per-invoice sale (`sales.employee_id = ?`),
+  /// * linked return on a per-item sale (`sale_items.employee_id = ?`),
+  /// * adjustment / unlinked return (`sale_return_adjustments.employee_id = ?`).
+  ///
+  /// The line total is `sale_return_items.refund_cents` for linked lines and
+  /// `sale_return_adjustment_items.total_cents` for adjustment lines.
+  Future<List<EmployeeLineDetail>> getEmployeeReturnsLineDetails(
+    int employeeId,
+    DateTime periodStart,
+    DateTime periodEnd,
+  ) async {
+    final rows = await customSelect(
+      '''
+      SELECT * FROM (
+        -- Linked returns (per-invoice + per-item attribution).
+        SELECT
+          p.name          AS product_name,
+          pc.name         AS color_name,
+          sz.name         AS size_name,
+          sri.quantity    AS quantity,
+          sri.refund_cents AS line_total,
+          sr.return_number AS doc_number,
+          sr.return_date  AS doc_date,
+          c.name          AS customer_name
+        FROM sale_return_items sri
+        INNER JOIN sale_returns sr ON sr.id = sri.return_id
+        INNER JOIN sale_items si ON si.id = sri.sale_item_id
+        INNER JOIN sales s ON s.id = sr.sale_id
+        LEFT JOIN products p ON p.id = si.product_id
+        LEFT JOIN product_variants pv ON pv.id = si.variant_id
+        LEFT JOIN product_colors pc ON pc.id = pv.color_id
+        LEFT JOIN sizes sz ON sz.id = pv.size_id
+        LEFT JOIN customers c ON c.id = s.customer_id
+        WHERE sr.status != 'voided'
+          AND sr.return_date >= ?
+          AND sr.return_date <= ?
+          AND (
+            s.employee_id = ?
+            OR (s.employee_id IS NULL AND si.employee_id = ?)
+          )
+        UNION ALL
+        -- Adjustment (unlinked) returns.
+        SELECT
+          p.name           AS product_name,
+          pc.name          AS color_name,
+          sz.name          AS size_name,
+          srai.quantity    AS quantity,
+          srai.total_cents AS line_total,
+          sra.return_number AS doc_number,
+          sra.return_date  AS doc_date,
+          c.name           AS customer_name
+        FROM sale_return_adjustment_items srai
+        INNER JOIN sale_return_adjustments sra ON sra.id = srai.return_id
+        LEFT JOIN products p ON p.id = srai.product_id
+        LEFT JOIN product_variants pv ON pv.id = srai.variant_id
+        LEFT JOIN product_colors pc ON pc.id = pv.color_id
+        LEFT JOIN sizes sz ON sz.id = pv.size_id
+        LEFT JOIN customers c ON c.id = sra.customer_id
+        WHERE sra.status != 'voided'
+          AND sra.employee_id = ?
+          AND sra.return_date >= ?
+          AND sra.return_date <= ?
+      )
+      ORDER BY doc_date DESC
+      ''',
+      variables: [
+        Variable.withDateTime(periodStart),
+        Variable.withDateTime(periodEnd),
+        Variable.withInt(employeeId),
+        Variable.withInt(employeeId),
+        Variable.withInt(employeeId),
+        Variable.withDateTime(periodStart),
+        Variable.withDateTime(periodEnd),
+      ],
+    ).get();
+
+    return rows.map(_mapLineDetail).toList();
+  }
+
+  EmployeeLineDetail _mapLineDetail(QueryRow row) {
+    return EmployeeLineDetail(
+      productName: row.readNullable<String>('product_name') ?? '—',
+      colorName: row.readNullable<String>('color_name'),
+      sizeName: row.readNullable<String>('size_name'),
+      quantity: row.read<int>('quantity'),
+      lineTotalCents: row.read<int>('line_total'),
+      documentNumber: row.readNullable<String>('doc_number') ?? '',
+      documentDate: row.read<DateTime>('doc_date'),
+      customerName: row.readNullable<String>('customer_name'),
+    );
+  }
+
   /// Get all commissions linked to a specific sale
   Future<List<Commission>> getCommissionsBySaleId(int saleId) {
     return (select(commissions)..where((c) => c.saleId.equals(saleId))).get();
@@ -629,6 +814,14 @@ class EmployeeDao extends DatabaseAccessor<AppDatabase>
   /// Delete all commissions linked to a specific sale
   Future<int> deleteCommissionsBySaleId(int saleId) {
     return (delete(commissions)..where((c) => c.saleId.equals(saleId))).go();
+  }
+
+  /// Delete all commissions created for a specific adjustment sale return.
+  /// Used by `voidSaleAdjReturn` to reverse the deduction exactly.
+  Future<int> deleteCommissionsByAdjustmentReturnId(int adjustmentReturnId) {
+    return (delete(commissions)
+          ..where((c) => c.saleReturnAdjustmentId.equals(adjustmentReturnId)))
+        .go();
   }
 
   /// Get total commission for an employee in a period

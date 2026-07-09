@@ -4,6 +4,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/attendance_service.dart';
+import '../../../auth/auth.dart';
+import '../../domain/entities/employee_entity.dart';
 import '../../domain/repositories/employee_repository.dart';
 import '../bloc/attendance_bloc.dart';
 import '../bloc/employees_bloc.dart';
@@ -705,6 +707,29 @@ class _AttendanceCard extends StatelessWidget {
                     ),
                   ),
                 ),
+                // Owner/manager-only correction path for mistakenly-recorded
+                // check-in/check-out times or status.
+                PermissionGate(
+                  permission: Permissions.manageEmployees,
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: SizedBox(
+                      height: 30,
+                      child: TextButton.icon(
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        onPressed: () => _showEditDialog(context),
+                        icon: const Icon(Icons.edit_outlined, size: 14),
+                        label: Text(
+                          'employees.edit_attendance'.tr(),
+                          style: const TextStyle(fontSize: 11),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
                 if (canCheckOut) ...[
                   const SizedBox(height: 8),
                   SizedBox(
@@ -744,6 +769,30 @@ class _AttendanceCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _showEditDialog(BuildContext context) async {
+    final bloc = context.read<AttendanceBloc>();
+    final result = await showDialog<_EditAttendanceResult>(
+      context: context,
+      useRootNavigator: true,
+      builder: (_) => _EditAttendanceDialog(
+        attendance: attendance,
+        employeeName: employeeName,
+      ),
+    );
+
+    if (result != null) {
+      bloc.add(
+        AttendanceEditRequested(
+          employeeId: attendance.employeeId,
+          checkInTime: result.checkInTime,
+          checkOutTime: result.checkOutTime,
+          status: result.status,
+          notes: result.notes,
+        ),
+      );
+    }
   }
 
   Color _getStatusColor(String status) {
@@ -795,6 +844,263 @@ class _AttendanceCard extends StatelessWidget {
       default:
         return status;
     }
+  }
+}
+
+class _EditAttendanceResult {
+  final DateTime? checkInTime;
+  final DateTime? checkOutTime;
+  final AttendanceStatus status;
+  final String? notes;
+
+  const _EditAttendanceResult({
+    required this.checkInTime,
+    required this.checkOutTime,
+    required this.status,
+    this.notes,
+  });
+}
+
+/// Owner/manager-only dialog to correct a mistakenly-recorded attendance
+/// record (e.g. a check-out saved in the morning that flagged an employee as
+/// an early departure). Overtime is recomputed downstream from the corrected
+/// times, so payroll counts stay consistent — no accounting corruption.
+class _EditAttendanceDialog extends StatefulWidget {
+  final Attendance attendance;
+  final String? employeeName;
+
+  const _EditAttendanceDialog({required this.attendance, this.employeeName});
+
+  @override
+  State<_EditAttendanceDialog> createState() => _EditAttendanceDialogState();
+}
+
+class _EditAttendanceDialogState extends State<_EditAttendanceDialog> {
+  TimeOfDay? _checkIn;
+  TimeOfDay? _checkOut;
+  late AttendanceStatus _status;
+  late final TextEditingController _notesController;
+
+  static const List<AttendanceStatus> _selectableStatuses = [
+    AttendanceStatus.present,
+    AttendanceStatus.late,
+    AttendanceStatus.early_departure,
+    AttendanceStatus.absent,
+    AttendanceStatus.leave,
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    final a = widget.attendance;
+    _checkIn = a.checkInTime != null ? TimeOfDay.fromDateTime(a.checkInTime!) : null;
+    _checkOut = a.checkOutTime != null ? TimeOfDay.fromDateTime(a.checkOutTime!) : null;
+    _status = AttendanceStatus.fromString(a.status);
+    if (!_selectableStatuses.contains(_status)) {
+      _status = AttendanceStatus.present;
+    }
+    _notesController = TextEditingController(text: a.notes ?? '');
+  }
+
+  @override
+  void dispose() {
+    _notesController.dispose();
+    super.dispose();
+  }
+
+  bool get _timesEnabled =>
+      _status != AttendanceStatus.absent && _status != AttendanceStatus.leave;
+
+  String _statusLabel(AttendanceStatus status) {
+    switch (status) {
+      case AttendanceStatus.present:
+        return 'employees.status_present'.tr();
+      case AttendanceStatus.late:
+        return 'employees.status_late'.tr();
+      case AttendanceStatus.absent:
+        return 'employees.status_absent'.tr();
+      case AttendanceStatus.leave:
+        return 'employees.status_on_leave'.tr();
+      case AttendanceStatus.early_departure:
+        return 'employees.status_early_departure'.tr();
+      case AttendanceStatus.holiday:
+        return 'employees.status_present'.tr();
+    }
+  }
+
+  Future<void> _pickCheckIn() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _checkIn ?? TimeOfDay.now(),
+    );
+    if (picked != null) setState(() => _checkIn = picked);
+  }
+
+  Future<void> _pickCheckOut() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _checkOut ?? TimeOfDay.now(),
+    );
+    if (picked != null) setState(() => _checkOut = picked);
+  }
+
+  DateTime? _combine(TimeOfDay? time) {
+    if (time == null) return null;
+    final d = widget.attendance.attendanceDate;
+    return DateTime(d.year, d.month, d.day, time.hour, time.minute);
+  }
+
+  void _submit() {
+    final checkIn = _timesEnabled ? _combine(_checkIn) : null;
+    final checkOut = _timesEnabled ? _combine(_checkOut) : null;
+    Navigator.of(context).pop(
+      _EditAttendanceResult(
+        checkInTime: checkIn,
+        checkOutTime: checkOut,
+        status: _status,
+        notes: _notesController.text.trim().isEmpty
+            ? null
+            : _notesController.text.trim(),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return AlertDialog(
+      title: Row(
+        children: [
+          const Icon(Icons.edit_outlined, size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              widget.employeeName != null
+                  ? '${'employees.edit_attendance'.tr()} · ${widget.employeeName}'
+                  : 'employees.edit_attendance'.tr(),
+            ),
+          ),
+        ],
+      ),
+      content: SizedBox(
+        width: 420,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Status
+              DropdownButtonFormField<AttendanceStatus>(
+                initialValue: _status,
+                isExpanded: true,
+                decoration: InputDecoration(
+                  labelText: 'employees.status'.tr(),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                items: _selectableStatuses
+                    .map((s) => DropdownMenuItem(
+                          value: s,
+                          child: Text(_statusLabel(s)),
+                        ))
+                    .toList(),
+                onChanged: (value) {
+                  if (value != null) setState(() => _status = value);
+                },
+              ),
+              const SizedBox(height: 12),
+
+              // Check-in time
+              InkWell(
+                onTap: _timesEnabled ? _pickCheckIn : null,
+                borderRadius: BorderRadius.circular(12),
+                child: InputDecorator(
+                  decoration: InputDecoration(
+                    labelText: 'employees.check_in_time'.tr(),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    prefixIcon: const Icon(Icons.login, size: 18),
+                    enabled: _timesEnabled,
+                    suffixIcon: _timesEnabled && _checkIn != null
+                        ? IconButton(
+                            icon: const Icon(Icons.clear, size: 18),
+                            onPressed: () => setState(() => _checkIn = null),
+                          )
+                        : null,
+                  ),
+                  child: Text(
+                    _checkIn != null
+                        ? _checkIn!.format(context)
+                        : 'employees.select_time'.tr(),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // Check-out time
+              InkWell(
+                onTap: _timesEnabled ? _pickCheckOut : null,
+                borderRadius: BorderRadius.circular(12),
+                child: InputDecorator(
+                  decoration: InputDecoration(
+                    labelText: 'employees.check_out_time'.tr(),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    prefixIcon: const Icon(Icons.logout, size: 18),
+                    enabled: _timesEnabled,
+                    suffixIcon: _timesEnabled && _checkOut != null
+                        ? IconButton(
+                            icon: const Icon(Icons.clear, size: 18),
+                            onPressed: () => setState(() => _checkOut = null),
+                          )
+                        : null,
+                  ),
+                  child: Text(
+                    _checkOut != null
+                        ? _checkOut!.format(context)
+                        : 'employees.select_time'.tr(),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // Notes
+              TextField(
+                controller: _notesController,
+                maxLines: 2,
+                decoration: InputDecoration(
+                  labelText: 'common.notes'.tr(),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'employees.edit_attendance_hint'.tr(),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text('common.cancel'.tr()),
+        ),
+        FilledButton(
+          onPressed: _submit,
+          child: Text('common.save'.tr()),
+        ),
+      ],
+    );
   }
 }
 

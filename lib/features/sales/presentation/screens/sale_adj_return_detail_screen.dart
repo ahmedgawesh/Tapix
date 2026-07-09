@@ -11,6 +11,8 @@ import '../../../../core/database/app_database.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../../../core/services/journal_entry_service.dart';
+import '../../../../core/services/commissions/commission_service.dart';
+import '../../../../core/services/loyalty/loyalty_points_service.dart';
 import '../../../../core/widgets/pin_verification_dialog.dart';
 import '../../../auth/auth.dart';
 import '../../../settings/presentation/bloc/app_settings_bloc.dart';
@@ -302,6 +304,8 @@ class _SaleAdjReturnDetailScreenState extends State<SaleAdjReturnDetailScreen> {
         widget.returnId,
         journalEntryService: sl<JournalEntryService>(),
         allowNegativeStock: allowNegativeStock,
+        commissionService: sl<CommissionService>(),
+        loyaltyPointsService: sl<LoyaltyPointsService>(),
       );
       if (mounted) {
         messenger.showSnackBar(

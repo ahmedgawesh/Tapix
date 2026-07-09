@@ -167,8 +167,14 @@ class SalespeopleCommissionReportBloc extends RealtimeBloc<
   }
 
   Stream<SalespeopleCommissionReportData> _buildCombinedStream() {
-    // Watch sales table for real-time changes
-    return _db.select(_db.sales).watch().asyncMap((_) async {
+    // Watch both the sales and commissions tables for real-time changes.
+    // Commissions must be watched independently because a return-reversal
+    // inserts a commission row without necessarily mutating the sales table.
+    return _db
+        .customSelect('SELECT 1',
+            readsFrom: {_db.sales, _db.commissions})
+        .watch()
+        .asyncMap((_) async {
       final items = await _loadSalespeopleCommission();
 
       int totalSales = 0;
@@ -310,7 +316,17 @@ class SalespeopleCommissionReportBloc extends RealtimeBloc<
       readsFrom: {_db.employees, _db.sales},
     ).get();
 
-    // Get commission data grouped by employee for the period
+    // Get commission data grouped by employee for the period.
+    //
+    // Attribution basis: each commission row is attributed by its OWN
+    // economic-event date (`effective_date` — the sale date for earned rows,
+    // the return date for reversal rows), NOT by the linked sale's
+    // `sale_date`. This is the SAP / NetSuite / QuickBooks "posting date"
+    // convention: a return-reversal lands in the period the return occurred
+    // in — the accounting-correct rule — instead of being dragged back to the
+    // original sale's month, and it stays correct for backdated documents.
+    // `COALESCE(effective_date, created_at)` defends any legacy row that
+    // predates the backfill / was written without a posting date.
     final commissionRows = await _db.customSelect(
       '''
       SELECT 
@@ -320,16 +336,15 @@ class SalespeopleCommissionReportBloc extends RealtimeBloc<
         COALESCE(SUM(CASE WHEN c.status = 'approved' THEN c.commission_amount_cents ELSE 0 END), 0) AS approved_cents,
         COALESCE(SUM(CASE WHEN c.status = 'paid' THEN c.commission_amount_cents ELSE 0 END), 0) AS paid_cents
       FROM commissions c
-      INNER JOIN sales s ON s.id = c.sale_id
-        AND s.sale_date >= ?
-        AND s.sale_date <= ?
+      WHERE COALESCE(c.effective_date, c.created_at) >= ?
+        AND COALESCE(c.effective_date, c.created_at) <= ?
       GROUP BY c.employee_id
       ''',
       variables: [
         Variable.withString(startIso),
         Variable.withString(endIso),
       ],
-      readsFrom: {_db.commissions, _db.sales},
+      readsFrom: {_db.commissions},
     ).get();
 
     // Build commission lookup map
@@ -364,7 +379,7 @@ class SalespeopleCommissionReportBloc extends RealtimeBloc<
       int approvedComm;
       int paidComm;
 
-      if (commBreakdown != null && commBreakdown.totalCents > 0) {
+      if (commBreakdown != null) {
         totalCommission = commBreakdown.totalCents;
         pendingComm = commBreakdown.pendingCents;
         approvedComm = commBreakdown.approvedCents;

@@ -424,15 +424,15 @@ void main() {
   // ──────────────────────────────────────────────────────────────────────────
   group('FIFO activation migration (10044 → 10045+)', () {
     test(
-      'a fresh DB has no orphaned opening batches and the schema is at 10057',
+      'a fresh DB has no orphaned opening batches and the schema is at 10059',
       () async {
         // The migration is exercised on every fresh in-memory DB. We assert:
-        //   - schema is at the expected version (v10057 — Phase 15 cheque
-        //     lifecycle JE wiring: adds `cleared_payment_id` on
-        //     `cheque_confirmations` so the dashboard's Confirm-Paid /
-        //     Confirm-Collected can record a real payment + post the JE)
+        //   - schema is at the expected version (v10059 — Phase 16 commission
+        //     reversal for adjustment (unlinked) sale returns: adds
+        //     `sale_return_adjustment_id` on `commissions`; v10058 added
+        //     `effective_date` on `commissions`)
         //   - no batch rows exist for an empty seed (sanity)
-        expect(db.schemaVersion, equals(10057));
+        expect(db.schemaVersion, equals(10059));
 
         final any = await db.customSelect(
           'SELECT COUNT(*) AS c FROM product_batches',

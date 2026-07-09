@@ -1,6 +1,6 @@
 part of 'auth_bloc.dart';
 
-abstract class AuthState extends RealtimeState<UserEntity?> with EquatableMixin {
+abstract class AuthState extends RealtimeState<UserEntity?> with Equatable {
   const AuthState();
 
   @override

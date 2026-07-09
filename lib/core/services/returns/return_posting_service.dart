@@ -114,6 +114,7 @@ class ReturnPostingService {
         ret.side == ReturnSide.sale &&
         ret.refund == RefundChannel.credit &&
         !ret.link.isLinked &&
+        !ret.creditToReceivable &&
         ret.partyId != null &&
         ret.totalCents > 0) {
       final sourceTable =

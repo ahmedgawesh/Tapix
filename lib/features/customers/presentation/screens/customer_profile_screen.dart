@@ -8,6 +8,7 @@ import '../../../../core/theme/colors.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../../../core/services/compliance/customer_credit_note_service.dart';
 import '../../../../core/services/parties/party_balance_classifier.dart';
 import '../../../../core/widgets/inputs/select_all_on_focus.dart';
 import '../../../../core/di/injection_container.dart';
@@ -163,6 +164,164 @@ class _OutstandingChequesSection extends StatelessWidget {
   }
 }
 
+/// Surfaces the customer's store-credit notes (issued by credit-refund
+/// adjustment returns). These settle to GL 2400 Customer Credit Liability
+/// via `CustomerCreditNoteService` and therefore never appear in
+/// `customer_transactions`; without this section an adjustment return that
+/// issued store credit would be invisible on the profile. Renders nothing
+/// when the customer has no open/applied notes.
+class _StoreCreditSection extends StatelessWidget {
+  final int customerId;
+  final CurrencyService currencyService;
+
+  const _StoreCreditSection({
+    required this.customerId,
+    required this.currencyService,
+  });
+
+  String _statusLabel(String status) {
+    switch (status) {
+      case 'partially_applied':
+        return 'customers.store_credit_status_partially_applied'.tr();
+      case 'fully_applied':
+        return 'customers.store_credit_status_fully_applied'.tr();
+      case 'open':
+      default:
+        return 'customers.store_credit_status_open'.tr();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return StreamBuilder<List<CustomerCreditNote>>(
+      stream: sl<CustomerCreditNoteService>().watchForCustomer(customerId),
+      builder: (context, snapshot) {
+        final notes = snapshot.data ?? const <CustomerCreditNote>[];
+        if (notes.isEmpty) {
+          return const SizedBox.shrink();
+        }
+
+        final totalAvailable = notes.fold<int>(
+          0,
+          (sum, n) => sum + n.balanceCents.toBigInt().toInt(),
+        );
+
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: Card(
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(
+                color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(LucideIcons.wallet, size: 18, color: Colors.teal),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'customers.store_credit_title'.tr(),
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        currencyService.format(totalAvailable),
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.teal,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'customers.store_credit_subtitle'.tr(),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  ...notes.map((note) {
+                    final balance = note.balanceCents.toBigInt().toInt();
+                    final original = note.originalAmountCents.toBigInt().toInt();
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 18,
+                            backgroundColor: Colors.teal.withValues(alpha: 0.1),
+                            child: const Icon(LucideIcons.ticket,
+                                size: 18, color: Colors.teal),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  note.noteNumber,
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                Text(
+                                  '${_statusLabel(note.status)} · '
+                                  '${'customers.store_credit_original'.tr()}: '
+                                  '${currencyService.format(original)}',
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                    fontSize: 10,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                currencyService.format(balance),
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.teal,
+                                ),
+                              ),
+                              Text(
+                                'customers.store_credit_available'.tr(),
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.outline,
+                                  fontSize: 10,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
   void _openUnifiedReturn(BuildContext context, Customer customer) {
     showUnifiedReturnSearchSheet(
@@ -293,6 +452,10 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                       currencyService: currencyService,
                     ),
                     const SizedBox(height: 16),
+                    _StoreCreditSection(
+                      customerId: widget.customerId,
+                      currencyService: currencyService,
+                    ),
                     _LoyaltyToggleCard(customer: customer),
                     const SizedBox(height: 16),
                     if (customer.loyaltyEnabled) ...[
@@ -1278,6 +1441,52 @@ class _LoyaltySection extends StatelessWidget {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 12),
+
+                  // Monetary value of the remaining points balance
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.06)
+                          : theme.colorScheme.tertiaryContainer,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.savings_outlined,
+                          size: 18,
+                          color: isDark
+                              ? const Color(0xFF90CAF9)
+                              : theme.colorScheme.tertiary,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'customers.points_balance_value'.tr(),
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: isDark
+                                  ? Colors.white70
+                                  : theme.colorScheme.onTertiaryContainer,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          '${summary.pointsBalanceValueCents} '
+                          '${'customers.loyalty_cents'.tr()} = '
+                          '${sl<CurrencyService>().format(summary.pointsBalanceValueCents)}',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: isDark
+                                ? Colors.white
+                                : theme.colorScheme.onTertiaryContainer,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                   const SizedBox(height: 16),
 
                   // Tier Progress
@@ -1853,6 +2062,26 @@ class _TransactionTile extends StatelessWidget {
         color = Colors.green;
         typeLabel = 'customers.transaction_return'.tr();
         break;
+      case 'credit_note':
+        icon = LucideIcons.fileText;
+        color = Colors.green;
+        typeLabel = 'customers.transaction_credit_note'.tr();
+        break;
+      case 'refund':
+        icon = LucideIcons.arrowLeftRight;
+        color = Colors.green;
+        typeLabel = 'customers.transaction_refund'.tr();
+        break;
+      case 'credit_note_reversal':
+        icon = LucideIcons.fileX;
+        color = Colors.red;
+        typeLabel = 'customers.transaction_credit_note_reversal'.tr();
+        break;
+      case 'refund_reversal':
+        icon = LucideIcons.fileX;
+        color = Colors.red;
+        typeLabel = 'customers.transaction_refund_reversal'.tr();
+        break;
       case 'sale':
         icon = LucideIcons.shoppingCart;
         color = Colors.orange;
@@ -1868,10 +2097,15 @@ class _TransactionTile extends StatelessWidget {
         color = Colors.red;
         typeLabel = 'customers.transaction_adj_return_reversal'.tr();
         break;
-      default:
+      case 'adjustment':
         icon = LucideIcons.fileText;
         color = theme.colorScheme.outline;
         typeLabel = 'customers.transaction_adjustment'.tr();
+        break;
+      default:
+        icon = LucideIcons.fileText;
+        color = theme.colorScheme.outline;
+        typeLabel = transaction.transactionType.toUpperCase();
     }
 
     final canPrint = transaction.transactionType == 'payment' ||

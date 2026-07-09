@@ -201,8 +201,15 @@ class CustomerSalesReturnsBloc
   }
 
   Stream<CustomerSalesReturnsData> _buildCombinedStream() {
-    // Watch sale_returns for real-time changes
-    return _db.select(_db.saleReturns).watch().asyncMap((_) async {
+    // Watch BOTH linked sale_returns and adjustment (unlinked) sale returns so
+    // posting/voiding either flow live-refreshes every figure in this report.
+    return _db
+        .customSelect(
+          'SELECT 1',
+          readsFrom: {_db.saleReturns, _db.saleReturnAdjustments},
+        )
+        .watch()
+        .asyncMap((_) async {
       final summaries = await _loadCustomerSummaries();
       final details = await _loadReturnDetails();
       final reasons = await _loadReasonBreakdown();
@@ -285,37 +292,53 @@ class CustomerSalesReturnsBloc
     final startIso = _dateRange.startDate.toIso8601String();
     final endIso = _dateRange.endDate.toIso8601String();
 
+    // Combine linked (invoice-based) returns and adjustment (unlinked) returns.
+    // Only returns attributed to a real customer are grouped here (walk-in
+    // adjustment returns with a NULL customer are excluded, matching the
+    // existing by-customer convention used elsewhere in reports).
     final rows = await _db.customSelect(
       '''
       SELECT 
         c.id AS customer_id,
         c.name AS customer_name,
         c.segment AS segment,
-        COUNT(sr.id) AS return_count,
-        COALESCE(SUM(sr.total_cents), 0) AS total_returned_cents,
-        COALESCE(SUM(item_counts.item_qty), 0) AS total_items_returned,
-        MAX(sr.return_date) AS last_return_date
-      FROM sale_returns sr
-      INNER JOIN sales s ON s.id = sr.sale_id
-      INNER JOIN customers c ON c.id = s.customer_id
-      LEFT JOIN (
-        SELECT sri.return_id, SUM(sri.quantity) AS item_qty
-        FROM sale_return_items sri
-        GROUP BY sri.return_id
-      ) item_counts ON item_counts.return_id = sr.id
-      WHERE sr.status = 'posted'
-        AND sr.return_date >= ?
-        AND sr.return_date <= ?
+        COUNT(r.return_id) AS return_count,
+        COALESCE(SUM(r.total_cents), 0) AS total_returned_cents,
+        COALESCE(SUM(r.item_qty), 0) AS total_items_returned,
+        MAX(r.return_date) AS last_return_date
+      FROM (
+        SELECT sr.id AS return_id, s.customer_id AS customer_id,
+               sr.total_cents AS total_cents, sr.return_date AS return_date,
+               (SELECT COALESCE(SUM(sri.quantity), 0) FROM sale_return_items sri
+                  WHERE sri.return_id = sr.id) AS item_qty
+        FROM sale_returns sr
+        INNER JOIN sales s ON s.id = sr.sale_id
+        WHERE sr.status = 'posted'
+          AND sr.return_date >= ? AND sr.return_date <= ?
+        UNION ALL
+        SELECT sra.id AS return_id, sra.customer_id AS customer_id,
+               sra.total_cents AS total_cents, sra.return_date AS return_date,
+               (SELECT COALESCE(SUM(srai.quantity), 0) FROM sale_return_adjustment_items srai
+                  WHERE srai.return_id = sra.id) AS item_qty
+        FROM sale_return_adjustments sra
+        WHERE sra.status = 'posted'
+          AND sra.return_date >= ? AND sra.return_date <= ?
+      ) r
+      INNER JOIN customers c ON c.id = r.customer_id
       GROUP BY c.id
       ORDER BY total_returned_cents DESC
       ''',
       variables: [
         Variable<String>(startIso),
         Variable<String>(endIso),
+        Variable<String>(startIso),
+        Variable<String>(endIso),
       ],
       readsFrom: {
         _db.saleReturns,
         _db.saleReturnItems,
+        _db.saleReturnAdjustments,
+        _db.saleReturnAdjustmentItems,
         _db.sales,
         _db.customers,
       },
@@ -340,38 +363,60 @@ class CustomerSalesReturnsBloc
     final startIso = _dateRange.startDate.toIso8601String();
     final endIso = _dateRange.endDate.toIso8601String();
 
+    // Linked returns carry a real disposition + original invoice number.
+    // Adjustment (unlinked) returns are marked with disposition 'adjustment'
+    // and have no originating invoice; item_count comes from their own items.
     final rows = await _db.customSelect(
       '''
-      SELECT 
-        sr.id AS return_id,
-        sr.return_number AS return_number,
-        sr.return_date AS return_date,
-        sr.status AS status,
-        sr.disposition_type AS disposition_type,
-        sr.refund_method AS refund_method,
-        sr.reason AS reason,
-        sr.total_cents AS total_cents,
-        COALESCE(item_counts.item_qty, 0) AS item_count,
-        s.invoice_number AS original_invoice_number
-      FROM sale_returns sr
-      INNER JOIN sales s ON s.id = sr.sale_id
-      LEFT JOIN (
-        SELECT sri.return_id, SUM(sri.quantity) AS item_qty
-        FROM sale_return_items sri
-        GROUP BY sri.return_id
-      ) item_counts ON item_counts.return_id = sr.id
-      WHERE sr.status = 'posted'
-        AND sr.return_date >= ?
-        AND sr.return_date <= ?
-      ORDER BY sr.return_date DESC
+      SELECT return_id, return_number, return_date, status, disposition_type,
+             refund_method, reason, total_cents, item_count, original_invoice_number
+      FROM (
+        SELECT 
+          sr.id AS return_id,
+          sr.return_number AS return_number,
+          sr.return_date AS return_date,
+          sr.status AS status,
+          sr.disposition_type AS disposition_type,
+          sr.refund_method AS refund_method,
+          sr.reason AS reason,
+          sr.total_cents AS total_cents,
+          (SELECT COALESCE(SUM(sri.quantity), 0) FROM sale_return_items sri
+             WHERE sri.return_id = sr.id) AS item_count,
+          s.invoice_number AS original_invoice_number
+        FROM sale_returns sr
+        INNER JOIN sales s ON s.id = sr.sale_id
+        WHERE sr.status = 'posted'
+          AND sr.return_date >= ? AND sr.return_date <= ?
+        UNION ALL
+        SELECT 
+          sra.id AS return_id,
+          sra.return_number AS return_number,
+          sra.return_date AS return_date,
+          sra.status AS status,
+          'adjustment' AS disposition_type,
+          sra.refund_method AS refund_method,
+          NULL AS reason,
+          sra.total_cents AS total_cents,
+          (SELECT COALESCE(SUM(srai.quantity), 0) FROM sale_return_adjustment_items srai
+             WHERE srai.return_id = sra.id) AS item_count,
+          NULL AS original_invoice_number
+        FROM sale_return_adjustments sra
+        WHERE sra.status = 'posted'
+          AND sra.return_date >= ? AND sra.return_date <= ?
+      )
+      ORDER BY return_date DESC
       ''',
       variables: [
+        Variable<String>(startIso),
+        Variable<String>(endIso),
         Variable<String>(startIso),
         Variable<String>(endIso),
       ],
       readsFrom: {
         _db.saleReturns,
         _db.saleReturnItems,
+        _db.saleReturnAdjustments,
+        _db.saleReturnAdjustmentItems,
         _db.sales,
       },
     ).get();
@@ -399,25 +444,34 @@ class CustomerSalesReturnsBloc
 
     final rows = await _db.customSelect(
       '''
-      SELECT 
-        COALESCE(sri.reason, 'other') AS reason,
-        COUNT(sri.id) AS count,
-        COALESCE(SUM(sri.refund_cents), 0) AS total_cents
-      FROM sale_return_items sri
-      INNER JOIN sale_returns sr ON sr.id = sri.return_id
-      WHERE sr.status = 'posted'
-        AND sr.return_date >= ?
-        AND sr.return_date <= ?
-      GROUP BY COALESCE(sri.reason, 'other')
+      SELECT reason, COUNT(*) AS count, COALESCE(SUM(amount_cents), 0) AS total_cents
+      FROM (
+        SELECT COALESCE(sri.reason, 'other') AS reason, sri.refund_cents AS amount_cents
+        FROM sale_return_items sri
+        INNER JOIN sale_returns sr ON sr.id = sri.return_id
+        WHERE sr.status = 'posted'
+          AND sr.return_date >= ? AND sr.return_date <= ?
+        UNION ALL
+        SELECT COALESCE(srai.reason, 'other') AS reason, srai.total_cents AS amount_cents
+        FROM sale_return_adjustment_items srai
+        INNER JOIN sale_return_adjustments sra ON sra.id = srai.return_id
+        WHERE sra.status = 'posted'
+          AND sra.return_date >= ? AND sra.return_date <= ?
+      )
+      GROUP BY reason
       ORDER BY total_cents DESC
       ''',
       variables: [
+        Variable<String>(startIso),
+        Variable<String>(endIso),
         Variable<String>(startIso),
         Variable<String>(endIso),
       ],
       readsFrom: {
         _db.saleReturnItems,
         _db.saleReturns,
+        _db.saleReturnAdjustmentItems,
+        _db.saleReturnAdjustments,
       },
     ).get();
 
@@ -436,34 +490,63 @@ class CustomerSalesReturnsBloc
 
     final rows = await _db.customSelect(
       '''
-      SELECT 
-        sri.return_id AS return_id,
-        p.name AS product_name,
-        pv.sku AS sku,
-        pc.name AS color_name,
-        sz.name AS size_name,
-        sri.quantity AS quantity,
-        sri.refund_cents AS refund_cents,
-        sri.reason AS reason
-      FROM sale_return_items sri
-      INNER JOIN sale_returns sr ON sr.id = sri.return_id
-      INNER JOIN sale_items si ON si.id = sri.sale_item_id
-      INNER JOIN products p ON p.id = si.product_id
-      LEFT JOIN product_variants pv ON pv.id = si.variant_id
-      LEFT JOIN product_colors pc ON pc.id = pv.color_id
-      LEFT JOIN sizes sz ON sz.id = pv.size_id
-      WHERE sr.status = 'posted'
-        AND sr.return_date >= ?
-        AND sr.return_date <= ?
-      ORDER BY sr.return_date DESC, sri.id ASC
+      SELECT return_id, product_name, sku, color_name, size_name,
+             quantity, refund_cents, reason, return_date
+      FROM (
+        SELECT 
+          sri.return_id AS return_id,
+          p.name AS product_name,
+          pv.sku AS sku,
+          pc.name AS color_name,
+          sz.name AS size_name,
+          sri.quantity AS quantity,
+          sri.refund_cents AS refund_cents,
+          sri.reason AS reason,
+          sr.return_date AS return_date,
+          sri.id AS order_key
+        FROM sale_return_items sri
+        INNER JOIN sale_returns sr ON sr.id = sri.return_id
+        INNER JOIN sale_items si ON si.id = sri.sale_item_id
+        INNER JOIN products p ON p.id = si.product_id
+        LEFT JOIN product_variants pv ON pv.id = si.variant_id
+        LEFT JOIN product_colors pc ON pc.id = pv.color_id
+        LEFT JOIN sizes sz ON sz.id = pv.size_id
+        WHERE sr.status = 'posted'
+          AND sr.return_date >= ? AND sr.return_date <= ?
+        UNION ALL
+        SELECT 
+          srai.return_id AS return_id,
+          p.name AS product_name,
+          pv.sku AS sku,
+          pc.name AS color_name,
+          sz.name AS size_name,
+          srai.quantity AS quantity,
+          srai.total_cents AS refund_cents,
+          srai.reason AS reason,
+          sra.return_date AS return_date,
+          srai.id AS order_key
+        FROM sale_return_adjustment_items srai
+        INNER JOIN sale_return_adjustments sra ON sra.id = srai.return_id
+        INNER JOIN products p ON p.id = srai.product_id
+        LEFT JOIN product_variants pv ON pv.id = srai.variant_id
+        LEFT JOIN product_colors pc ON pc.id = pv.color_id
+        LEFT JOIN sizes sz ON sz.id = pv.size_id
+        WHERE sra.status = 'posted'
+          AND sra.return_date >= ? AND sra.return_date <= ?
+      )
+      ORDER BY return_date DESC, order_key ASC
       ''',
       variables: [
+        Variable<String>(startIso),
+        Variable<String>(endIso),
         Variable<String>(startIso),
         Variable<String>(endIso),
       ],
       readsFrom: {
         _db.saleReturnItems,
         _db.saleReturns,
+        _db.saleReturnAdjustmentItems,
+        _db.saleReturnAdjustments,
         _db.saleItems,
         _db.products,
         _db.productVariants,

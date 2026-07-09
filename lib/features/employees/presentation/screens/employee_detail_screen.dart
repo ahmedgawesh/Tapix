@@ -10,6 +10,7 @@ import '../../domain/repositories/employee_repository.dart';
 import '../../domain/services/payroll_calculation_service.dart';
 import '../bloc/employee_detail_bloc.dart';
 import '../services/payslip_pdf_service.dart';
+import 'employee_sales_detail_screen.dart';
 
 class EmployeeDetailScreen extends StatelessWidget {
   final int employeeId;
@@ -668,6 +669,11 @@ class _SalesCommissionCard extends StatelessWidget {
                     label: 'employees.sales_total'.tr(),
                     value: cs.format(state.salesTotalCents),
                     color: Colors.green,
+                    onTap: () => _openLineDetail(
+                      context,
+                      state,
+                      EmployeeLineDetailMode.sales,
+                    ),
                   ),
                 ),
               ],
@@ -692,6 +698,11 @@ class _SalesCommissionCard extends StatelessWidget {
                     label: 'employees.returns_total'.tr(),
                     value: cs.format(state.returnsTotalCents),
                     color: Colors.red,
+                    onTap: () => _openLineDetail(
+                      context,
+                      state,
+                      EmployeeLineDetailMode.returns,
+                    ),
                   ),
                 ),
               ],
@@ -727,6 +738,23 @@ class _SalesCommissionCard extends StatelessWidget {
       ),
     );
   }
+
+  void _openLineDetail(
+    BuildContext context,
+    EmployeeDetailState state,
+    EmployeeLineDetailMode mode,
+  ) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => EmployeeSalesDetailScreen(
+          employeeId: state.employeeId,
+          employeeName: state.employee?.name ?? '',
+          period: state.period,
+          mode: mode,
+        ),
+      ),
+    );
+  }
 }
 
 class _CommissionStatTile extends StatelessWidget {
@@ -734,25 +762,22 @@ class _CommissionStatTile extends StatelessWidget {
   final String label;
   final String value;
   final Color color;
+  final VoidCallback? onTap;
 
   const _CommissionStatTile({
     required this.icon,
     required this.label,
     required this.value,
     required this.color,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Container(
+    final content = Padding(
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.2)),
-      ),
       child: Row(
         children: [
           Icon(icon, color: color, size: 20),
@@ -779,7 +804,25 @@ class _CommissionStatTile extends StatelessWidget {
               ],
             ),
           ),
+          if (onTap != null)
+            Icon(Icons.chevron_right, color: color.withValues(alpha: 0.7), size: 18),
         ],
+      ),
+    );
+
+    return Material(
+      color: color.withValues(alpha: 0.08),
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Ink(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: color.withValues(alpha: 0.2)),
+          ),
+          child: content,
+        ),
       ),
     );
   }

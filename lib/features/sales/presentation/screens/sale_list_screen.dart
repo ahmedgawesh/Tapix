@@ -72,10 +72,29 @@ class _SaleHubViewState extends State<_SaleHubView> {
         ),
         title: Text('sales.title'.tr()),
         actions: [
-          IconButton(
-            icon: const Icon(LucideIcons.undo2),
-            onPressed: () => context.push('/sales/returns'),
-            tooltip: 'sales.returns'.tr(),
+          Tooltip(
+            message: 'sales.returns'.tr(),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(8),
+              onTap: () => context.push('/sales/returns'),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(LucideIcons.undo2, size: 22),
+                    const SizedBox(height: 2),
+                    Text(
+                      'sales.returns'.tr(),
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            fontSize: 10,
+                          ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
           IconButton(
             icon: const Icon(LucideIcons.settings),
@@ -770,6 +789,11 @@ class _SaleTile extends StatelessWidget {
                           const SizedBox(height: 10),
                           Row(
                             children: [
+                              Expanded(
+                                child: SingleChildScrollView(
+                                  scrollDirection: Axis.horizontal,
+                                  child: Row(
+                                    children: [
                               Icon(LucideIcons.calendar,
                                   size: 13, color: cs.onSurfaceVariant),
                               const SizedBox(width: 4),
@@ -851,7 +875,11 @@ class _SaleTile extends StatelessWidget {
                                   ),
                                 ),
                               ],
-                              const Spacer(),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
                               Text(
                                 currencyService
                                     .format(sale.totalCents.toBigInt().toInt()),

@@ -372,6 +372,56 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
   }
 
   @override
+  Future<bool> editAttendance({
+    required int employeeId,
+    required DateTime date,
+    DateTime? checkInTime,
+    DateTime? checkOutTime,
+    required AttendanceStatus status,
+    String? notes,
+    int? approvedBy,
+  }) async {
+    final existing = await _dao.getAttendance(employeeId, date);
+    if (existing == null) {
+      throw Exception('No attendance record found for this date');
+    }
+
+    // Absent / leave records carry no working times; clear them so the
+    // payroll counts (which aggregate by status) stay coherent.
+    final bool clearsTimes =
+        status == AttendanceStatus.absent || status == AttendanceStatus.leave;
+
+    final DateTime? effectiveCheckIn = clearsTimes ? null : checkInTime;
+    final DateTime? effectiveCheckOut = clearsTimes ? null : checkOutTime;
+
+    // Recompute overtime from the corrected times so downstream payroll math
+    // is not corrupted by a stale value. Guards against inverted times.
+    int computedOvertime = 0;
+    if (effectiveCheckIn != null && effectiveCheckOut != null) {
+      final employee = await _dao.getEmployee(employeeId);
+      if (employee != null && effectiveCheckOut.isAfter(effectiveCheckIn)) {
+        final workedMinutes =
+            effectiveCheckOut.difference(effectiveCheckIn).inMinutes;
+        final expectedMinutes = employee.workingHoursPerDay * 60;
+        if (workedMinutes > expectedMinutes) {
+          computedOvertime = workedMinutes - expectedMinutes;
+        }
+      }
+    }
+
+    final updated = existing.copyWith(
+      checkInTime: Value(effectiveCheckIn),
+      checkOutTime: Value(effectiveCheckOut),
+      status: status.name,
+      overtimeMinutes: computedOvertime,
+      notes: Value(notes),
+      approvedBy: Value(approvedBy),
+      updatedAt: DateTime.now(),
+    );
+    return _dao.updateAttendance(updated);
+  }
+
+  @override
   Future<Map<String, int>> getEmployeeAttendanceCounts(
     int employeeId,
     DateTime startDate,
@@ -680,6 +730,9 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
       currencyId: Value(currencyId),
       period: Value(period),
       status: const Value('pending'),
+      // Manual commissions have no linked economic document; default the
+      // posting date to now so they still surface in date-ranged reports.
+      effectiveDate: Value(DateTime.now()),
       createdAt: Value(DateTime.now()),
     );
     return _dao.createCommission(companion);

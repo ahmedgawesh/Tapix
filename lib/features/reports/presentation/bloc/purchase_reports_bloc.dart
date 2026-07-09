@@ -169,6 +169,11 @@ class PurchaseReportsSummary {
   final int creditPurchasesCents;
   final int cardPurchasesCents;
   final int chequePurchasesCents;
+  /// Total value of ALL posted purchase returns in the period — linked
+  /// (invoice-based) AND adjustment (unlinked) returns combined.
+  final int totalReturnsCents;
+  /// Count of ALL posted purchase returns (linked + adjustment).
+  final int returnCount;
 
   const PurchaseReportsSummary({
     this.totalPurchasesCents = 0,
@@ -181,7 +186,12 @@ class PurchaseReportsSummary {
     this.creditPurchasesCents = 0,
     this.cardPurchasesCents = 0,
     this.chequePurchasesCents = 0,
+    this.totalReturnsCents = 0,
+    this.returnCount = 0,
   });
+
+  /// Net purchases = gross purchases − all returns (linked + adjustment).
+  int get netPurchasesCents => totalPurchasesCents - totalReturnsCents;
 }
 
 class PurchaseReportsData {
@@ -252,7 +262,19 @@ class PurchaseReportsBloc
 
   @override
   Stream<PurchaseReportsData> get dataStream {
-    return _db.select(_db.purchases).watch().asyncMap((_) => _loadAll());
+    // Watch purchases AND both return sources so posting/voiding a linked or
+    // adjustment (unlinked) return live-refreshes the net-purchases figures.
+    return _db
+        .customSelect(
+          'SELECT 1',
+          readsFrom: {
+            _db.purchases,
+            _db.purchaseReturns,
+            _db.purchaseReturnAdjustments,
+          },
+        )
+        .watch()
+        .asyncMap((_) => _loadAll());
   }
 
   @override
@@ -276,6 +298,7 @@ class PurchaseReportsBloc
       _loadBySupplier(),
       _loadCancelledInvoices(),
       _loadPurchaseOrders(),
+      _loadReturnsTotals(),
     ]);
 
     final allPurchases = results[0] as List<PurchaseInvoiceItem>;
@@ -284,6 +307,7 @@ class PurchaseReportsBloc
     final bySupplier = results[3] as List<PurchasesBySupplierItem>;
     final cancelled = results[4] as List<CancelledPurchaseItem>;
     final orders = results[5] as List<PurchaseOrderItem>;
+    final returnsTotals = results[6] as ({int totalCents, int count});
 
     // Calculate summary from allPurchases
     int totalPurchases = 0;
@@ -324,6 +348,8 @@ class PurchaseReportsBloc
         creditPurchasesCents: creditPurchases,
         cardPurchasesCents: cardPurchases,
         chequePurchasesCents: chequePurchases,
+        totalReturnsCents: returnsTotals.totalCents,
+        returnCount: returnsTotals.count,
       ),
       allPurchases: allPurchases,
       byProduct: byProduct,
@@ -332,6 +358,45 @@ class PurchaseReportsBloc
       cancelledInvoices: cancelled,
       purchaseOrders: orders,
       dateRange: _dateRange,
+    );
+  }
+
+  /// Total value + count of ALL posted purchase returns in the period,
+  /// combining linked (invoice-based) returns and adjustment (unlinked)
+  /// returns. Used to present net purchases (gross − returns) on the summary.
+  Future<({int totalCents, int count})> _loadReturnsTotals() async {
+    final startIso = _dateRange.startDate.toIso8601String();
+    final endIso = _dateRange.endDate.toIso8601String();
+
+    final rows = await _db.customSelect(
+      '''
+      SELECT
+        (SELECT COALESCE(SUM(pr.total_cents), 0) FROM purchase_returns pr
+           WHERE pr.status = 'posted'
+             AND pr.return_date >= ? AND pr.return_date <= ?)
+        + (SELECT COALESCE(SUM(pra.total_cents), 0) FROM purchase_return_adjustments pra
+           WHERE pra.status = 'posted'
+             AND pra.return_date >= ? AND pra.return_date <= ?) AS total_cents,
+        (SELECT COUNT(*) FROM purchase_returns pr
+           WHERE pr.status = 'posted'
+             AND pr.return_date >= ? AND pr.return_date <= ?)
+        + (SELECT COUNT(*) FROM purchase_return_adjustments pra
+           WHERE pra.status = 'posted'
+             AND pra.return_date >= ? AND pra.return_date <= ?) AS return_count
+      ''',
+      variables: [
+        Variable.withString(startIso), Variable.withString(endIso),
+        Variable.withString(startIso), Variable.withString(endIso),
+        Variable.withString(startIso), Variable.withString(endIso),
+        Variable.withString(startIso), Variable.withString(endIso),
+      ],
+      readsFrom: {_db.purchaseReturns, _db.purchaseReturnAdjustments},
+    ).get();
+
+    if (rows.isEmpty) return (totalCents: 0, count: 0);
+    return (
+      totalCents: rows.first.read<int>('total_cents'),
+      count: rows.first.read<int>('return_count'),
     );
   }
 

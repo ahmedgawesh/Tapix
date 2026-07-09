@@ -740,6 +740,8 @@ class _StatementContent extends StatelessWidget {
         return 'reports.txn_type_refund'.tr();
       case 'adjustment':
         return 'reports.txn_type_adjustment'.tr();
+      case 'adjustment_return':
+        return 'reports.txn_type_adjustment_return'.tr();
       case 'credit_note':
         return 'reports.txn_type_credit_note'.tr();
       case 'opening_balance':

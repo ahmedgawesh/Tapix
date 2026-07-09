@@ -259,6 +259,13 @@ class _ReportsHubView extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               _ReportTile(
+                icon: LucideIcons.undo2,
+                title: 'reports.supplier_returns_report'.tr(),
+                subtitle: 'reports.supplier_returns_report_desc'.tr(),
+                onTap: () => context.push('/reports/supplier-returns'),
+              ),
+              const SizedBox(height: 8),
+              _ReportTile(
                 icon: LucideIcons.warehouse,
                 title: 'reports.supplier_stocktake'.tr(),
                 subtitle: 'reports.supplier_stocktake_desc'.tr(),

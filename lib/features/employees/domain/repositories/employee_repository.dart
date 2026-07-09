@@ -153,6 +153,22 @@ abstract class EmployeeRepository {
     int? approvedBy,
   });
 
+  /// Correct an existing attendance record (owner/manager only).
+  ///
+  /// Lets an authorised user fix a mistakenly-recorded check-in/check-out
+  /// time and status. Overtime is recomputed from the corrected times, so
+  /// downstream payroll counts stay consistent (attendance is not tied to any
+  /// posted journal entry — payroll aggregates these values on demand).
+  Future<bool> editAttendance({
+    required int employeeId,
+    required DateTime date,
+    DateTime? checkInTime,
+    DateTime? checkOutTime,
+    required AttendanceStatus status,
+    String? notes,
+    int? approvedBy,
+  });
+
   /// Get employee attendance counts for a period
   Future<Map<String, int>> getEmployeeAttendanceCounts(
     int employeeId,

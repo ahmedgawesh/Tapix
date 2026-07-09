@@ -2,7 +2,7 @@ import 'package:equatable/equatable.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../domain/entities/size_entity.dart';
 
-abstract class SizesEvent extends RealtimeEvent with EquatableMixin {
+abstract class SizesEvent extends RealtimeEvent with Equatable {
   const SizesEvent();
 
   @override

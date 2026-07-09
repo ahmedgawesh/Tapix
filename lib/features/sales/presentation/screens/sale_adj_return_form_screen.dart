@@ -13,6 +13,8 @@ import '../../../employees/domain/repositories/employee_repository.dart';
 import '../../../../core/database/daos/adjustment_return_dao.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../../../core/services/journal_entry_service.dart';
+import '../../../../core/services/commissions/commission_service.dart';
+import '../../../../core/services/loyalty/loyalty_points_service.dart';
 import '../../../../core/widgets/inputs/select_all_on_focus.dart';
 import '../../../purchases/presentation/bloc/purchase_adj_return_form_bloc.dart'
     show AdjReturnLineItem, AdjReturnPaymentMethod, AdjReturnReasonCode;
@@ -51,6 +53,8 @@ class SaleAdjReturnFormScreen extends StatelessWidget {
         final bloc = SaleAdjReturnFormBloc(
           sl<AdjustmentReturnDao>(),
           sl<JournalEntryService>(),
+          sl<CommissionService>(),
+          sl<LoyaltyPointsService>(),
         );
         if (customerId != null && customerName != null) {
           bloc.add(SaleAdjReturnCustomerSelected(customerId!, customerName!));
@@ -174,6 +178,7 @@ class _FormView extends StatelessWidget {
                             const SizedBox(height: 12),
                             _SaleFraudWarnings(
                               customerId: state.customerId,
+                              employeeId: state.employeeId,
                               items: state.items,
                             ),
                           ],
@@ -1094,6 +1099,42 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                       _summaryRow(theme, 'returns.total_refund'.tr(),
                           curr.format(state.totalCents),
                           isBold: true, valueColor: cs.error),
+                      // ── Loyalty points deduction (req 3 + 4) ──
+                      // Shown only for a credit return with a selected
+                      // customer: the points that will be deducted plus
+                      // their monetary value in cents and the selected
+                      // currency.
+                      if (state.loyaltyEnabled &&
+                          state.loyaltyPointsToDeduct > 0) ...[
+                        const SizedBox(height: 8),
+                        _summaryRow(
+                          theme,
+                          'returns.loyalty_points_deducted'.tr(),
+                          '- ${state.loyaltyPointsToDeduct} ${'sales.points'.tr()}',
+                          valueColor: cs.tertiary,
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('returns.loyalty_points_value'.tr(),
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                    color: cs.onSurfaceVariant)),
+                            Text(
+                              'returns.loyalty_points_value_detail'.tr(
+                                namedArgs: {
+                                  'points': '${state.loyaltyPointsToDeduct}',
+                                  'cents': '${state.loyaltyDeductionValueCents}',
+                                  'amount': curr
+                                      .format(state.loyaltyDeductionValueCents),
+                                },
+                              ),
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                  color: cs.onSurfaceVariant),
+                            ),
+                          ],
+                        ),
+                      ],
                     ]),
                   ),
                   const SizedBox(height: 16),
@@ -1102,6 +1143,7 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                   //    sees them right before confirming the refund) ──
                   _SaleFraudWarnings(
                     customerId: state.customerId,
+                    employeeId: state.employeeId,
                     items: state.items,
                   ),
 
@@ -1296,13 +1338,22 @@ class _AdjReturnItemTileState extends State<_AdjReturnItemTile> {
     final discountPerItem = context.read<SaleAdjReturnFormBloc>().state.discountPerItem;
     final db = sl<AppDatabase>();
     int stockQty = 0;
+    // Resolve live retail + wholesale reference prices so the edit sheet can
+    // offer the retail/wholesale tier shortcuts regardless of how the line was
+    // originally added (picker, external navigation, or a pre-existing item).
+    int? retailCents = widget.item.retailPriceCents;
+    int? wholesaleCents = widget.item.wholesalePriceCents;
     try {
       if (widget.item.variantId != null) {
         final v = await (db.select(db.productVariants)..where((t) => t.id.equals(widget.item.variantId!))).getSingleOrNull();
         stockQty = v?.stockQuantity ?? 0;
+        retailCents = v?.priceCents.toBigInt().toInt() ?? retailCents;
+        wholesaleCents = v?.wholesalePriceCents?.toBigInt().toInt() ?? wholesaleCents;
       } else {
         final p = await (db.select(db.products)..where((t) => t.id.equals(widget.item.productId))).getSingleOrNull();
         stockQty = p?.stockQuantity ?? 0;
+        retailCents = p?.priceCents.toBigInt().toInt() ?? retailCents;
+        wholesaleCents = p?.wholesalePriceCents?.toBigInt().toInt() ?? wholesaleCents;
       }
     } catch (_) {}
     if (!context.mounted) return;
@@ -1319,6 +1370,8 @@ class _AdjReturnItemTileState extends State<_AdjReturnItemTile> {
         onDiscountChanged: widget.onDiscountChanged,
         showDiscount: discountPerItem,
         stockQuantity: stockQty,
+        retailPriceCents: retailCents,
+        wholesalePriceCents: wholesaleCents,
       ),
     );
   }
@@ -1466,6 +1519,13 @@ class _ItemEditSheet extends StatefulWidget {
   final void Function(int cents, int percentBps) onDiscountChanged;
   final bool showDiscount;
   final int stockQuantity;
+  /// Live retail selling price resolved from the DB at open time. Falls back to
+  /// the value captured on the line item when null. Drives the "retail" tier
+  /// shortcut so it works regardless of how the line was originally added.
+  final int? retailPriceCents;
+  /// Live wholesale selling price resolved from the DB at open time (nullable
+  /// when the product/variant has none). Drives the "wholesale" tier shortcut.
+  final int? wholesalePriceCents;
 
   const _ItemEditSheet({
     required this.item,
@@ -1474,6 +1534,8 @@ class _ItemEditSheet extends StatefulWidget {
     required this.onDiscountChanged,
     this.showDiscount = true,
     this.stockQuantity = 0,
+    this.retailPriceCents,
+    this.wholesalePriceCents,
   });
 
   @override
@@ -1551,6 +1613,40 @@ class _ItemEditSheetState extends State<_ItemEditSheet> {
     setState(() {});
   }
 
+  /// A tappable price shortcut (retail / wholesale). Tapping snaps the unit
+  /// price field to [priceCents] and re-applies it to the line.
+  Widget _priceTierBtn(
+      ColorScheme cs, ThemeData theme, String tier, int priceCents, CurrencyService curr) {
+    final priceStr = (priceCents / 100).toStringAsFixed(2);
+    final isActive = _priceCtrl.text == priceStr;
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: () {
+        _priceCtrl.text = priceStr;
+        _applyPrice();
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: isActive ? cs.primary : cs.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: isActive ? cs.primary : cs.outlineVariant),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Text(tier,
+              style: theme.textTheme.labelSmall?.copyWith(
+                  color: isActive ? cs.onPrimary : cs.onSurfaceVariant,
+                  fontWeight: FontWeight.bold)),
+          const SizedBox(width: 4),
+          Text(curr.format(priceCents),
+              style: theme.textTheme.labelSmall?.copyWith(
+                  color: isActive ? cs.onPrimary : cs.onSurface,
+                  fontWeight: FontWeight.w500)),
+        ]),
+      ),
+    );
+  }
+
   // ─── live computed values from controllers ───
   int get _livePriceCents => ((double.tryParse(_priceCtrl.text) ?? 0) * 100).round();
   int get _liveSubtotal => _livePriceCents * widget.item.quantity;
@@ -1571,7 +1667,8 @@ class _ItemEditSheetState extends State<_ItemEditSheet> {
         left: 20, right: 20, top: 16,
         bottom: MediaQuery.of(context).viewInsets.bottom + 20,
       ),
-      child: Column(
+      child: SingleChildScrollView(
+        child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1629,6 +1726,33 @@ class _ItemEditSheetState extends State<_ItemEditSheet> {
               style: theme.textTheme.labelSmall?.copyWith(
                   fontWeight: FontWeight.w600, color: cs.onSurfaceVariant)),
           const SizedBox(height: 6),
+          // Price tier shortcuts — let the user return at the regular retail
+          // price or the customer's wholesale price. Prices are resolved live
+          // from the DB when the sheet opens, falling back to whatever was
+          // captured on the line item, so the shortcut works regardless of how
+          // the line was originally added.
+          Builder(builder: (context) {
+            final retail = widget.retailPriceCents ?? item.retailPriceCents;
+            final wholesale = widget.wholesalePriceCents ?? item.wholesalePriceCents;
+            if (retail == null && wholesale == null) {
+              return const SizedBox.shrink();
+            }
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  if (retail != null)
+                    _priceTierBtn(cs, theme, 'sales.retail_price'.tr(), retail, curr),
+                  if (wholesale != null) ...[
+                    const SizedBox(width: 6),
+                    _priceTierBtn(
+                        cs, theme, 'sales.wholesale_price'.tr(), wholesale, curr),
+                  ],
+                ]),
+                const SizedBox(height: 8),
+              ],
+            );
+          }),
           TextField(
             controller: _priceCtrl,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -1755,6 +1879,7 @@ class _ItemEditSheetState extends State<_ItemEditSheet> {
           ]),
         ],
       ),
+      ),
     );
   }
 }
@@ -1868,6 +1993,8 @@ class _PickerRow {
   final String? variantLabel;
   final String? sku;
   final int priceCents;
+  /// Wholesale selling price (nullable when the product/variant has none).
+  final int? wholesalePriceCents;
   final int costCents;
   final int stockQuantity;
   final int taxRateBps;
@@ -1884,6 +2011,7 @@ class _PickerRow {
     this.variantLabel,
     this.sku,
     required this.priceCents,
+    this.wholesalePriceCents,
     required this.costCents,
     required this.stockQuantity,
     required this.taxRateBps,
@@ -1995,6 +2123,7 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
             variantLabel: parts.isNotEmpty ? parts.join(' / ') : null,
             sku: vr.readNullable<String>('sku'),
             priceCents: vr.read<int>('price_cents'),
+            wholesalePriceCents: vr.readNullable<int>('wholesale_price_cents'),
             costCents: vr.read<int>('cost_cents'),
             stockQuantity: vr.read<int>('stock_quantity'),
             taxRateBps: taxBps,
@@ -2009,6 +2138,7 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
           variantLabel: defaultVariantLabels[product.id],
           sku: product.sku,
           priceCents: product.priceCents.toBigInt().toInt(),
+          wholesalePriceCents: product.wholesalePriceCents?.toBigInt().toInt(),
           costCents: product.costCents.toBigInt().toInt(),
           stockQuantity: product.stockQuantity,
           taxRateBps: taxBps,
@@ -2124,6 +2254,8 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
                       quantity: 1,
                       unitPriceCents: row.priceCents,
                       unitCostCents: row.costCents,
+                      retailPriceCents: row.priceCents,
+                      wholesalePriceCents: row.wholesalePriceCents,
                       taxRateBps: row.taxRateBps,
                     )),
                   );
@@ -2204,31 +2336,55 @@ class _ReasonDropdown extends StatelessWidget {
 // ═══════════════════════════════════════════════════════════
 class _SaleFraudWarnings extends StatelessWidget {
   final int? customerId;
+  final int? employeeId;
   final List<AdjReturnLineItem> items;
 
-  const _SaleFraudWarnings({required this.customerId, required this.items});
+  const _SaleFraudWarnings({
+    required this.customerId,
+    this.employeeId,
+    required this.items,
+  });
 
   @override
   Widget build(BuildContext context) {
-    // Walk-in (no customer) or no items: nothing to verify.
-    if (items.isEmpty || customerId == null) return const SizedBox.shrink();
+    // Nothing attributed (no customer AND no salesperson) or no items:
+    // nothing to verify.
+    if (items.isEmpty || (customerId == null && employeeId == null)) {
+      return const SizedBox.shrink();
+    }
 
     final dao = sl<AdjustmentReturnDao>();
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: FutureBuilder<List<_ItemWarning>>(
         future: Future.wait(items.map((it) async {
-          final qty = await dao.getCustomerProductPurchasedQty(
-            customerId: customerId,
-            productId: it.productId,
-            variantId: it.variantId,
+          final custQty = customerId == null
+              ? -1 // sentinel: customer check skipped (walk-in)
+              : await dao.getCustomerProductPurchasedQty(
+                  customerId: customerId,
+                  productId: it.productId,
+                  variantId: it.variantId,
+                );
+          final empQty = employeeId == null
+              ? -1 // sentinel: salesperson check skipped
+              : await dao.getEmployeeProductSoldQty(
+                  employeeId: employeeId,
+                  productId: it.productId,
+                  variantId: it.variantId,
+                );
+          return _ItemWarning(
+            item: it,
+            historyQty: custQty,
+            employeeSoldQty: empQty,
           );
-          return _ItemWarning(item: it, historyQty: qty);
         })),
         builder: (context, snap) {
           if (!snap.hasData) return const SizedBox.shrink();
           final warnings = snap.data!
-              .where((w) => w.historyQty == 0 || w.item.quantity > w.historyQty)
+              .where((w) =>
+                  (w.historyQty >= 0 &&
+                      (w.historyQty == 0 || w.item.quantity > w.historyQty)) ||
+                  (w.employeeSoldQty == 0))
               .toList();
           if (warnings.isEmpty) return const SizedBox.shrink();
           return _buildWarningsCard(context, warnings);
@@ -2259,29 +2415,39 @@ class _SaleFraudWarnings extends StatelessWidget {
                     color: Colors.amber.shade800)),
           ]),
           const SizedBox(height: 8),
-          ...warnings.map((w) {
-            final neverBought = w.historyQty == 0;
-            final text = neverBought
-                ? '${w.item.displayName} — ${'returns.warning_never_bought'.tr()}'
-                : '${w.item.displayName} — ${'returns.warning_qty_exceeds_history'.tr(namedArgs: {
+          ...warnings.expand((w) {
+            final lines = <String>[];
+            // Customer-history messages (skipped when historyQty == -1).
+            if (w.historyQty == 0) {
+              lines.add(
+                  '${w.item.displayName} — ${'returns.warning_never_bought'.tr()}');
+            } else if (w.historyQty > 0 && w.item.quantity > w.historyQty) {
+              lines.add(
+                  '${w.item.displayName} — ${'returns.warning_qty_exceeds_history'.tr(namedArgs: {
                     'qty': '${w.item.quantity}',
                     'history': '${w.historyQty}',
-                  })}';
-            return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 2),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(LucideIcons.dot,
-                      size: 16, color: Colors.amber.shade700),
-                  Expanded(
-                    child: Text(text,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                            color: Colors.amber.shade900, height: 1.35)),
+                  })}');
+            }
+            // Salesperson-attribution message (skipped when empQty == -1).
+            if (w.employeeSoldQty == 0) {
+              lines.add(
+                  '${w.item.displayName} — ${'returns.warning_employee_never_sold'.tr()}');
+            }
+            return lines.map((text) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(LucideIcons.dot,
+                          size: 16, color: Colors.amber.shade700),
+                      Expanded(
+                        child: Text(text,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                                color: Colors.amber.shade900, height: 1.35)),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            );
+                ));
           }),
         ],
       ),
@@ -2291,6 +2457,17 @@ class _SaleFraudWarnings extends StatelessWidget {
 
 class _ItemWarning {
   final AdjReturnLineItem item;
+
+  /// Customer historical purchased qty. `-1` = check skipped (walk-in).
   final int historyQty;
-  const _ItemWarning({required this.item, required this.historyQty});
+
+  /// Quantity the attributed salesperson has sold. `-1` = check skipped
+  /// (no salesperson selected); `0` = salesperson never sold this product.
+  final int employeeSoldQty;
+
+  const _ItemWarning({
+    required this.item,
+    required this.historyQty,
+    this.employeeSoldQty = -1,
+  });
 }

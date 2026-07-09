@@ -259,6 +259,21 @@ class PostedReturn {
   /// thrown `ReturnApprovalRequiredException` for the UI).
   final String? approvalReason;
 
+  /// Sale-side, `refund == credit`, UNLINKED returns only.
+  ///
+  /// When `true` the credit settlement reduces **1100 Accounts Receivable**
+  /// directly (mirroring a linked credit return) instead of issuing a
+  /// **2400 Customer Credit Liability** store-credit note. The caller
+  /// (`AdjustmentReturnDao.postSaleAdjReturn`) also writes an
+  /// `adjustment_return` row to `customer_transactions` and reduces
+  /// `customers.balance_cents` by the same amount, so the AR sub-ledger
+  /// (`Σ customers.balance_cents`) stays reconciled 1:1 with GL 1100.
+  ///
+  /// When `false` (default) the legacy behaviour is preserved: an unlinked
+  /// sale credit return routes to 2400 and issues a store-credit note. This
+  /// keeps the store-credit capability intact for callers that want it.
+  final bool creditToReceivable;
+
   const PostedReturn({
     required this.side,
     required this.link,
@@ -272,6 +287,7 @@ class PostedReturn {
     this.postingDate,
     this.approvalStatus = 'auto_approved',
     this.approvalReason,
+    this.creditToReceivable = false,
   });
 
   /// Convenience: total monetary impact (sum of all lines).

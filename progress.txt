@@ -2783,3 +2783,90 @@ DOCS UPDATED
   • docs/ACCOUNTING_INTEGRITY_GUIDELINES.md (new Phase 15.4 section:
     SoT rule + 2 banned-pattern entries + test pin)
 
+
+───────────────────────────────────────────────────────────────
+Phase 16 — Adjustment sale return must DEDUCT salesperson commission
+───────────────────────────────────────────────────────────────
+FIELD REPORT (tapix_backup_20260705_235704.db)
+  Employee "bero" (EMP0001, percentage, 1%). SAR-202607-0003 was an
+  adjustment (unlinked) sale return attributed to bero, subtotal 20000,
+  discount 100, tax 199, total 20099, return_date 2026-06-30.
+  Employee detail screen (يونيو 2026) showed إجمالي المرتجعات $200.99
+  but المخصوم (مرتجعات) = $0.00. The commission was earned on the
+  original sale but never deducted on the return.
+
+ROOT CAUSE
+  Adjustment (unlinked) returns by original design never touched
+  commission. `AdjustmentReturnDao.postSaleAdjReturn` recorded only
+  stock + GL; it never called `CommissionService`. And
+  `CommissionService.reverseForReturn` needs a `saleId` to prorate the
+  ORIGINAL commission — an adjustment return has none. The employee
+  detail screen's `deductedCommissionCents` sums negative `commissions`
+  rows for the period; none existed for the adjustment return, so the
+  deduction read $0.00 even though the return total surfaced correctly
+  via `EmployeeDao.getEmployeeSalesStats` (sale_return_adjustments branch).
+
+FIX (additive, single SoT, current-rate basis)
+  Because there is no original commission to prorate, the deduction is
+  computed FRESH from the return's own net × the employee's CURRENT rate
+  (mirrors `createForSale`), only when an employee is attributed.
+
+  • Schema 10058 → 10059: `commissions.sale_return_adjustment_id`
+    (nullable INT, no FK — keeps people.dart decoupled). Migration is
+    additive + nullable, no backfill (historical adjustment returns get
+    no retroactive deduction; a commission/ledger rebuild is the recovery
+    path). Defensive `_safeAddColumn` in `_ensureSchemaIntegrity` +
+    index `idx_commissions_sale_return_adjustment`.
+  • `CommissionService.reverseForAdjustmentReturn(...)` — new. percentage:
+    −(subtotal − discount) × rateBps / 10000; fixed: −fixedCents ×
+    itemCount. Negative row keyed by `saleReturnAdjustmentId`,
+    `effectiveDate` = returnDate, `period` = month of returnDate, so it
+    lands in the return's economic period and surfaces in the employee
+    detail's deducted total. No-op when employee missing / rate ≤ 0 /
+    net ≤ 0.
+  • `CommissionService.deleteForAdjustmentReturn(id)` +
+    `EmployeeDao.deleteCommissionsByAdjustmentReturnId(id)` — exact void
+    reversal (delete, not recompute — rate-change safe).
+  • `AdjustmentReturnDao.postSaleAdjReturn` / `createAndPostSaleAdjReturn`
+    gained optional `CommissionService? commissionService`; posts the
+    reversal inside the same tx when `returnData.employeeId != null`
+    (itemCount = Σ quantity). `voidSaleAdjReturn` gained the same param
+    and deletes the reversal inside the void tx.
+  • Callers wired: `SaleAdjReturnFormBloc` (+ screen DI),
+    `sale_adj_return_detail_screen` (void), `UnifiedReturnService`
+    (sale-side post), and DI registration for `UnifiedReturnService`.
+  • Purchase adjustment returns intentionally NOT touched — supplier-side
+    returns carry no salesperson commission.
+
+REGRESSION SUITE (all green)
+  • test/core/services/commissions/commission_service_test.dart — 6 new
+    tests (percentage/fixed deduction, keyed by adj id, 3 no-op guards,
+    exact delete).
+  • test/integration/adjustment_return_accounting_test.dart — 2 new
+    end-to-end DAO tests: post deducts −199 (field shape) + void removes
+    it; no row when no employee attributed.
+  • Fixed 3 existing UnifiedReturnService constructor call sites (new
+    6th positional CommissionService arg + import).
+
+VERIFICATION
+  • flutter analyze --no-pub → 0 issues (project-wide)
+  • Relevant suites green: commission_service, adjustment_return_*,
+    unified_return, linked_return_cap_after_adjustment,
+    purchase_adj_return_supplier_ref, employee_dao_sales_stats,
+    test/features/employees, test/features/reports, app_database_test.
+  • build_runner regenerated app_database.g.dart (saleReturnAdjustmentId).
+
+FIELD-FACING REMEDIATION
+  Phase 16 prevents NEW gaps. The historical SAR-202607-0003 in the
+  backup has no reversal row; a commission/ledger rebuild (or a manual
+  negative commission entry) is the recovery path for that one document.
+
+YAGNI GATES HELD
+  • No proration engine (no original commission exists to prorate).
+  • No FK on sale_return_adjustment_id (keeps people.dart decoupled;
+    cascade is managed manually by voidSaleAdjReturn).
+  • Purchase-side adjustment returns untouched (no salesperson link).
+
+DOCS UPDATED
+  • progress.txt (this entry)
+

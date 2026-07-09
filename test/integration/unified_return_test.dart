@@ -4,10 +4,13 @@ import 'package:drift/native.dart';
 import 'package:decimal/decimal.dart';
 import 'package:tapix/core/database/app_database.dart';
 import 'package:tapix/core/database/daos/adjustment_return_dao.dart';
+import 'package:tapix/core/services/commissions/commission_service.dart';
 import 'package:tapix/core/services/journal_entry_service.dart';
+import 'package:tapix/core/services/loyalty/loyalty_points_service.dart';
 import 'package:tapix/core/services/unified_return_service.dart';
 import 'package:tapix/core/services/return_calculation_service.dart';
 import 'package:tapix/features/accounting/data/repositories/accounting_repository.dart';
+import 'package:tapix/features/customers/data/repositories/loyalty_repository_impl.dart';
 
 /// Unified Return System integration tests.
 ///
@@ -35,6 +38,12 @@ void main() {
       db.saleDao,
       adjDao,
       journalService,
+      CommissionService(db.employeeDao),
+      LoyaltyPointsService(
+        LoyaltyRepositoryImpl(db, journalService),
+        journalService,
+        db,
+      ),
     );
 
     // Force DB init (triggers beforeOpen → seeds accounts)

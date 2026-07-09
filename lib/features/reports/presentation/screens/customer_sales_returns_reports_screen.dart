@@ -627,6 +627,8 @@ class _ReturnDetailsTab extends StatelessWidget {
         return 'reports.disposition_store_credit'.tr();
       case 'refund':
         return 'reports.disposition_refund'.tr();
+      case 'adjustment':
+        return 'reports.disposition_adjustment'.tr();
       default:
         return type;
     }

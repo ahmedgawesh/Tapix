@@ -90,6 +90,8 @@ void main() {
       expect(row.commissionAmountCents.toBigInt().toInt(), 450);
       expect(row.commissionRateBps, 500.0);
       expect(row.period, '2026-05');
+      // Economic-event date is the sale date (posting-date convention).
+      expect(row.effectiveDate, DateTime(2026, 5, 15));
     });
 
     test('percentage: skips row when net revenue is non-positive', () async {
@@ -228,6 +230,10 @@ void main() {
           .where((r) => r.commissionAmountCents.toBigInt().toInt() < 0)
           .toList();
       expect(negatives.single.commissionAmountCents.toBigInt().toInt(), -125);
+      // Reversal's economic-event date is the RETURN date, not the sale date,
+      // so it is attributed to the period the return occurred in.
+      expect(negatives.single.effectiveDate, DateTime(2026, 5, 16));
+      expect(negatives.single.period, '2026-05');
     });
 
     test('caps returnSubtotal at saleSubtotal (over-return guard)', () async {
@@ -449,6 +455,127 @@ void main() {
       final removed = await service.deleteForSale(1);
       expect(removed, 2);
       expect(await employeeDao.getCommissionsBySaleId(1), isEmpty);
+    });
+  });
+
+  // ─────────────────── reverseForAdjustmentReturn / delete ──────────────────
+  //
+  // An unlinked (adjustment) sale return attributed to a salesperson has no
+  // original commission to prorate against, so the deduction is computed
+  // fresh from the return's own net (subtotal − discount) × the employee's
+  // current rate (percentage) or fixedCents × itemCount (fixed). The negative
+  // row is keyed by the adjustment-return id so a void deletes it exactly.
+
+  Future<List<Commission>> commissionsByAdj(int adjId) {
+    return (db.select(db.commissions)
+          ..where((c) => c.saleReturnAdjustmentId.equals(adjId)))
+        .get();
+  }
+
+  group('CommissionService.reverseForAdjustmentReturn', () {
+    test('percentage: deduction = (subtotal − discount) × rate, keyed by adj id',
+        () async {
+      // Matches the field report: 1% of (20000 − 100) = 199.
+      final empId = await makeEmployee(defaultRateBps: 100);
+      await service.reverseForAdjustmentReturn(
+        adjustmentReturnId: 3,
+        employeeId: empId,
+        returnSubtotalCents: 20000,
+        returnDiscountCents: 100,
+        itemCount: 1,
+        currencyId: currencyId,
+        returnDate: DateTime(2026, 6, 30),
+      );
+      final rows = await commissionsByAdj(3);
+      expect(rows.length, 1);
+      final row = rows.single;
+      expect(row.commissionAmountCents.toBigInt().toInt(), -199);
+      expect(row.commissionRateBps, 100.0);
+      expect(row.saleId, isNull);
+      expect(row.saleReturnAdjustmentId, 3);
+      // Attributed to the return's economic-event period.
+      expect(row.effectiveDate, DateTime(2026, 6, 30));
+      expect(row.period, '2026-06');
+    });
+
+    test('fixed: deduction = fixedCents × itemCount', () async {
+      final empId = await makeEmployee(
+        commissionType: 'fixed',
+        fixedCents: 150,
+      );
+      await service.reverseForAdjustmentReturn(
+        adjustmentReturnId: 7,
+        employeeId: empId,
+        returnSubtotalCents: 99999,
+        returnDiscountCents: 0,
+        itemCount: 3,
+        currencyId: currencyId,
+        returnDate: DateTime(2026, 6, 30),
+      );
+      final row = (await commissionsByAdj(7)).single;
+      expect(row.commissionAmountCents.toBigInt().toInt(), -450);
+      expect(row.commissionRateBps, 0.0);
+    });
+
+    test('no-op when employee is missing', () async {
+      await service.reverseForAdjustmentReturn(
+        adjustmentReturnId: 9,
+        employeeId: 99999,
+        returnSubtotalCents: 20000,
+        returnDiscountCents: 0,
+        itemCount: 1,
+        currencyId: currencyId,
+        returnDate: DateTime(2026, 6, 30),
+      );
+      expect(await commissionsByAdj(9), isEmpty);
+    });
+
+    test('no-op when percentage rate is zero', () async {
+      final empId = await makeEmployee(defaultRateBps: 0);
+      await service.reverseForAdjustmentReturn(
+        adjustmentReturnId: 9,
+        employeeId: empId,
+        returnSubtotalCents: 20000,
+        returnDiscountCents: 0,
+        itemCount: 1,
+        currencyId: currencyId,
+        returnDate: DateTime(2026, 6, 30),
+      );
+      expect(await commissionsByAdj(9), isEmpty);
+    });
+
+    test('no-op when net revenue is non-positive', () async {
+      final empId = await makeEmployee(defaultRateBps: 100);
+      await service.reverseForAdjustmentReturn(
+        adjustmentReturnId: 9,
+        employeeId: empId,
+        returnSubtotalCents: 500,
+        returnDiscountCents: 500, // net = 0
+        itemCount: 1,
+        currencyId: currencyId,
+        returnDate: DateTime(2026, 6, 30),
+      );
+      expect(await commissionsByAdj(9), isEmpty);
+    });
+  });
+
+  group('CommissionService.deleteForAdjustmentReturn', () {
+    test('removes exactly the reversal row for that adjustment return',
+        () async {
+      final empId = await makeEmployee(defaultRateBps: 100);
+      await service.reverseForAdjustmentReturn(
+        adjustmentReturnId: 3,
+        employeeId: empId,
+        returnSubtotalCents: 20000,
+        returnDiscountCents: 100,
+        itemCount: 1,
+        currencyId: currencyId,
+        returnDate: DateTime(2026, 6, 30),
+      );
+      expect((await commissionsByAdj(3)).length, 1);
+      final removed = await service.deleteForAdjustmentReturn(3);
+      expect(removed, 1);
+      expect(await commissionsByAdj(3), isEmpty);
     });
   });
 }

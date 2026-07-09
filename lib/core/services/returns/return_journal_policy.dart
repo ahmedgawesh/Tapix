@@ -358,10 +358,13 @@ class ReturnJournalPolicy {
       case RefundChannel.cheque:
         return _requireAccountId(_bankCode);
       case RefundChannel.credit:
-        // Linked → reduce existing AR. Unlinked → park in 2400 Customer
-        // Credit Liability so AR isn't created out of thin air. Aging
-        // reports remain accurate either way.
-        if (ret.link.isLinked) {
+        // Linked → reduce existing AR. Unlinked → by default park in 2400
+        // Customer Credit Liability so AR isn't created out of thin air
+        // (store-credit sub-ledger). When the caller opts into
+        // `creditToReceivable` (sale adjustment returns), reduce 1100 AR
+        // directly instead — the DAO mirrors this on `customers.balance_cents`
+        // so the AR sub-ledger stays reconciled with GL 1100.
+        if (ret.link.isLinked || ret.creditToReceivable) {
           return _requireAccountId(_arCode);
         }
         return _requireAccountId(_customerCreditLiabilityCode);
@@ -395,14 +398,15 @@ class ReturnJournalPolicy {
 
   String _saleDescription(PostedReturn ret) {
     final base = ret.referenceCode ?? 'Sale Return #${ret.returnId}';
-    final method = _refundMethodLabel(ret.refund, ReturnSide.sale, ret.link);
+    final method = _refundMethodLabel(
+        ret.refund, ReturnSide.sale, ret.link, ret.creditToReceivable);
     return '$base — $method';
   }
 
   String _purchaseDescription(PostedReturn ret) {
     final base = ret.referenceCode ?? 'Purchase Return #${ret.returnId}';
-    final method =
-        _refundMethodLabel(ret.refund, ReturnSide.purchase, ret.link);
+    final method = _refundMethodLabel(
+        ret.refund, ReturnSide.purchase, ret.link, ret.creditToReceivable);
     return '$base — $method';
   }
 
@@ -415,7 +419,7 @@ class ReturnJournalPolicy {
       case RefundChannel.cheque:
         return 'Cheque refund — Sale Return #${ret.returnId}';
       case RefundChannel.credit:
-        if (ret.link.isLinked) {
+        if (ret.link.isLinked || ret.creditToReceivable) {
           return 'AR reduced — Sale Return #${ret.returnId}';
         }
         return 'Customer credit issued — Sale Return #${ret.returnId}';
@@ -439,6 +443,7 @@ class ReturnJournalPolicy {
     RefundChannel ch,
     ReturnSide side,
     ReturnLink link,
+    bool creditToReceivable,
   ) {
     switch (ch) {
       case RefundChannel.cash:
@@ -448,7 +453,7 @@ class ReturnJournalPolicy {
       case RefundChannel.cheque:
         return 'Cheque';
       case RefundChannel.credit:
-        if (side == ReturnSide.sale && !link.isLinked) {
+        if (side == ReturnSide.sale && !link.isLinked && !creditToReceivable) {
           return 'Customer Credit';
         }
         return 'Credit';

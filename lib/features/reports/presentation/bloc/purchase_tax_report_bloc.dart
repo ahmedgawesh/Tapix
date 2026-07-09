@@ -159,7 +159,19 @@ class PurchaseTaxReportBloc
 
   @override
   Stream<PurchaseTaxReportData> get dataStream {
-    return _db.select(_db.purchases).watch().asyncMap((_) => _loadData());
+    // React to purchases AND both return sources so posting/voiding a linked or
+    // adjustment (unlinked) return live-refreshes the tax figures.
+    return _db
+        .customSelect(
+          'SELECT 1',
+          readsFrom: {
+            _db.purchases,
+            _db.purchaseReturns,
+            _db.purchaseReturnAdjustments,
+          },
+        )
+        .watch()
+        .asyncMap((_) => _loadData());
   }
 
   @override
@@ -235,27 +247,60 @@ class PurchaseTaxReportBloc
       );
     }).toList();
 
+    // Load purchase returns with tax — BOTH linked (invoice-based) returns and
+    // adjustment (unlinked, product-based) returns. Input-VAT reversed on an
+    // adjustment return is just as real as on a linked return and must reduce
+    // the net recoverable tax the same way.
     final returnRows = await _db.customSelect(
       '''
-      SELECT 
-        pr.id AS return_id,
-        pr.return_number,
-        sup.name AS supplier_name,
-        pr.return_date,
-        pr.subtotal_cents,
-        pr.discount_cents,
-        pr.tax_cents,
-        pr.total_cents
-      FROM purchase_returns pr
-      INNER JOIN purchases p ON p.id = pr.purchase_id
-      LEFT JOIN suppliers sup ON sup.id = p.supplier_id
-      WHERE pr.status = 'posted'
-        AND pr.return_date >= ?
-        AND pr.return_date <= ?
-      ORDER BY pr.return_date DESC
+      SELECT return_id, return_number, supplier_name, return_date,
+             subtotal_cents, discount_cents, tax_cents, total_cents
+      FROM (
+        SELECT 
+          pr.id AS return_id,
+          pr.return_number AS return_number,
+          sup.name AS supplier_name,
+          pr.return_date AS return_date,
+          pr.subtotal_cents AS subtotal_cents,
+          pr.discount_cents AS discount_cents,
+          pr.tax_cents AS tax_cents,
+          pr.total_cents AS total_cents
+        FROM purchase_returns pr
+        INNER JOIN purchases p ON p.id = pr.purchase_id
+        LEFT JOIN suppliers sup ON sup.id = p.supplier_id
+        WHERE pr.status = 'posted'
+          AND pr.return_date >= ?
+          AND pr.return_date <= ?
+        UNION ALL
+        SELECT 
+          pra.id AS return_id,
+          pra.return_number AS return_number,
+          sup.name AS supplier_name,
+          pra.return_date AS return_date,
+          pra.subtotal_cents AS subtotal_cents,
+          pra.discount_cents AS discount_cents,
+          pra.tax_cents AS tax_cents,
+          pra.total_cents AS total_cents
+        FROM purchase_return_adjustments pra
+        LEFT JOIN suppliers sup ON sup.id = pra.supplier_id
+        WHERE pra.status = 'posted'
+          AND pra.return_date >= ?
+          AND pra.return_date <= ?
+      )
+      ORDER BY return_date DESC
       ''',
-      variables: [Variable.withString(startIso), Variable.withString(endIso)],
-      readsFrom: {_db.purchaseReturns, _db.purchases, _db.suppliers},
+      variables: [
+        Variable.withString(startIso),
+        Variable.withString(endIso),
+        Variable.withString(startIso),
+        Variable.withString(endIso),
+      ],
+      readsFrom: {
+        _db.purchaseReturns,
+        _db.purchaseReturnAdjustments,
+        _db.purchases,
+        _db.suppliers,
+      },
     ).get();
 
     final returns = returnRows.map((row) {

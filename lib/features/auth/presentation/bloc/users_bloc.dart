@@ -6,7 +6,7 @@ import '../../domain/entities/user_entity.dart';
 import '../../domain/repositories/user_repository_interface.dart';
 
 // Events
-abstract class UsersEvent extends RealtimeEvent with EquatableMixin {
+abstract class UsersEvent extends RealtimeEvent with Equatable {
   const UsersEvent();
 
   @override

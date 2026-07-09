@@ -418,6 +418,11 @@ class CustomerStatementPdfService {
       'ar': 'تسوية',
       'fr': 'Ajustement',
     },
+    'txn_adjustment_return': {
+      'en': 'Unlinked Return',
+      'ar': 'مرتجع غير مرتبط',
+      'fr': 'Retour Non Lié',
+    },
     'txn_credit_note': {
       'en': 'Credit Note',
       'ar': 'إشعار دائن',

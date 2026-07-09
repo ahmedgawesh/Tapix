@@ -125,9 +125,17 @@ class _SaleLineFlowRow extends StatelessWidget {
 
     final reconstructed = line.reconstructedCogsCents;
     final snapshot = line.snapshotCostCents ?? 0;
+    // `snapshot` is a PER-UNIT cost (sale_items.cost_cents) while
+    // `reconstructed` is the TOTAL COGS across net-consumed batch quantity.
+    // Compare like-for-like by expanding the snapshot to the same net
+    // quantity the ledger reflects (post-return), allowing ±1 cent per unit
+    // for the blended-cost rounding stamped at sale time.
+    final netQty = line.batches.fold<int>(0, (s, b) => s + b.quantity);
+    final expectedFromSnapshot = snapshot * netQty;
     final hasMismatch = line.isBatchTracked &&
         snapshot > 0 &&
-        (reconstructed - snapshot).abs() > 0;
+        netQty > 0 &&
+        (reconstructed - expectedFromSnapshot).abs() > netQty;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),

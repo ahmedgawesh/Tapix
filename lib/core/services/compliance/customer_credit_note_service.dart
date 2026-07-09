@@ -377,6 +377,19 @@ class CustomerCreditNoteService {
         .get();
   }
 
+  /// Reactively watch every non-voided credit note for [customerId]
+  /// (newest first). Powers the customer-profile "Store Credit" section so
+  /// adjustment-return credit notes — which settle to 2400 and therefore
+  /// never touch `customer_transactions` — are still visible to the user.
+  Stream<List<CustomerCreditNote>> watchForCustomer(int customerId) {
+    return (_db.select(_db.customerCreditNotes)
+          ..where((n) =>
+              n.customerId.equals(customerId) &
+              n.status.isNotValue('voided'))
+          ..orderBy([(n) => OrderingTerm.desc(n.issuedAt)]))
+        .watch();
+  }
+
   /// Fetch a single note (for UI / audit).
   Future<CustomerCreditNote?> getById(int id) {
     return (_db.select(_db.customerCreditNotes)..where((n) => n.id.equals(id)))

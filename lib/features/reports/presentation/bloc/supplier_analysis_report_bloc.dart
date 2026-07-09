@@ -283,8 +283,8 @@ class SupplierAnalysisReportBloc extends RealtimeBloc<
         s.phone AS phone,
         COALESCE(SUM(CASE WHEN st.transaction_type = 'purchase' THEN st.amount_cents ELSE 0 END), 0) AS total_purchases_cents,
         COALESCE(SUM(CASE WHEN st.transaction_type = 'purchase' THEN 1 ELSE 0 END), 0) AS purchase_count,
-        COALESCE(SUM(CASE WHEN st.transaction_type IN ('credit_note', 'refund') THEN ABS(st.amount_cents) ELSE 0 END), 0) AS total_returns_cents,
-        COALESCE(SUM(CASE WHEN st.transaction_type IN ('credit_note', 'refund') THEN 1 ELSE 0 END), 0) AS return_count,
+        COALESCE(SUM(CASE WHEN st.transaction_type IN ('credit_note', 'refund', 'adjustment_return') THEN ABS(st.amount_cents) ELSE 0 END), 0) AS total_returns_cents,
+        COALESCE(SUM(CASE WHEN st.transaction_type IN ('credit_note', 'refund', 'adjustment_return') THEN 1 ELSE 0 END), 0) AS return_count,
         COALESCE(SUM(CASE WHEN st.transaction_type = 'payment' THEN ABS(st.amount_cents) ELSE 0 END), 0) AS total_payments_cents,
         COALESCE(SUM(CASE WHEN st.transaction_type = 'payment' THEN 1 ELSE 0 END), 0) AS payment_count,
         MAX(st.transaction_date) AS last_transaction_at

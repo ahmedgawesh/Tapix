@@ -171,6 +171,7 @@ import '../../features/reports/presentation/bloc/supplier_ledger_report_bloc.dar
 import '../../features/reports/presentation/bloc/customer_ledger_report_bloc.dart';
 import '../../features/reports/presentation/bloc/customer_invoices_report_bloc.dart';
 import '../../features/reports/presentation/bloc/supplier_invoices_report_bloc.dart';
+import '../../features/reports/presentation/bloc/supplier_returns_report_bloc.dart';
 import '../../features/reports/presentation/bloc/supplier_stocktake_report_bloc.dart';
 import '../../features/reports/presentation/bloc/supplier_balance_drilldown_bloc.dart';
 import '../../features/reports/presentation/bloc/salespeople_commission_report_bloc.dart';
@@ -269,6 +270,8 @@ Future<void> init() async {
     sl<SaleDao>(),
     sl<AdjustmentReturnDao>(),
     sl<JournalEntryService>(),
+    sl<CommissionService>(),
+    sl<LoyaltyPointsService>(),
   ));
 
   // Datasources
@@ -711,6 +714,10 @@ Future<void> init() async {
   sl.registerFactory(() {
     final defaultRange = sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
     return SupplierInvoicesReportBloc(sl<AppDatabase>(), defaultDateRange: defaultRange);
+  });
+  sl.registerFactory(() {
+    final defaultRange = sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
+    return SupplierReturnsReportBloc(sl<AppDatabase>(), defaultDateRange: defaultRange);
   });
   sl.registerFactory(() {
     final defaultRange = sl<AppSettingsBloc>().state.settings.defaultReportDateRange;

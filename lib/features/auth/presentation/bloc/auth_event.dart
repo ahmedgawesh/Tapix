@@ -1,6 +1,6 @@
 part of 'auth_bloc.dart';
 
-abstract class AuthEvent extends RealtimeEvent with EquatableMixin {
+abstract class AuthEvent extends RealtimeEvent with Equatable {
   const AuthEvent();
 
   @override

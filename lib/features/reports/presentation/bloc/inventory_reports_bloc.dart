@@ -563,13 +563,18 @@ class InventoryReportsBloc
 
     final whereClause = whereClauses.join(' AND ');
 
-    // Date variables for the 4 subqueries (purchase, sale, sale_return, purchase_return)
-    // Each subquery needs startIso and endIso
+    // Date variables for the subqueries in SQL order:
+    //   purchased, sold, sale_ret (linked + adjustment), purch_ret (linked + adjustment)
+    // Each branch needs startIso and endIso. Sale/purchase returns each combine
+    // the linked path AND the adjustment (unlinked) path so physical stock
+    // movement reconciles regardless of which return flow the user picked.
     final dateVars = [
-      Variable<String>(startIso), Variable<String>(endIso),
-      Variable<String>(startIso), Variable<String>(endIso),
-      Variable<String>(startIso), Variable<String>(endIso),
-      Variable<String>(startIso), Variable<String>(endIso),
+      Variable<String>(startIso), Variable<String>(endIso), // purchased
+      Variable<String>(startIso), Variable<String>(endIso), // sold
+      Variable<String>(startIso), Variable<String>(endIso), // sale_ret linked
+      Variable<String>(startIso), Variable<String>(endIso), // sale_ret adjustment
+      Variable<String>(startIso), Variable<String>(endIso), // purch_ret linked
+      Variable<String>(startIso), Variable<String>(endIso), // purch_ret adjustment
     ];
 
     // The key fix: subqueries group by BOTH product_id AND variant_id
@@ -621,24 +626,36 @@ class InventoryReportsBloc
         ) AND pv.color_id IS NULL AND pv.size_id IS NULL)
         OR (sold.variant_id IS NULL AND pv.id IS NULL))
       LEFT JOIN (
-        SELECT si.product_id, si.variant_id, SUM(sri.quantity) AS qty
-        FROM sale_return_items sri
-        INNER JOIN sale_items si ON si.id = sri.sale_item_id
-        INNER JOIN sale_returns sr ON sr.id = sri.return_id AND sr.status = 'posted'
-        WHERE sr.return_date >= ? AND sr.return_date <= ?
-        GROUP BY si.product_id, si.variant_id
+        SELECT product_id, variant_id, SUM(qty) AS qty FROM (
+          SELECT si.product_id AS product_id, si.variant_id AS variant_id, sri.quantity AS qty
+          FROM sale_return_items sri
+          INNER JOIN sale_items si ON si.id = sri.sale_item_id
+          INNER JOIN sale_returns sr ON sr.id = sri.return_id AND sr.status = 'posted'
+          WHERE sr.return_date >= ? AND sr.return_date <= ?
+          UNION ALL
+          SELECT srai.product_id AS product_id, srai.variant_id AS variant_id, srai.quantity AS qty
+          FROM sale_return_adjustment_items srai
+          INNER JOIN sale_return_adjustments sra ON sra.id = srai.return_id AND sra.status = 'posted'
+          WHERE sra.return_date >= ? AND sra.return_date <= ?
+        ) GROUP BY product_id, variant_id
       ) sale_ret ON sale_ret.product_id = p.id 
         AND (sale_ret.variant_id = pv.id OR (sale_ret.variant_id IS NULL AND pv.id IS NOT NULL AND NOT EXISTS(
           SELECT 1 FROM product_variants pv3 WHERE pv3.product_id = p.id AND pv3.is_active = 1 AND pv3.color_id IS NOT NULL
         ) AND pv.color_id IS NULL AND pv.size_id IS NULL)
         OR (sale_ret.variant_id IS NULL AND pv.id IS NULL))
       LEFT JOIN (
-        SELECT pi.product_id, pi.variant_id, SUM(pri.quantity) AS qty
-        FROM purchase_return_items pri
-        INNER JOIN purchase_items pi ON pi.id = pri.purchase_item_id
-        INNER JOIN purchase_returns pr ON pr.id = pri.return_id AND pr.status = 'posted'
-        WHERE pr.return_date >= ? AND pr.return_date <= ?
-        GROUP BY pi.product_id, pi.variant_id
+        SELECT product_id, variant_id, SUM(qty) AS qty FROM (
+          SELECT pi.product_id AS product_id, pi.variant_id AS variant_id, pri.quantity AS qty
+          FROM purchase_return_items pri
+          INNER JOIN purchase_items pi ON pi.id = pri.purchase_item_id
+          INNER JOIN purchase_returns pr ON pr.id = pri.return_id AND pr.status = 'posted'
+          WHERE pr.return_date >= ? AND pr.return_date <= ?
+          UNION ALL
+          SELECT prai.product_id AS product_id, prai.variant_id AS variant_id, prai.quantity AS qty
+          FROM purchase_return_adjustment_items prai
+          INNER JOIN purchase_return_adjustments pra ON pra.id = prai.return_id AND pra.status = 'posted'
+          WHERE pra.return_date >= ? AND pra.return_date <= ?
+        ) GROUP BY product_id, variant_id
       ) purch_ret ON purch_ret.product_id = p.id 
         AND (purch_ret.variant_id = pv.id OR (purch_ret.variant_id IS NULL AND pv.id IS NOT NULL AND NOT EXISTS(
           SELECT 1 FROM product_variants pv3 WHERE pv3.product_id = p.id AND pv3.is_active = 1 AND pv3.color_id IS NOT NULL
@@ -663,8 +680,12 @@ class InventoryReportsBloc
         _db.sales,
         _db.saleReturnItems,
         _db.saleReturns,
+        _db.saleReturnAdjustmentItems,
+        _db.saleReturnAdjustments,
         _db.purchaseReturnItems,
         _db.purchaseReturns,
+        _db.purchaseReturnAdjustmentItems,
+        _db.purchaseReturnAdjustments,
       },
     ).get();
 

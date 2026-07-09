@@ -91,6 +91,7 @@ class CommissionService {
       currencyId: Value(currencyId),
       period: Value(period),
       status: const Value('pending'),
+      effectiveDate: Value(saleDate),
       createdAt: Value(DateTime.now()),
     );
 
@@ -171,12 +172,82 @@ class CommissionService {
         currencyId: Value(currencyId),
         period: Value(period),
         status: const Value('pending'),
+        effectiveDate: Value(returnDate),
         createdAt: Value(DateTime.now()),
       );
 
       await _employeeDao.createCommission(companion);
     }
   }
+
+  /// Reverse (deduct) commission for an UNLINKED (adjustment) sale return.
+  ///
+  /// An adjustment return has no originating invoice, so — unlike
+  /// [reverseForReturn] — there is no ORIGINAL commission row to prorate
+  /// against. The deduction is therefore computed fresh with the SAME
+  /// formula as [createForSale], using the employee's CURRENT commission
+  /// settings:
+  /// - **percentage**: `(returnSubtotal - returnDiscount) * rateBps / 10000`
+  ///   (post-discount, pre-tax net — matches how earning is computed).
+  /// - **fixed**: `fixedCommissionCents * itemCount` (per returned unit).
+  ///
+  /// The negative row is keyed by [adjustmentReturnId] (not `saleId`) so a
+  /// void of the adjustment return can delete exactly this reversal via
+  /// [deleteForAdjustmentReturn] — no recomputation, rate-change safe.
+  ///
+  /// No-op (nothing inserted) when the employee is missing, the rate/fixed
+  /// amount is ≤ 0, or the computed deduction rounds to 0.
+  Future<void> reverseForAdjustmentReturn({
+    required int adjustmentReturnId,
+    required int employeeId,
+    required int returnSubtotalCents,
+    required int returnDiscountCents,
+    required int itemCount,
+    required int currencyId,
+    required DateTime returnDate,
+  }) async {
+    final employee = await _employeeDao.getEmployee(employeeId);
+    if (employee == null) return;
+
+    int deduction;
+    int rateBps;
+    if (employee.commissionType == 'fixed') {
+      final fixedCents = employee.fixedCommissionCents?.toBigInt().toInt() ?? 0;
+      if (fixedCents <= 0 || itemCount <= 0) return;
+      deduction = fixedCents * itemCount;
+      rateBps = 0;
+    } else {
+      rateBps = employee.defaultCommissionRateBps;
+      if (rateBps <= 0) return;
+      final netRevenueCents = returnSubtotalCents - returnDiscountCents;
+      if (netRevenueCents <= 0) return;
+      deduction = (netRevenueCents * rateBps) ~/ 10000;
+    }
+
+    if (deduction <= 0) return;
+
+    final period =
+        '${returnDate.year}-${returnDate.month.toString().padLeft(2, '0')}';
+
+    final companion = db.CommissionsCompanion(
+      employeeId: Value(employeeId),
+      saleReturnAdjustmentId: Value(adjustmentReturnId),
+      commissionRateBps: Value(rateBps.toDouble()),
+      commissionAmountCents: Value(Decimal.fromInt(-deduction)),
+      currencyId: Value(currencyId),
+      period: Value(period),
+      status: const Value('pending'),
+      effectiveDate: Value(returnDate),
+      createdAt: Value(DateTime.now()),
+    );
+
+    await _employeeDao.createCommission(companion);
+  }
+
+  /// Delete every commission row created for an adjustment sale return
+  /// (used by `voidSaleAdjReturn`). Returns the number of rows removed.
+  Future<int> deleteForAdjustmentReturn(int adjustmentReturnId) =>
+      _employeeDao.deleteCommissionsByAdjustmentReturnId(adjustmentReturnId);
 
   /// Delete every commission row linked to a sale (used by `voidSale` /
   /// `editPostedSale`). Returns the number of rows removed.

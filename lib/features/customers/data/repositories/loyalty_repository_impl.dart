@@ -65,6 +65,7 @@ class LoyaltyRepositoryImpl implements LoyaltyRepository {
       if (customer == null) return null;
 
       final tiers = await getAllTiers();
+      final settings = await getLoyaltySettings();
       final transactions = await (_database.select(_database.loyaltyPointTransactions)
             ..where((t) => t.customerId.equals(customerId)))
           .get();
@@ -118,6 +119,7 @@ class LoyaltyRepositoryImpl implements LoyaltyRepository {
         nextTier: nextTier,
         pointsToNextTier: pointsToNextTier,
         currentBenefits: currentBenefits,
+        pointValueCents: settings?.pointValueCents ?? 0,
       );
     });
   }
@@ -135,6 +137,7 @@ class LoyaltyRepositoryImpl implements LoyaltyRepository {
     if (customer == null) return null;
 
     final tiers = await getAllTiers();
+    final settings = await getLoyaltySettings();
     final transactions = await (_database.select(_database.loyaltyPointTransactions)
           ..where((t) => t.customerId.equals(customerId)))
         .get();
@@ -184,6 +187,7 @@ class LoyaltyRepositoryImpl implements LoyaltyRepository {
       nextTier: nextTier,
       pointsToNextTier: pointsToNextTier,
       currentBenefits: currentBenefits,
+      pointValueCents: settings?.pointValueCents ?? 0,
     );
   }
 

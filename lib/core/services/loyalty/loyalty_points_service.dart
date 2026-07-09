@@ -38,6 +38,7 @@
 import 'dart:developer' as developer;
 
 import 'package:decimal/decimal.dart';
+import 'package:drift/drift.dart';
 
 import '../../database/app_database.dart';
 import '../../../features/customers/domain/repositories/loyalty_repository.dart';
@@ -123,6 +124,36 @@ class LoyaltyAwardResult {
     birthdayFlatBonus: 0,
     birthdayPercentBonus: 0,
     totalPoints: 0,
+  );
+}
+
+/// Non-mutating preview of a loyalty-point deduction for a credit
+/// adjustment return, plus the per-point monetary value so the UI can
+/// render "‑N points (= X cents = $Y)" in the selected currency.
+class LoyaltyDeductionPreview {
+  /// Whether the loyalty program is enabled (drives UI visibility).
+  final bool enabled;
+
+  /// Points that WOULD be deducted (already capped at the customer's
+  /// current balance). Zero when nothing to deduct.
+  final int pointsToDeduct;
+
+  /// Value of ONE point in cents (from `LoyaltySettings.pointValueCents`).
+  final int pointValueCents;
+
+  const LoyaltyDeductionPreview({
+    required this.enabled,
+    required this.pointsToDeduct,
+    required this.pointValueCents,
+  });
+
+  /// Total monetary value of [pointsToDeduct] in cents.
+  int get totalValueCents => pointsToDeduct * pointValueCents;
+
+  static const LoyaltyDeductionPreview disabled = LoyaltyDeductionPreview(
+    enabled: false,
+    pointsToDeduct: 0,
+    pointValueCents: 0,
   );
 }
 
@@ -350,6 +381,165 @@ class LoyaltyPointsService {
     } catch (e) {
       developer.log(
         'LoyaltyPointsService.reverseForReturn failed for return #$returnId: $e',
+        name: 'LoyaltyPointsService',
+      );
+      return 0;
+    }
+  }
+
+  // ─────────────────── ADJUSTMENT-RETURN PREVIEW ───────────────────
+
+  /// Non-mutating preview of the loyalty-point deduction that
+  /// [reverseForAdjustmentReturn] would apply for a credit adjustment
+  /// return of [returnTotalCents] against [customerId]. Also surfaces
+  /// the monetary value of those points so the UI can show "‑N points
+  /// (= X cents = $Y)". Returns [LoyaltyDeductionPreview.disabled] when
+  /// loyalty is off / customer absent / nothing to deduct. Never throws.
+  Future<LoyaltyDeductionPreview> previewAdjustmentReturnDeduction({
+    required int customerId,
+    required int returnTotalCents,
+  }) async {
+    try {
+      final settings = await _loyalty.getLoyaltySettings();
+      if (settings == null || !settings.isEnabled) {
+        return LoyaltyDeductionPreview.disabled;
+      }
+      if (returnTotalCents <= 0) {
+        return LoyaltyDeductionPreview(
+          enabled: true,
+          pointsToDeduct: 0,
+          pointValueCents: settings.pointValueCents,
+        );
+      }
+
+      final summary = await _loyalty.getCustomerLoyaltySummary(customerId);
+      final multiplier = summary?.currentTier?.pointsMultiplier ?? 1.0;
+
+      final basePoints =
+          (returnTotalCents * settings.pointsPerCurrencyUnit) ~/ 100;
+      final computed = basePoints <= 0 ? 0 : _mulRound(basePoints, multiplier);
+      final currentBalance = summary?.pointsBalance ?? 0;
+      final capped = computed > currentBalance ? currentBalance : computed;
+
+      return LoyaltyDeductionPreview(
+        enabled: true,
+        pointsToDeduct: capped < 0 ? 0 : capped,
+        pointValueCents: settings.pointValueCents,
+      );
+    } catch (e) {
+      developer.log(
+        'LoyaltyPointsService.previewAdjustmentReturnDeduction failed: $e',
+        name: 'LoyaltyPointsService',
+      );
+      return LoyaltyDeductionPreview.disabled;
+    }
+  }
+
+  // ─────────────────── ADJUSTMENT-RETURN ORCHESTRATOR ───────────────────
+
+  /// Deduct loyalty points when a sale ADJUSTMENT (unlinked) return is
+  /// posted for an attributed customer.
+  ///
+  /// Because the return is unlinked there is no original sale to prorate
+  /// against, so the deduction is recomputed from the return's own total
+  /// using the live settings + the customer's current tier multiplier —
+  /// the same base×multiplier layer that [reverseForReturn] reverses for
+  /// linked returns (birthday/bonus layers intentionally excluded so a
+  /// customer never loses a one-time windfall on a return).
+  ///
+  /// The deduction is capped at the customer's current balance so the
+  /// balance is never pushed negative. Keyed by [adjustmentReturnId] with
+  /// `referenceType = 'sale_return_adjustment'` so a void restores it
+  /// exactly. Never throws — loyalty is non-critical and must not roll
+  /// back the accounting post.
+  Future<int> reverseForAdjustmentReturn({
+    required int customerId,
+    required int adjustmentReturnId,
+    required int returnTotalCents,
+    DateTime? returnDate,
+  }) async {
+    try {
+      if (returnTotalCents <= 0) return 0;
+
+      final settings = await _loyalty.getLoyaltySettings();
+      if (settings == null || !settings.isEnabled) return 0;
+
+      final summary = await _loyalty.getCustomerLoyaltySummary(customerId);
+      final multiplier = summary?.currentTier?.pointsMultiplier ?? 1.0;
+
+      final basePoints =
+          (returnTotalCents * settings.pointsPerCurrencyUnit) ~/ 100;
+      if (basePoints <= 0) return 0;
+      final pointsToDeduct = _mulRound(basePoints, multiplier);
+      if (pointsToDeduct <= 0) return 0;
+
+      final currentBalance = summary?.pointsBalance ?? 0;
+      final actualDeduction =
+          pointsToDeduct > currentBalance ? currentBalance : pointsToDeduct;
+      if (actualDeduction <= 0) return 0;
+
+      await _loyalty.redeemPoints(
+        customerId: customerId,
+        points: actualDeduction,
+        reason:
+            'Points reversed for adjustment return #$adjustmentReturnId',
+        referenceId: adjustmentReturnId,
+        referenceType: 'sale_return_adjustment',
+      );
+
+      return actualDeduction;
+    } catch (e) {
+      developer.log(
+        'LoyaltyPointsService.reverseForAdjustmentReturn failed for '
+        'return #$adjustmentReturnId: $e',
+        name: 'LoyaltyPointsService',
+      );
+      return 0;
+    }
+  }
+
+  /// Restore the points that [reverseForAdjustmentReturn] deducted, when
+  /// that adjustment return is voided. Reads back the exact deducted
+  /// amount from `loyalty_point_transactions` (the negative row keyed by
+  /// [adjustmentReturnId]) and re-adds its absolute value. Never throws.
+  Future<int> restoreForAdjustmentReturnVoid({
+    required int customerId,
+    required int adjustmentReturnId,
+  }) async {
+    try {
+      final rows = await _db.customSelect(
+        'SELECT points FROM loyalty_point_transactions '
+        "WHERE reference_type = 'sale_return_adjustment' "
+        '  AND reference_id = ? AND customer_id = ? AND points < 0',
+        variables: [
+          Variable.withInt(adjustmentReturnId),
+          Variable.withInt(customerId),
+        ],
+      ).get();
+      if (rows.isEmpty) return 0;
+
+      final deducted = rows.fold<int>(
+        0,
+        (sum, r) => sum + r.read<int>('points'),
+      );
+      final toRestore = -deducted;
+      if (toRestore <= 0) return 0;
+
+      await _loyalty.addPoints(
+        customerId: customerId,
+        points: toRestore,
+        source: 'sale_return_adjustment_void',
+        referenceId: adjustmentReturnId,
+        referenceType: 'sale_return_adjustment_void',
+        description:
+            'Points restored on void of adjustment return #$adjustmentReturnId',
+      );
+
+      return toRestore;
+    } catch (e) {
+      developer.log(
+        'LoyaltyPointsService.restoreForAdjustmentReturnVoid failed for '
+        'return #$adjustmentReturnId: $e',
         name: 'LoyaltyPointsService',
       );
       return 0;

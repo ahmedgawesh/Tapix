@@ -8,6 +8,8 @@ import '../../services/stock_service.dart';
 import '../../services/balance_service.dart';
 import '../../services/batch_service.dart';
 import '../../services/journal_entry_service.dart';
+import '../../services/commissions/commission_service.dart';
+import '../../services/loyalty/loyalty_points_service.dart';
 import '../../services/tax_calculation_service.dart';
 import '../../services/returns/posted_return.dart';
 import '../../services/returns/return_approval_decision.dart';
@@ -303,6 +305,46 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
     // else: no variant filter — see doc comment above.
     final row = await query.getSingleOrNull();
     return row?.read(qtyExp) ?? 0;
+  }
+
+  /// Total quantity of a given (product, variant) that was sold *by*
+  /// [employeeId] across all completed sales. Used to warn — on an
+  /// unlinked (adjustment) sale return — when the attributed salesperson
+  /// never actually sold the product being returned.
+  ///
+  /// Mirrors the commission attribution rule in `SaleRepositoryImpl` and
+  /// `getEmployeeSalesStats`: a sale is credited to the salesperson either
+  /// via the header (`sales.employee_id`, per-invoice mode) or via the line
+  /// item (`sale_items.employee_id`, per-item mode). Both paths are counted
+  /// here. Voided / draft / pending sales are excluded so the warning only
+  /// reflects goods that were actually sold and delivered.
+  ///
+  /// When [variantId] is null the variant filter is dropped (same rationale
+  /// as `getCustomerProductPurchasedQty`). Returns 0 when the employee never
+  /// sold the product.
+  Future<int> getEmployeeProductSoldQty({
+    required int? employeeId,
+    required int productId,
+    int? variantId,
+  }) async {
+    if (employeeId == null) return 0;
+    final variantClause =
+        variantId != null ? 'AND si.variant_id = ${variantId.toString()} ' : '';
+    final row = await customSelect(
+      'SELECT COALESCE(SUM(si.quantity), 0) AS c '
+      'FROM sale_items si '
+      'JOIN sales s ON s.id = si.sale_id '
+      "WHERE s.status = 'completed' "
+      '  AND si.product_id = ? '
+      '  AND (s.employee_id = ? OR si.employee_id = ?) '
+      '$variantClause',
+      variables: [
+        Variable.withInt(productId),
+        Variable.withInt(employeeId),
+        Variable.withInt(employeeId),
+      ],
+    ).getSingleOrNull();
+    return row?.read<int>('c') ?? 0;
   }
 
   /// Total quantity of a given (product, variant) that [supplierId] has
@@ -1465,6 +1507,8 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
     required JournalEntryService journalEntryService,
     int? userId,
     bool allowOverHistory = false,
+    CommissionService? commissionService,
+    LoyaltyPointsService? loyaltyPointsService,
   }) {
     return transaction(() async {
       final returnData = await getSaleAdjReturnById(returnId);
@@ -1581,6 +1625,9 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
         // restore against, so we materialise a new batch carrying the snapshot
         // unit cost stamped on the return item. `source = 'sale_return'`
         // distinguishes it from purchase batches in audit/expiry reports.
+        // The batch is named after this return's `SAR-…` document number
+        // (via [documentReference]) so it is traceable in the Batch Management
+        // report and never confused with a LINKED `SR-…` return document.
         // WAC products keep their batches untouched (legacy path).
         if (await _isFifoProduct(item.productId)) {
           await BatchService.createOpeningBatch(
@@ -1590,6 +1637,7 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
             quantity: item.quantity,
             unitCostCents: item.unitCostCents.toBigInt().toInt(),
             source: 'sale_return',
+            documentReference: returnData.returnNumber,
           );
           batchedProductIds.add(item.productId);
         }
@@ -1617,31 +1665,48 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
         updatedAt: Value(DateTime.now()),
       ));
 
-      // ── Customer ledger ──
-      // An ADJUSTMENT sale return NEVER touches `customers.balance_cents`.
-      // The JE policy routes its settlement leg as follows:
-      //   cash    → Cr 1000 Cash         (physical cash leaves the till)
-      //   bank/cheque → Cr 1010 Bank     (physical bank settlement)
-      //   credit  → Cr 2400 Customer Credit Liability (sub-ledger lives
-      //             in `customer_credit_notes`, issued by
-      //             `CustomerCreditNoteService.issueForReturn` from
-      //             `ReturnPostingService.post`; balance there reconciles
-      //             1:1 against the GL on 2400)
+      // ── Customer ledger (mirror of the purchase-adjustment supplier path) ──
+      // For a CREDIT ("رصيد") refund on an adjustment sale return the store
+      // owes the customer less, so we reduce 1100 AR directly (symmetric with
+      // a LINKED credit return in `sale_dao.postSaleReturn` and with the
+      // supplier side of `postPurchaseAdjReturn`). We:
+      //   1. Write an `adjustment_return` row to `customer_transactions`
+      //      (amount = −refund) so it surfaces in the customer profile's
+      //      transactions list, AND
+      //   2. Reduce `customers.balance_cents` by the same amount.
+      // Because `CustomerDao.recalculateBalance` rebuilds the balance from
+      // SUM(customer_transactions.amount_cents), writing BOTH keeps the AR
+      // sub-ledger reconciled with GL 1100 (the JE settlement leg credits
+      // 1100 via `creditToReceivable`). The reconciliation invariant
+      // Σ(customers.balance_cents) == GL(1100) therefore holds.
       //
-      // 1100 AR (`customers.balance_cents`) is only legitimately reduced
-      // by a LINKED sale return on credit — that path lives in
-      // `sale_dao.postSaleReturn` and is correctly gated there. Recording
-      // a `customer_transactions` row with `amount_cents = -refundCents`
-      // here would (a) double-credit the customer on cash/cheque (they
-      // already received the money) and (b) drift away from the GL on
-      // every recalculation, because
-      // `CustomerDao.recalculateBalance` rebuilds
-      // `customers.balance_cents` from SUM(customer_transactions.amount_cents)
-      // and would silently re-introduce this bug. So we do NOT insert any
-      // customer_transactions row from this code path. The credit-note
-      // sub-ledger captures the audit trail for credit refunds; cash /
-      // cheque refunds are audited via the `sale_return_adjustments`
-      // row itself + the JE.
+      // CASH / CHEQUE refunds are intentionally NOT recorded here: the money
+      // physically left the till/bank (Cr 1000/1010), never touching AR, so
+      // touching `customers.balance_cents` would drift it from GL 1100. Those
+      // refunds are audited via the `sale_return_adjustments` row + the JE.
+      final refundCents = returnData.totalCents.toBigInt().toInt();
+      final isCreditRefund = returnData.refundMethod == 'credit';
+      if (isCreditRefund && returnData.customerId != null && refundCents > 0) {
+        await into(customerTransactions).insert(
+          CustomerTransactionsCompanion.insert(
+            customerId: returnData.customerId!,
+            transactionType: 'adjustment_return',
+            amountCents: Decimal.fromInt(-refundCents),
+            currencyId: returnData.currencyId,
+            description:
+                Value('Adjustment sale return ${returnData.returnNumber} (credit)'),
+            referenceId: Value(returnId),
+            referenceType: const Value('sale_return_adjustment'),
+          ),
+        );
+
+        // Reduce customer balance (they owe us less).
+        await BalanceService.adjustCustomerBalance(
+          this,
+          customerId: returnData.customerId!,
+          deltaCents: -refundCents,
+        );
+      }
 
       // ── Phase 2.1: snapshot-column back-fill (sale adjustment side) ──
       // Freeze `tax_rate_bps_at_post` + `unit_cost_at_post_cents` per line.
@@ -1690,7 +1755,10 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
       // pipeline. The Phase 2 centralized guards (fiscal period, credit
       // notes, disposition routing) all fire inside
       // `ReturnPostingService.post` — there is no per-caller logic here.
-      final refundCents = returnData.totalCents.toBigInt().toInt();
+      //
+      // `creditToReceivable` routes a CREDIT settlement to 1100 AR (mirroring
+      // the `customers.balance_cents` reduction above) instead of issuing a
+      // 2400 store-credit note — keeping the AR sub-ledger reconciled with GL.
       await journalEntryService.recordSaleAdjustmentReturnJournalEntry(
         returnId: returnId,
         totalCents: refundCents,
@@ -1704,6 +1772,7 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
         explicitLines: explicitLines,
         approvalStatus: returnData.approvalStatus,
         approvalReason: returnData.approvalReason,
+        creditToReceivable: isCreditRefund,
       );
 
       // ── Atomic counters: bump qty_returned_adjustment on FIFO-oldest
@@ -1740,6 +1809,48 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
           // override permitted. Walk-in returns leave counters untouched.
         }
       }
+
+      // ── Commission reversal (Phase 6 SoT) ──
+      // An adjustment return attributed to a salesperson must DEDUCT their
+      // commission, symmetrically with a linked return. Because the return
+      // is unlinked there is no original commission to prorate against, so
+      // `CommissionService.reverseForAdjustmentReturn` computes a fresh
+      // deduction from the return's own net (subtotal − discount) × the
+      // employee's current rate. Keyed by `returnId` so a void deletes it
+      // exactly. No-op when no employee is attributed. Runs inside this
+      // transaction (shared AppDatabase) so it is atomic with the post.
+      if (commissionService != null && returnData.employeeId != null) {
+        final commissionItemCount =
+            items.fold<int>(0, (sum, i) => sum + i.quantity);
+        await commissionService.reverseForAdjustmentReturn(
+          adjustmentReturnId: returnId,
+          employeeId: returnData.employeeId!,
+          returnSubtotalCents: returnData.subtotalCents.toBigInt().toInt(),
+          returnDiscountCents: returnData.discountCents.toBigInt().toInt(),
+          itemCount: commissionItemCount,
+          currencyId: returnData.currencyId,
+          returnDate: returnData.returnDate,
+        );
+      }
+
+      // ── Loyalty-points reversal ──
+      // When a customer is attributed, returning goods must DEDUCT the
+      // loyalty points that the equivalent spend would have earned — the
+      // same rule the user expects ("طالما انا مختار العميل"). Because the
+      // return is unlinked there is no original sale to prorate against, so
+      // `LoyaltyPointsService.reverseForAdjustmentReturn` recomputes the
+      // deduction from the return's own total using the live settings +
+      // the customer's tier multiplier, capped at their current balance.
+      // Never throws (loyalty is non-critical) so it cannot roll back the
+      // accounting post.
+      if (loyaltyPointsService != null && returnData.customerId != null) {
+        await loyaltyPointsService.reverseForAdjustmentReturn(
+          customerId: returnData.customerId!,
+          adjustmentReturnId: returnId,
+          returnTotalCents: returnData.totalCents.toBigInt().toInt(),
+          returnDate: returnData.returnDate,
+        );
+      }
     });
   }
 
@@ -1756,6 +1867,8 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
     int? userId,
     bool allowOverHistory = false,
     ReturnApprovalService? approvalService,
+    CommissionService? commissionService,
+    LoyaltyPointsService? loyaltyPointsService,
   }) {
     return transaction(() async {
       // Generate number atomically inside the transaction
@@ -1774,6 +1887,8 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
         journalEntryService: journalEntryService,
         userId: userId,
         allowOverHistory: allowOverHistory,
+        commissionService: commissionService,
+        loyaltyPointsService: loyaltyPointsService,
       );
       return returnId;
     });
@@ -1791,6 +1906,8 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
     bool allowNegativeStock = false,
     int? voidedBy,
     String? voidReason,
+    CommissionService? commissionService,
+    LoyaltyPointsService? loyaltyPointsService,
   }) {
     return transaction(() async {
       final returnData = await getSaleAdjReturnById(returnId);
@@ -1900,15 +2017,39 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
         }
 
         // ── Customer ledger reversal ──
-        // The forward path (`postSaleAdjReturn`) intentionally writes
-        // nothing to `customer_transactions` / `customers.balance_cents`
-        // because the adjustment-return JE settles to Cash / Bank / 2400
-        // Customer Credit Liability — never 1100 AR. Voiding therefore
-        // has nothing to reverse on the customer sub-ledger. The 2400
-        // credit-note row (if any) is voided by `voidJournalEntriesForSource`
-        // below + the credit-note service's `voidForReturn` hook on the
-        // GL side. No-op kept here so the symmetry with the forward path
-        // stays obvious to future readers.
+        // The forward path (`postSaleAdjReturn`) writes an
+        // `adjustment_return` row to `customer_transactions` and REDUCES
+        // `customers.balance_cents` by the refund when the refund method
+        // is `credit` (the customer owes us less). Voiding must undo both,
+        // symmetric with the supplier side of `voidPurchaseAdjReturn` and
+        // with a linked-return void in `sale_dao`. Cash/bank refunds never
+        // touched the customer sub-ledger, so nothing is reversed for them.
+        final voidRefundCents = returnData.totalCents.toBigInt().toInt();
+        final wasCreditRefund = returnData.refundMethod == 'credit';
+        if (wasCreditRefund &&
+            returnData.customerId != null &&
+            voidRefundCents > 0) {
+          await into(customerTransactions).insert(
+            CustomerTransactionsCompanion.insert(
+              customerId: returnData.customerId!,
+              transactionType: 'adjustment_return_reversal',
+              amountCents: Decimal.fromInt(voidRefundCents),
+              currencyId: returnData.currencyId,
+              description: Value(
+                'Void adjustment return ${returnData.returnNumber} (credit)',
+              ),
+              referenceType: const Value('sale_return_adjustment'),
+              referenceId: Value(returnId),
+            ),
+          );
+
+          // Restore customer balance (they owe us the amount again).
+          await BalanceService.adjustCustomerBalance(
+            this,
+            customerId: returnData.customerId!,
+            deltaCents: voidRefundCents,
+          );
+        }
 
         // Reverse GL journal entries
         await journalEntryService.voidJournalEntriesForSource(
@@ -1959,6 +2100,27 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
               remaining -= take;
             }
           }
+        }
+
+        // ── Commission reversal cleanup ──
+        // Delete the negative commission row(s) this adjustment return
+        // created on post (keyed by returnId). Deleting — rather than
+        // re-posting an offsetting positive — is exact and rate-change
+        // safe. No-op when none exist (return had no attributed employee).
+        if (commissionService != null) {
+          await commissionService.deleteForAdjustmentReturn(returnId);
+        }
+
+        // ── Loyalty-points restore ──
+        // Re-credit the points that the post path deducted for this
+        // return (keyed by returnId). Reads back the exact deducted
+        // amount from the ledger, so a partial-cap deduction is restored
+        // exactly. No-op when no customer / no deduction row. Never throws.
+        if (loyaltyPointsService != null && returnData.customerId != null) {
+          await loyaltyPointsService.restoreForAdjustmentReturnVoid(
+            customerId: returnData.customerId!,
+            adjustmentReturnId: returnId,
+          );
         }
       }
 

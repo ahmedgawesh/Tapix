@@ -1291,6 +1291,7 @@ class JournalEntryService {
     List<PostedReturnLine>? explicitLines,
     String approvalStatus = 'auto_approved',
     String? approvalReason,
+    bool creditToReceivable = false,
   }) async {
     if (totalCents <= 0 && inventoryCostCents <= 0) {
       developer.log(
@@ -1321,6 +1322,7 @@ class JournalEntryService {
         postingDate: postingDate,
         approvalStatus: approvalStatus,
         approvalReason: approvalReason,
+        creditToReceivable: creditToReceivable,
       ));
       return;
     }

@@ -58,10 +58,29 @@ class _PurchaseHubViewState extends State<_PurchaseHubView> {
         ),
         title: Text('purchases.title'.tr()),
         actions: [
-          IconButton(
-            icon: const Icon(LucideIcons.undo2),
-            onPressed: () => context.push('/purchases/returns'),
-            tooltip: 'purchases.returns'.tr(),
+          Tooltip(
+            message: 'purchases.returns'.tr(),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(8),
+              onTap: () => context.push('/purchases/returns'),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(LucideIcons.undo2, size: 22),
+                    const SizedBox(height: 2),
+                    Text(
+                      'purchases.returns'.tr(),
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            fontSize: 10,
+                          ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
           IconButton(
             icon: const Icon(LucideIcons.settings),

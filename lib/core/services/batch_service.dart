@@ -88,6 +88,13 @@ class BatchService {
   ///   - 'opening'     opening stock at FIFO activation
   ///   - 'found'       inventory_adjustment.gain (count surplus)
   ///   - 'sale_return' sale-adjustment-return (no original invoice)
+  ///
+  /// [documentReference] — when supplied (the unlinked sale-adjustment-return
+  /// path passes the return's `SAR-YYYYMM-NNNN` number), the generated
+  /// `batch_number` is derived from it so the batch is directly traceable to
+  /// its source return AND can never collide with a *linked* sale-return
+  /// document number (which uses the `SR-YYYYMM-NNNN` scheme). Without it the
+  /// batch falls back to a generated prefix (`OPEN` / `FOUND` / `SAR`).
   static Future<int> createOpeningBatch(
     DatabaseAccessor<AppDatabase> dao, {
     required int productId,
@@ -98,6 +105,7 @@ class BatchService {
     required String source,
     DateTime? receivedDate,
     DateTime? expiryDate,
+    String? documentReference,
   }) async {
     assert(quantity > 0, 'Batch quantity must be positive');
     assert(
@@ -107,12 +115,21 @@ class BatchService {
     final resolvedVariantId =
         await _resolveVariantId(dao, productId: productId, variantId: variantId);
     final ts = DateTime.now().microsecondsSinceEpoch;
-    final prefix = source == 'opening'
-        ? 'OPEN'
-        : source == 'found'
-            ? 'FOUND'
-            : 'SR';
-    final batchNumber = '$prefix-${_yyyymm()}-V$resolvedVariantId-$ts';
+    // Prefer the source document number so the batch reads as e.g.
+    // `SAR-202607-0001-V19-…` in the Batch Management report — unambiguously
+    // an *unlinked* sale return, never mistaken for a linked `SR-…` document.
+    final String batchNumber;
+    final ref = documentReference?.trim();
+    if (ref != null && ref.isNotEmpty) {
+      batchNumber = '$ref-V$resolvedVariantId-$ts';
+    } else {
+      final prefix = source == 'opening'
+          ? 'OPEN'
+          : source == 'found'
+              ? 'FOUND'
+              : 'SAR';
+      batchNumber = '$prefix-${_yyyymm()}-V$resolvedVariantId-$ts';
+    }
     return _insertBatch(
       dao,
       productId: productId,

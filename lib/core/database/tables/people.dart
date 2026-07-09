@@ -84,6 +84,14 @@ class Commissions extends Table {
   IntColumn get id => integer().autoIncrement()();
   IntColumn get employeeId => integer().references(Employees, #id, onDelete: KeyAction.cascade)();
   IntColumn get saleId => integer().nullable().references(Sales, #id, onDelete: KeyAction.cascade)();
+  /// Set on REVERSAL rows created for an unlinked (adjustment) sale return.
+  /// An adjustment return has no `saleId` to prorate against, so the negative
+  /// commission row is instead keyed by the adjustment-return id. This lets a
+  /// void of the adjustment return delete exactly the reversal it created
+  /// (rate-change safe — no recomputation on void). Plain nullable int (no FK)
+  /// so `people.dart` stays decoupled from the returns tables; the cascade is
+  /// managed manually by `voidSaleAdjReturn`.
+  IntColumn get saleReturnAdjustmentId => integer().nullable()();
   IntColumn get commissionRateBps => integer().map(const BasisPointsConverter())();
   IntColumn get commissionAmountCents => integer().map(const MoneyConverter())();
   IntColumn get currencyId => integer().references(Currencies, #id, onDelete: KeyAction.restrict)();
@@ -91,6 +99,13 @@ class Commissions extends Table {
   TextColumn get period => text().nullable()();
   /// Status: pending, approved, paid
   TextColumn get status => text().withDefault(const Constant('pending'))();
+  /// Economic-event date for period attribution — the SAP / NetSuite /
+  /// QuickBooks "posting / transaction date" convention. For EARNED rows this
+  /// is the sale date; for REVERSAL rows it is the return date. All commission
+  /// reports MUST filter on this column (not [createdAt], which is the physical
+  /// insertion time and diverges for backdated documents). Nullable only to
+  /// permit backfill of pre-migration rows; every new row stamps it.
+  DateTimeColumn get effectiveDate => dateTime().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 }
 

@@ -108,6 +108,14 @@ class AdjReturnLineItem extends Equatable {
   final int quantity;
   final int unitPriceCents;
   final int unitCostCents;
+  /// Reference retail (regular) selling price captured at pick time. Used to
+  /// render the "retail" price-tier shortcut in the edit sheet so the user can
+  /// snap back to it after switching to wholesale. Never mutated by edits.
+  final int? retailPriceCents;
+  /// Reference wholesale selling price captured at pick time (nullable when the
+  /// product/variant has no wholesale price). Used to render the "wholesale"
+  /// price-tier shortcut in the edit sheet.
+  final int? wholesalePriceCents;
   final int discountCents;
   /// When > 0, the line discount is treated as a percentage (basis points,
   /// e.g. 100 = 1%) of the line subtotal, and [discountCents] is ignored
@@ -128,6 +136,8 @@ class AdjReturnLineItem extends Equatable {
     required this.quantity,
     required this.unitPriceCents,
     this.unitCostCents = 0,
+    this.retailPriceCents,
+    this.wholesalePriceCents,
     this.discountCents = 0,
     this.discountPercentBps = 0,
     this.taxRateBps = 0,
@@ -197,6 +207,8 @@ class AdjReturnLineItem extends Equatable {
       quantity: quantity ?? this.quantity,
       unitPriceCents: unitPriceCents ?? this.unitPriceCents,
       unitCostCents: unitCostCents,
+      retailPriceCents: retailPriceCents,
+      wholesalePriceCents: wholesalePriceCents,
       discountCents: discountCents ?? this.discountCents,
       discountPercentBps: discountPercentBps ?? this.discountPercentBps,
       taxRateBps: taxRateBps ?? this.taxRateBps,
@@ -207,7 +219,8 @@ class AdjReturnLineItem extends Equatable {
   @override
   List<Object?> get props => [
         productId, variantId, productName, variantSku, variantLabel,
-        quantity, unitPriceCents, unitCostCents, discountCents,
+        quantity, unitPriceCents, unitCostCents, retailPriceCents,
+        wholesalePriceCents, discountCents,
         discountPercentBps, taxRateBps, reason,
       ];
 }

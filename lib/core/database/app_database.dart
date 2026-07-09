@@ -578,6 +578,16 @@ FROM product_variants__old
     await _safeAddColumn('employees', 'weekly_off_days', "TEXT NOT NULL DEFAULT '[5,6]'");
     await _safeAddColumn('employees', 'annual_leave_days', 'INTEGER NOT NULL DEFAULT 21');
 
+    // Commission economic-event date (v10058) — posting/transaction date used
+    // by all commission reports. Backfilled by the 10058 migration; this guard
+    // only protects DBs opened via the integrity path (fresh installs already
+    // have it from the table definition).
+    await _safeAddColumn('commissions', 'effective_date', 'TEXT');
+
+    // Commission reversal link for unlinked (adjustment) sale returns
+    // (v10059). Defensive guard for DBs opened via the integrity path.
+    await _safeAddColumn('commissions', 'sale_return_adjustment_id', 'INTEGER');
+
     // Customer transactions: number + discount type
     await _safeAddColumn('customer_transactions', 'transaction_number', 'TEXT');
     await _safeAddColumn('customer_transactions', 'discount_type', 'TEXT');
@@ -862,7 +872,7 @@ CREATE TABLE IF NOT EXISTS sale_payments (
   }
 
   @override
-  int get schemaVersion => 10057;
+  int get schemaVersion => 10060;
 
   @override
   MigrationStrategy get migration {
@@ -2126,6 +2136,96 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
           );
         }
 
+        // ════════════════════════════════════════════════════════════════════
+        // Migration 10057 → 10058 — Commission economic-event date.
+        // ════════════════════════════════════════════════════════════════════
+        // Adds `commissions.effective_date` (nullable ISO-text DateTime) — the
+        // SAP / NetSuite / QuickBooks "posting / transaction date" convention.
+        // Reports attribute each commission row by this economic-event date
+        // instead of the physical `created_at` insertion timestamp, so sales
+        // and returns land in their true economic period even for backdated
+        // documents, and the salespeople report can filter arbitrary ranges.
+        //
+        // Backfill:
+        //   * EARNED rows (amount ≥ 0 with a linked sale) → the sale's date.
+        //   * All remaining rows (reversals + orphans) → `created_at` (the
+        //     insertion time ≈ the return-post time; best available signal).
+        if (from < 10058) {
+          await _safeAddColumn('commissions', 'effective_date', 'TEXT');
+          await customStatement(
+            'UPDATE commissions '
+            'SET effective_date = ('
+            '  SELECT s.sale_date FROM sales s WHERE s.id = commissions.sale_id'
+            ') '
+            'WHERE effective_date IS NULL '
+            '  AND sale_id IS NOT NULL '
+            '  AND commission_amount_cents >= 0',
+          );
+          await customStatement(
+            'UPDATE commissions SET effective_date = created_at '
+            'WHERE effective_date IS NULL',
+          );
+          developer.log(
+            'Migration 10058: added commissions.effective_date + backfilled '
+            '(earned→sale_date, reversal→created_at). Commission reports now '
+            'attribute by economic-event date, not physical insertion time.',
+            name: 'DB_MIGRATION',
+          );
+        }
+
+        // ════════════════════════════════════════════════════════════════════
+        // Migration 10058 → 10059 — Commission reversal for adjustment returns.
+        // ════════════════════════════════════════════════════════════════════
+        // Adds `commissions.sale_return_adjustment_id` (nullable INT). An
+        // unlinked (adjustment) sale return attributed to a salesperson now
+        // posts a NEGATIVE commission row keyed by this id, so the employee's
+        // commission is deducted symmetrically with a normal linked return.
+        // Voiding the adjustment return deletes exactly that reversal row.
+        //
+        // Additive + nullable. No existing-row backfill required (historical
+        // adjustment returns simply never had a reversal; a Ledger/commission
+        // rebuild is the recovery path if a retroactive deduction is wanted).
+        if (from < 10059) {
+          await _safeAddColumn(
+              'commissions', 'sale_return_adjustment_id', 'INTEGER');
+          developer.log(
+            'Migration 10059: added commissions.sale_return_adjustment_id. '
+            'Adjustment (unlinked) sale returns attributed to a salesperson '
+            'now deduct commission via a negative row keyed by the return id.',
+            name: 'DB_MIGRATION',
+          );
+        }
+
+        // Migration 10059 -> 10060: re-prefix legacy unlinked-sale-return
+        // batches so they read as `SAR-…` in the Batch Management report.
+        //
+        // Unlinked sale-adjustment returns materialise a batch
+        // (source='sale_return'). The old naming used an `SR-YYYYMM-V…`
+        // prefix which COLLIDES visually with LINKED sale-return document
+        // numbers (`SR-YYYYMM-NNNN`), making the unlinked batches look like
+        // linked returns in the report. New posts now embed the actual
+        // `SAR-…` return number; this back-fills existing rows by swapping
+        // the leading `SR-` for `SAR-`. Display-only (batch_number is never a
+        // lookup key) and idempotent (the LIKE guard skips already-migrated
+        // rows). The UNIQUE(batch_number) constraint holds because the
+        // trailing microsecond timestamp keeps every value distinct.
+        if (from < 10060) {
+          await customStatement(
+            'UPDATE product_batches '
+            "   SET batch_number = 'SAR-' || SUBSTR(batch_number, 4), "
+            '       updated_at = ? '
+            " WHERE source = 'sale_return' "
+            "   AND batch_number LIKE 'SR-%'",
+            [DateTime.now().toIso8601String()],
+          );
+          developer.log(
+            'Migration 10060: re-prefixed legacy sale_return batches '
+            'SR- -> SAR- so unlinked sale returns are identifiable in the '
+            'Batch Management report.',
+            name: 'DB_MIGRATION',
+          );
+        }
+
         await _createIndexes();
         await _seedInitialData();
       },
@@ -2186,6 +2286,7 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
     await customStatement('CREATE INDEX IF NOT EXISTS idx_products_active ON products(is_active, name)');
     await customStatement('CREATE INDEX IF NOT EXISTS idx_sale_items_sale ON sale_items(sale_id)');
     await customStatement('CREATE INDEX IF NOT EXISTS idx_journal_entry_date ON journal_entries(entry_date)');
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_commissions_employee_effective ON commissions(employee_id, effective_date)');
     await customStatement('CREATE INDEX IF NOT EXISTS idx_audit_table_record ON audit_logs(target_table, record_id)');
     await customStatement('CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku)');
     await customStatement('CREATE UNIQUE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode) WHERE barcode IS NOT NULL');
@@ -2215,6 +2316,7 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
     await customStatement('CREATE INDEX IF NOT EXISTS idx_payrolls_status ON payrolls(status)');
     await customStatement('CREATE INDEX IF NOT EXISTS idx_commissions_employee ON commissions(employee_id)');
     await customStatement('CREATE INDEX IF NOT EXISTS idx_commissions_period ON commissions(period)');
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_commissions_sale_return_adjustment ON commissions(sale_return_adjustment_id)');
     await customStatement('CREATE INDEX IF NOT EXISTS idx_shift_schedules_employee_date ON shift_schedules(employee_id, shift_date)');
     await customStatement('CREATE INDEX IF NOT EXISTS idx_performance_metrics_employee ON performance_metrics(employee_id)');
     await customStatement('CREATE INDEX IF NOT EXISTS idx_performance_metrics_period ON performance_metrics(period_identifier)');

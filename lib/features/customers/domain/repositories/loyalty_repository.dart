@@ -11,6 +11,9 @@ class CustomerLoyaltySummary {
   final int pointsToNextTier;
   final List<TierBenefit> currentBenefits;
 
+  /// Monetary value of ONE point in cents (from `LoyaltySettings.pointValueCents`).
+  final int pointValueCents;
+
   const CustomerLoyaltySummary({
     required this.customerId,
     required this.pointsBalance,
@@ -20,7 +23,11 @@ class CustomerLoyaltySummary {
     this.nextTier,
     required this.pointsToNextTier,
     required this.currentBenefits,
+    this.pointValueCents = 0,
   });
+
+  /// Total monetary value of the remaining points balance in cents.
+  int get pointsBalanceValueCents => pointsBalance * pointValueCents;
 }
 
 /// Represents a single tier benefit for UI display

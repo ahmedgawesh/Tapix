@@ -3,7 +3,7 @@ import 'package:decimal/decimal.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../domain/entities/product_variant_entity.dart';
 
-abstract class EditPricesEvent extends RealtimeEvent with EquatableMixin {
+abstract class EditPricesEvent extends RealtimeEvent with Equatable {
   const EditPricesEvent();
 
   @override

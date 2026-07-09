@@ -14,6 +14,8 @@ import '../../../../core/pricing/discount.dart';
 import '../../../../core/pricing/invoice_pricing_engine.dart';
 import '../../../../core/pricing/pricing_snapshot.dart';
 import '../../../../core/services/journal_entry_service.dart';
+import '../../../../core/services/commissions/commission_service.dart';
+import '../../../../core/services/loyalty/loyalty_points_service.dart';
 import '../../../purchases/presentation/bloc/purchase_adj_return_form_bloc.dart';
 
 // Re-use AdjReturnLineItem from purchase_adj_return_form_bloc.dart
@@ -43,6 +45,17 @@ class SaleAdjReturnFormState extends Equatable {
   final bool hasUnsavedChanges;
   final int? createdReturnId;
 
+  /// ── Loyalty deduction preview (req 3 + 4) ──
+  /// Whether the loyalty program is enabled (drives UI visibility).
+  final bool loyaltyEnabled;
+
+  /// Points that WILL be deducted on submit for a credit return with a
+  /// selected customer (already capped at the customer's balance).
+  final int loyaltyPointsToDeduct;
+
+  /// Value of ONE point in cents, from loyalty settings.
+  final int loyaltyPointValueCents;
+
   SaleAdjReturnFormState({
     this.returnNumber,
     this.customerId,
@@ -65,6 +78,9 @@ class SaleAdjReturnFormState extends Equatable {
     this.isSuccess = false,
     this.hasUnsavedChanges = false,
     this.createdReturnId,
+    this.loyaltyEnabled = false,
+    this.loyaltyPointsToDeduct = 0,
+    this.loyaltyPointValueCents = 0,
   }) : returnDate = returnDate ?? DateTime.now();
 
   // ── Engine-backed invoice math ─────────────────────────────────────────
@@ -148,6 +164,9 @@ class SaleAdjReturnFormState extends Equatable {
     bool? isSuccess,
     bool? hasUnsavedChanges,
     int? createdReturnId,
+    bool? loyaltyEnabled,
+    int? loyaltyPointsToDeduct,
+    int? loyaltyPointValueCents,
   }) {
     return SaleAdjReturnFormState(
       returnNumber: returnNumber ?? this.returnNumber,
@@ -171,8 +190,17 @@ class SaleAdjReturnFormState extends Equatable {
       isSuccess: isSuccess ?? this.isSuccess,
       hasUnsavedChanges: hasUnsavedChanges ?? this.hasUnsavedChanges,
       createdReturnId: createdReturnId ?? this.createdReturnId,
+      loyaltyEnabled: loyaltyEnabled ?? this.loyaltyEnabled,
+      loyaltyPointsToDeduct:
+          loyaltyPointsToDeduct ?? this.loyaltyPointsToDeduct,
+      loyaltyPointValueCents:
+          loyaltyPointValueCents ?? this.loyaltyPointValueCents,
     );
   }
+
+  /// Total monetary value of [loyaltyPointsToDeduct] in cents.
+  int get loyaltyDeductionValueCents =>
+      loyaltyPointsToDeduct * loyaltyPointValueCents;
 
   @override
   List<Object?> get props => [
@@ -180,6 +208,7 @@ class SaleAdjReturnFormState extends Equatable {
         discountPerItem, overallDiscountCents, overallDiscountIsPercent,
         paymentMethod, dueDate, reasonCode,
         isLoading, isSubmitting, error, isSuccess, hasUnsavedChanges, createdReturnId,
+        loyaltyEnabled, loyaltyPointsToDeduct, loyaltyPointValueCents,
       ];
 }
 
@@ -312,14 +341,29 @@ class _SaleAdjReturnInitialized extends SaleAdjReturnFormEvent {
   const _SaleAdjReturnInitialized();
 }
 
+/// Internal event: recompute the loyalty deduction preview whenever the
+/// customer, totals, or refund method changes. Fired by the mutating
+/// handlers so the sync UI handlers stay sync while the async loyalty
+/// lookup runs on its own turn.
+class _SaleAdjReturnRecomputeLoyalty extends SaleAdjReturnFormEvent {
+  const _SaleAdjReturnRecomputeLoyalty();
+}
+
 class SaleAdjReturnFormBloc
     extends Bloc<SaleAdjReturnFormEvent, SaleAdjReturnFormState> {
   final AdjustmentReturnDao _dao;
   final JournalEntryService _journalEntryService;
+  final CommissionService _commissionService;
+  final LoyaltyPointsService _loyaltyPointsService;
 
-  SaleAdjReturnFormBloc(this._dao, this._journalEntryService)
-      : super(SaleAdjReturnFormState()) {
+  SaleAdjReturnFormBloc(
+    this._dao,
+    this._journalEntryService,
+    this._commissionService,
+    this._loyaltyPointsService,
+  ) : super(SaleAdjReturnFormState()) {
     on<_SaleAdjReturnInitialized>(_onInitialized);
+    on<_SaleAdjReturnRecomputeLoyalty>(_onRecomputeLoyalty);
     on<SaleAdjReturnCustomerSelected>(_onCustomerSelected);
     add(const _SaleAdjReturnInitialized());
     on<SaleAdjReturnItemAdded>(_onItemAdded);
@@ -348,6 +392,34 @@ class SaleAdjReturnFormBloc
     } catch (_) {}
   }
 
+  /// Recompute the loyalty-point deduction preview. Only meaningful for a
+  /// credit return with a selected customer; otherwise clears the preview.
+  Future<void> _onRecomputeLoyalty(
+    _SaleAdjReturnRecomputeLoyalty event,
+    Emitter<SaleAdjReturnFormState> emit,
+  ) async {
+    final isCredit = state.paymentMethod == AdjReturnPaymentMethod.credit;
+    if (!isCredit || state.customerId == null || state.totalCents <= 0) {
+      if (state.loyaltyPointsToDeduct != 0 || state.loyaltyEnabled) {
+        emit(state.copyWith(
+          loyaltyEnabled: false,
+          loyaltyPointsToDeduct: 0,
+          loyaltyPointValueCents: 0,
+        ));
+      }
+      return;
+    }
+    final preview = await _loyaltyPointsService.previewAdjustmentReturnDeduction(
+      customerId: state.customerId!,
+      returnTotalCents: state.totalCents,
+    );
+    emit(state.copyWith(
+      loyaltyEnabled: preview.enabled,
+      loyaltyPointsToDeduct: preview.pointsToDeduct,
+      loyaltyPointValueCents: preview.pointValueCents,
+    ));
+  }
+
   void _onCustomerSelected(
     SaleAdjReturnCustomerSelected event,
     Emitter<SaleAdjReturnFormState> emit,
@@ -361,6 +433,7 @@ class SaleAdjReturnFormBloc
         hasUnsavedChanges: true,
       ));
     }
+    add(const _SaleAdjReturnRecomputeLoyalty());
   }
 
   void _onItemAdded(
@@ -371,6 +444,7 @@ class SaleAdjReturnFormBloc
       items: [...state.items, event.item],
       hasUnsavedChanges: true,
     ));
+    add(const _SaleAdjReturnRecomputeLoyalty());
   }
 
   void _onItemRemoved(
@@ -380,6 +454,7 @@ class SaleAdjReturnFormBloc
     final updated = List<AdjReturnLineItem>.from(state.items)
       ..removeAt(event.index);
     emit(state.copyWith(items: updated, hasUnsavedChanges: true));
+    add(const _SaleAdjReturnRecomputeLoyalty());
   }
 
   void _onQuantityChanged(
@@ -392,6 +467,7 @@ class SaleAdjReturnFormBloc
       updated[event.index] = updated[event.index].copyWith(quantity: qty);
       emit(state.copyWith(items: updated, hasUnsavedChanges: true));
     }
+    add(const _SaleAdjReturnRecomputeLoyalty());
   }
 
   void _onPriceChanged(
@@ -404,6 +480,7 @@ class SaleAdjReturnFormBloc
           updated[event.index].copyWith(unitPriceCents: event.unitPriceCents);
       emit(state.copyWith(items: updated, hasUnsavedChanges: true));
     }
+    add(const _SaleAdjReturnRecomputeLoyalty());
   }
 
   void _onDiscountChanged(
@@ -418,6 +495,7 @@ class SaleAdjReturnFormBloc
       );
       emit(state.copyWith(items: updated, hasUnsavedChanges: true));
     }
+    add(const _SaleAdjReturnRecomputeLoyalty());
   }
 
   void _onNotesChanged(
@@ -443,6 +521,7 @@ class SaleAdjReturnFormBloc
       overallDiscountIsPercent: event.isPercent,
       hasUnsavedChanges: true,
     ));
+    add(const _SaleAdjReturnRecomputeLoyalty());
   }
 
   void _onDiscountModeChanged(
@@ -467,6 +546,7 @@ class SaleAdjReturnFormBloc
       overallDiscountIsPercent: false,
       hasUnsavedChanges: true,
     ));
+    add(const _SaleAdjReturnRecomputeLoyalty());
   }
 
   void _onPaymentMethodChanged(
@@ -477,6 +557,7 @@ class SaleAdjReturnFormBloc
       paymentMethod: event.method,
       hasUnsavedChanges: true,
     ));
+    add(const _SaleAdjReturnRecomputeLoyalty());
   }
 
   void _onDueDateChanged(
@@ -600,6 +681,8 @@ class SaleAdjReturnFormBloc
         returnData,
         itemCompanions,
         journalEntryService: _journalEntryService,
+        commissionService: _commissionService,
+        loyaltyPointsService: _loyaltyPointsService,
       );
 
       emit(state.copyWith(

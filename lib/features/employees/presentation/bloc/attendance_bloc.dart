@@ -87,6 +87,23 @@ class AttendanceMarkAbsentRequested extends AttendanceEvent {
   });
 }
 
+/// Correct an existing attendance record (owner/manager only).
+class AttendanceEditRequested extends AttendanceEvent {
+  final int employeeId;
+  final DateTime? checkInTime;
+  final DateTime? checkOutTime;
+  final AttendanceStatus status;
+  final String? notes;
+
+  const AttendanceEditRequested({
+    required this.employeeId,
+    required this.checkInTime,
+    required this.checkOutTime,
+    required this.status,
+    this.notes,
+  });
+}
+
 /// Internal event fired when the attendance stream emits new data.
 class _AttendanceDataReceived extends AttendanceEvent {
   final List<Attendance> attendances;
@@ -162,6 +179,7 @@ class AttendanceBloc extends Bloc<AttendanceEvent, AttendanceState> {
     on<AttendanceStatusUpdateRequested>(_onStatusUpdateRequested);
     on<AttendanceMarkLateRequested>(_onMarkLateRequested);
     on<AttendanceMarkAbsentRequested>(_onMarkAbsentRequested);
+    on<AttendanceEditRequested>(_onEditRequested);
   }
 
   void _onInitialized(
@@ -375,6 +393,25 @@ class AttendanceBloc extends Bloc<AttendanceEvent, AttendanceState> {
       await _repository.markAbsent(
         employeeId: event.employeeId,
         date: state.selectedDate,
+        notes: event.notes,
+      );
+      // Stream will automatically update
+    } catch (e) {
+      emit(state.copyWith(error: e.toString()));
+    }
+  }
+
+  Future<void> _onEditRequested(
+    AttendanceEditRequested event,
+    Emitter<AttendanceState> emit,
+  ) async {
+    try {
+      await _repository.editAttendance(
+        employeeId: event.employeeId,
+        date: state.selectedDate,
+        checkInTime: event.checkInTime,
+        checkOutTime: event.checkOutTime,
+        status: event.status,
         notes: event.notes,
       );
       // Stream will automatically update

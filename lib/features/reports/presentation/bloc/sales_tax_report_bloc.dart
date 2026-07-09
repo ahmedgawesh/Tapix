@@ -159,7 +159,19 @@ class SalesTaxReportBloc
 
   @override
   Stream<SalesTaxReportData> get dataStream {
-    return _db.select(_db.sales).watch().asyncMap((_) => _loadData());
+    // React to sales AND both return sources so posting/voiding a linked or
+    // adjustment (unlinked) return live-refreshes the tax figures.
+    return _db
+        .customSelect(
+          'SELECT 1',
+          readsFrom: {
+            _db.sales,
+            _db.saleReturns,
+            _db.saleReturnAdjustments,
+          },
+        )
+        .watch()
+        .asyncMap((_) => _loadData());
   }
 
   @override
@@ -236,28 +248,60 @@ class SalesTaxReportBloc
       );
     }).toList();
 
-    // Load sale returns with tax
+    // Load sale returns with tax — BOTH linked (invoice-based) returns and
+    // adjustment (unlinked, product-based) returns. Tax on adjustment returns
+    // is a real VAT reduction and must lower the net tax liability exactly the
+    // same way a linked return does.
     final returnRows = await _db.customSelect(
       '''
-      SELECT 
-        sr.id AS return_id,
-        sr.return_number,
-        c.name AS customer_name,
-        sr.return_date,
-        sr.subtotal_cents,
-        sr.discount_cents,
-        sr.tax_cents,
-        sr.total_cents
-      FROM sale_returns sr
-      INNER JOIN sales s ON s.id = sr.sale_id
-      LEFT JOIN customers c ON c.id = s.customer_id
-      WHERE sr.status = 'posted'
-        AND sr.return_date >= ?
-        AND sr.return_date <= ?
-      ORDER BY sr.return_date DESC
+      SELECT return_id, return_number, customer_name, return_date,
+             subtotal_cents, discount_cents, tax_cents, total_cents
+      FROM (
+        SELECT 
+          sr.id AS return_id,
+          sr.return_number AS return_number,
+          c.name AS customer_name,
+          sr.return_date AS return_date,
+          sr.subtotal_cents AS subtotal_cents,
+          sr.discount_cents AS discount_cents,
+          sr.tax_cents AS tax_cents,
+          sr.total_cents AS total_cents
+        FROM sale_returns sr
+        INNER JOIN sales s ON s.id = sr.sale_id
+        LEFT JOIN customers c ON c.id = s.customer_id
+        WHERE sr.status = 'posted'
+          AND sr.return_date >= ?
+          AND sr.return_date <= ?
+        UNION ALL
+        SELECT 
+          sra.id AS return_id,
+          sra.return_number AS return_number,
+          c.name AS customer_name,
+          sra.return_date AS return_date,
+          sra.subtotal_cents AS subtotal_cents,
+          sra.discount_cents AS discount_cents,
+          sra.tax_cents AS tax_cents,
+          sra.total_cents AS total_cents
+        FROM sale_return_adjustments sra
+        LEFT JOIN customers c ON c.id = sra.customer_id
+        WHERE sra.status = 'posted'
+          AND sra.return_date >= ?
+          AND sra.return_date <= ?
+      )
+      ORDER BY return_date DESC
       ''',
-      variables: [Variable.withString(startIso), Variable.withString(endIso)],
-      readsFrom: {_db.saleReturns, _db.sales, _db.customers},
+      variables: [
+        Variable.withString(startIso),
+        Variable.withString(endIso),
+        Variable.withString(startIso),
+        Variable.withString(endIso),
+      ],
+      readsFrom: {
+        _db.saleReturns,
+        _db.saleReturnAdjustments,
+        _db.sales,
+        _db.customers,
+      },
     ).get();
 
     final returns = returnRows.map((row) {

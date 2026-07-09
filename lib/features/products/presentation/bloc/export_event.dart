@@ -4,7 +4,7 @@ import '../../../../core/bloc/realtime_bloc.dart';
 enum ExportFormat { csv, excel }
 enum ExportAction { save, share }
 
-abstract class ExportEvent extends RealtimeEvent with EquatableMixin {
+abstract class ExportEvent extends RealtimeEvent with Equatable {
   const ExportEvent();
 
   @override

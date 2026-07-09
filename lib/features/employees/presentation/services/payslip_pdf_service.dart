@@ -69,13 +69,12 @@ class PayslipPdfService {
     final subHeaderStyle = pw.TextStyle(font: fontBold, fontSize: 11);
 
     pdf.addPage(
-      pw.Page(
+      pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
         textDirection: isRtl ? pw.TextDirection.rtl : pw.TextDirection.ltr,
+        crossAxisAlignment: pw.CrossAxisAlignment.stretch,
         build: (pw.Context ctx) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-            children: [
+          return [
               // Header
               pw.Container(
                 padding: const pw.EdgeInsets.all(16),
@@ -257,7 +256,7 @@ class PayslipPdfService {
                   ],
                 ),
               ),
-              pw.Spacer(),
+              pw.SizedBox(height: 24),
 
               // Footer
               pw.Container(
@@ -267,8 +266,7 @@ class PayslipPdfService {
                   style: pw.TextStyle(font: font, fontSize: 8, color: PdfColors.grey500),
                 ),
               ),
-            ],
-          );
+            ];
         },
       ),
     );
@@ -373,13 +371,12 @@ class PayslipPdfService {
     final subHeaderStyle = pw.TextStyle(font: fontBold, fontSize: 11);
 
     pdf.addPage(
-      pw.Page(
+      pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
         textDirection: isRtl ? pw.TextDirection.rtl : pw.TextDirection.ltr,
+        crossAxisAlignment: pw.CrossAxisAlignment.stretch,
         build: (pw.Context ctx) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-            children: [
+          return [
               // Header
               pw.Container(
                 padding: const pw.EdgeInsets.all(16),
@@ -561,7 +558,7 @@ class PayslipPdfService {
                   ],
                 ),
               ),
-              pw.Spacer(),
+              pw.SizedBox(height: 24),
 
               // Footer
               pw.Container(
@@ -571,8 +568,7 @@ class PayslipPdfService {
                   style: pw.TextStyle(font: font, fontSize: 8, color: PdfColors.grey500),
                 ),
               ),
-            ],
-          );
+            ];
         },
       ),
     );

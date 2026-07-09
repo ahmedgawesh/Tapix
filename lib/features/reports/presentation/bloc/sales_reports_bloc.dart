@@ -184,6 +184,11 @@ class SalesReportsSummary {
   final int creditSalesCents;
   final int cardSalesCents;
   final int chequeSalesCents;
+  /// Total value of ALL posted sale returns in the period — linked
+  /// (invoice-based) AND adjustment (unlinked) returns combined.
+  final int totalReturnsCents;
+  /// Count of ALL posted sale returns (linked + adjustment).
+  final int returnCount;
 
   const SalesReportsSummary({
     this.totalSalesCents = 0,
@@ -196,7 +201,12 @@ class SalesReportsSummary {
     this.creditSalesCents = 0,
     this.cardSalesCents = 0,
     this.chequeSalesCents = 0,
+    this.totalReturnsCents = 0,
+    this.returnCount = 0,
   });
+
+  /// Net sales = gross sales − all returns (linked + adjustment).
+  int get netSalesCents => totalSalesCents - totalReturnsCents;
 }
 
 class SalesReportsData {
@@ -271,7 +281,19 @@ class SalesReportsBloc
 
   @override
   Stream<SalesReportsData> get dataStream {
-    return _db.select(_db.sales).watch().asyncMap((_) => _loadAll());
+    // Watch sales AND both return sources so posting/voiding a linked or
+    // adjustment (unlinked) return live-refreshes the net-sales figures.
+    return _db
+        .customSelect(
+          'SELECT 1',
+          readsFrom: {
+            _db.sales,
+            _db.saleReturns,
+            _db.saleReturnAdjustments,
+          },
+        )
+        .watch()
+        .asyncMap((_) => _loadAll());
   }
 
   @override
@@ -296,6 +318,7 @@ class SalesReportsBloc
       _loadCancelledInvoices(),
       _loadTaxByProduct(),
       _loadTaxByCustomer(),
+      _loadReturnsTotals(),
     ]);
 
     final allSales = results[0] as List<SaleInvoiceItem>;
@@ -305,6 +328,7 @@ class SalesReportsBloc
     final cancelled = results[4] as List<CancelledInvoiceItem>;
     final taxByProduct = results[5] as List<TaxByProductItem>;
     final taxByCustomer = results[6] as List<TaxByCustomerItem>;
+    final returnsTotals = results[7] as ({int totalCents, int count});
 
     // Calculate summary from allSales (only completed/non-voided)
     int totalSales = 0;
@@ -345,6 +369,8 @@ class SalesReportsBloc
         creditSalesCents: creditSales,
         cardSalesCents: cardSales,
         chequeSalesCents: chequeSales,
+        totalReturnsCents: returnsTotals.totalCents,
+        returnCount: returnsTotals.count,
       ),
       allSales: allSales,
       byProduct: byProduct,
@@ -354,6 +380,45 @@ class SalesReportsBloc
       taxByProduct: taxByProduct,
       taxByCustomer: taxByCustomer,
       dateRange: _dateRange,
+    );
+  }
+
+  /// Total value + count of ALL posted sale returns in the period, combining
+  /// linked (invoice-based) returns and adjustment (unlinked) returns. Used to
+  /// present net sales (gross − returns) on the summary.
+  Future<({int totalCents, int count})> _loadReturnsTotals() async {
+    final startIso = _dateRange.startDate.toIso8601String();
+    final endIso = _dateRange.endDate.toIso8601String();
+
+    final rows = await _db.customSelect(
+      '''
+      SELECT
+        (SELECT COALESCE(SUM(sr.total_cents), 0) FROM sale_returns sr
+           WHERE sr.status = 'posted'
+             AND sr.return_date >= ? AND sr.return_date <= ?)
+        + (SELECT COALESCE(SUM(sra.total_cents), 0) FROM sale_return_adjustments sra
+           WHERE sra.status = 'posted'
+             AND sra.return_date >= ? AND sra.return_date <= ?) AS total_cents,
+        (SELECT COUNT(*) FROM sale_returns sr
+           WHERE sr.status = 'posted'
+             AND sr.return_date >= ? AND sr.return_date <= ?)
+        + (SELECT COUNT(*) FROM sale_return_adjustments sra
+           WHERE sra.status = 'posted'
+             AND sra.return_date >= ? AND sra.return_date <= ?) AS return_count
+      ''',
+      variables: [
+        Variable.withString(startIso), Variable.withString(endIso),
+        Variable.withString(startIso), Variable.withString(endIso),
+        Variable.withString(startIso), Variable.withString(endIso),
+        Variable.withString(startIso), Variable.withString(endIso),
+      ],
+      readsFrom: {_db.saleReturns, _db.saleReturnAdjustments},
+    ).get();
+
+    if (rows.isEmpty) return (totalCents: 0, count: 0);
+    return (
+      totalCents: rows.first.read<int>('total_cents'),
+      count: rows.first.read<int>('return_count'),
     );
   }
 

@@ -430,7 +430,11 @@ void main() {
       // v10057 (Phase 15, May 2026) added `cleared_payment_id` on
       // `cheque_confirmations` so dashboard cheque-confirmation actually
       // settles the AP/AR balance via a real PurchasePayment/SalePayment.
-      expect(db.schemaVersion, equals(10057));
+      // v10058 (Jul 2026) added `effective_date` on `commissions` (economic
+      // posting-date attribution for the salespeople report).
+      // v10059 (Phase 16, Jul 2026) added `sale_return_adjustment_id` on
+      // `commissions` so adjustment (unlinked) sale returns deduct commission.
+      expect(db.schemaVersion, equals(10059));
     });
 
     test('foreign keys are enabled', () async {

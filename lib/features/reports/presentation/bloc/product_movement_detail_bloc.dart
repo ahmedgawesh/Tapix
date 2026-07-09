@@ -341,6 +341,42 @@ class ProductMovementDetailBloc
       ));
     }
 
+    // ── Sale Adjustment Returns (unlinked) ──
+    final saleAdjReturnRows = await _db.customSelect(
+      '''
+      SELECT 
+        sra.return_date AS dt,
+        sra.return_number AS ref,
+        srai.quantity AS qty,
+        srai.total_cents AS total,
+        c.name AS counterparty
+      FROM sale_return_adjustment_items srai
+      INNER JOIN sale_return_adjustments sra ON sra.id = srai.return_id
+      LEFT JOIN customers c ON c.id = sra.customer_id
+      WHERE srai.product_id = ?
+        AND sra.status = 'posted'
+        AND sra.return_date >= ? AND sra.return_date <= ?
+      ORDER BY sra.return_date DESC
+      ''',
+      variables: [
+        Variable.withInt(productId),
+        Variable.withString(startIso),
+        Variable.withString(endIso),
+      ],
+      readsFrom: {_db.saleReturnAdjustmentItems, _db.saleReturnAdjustments, _db.customers},
+    ).get();
+
+    for (final row in saleAdjReturnRows) {
+      movements.add(MovementEntry(
+        type: MovementType.saleReturn,
+        date: DateTime.parse(row.read<String>('dt')),
+        reference: row.read<String>('ref'),
+        quantity: row.read<int>('qty'),
+        totalCents: row.read<int>('total'),
+        counterpartyName: row.readNullable<String>('counterparty'),
+      ));
+    }
+
     // ── Purchase Returns ──
     final purchaseReturnRows = await _db.customSelect(
       '''
@@ -369,6 +405,42 @@ class ProductMovementDetailBloc
     ).get();
 
     for (final row in purchaseReturnRows) {
+      movements.add(MovementEntry(
+        type: MovementType.purchaseReturn,
+        date: DateTime.parse(row.read<String>('dt')),
+        reference: row.read<String>('ref'),
+        quantity: row.read<int>('qty'),
+        totalCents: row.read<int>('total'),
+        counterpartyName: row.readNullable<String>('counterparty'),
+      ));
+    }
+
+    // ── Purchase Adjustment Returns (unlinked) ──
+    final purchaseAdjReturnRows = await _db.customSelect(
+      '''
+      SELECT 
+        pra.return_date AS dt,
+        pra.return_number AS ref,
+        prai.quantity AS qty,
+        prai.total_cents AS total,
+        sup.name AS counterparty
+      FROM purchase_return_adjustment_items prai
+      INNER JOIN purchase_return_adjustments pra ON pra.id = prai.return_id
+      LEFT JOIN suppliers sup ON sup.id = pra.supplier_id
+      WHERE prai.product_id = ?
+        AND pra.status = 'posted'
+        AND pra.return_date >= ? AND pra.return_date <= ?
+      ORDER BY pra.return_date DESC
+      ''',
+      variables: [
+        Variable.withInt(productId),
+        Variable.withString(startIso),
+        Variable.withString(endIso),
+      ],
+      readsFrom: {_db.purchaseReturnAdjustmentItems, _db.purchaseReturnAdjustments, _db.suppliers},
+    ).get();
+
+    for (final row in purchaseAdjReturnRows) {
       movements.add(MovementEntry(
         type: MovementType.purchaseReturn,
         date: DateTime.parse(row.read<String>('dt')),

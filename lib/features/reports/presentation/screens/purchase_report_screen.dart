@@ -303,36 +303,66 @@ class _PurchaseReportViewState extends State<_PurchaseReportView> {
         countLabel = 'reports.invoice_count'.tr();
     }
 
+    final showNet = widget.reportType == PurchaseReportType.all;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Row(
+      child: Column(
         children: [
-          Expanded(
-            child: _SummaryCard(
-              label: 'reports.total_purchases'.tr(),
-              value: cs.formatCents(totalCents),
-              icon: LucideIcons.shoppingBag,
-              color: colorScheme.primary,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: _SummaryCard(
-              label: countLabel,
-              value: count.toString(),
-              icon: LucideIcons.receipt,
-              color: colorScheme.tertiary,
-            ),
-          ),
-          if (widget.reportType == PurchaseReportType.all) ...[
-            const SizedBox(width: 8),
-            Expanded(
-              child: _SummaryCard(
-                label: 'reports.total_discount'.tr(),
-                value: cs.formatCents(data.summary.totalDiscountCents),
-                icon: LucideIcons.percent,
-                color: colorScheme.error,
+          Row(
+            children: [
+              Expanded(
+                child: _SummaryCard(
+                  label: 'reports.total_purchases'.tr(),
+                  value: cs.formatCents(totalCents),
+                  icon: LucideIcons.shoppingBag,
+                  color: colorScheme.primary,
+                ),
               ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _SummaryCard(
+                  label: countLabel,
+                  value: count.toString(),
+                  icon: LucideIcons.receipt,
+                  color: colorScheme.tertiary,
+                ),
+              ),
+              if (showNet) ...[
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _SummaryCard(
+                    label: 'reports.total_discount'.tr(),
+                    value: cs.formatCents(data.summary.totalDiscountCents),
+                    icon: LucideIcons.percent,
+                    color: colorScheme.error,
+                  ),
+                ),
+              ],
+            ],
+          ),
+          if (showNet) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: _SummaryCard(
+                    label: 'reports.total_returns_period'.tr(),
+                    value: cs.formatCents(data.summary.totalReturnsCents),
+                    icon: LucideIcons.undo2,
+                    color: colorScheme.error,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _SummaryCard(
+                    label: 'reports.net_purchases'.tr(),
+                    value: cs.formatCents(data.summary.netPurchasesCents),
+                    icon: LucideIcons.trendingDown,
+                    color: colorScheme.primary,
+                  ),
+                ),
+              ],
             ),
           ],
         ],
