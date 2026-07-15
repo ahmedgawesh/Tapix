@@ -3147,6 +3147,8 @@
     "total_quantity": "Quantité totale",
     "total_paid": "Total payé",
     "no_invoices_in_period": "Aucune facture pour cette période",
+    "qty": "Qté",
+    "unit_price": "Prix unitaire",
     "line_total": "Total",
     "due": "Dû",
     "supplier_invoice_ref": "Réf. facture fournisseur",

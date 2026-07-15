@@ -96,11 +96,15 @@ class PurchaseAdjReturnItemWithDetails {
   final PurchaseReturnAdjustmentItem item;
   final Product product;
   final ProductVariant? variant;
+  final String? colorName;
+  final String? colorHex;
 
   PurchaseAdjReturnItemWithDetails({
     required this.item,
     required this.product,
     this.variant,
+    this.colorName,
+    this.colorHex,
   });
 }
 
@@ -109,11 +113,15 @@ class SaleAdjReturnItemWithDetails {
   final SaleReturnAdjustmentItem item;
   final Product product;
   final ProductVariant? variant;
+  final String? colorName;
+  final String? colorHex;
 
   SaleAdjReturnItemWithDetails({
     required this.item,
     required this.product,
     this.variant,
+    this.colorName,
+    this.colorHex,
   });
 }
 
@@ -150,6 +158,7 @@ class SaleAdjReturnWithParty {
   SaleReturnAdjustmentItems,
   Products,
   ProductVariants,
+  ProductColors,
   Suppliers,
   Customers,
   SupplierTransactions,
@@ -1334,6 +1343,7 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
   /// Watch items with product details for a purchase adjustment return
   Stream<List<PurchaseAdjReturnItemWithDetails>>
       watchPurchaseAdjReturnItemsWithDetails(int returnId) {
+    final pc = alias(db.productColors, 'pc');
     final query = select(purchaseReturnAdjustmentItems).join([
       innerJoin(products,
           products.id.equalsExp(purchaseReturnAdjustmentItems.productId)),
@@ -1341,14 +1351,18 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
           productVariants,
           productVariants.id
               .equalsExp(purchaseReturnAdjustmentItems.variantId)),
+      leftOuterJoin(pc, pc.id.equalsExp(productVariants.colorId)),
     ])
       ..where(purchaseReturnAdjustmentItems.returnId.equals(returnId));
 
     return query.watch().map((rows) => rows.map((row) {
+          final color = row.readTableOrNull(pc);
           return PurchaseAdjReturnItemWithDetails(
             item: row.readTable(purchaseReturnAdjustmentItems),
             product: row.readTable(products),
             variant: row.readTableOrNull(productVariants),
+            colorName: color?.name,
+            colorHex: color?.hexCode,
           );
         }).toList());
   }
@@ -2147,6 +2161,7 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
   /// Watch items with product details for a sale adjustment return
   Stream<List<SaleAdjReturnItemWithDetails>>
       watchSaleAdjReturnItemsWithDetails(int returnId) {
+    final pc = alias(db.productColors, 'pc');
     final query = select(saleReturnAdjustmentItems).join([
       innerJoin(products,
           products.id.equalsExp(saleReturnAdjustmentItems.productId)),
@@ -2154,14 +2169,18 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
           productVariants,
           productVariants.id
               .equalsExp(saleReturnAdjustmentItems.variantId)),
+      leftOuterJoin(pc, pc.id.equalsExp(productVariants.colorId)),
     ])
       ..where(saleReturnAdjustmentItems.returnId.equals(returnId));
 
     return query.watch().map((rows) => rows.map((row) {
+          final color = row.readTableOrNull(pc);
           return SaleAdjReturnItemWithDetails(
             item: row.readTable(saleReturnAdjustmentItems),
             product: row.readTable(products),
             variant: row.readTableOrNull(productVariants),
+            colorName: color?.name,
+            colorHex: color?.hexCode,
           );
         }).toList());
   }

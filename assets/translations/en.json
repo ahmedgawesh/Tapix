@@ -3142,6 +3142,8 @@
     "total_quantity": "Total Quantity",
     "total_paid": "Total Paid",
     "no_invoices_in_period": "No invoices in this period",
+    "qty": "Qty",
+    "unit_price": "Unit Price",
     "line_total": "Total",
     "due": "Due",
     "supplier_invoice_ref": "Supplier Invoice Ref",

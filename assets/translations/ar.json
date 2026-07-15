@@ -3147,6 +3147,8 @@
     "total_quantity": "إجمالي الكمية",
     "total_paid": "إجمالي المدفوع",
     "no_invoices_in_period": "لا توجد فواتير في هذه الفترة",
+    "qty": "الكمية",
+    "unit_price": "سعر الوحدة",
     "line_total": "الإجمالي",
     "due": "المتبقي",
     "supplier_invoice_ref": "مرجع فاتورة المورد",

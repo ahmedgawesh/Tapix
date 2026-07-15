@@ -716,24 +716,61 @@ class _SaleAdjReturnDetailScreenState extends State<SaleAdjReturnDetailScreen> {
                   final productName = d.product.name;
                   final variantSku = d.variant?.sku;
 
+                  // Build variant label parts (color · size · sku)
+                  final variantParts = <String>[];
+                  if (d.colorName != null && d.colorName!.isNotEmpty) {
+                    variantParts.add(d.colorName!);
+                  }
+                  if (variantSku != null && variantSku.isNotEmpty) {
+                    variantParts.add(variantSku);
+                  }
+                  final variantLine = variantParts.isNotEmpty
+                      ? variantParts.join(' · ')
+                      : null;
+
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 10),
                     child: Row(
                       children: [
-                        Container(
-                          width: 32,
-                          height: 32,
-                          decoration: BoxDecoration(
-                            color: colorScheme.tertiaryContainer
-                                .withValues(alpha: 0.3),
-                            borderRadius: BorderRadius.circular(8),
+                        if (d.colorHex != null &&
+                            d.colorHex!.isNotEmpty)
+                          Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color: Color(int.parse(
+                                  'FF${d.colorHex!.replaceAll('#', '')}',
+                                  radix: 16)),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                  color: colorScheme.outlineVariant),
+                            ),
+                            alignment: Alignment.center,
+                            child: Text('${index + 1}',
+                                style: theme.textTheme.labelMedium?.copyWith(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    shadows: [
+                                      const Shadow(
+                                          blurRadius: 2,
+                                          color: Colors.black54)
+                                    ])),
+                          )
+                        else
+                          Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color: colorScheme.tertiaryContainer
+                                  .withValues(alpha: 0.3),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            alignment: Alignment.center,
+                            child: Text('${index + 1}',
+                                style: theme.textTheme.labelMedium?.copyWith(
+                                    color: colorScheme.tertiary,
+                                    fontWeight: FontWeight.bold)),
                           ),
-                          alignment: Alignment.center,
-                          child: Text('${index + 1}',
-                              style: theme.textTheme.labelMedium?.copyWith(
-                                  color: colorScheme.tertiary,
-                                  fontWeight: FontWeight.bold)),
-                        ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Column(
@@ -742,8 +779,8 @@ class _SaleAdjReturnDetailScreenState extends State<SaleAdjReturnDetailScreen> {
                               Text(productName,
                                   style: theme.textTheme.bodyMedium?.copyWith(
                                       fontWeight: FontWeight.w500)),
-                              if (variantSku != null)
-                                Text(variantSku,
+                              if (variantLine != null)
+                                Text(variantLine,
                                     style: theme.textTheme.bodySmall?.copyWith(
                                         color: colorScheme.primary,
                                         fontSize: 11)),
