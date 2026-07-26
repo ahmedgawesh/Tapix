@@ -113,6 +113,7 @@ import '../../features/reports/presentation/screens/discount_reports_hub_screen.
 import '../../features/reports/presentation/screens/discount_report_screen.dart';
 import '../../features/reports/presentation/screens/profit_reports_hub_screen.dart';
 import '../../features/reports/presentation/screens/profit_report_screen.dart';
+import '../../features/reports/presentation/screens/stock_movement_report_screen.dart';
 import '../../features/financial_management/presentation/screens/financial_management_hub_screen.dart';
 import '../../features/financial_management/presentation/screens/chart_of_accounts_screen.dart';
 import '../../features/financial_management/presentation/screens/accounting_periods_screen.dart';
@@ -683,6 +684,10 @@ class AppRouter {
           GoRoute(
             path: 'product-movement-detail',
             builder: (context, state) => const ProductMovementDetailScreen(),
+          ),
+          GoRoute(
+            path: 'stock-movement',
+            builder: (context, state) => const StockMovementReportScreen(),
           ),
           GoRoute(
             path: 'product-variant-movement',

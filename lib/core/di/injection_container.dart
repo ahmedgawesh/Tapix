@@ -151,6 +151,7 @@ import '../../features/financial_management/presentation/bloc/accounting_periods
 import '../../features/reports/presentation/bloc/reports_bloc.dart';
 import '../../features/reports/presentation/bloc/inventory_reports_bloc.dart';
 import '../../features/reports/presentation/bloc/product_movement_detail_bloc.dart';
+import '../../features/reports/presentation/bloc/stock_movement_report_bloc.dart';
 import '../../features/reports/presentation/bloc/product_variant_movement_bloc.dart';
 import '../../features/reports/presentation/bloc/category_movement_bloc.dart';
 import '../../features/reports/presentation/bloc/customer_reports_bloc.dart';
@@ -634,6 +635,10 @@ Future<void> init() async {
   sl.registerFactory(() {
     final defaultRange = sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
     return ProductMovementDetailBloc(sl<AppDatabase>(), defaultDateRange: defaultRange);
+  });
+  sl.registerFactory(() {
+    final defaultRange = sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
+    return StockMovementReportBloc(sl<AppDatabase>(), defaultDateRange: defaultRange);
   });
   sl.registerFactory(() {
     final defaultRange = sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
